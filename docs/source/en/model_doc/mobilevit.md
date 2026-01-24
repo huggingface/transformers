@@ -11,10 +11,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 -->
 *This model was released on 2021-10-05 and added to Hugging Face Transformers on 2022-06-29.*
 
-
-
 # MobileViT
-
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-2">
@@ -24,20 +21,17 @@ Unless required by applicable law or agreed to in writing, software distributed 
 
 [MobileViT](https://huggingface.co/papers/2110.02178) is a lightweight vision transformer for mobile devices that merges CNNs's efficiency and inductive biases with transformers global context modeling. It treats transformers as convolutions, enabling global information processing without the heavy computational cost of standard ViTs.
 
-
 <div class="flex justify-center">
    <img src = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/MobileViT.png">
 </div>
 
-
 You can find all the original MobileViT checkpoints under the [Apple](https://huggingface.co/apple/models?search=mobilevit) organization.
 
-
 > [!TIP]
+>
 > - This model was contributed by [matthijs](https://huggingface.co/Matthijs).
 >
 > Click on the MobileViT models in the right sidebar for more examples of how to apply MobileViT to different vision tasks.
-
 
 The example below demonstrates how to do [Image Classification] with [`Pipeline`] and the [`AutoModel`] class.
 
@@ -92,27 +86,18 @@ print(f"The predicted class label is:{predicted_class_label}")
 </hfoption>
 </hfoptions>
 
-
 ## Notes
 
 - Does **not** operate on sequential data, it's purely designed for image tasks.
 - Feature maps are used directly instead of token embeddings.
 - Use [`MobileViTImageProcessor`] to preprocess images.
 - If using custom preprocessing, ensure that images are in **BGR** format (not RGB), as expected by the pretrained weights.
-- The classification models are pretrained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k).
+- The classification models are pretrained on [ImageNet-1k](https://huggingface.co/datasets/ILSVRC/imagenet-1k).
 - The segmentation models use a [DeepLabV3](https://huggingface.co/papers/1706.05587) head and are pretrained on [PASCAL VOC](http://host.robots.ox.ac.uk/pascal/VOC/).
-
-
 
 ## MobileViTConfig
 
 [[autodoc]] MobileViTConfig
-
-## MobileViTFeatureExtractor
-
-[[autodoc]] MobileViTFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
 
 ## MobileViTImageProcessor
 

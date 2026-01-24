@@ -56,14 +56,6 @@ BLOOM を使い始めるのに役立つ公式 Hugging Face およびコミュニ
 [[autodoc]] BloomConfig
     - all
 
-## BloomTokenizerFast
-
-[[autodoc]] BloomTokenizerFast
-    - all
-
-
-<frameworkcontent>
-<pt>
 
 ## BloomModel
 
@@ -90,5 +82,3 @@ BLOOM を使い始めるのに役立つ公式 Hugging Face およびコミュニ
 [[autodoc]] BloomForQuestionAnswering
     - forward
 
-</pt>
-</frameworkcontent>

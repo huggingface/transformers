@@ -93,12 +93,6 @@ BEiT の使用を開始するのに役立つ公式 Hugging Face およびコミ�
 
 [[autodoc]] BeitConfig
 
-## BeitFeatureExtractor
-
-[[autodoc]] BeitFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
-
 ## BeitImageProcessor
 
 [[autodoc]] BeitImageProcessor

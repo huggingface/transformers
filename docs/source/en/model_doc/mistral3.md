@@ -27,7 +27,6 @@ rendered properly in your Markdown viewer.
 
 You can find the original Mistral 3 checkpoints under the [Mistral AI](https://huggingface.co/mistralai/models?search=mistral-small-3) organization.
 
-
 > [!TIP]
 > This model was contributed by [cyrilvallez](https://huggingface.co/cyrilvallez) and [yonigozlan](https://huggingface.co/yonigozlan).
 > Click on the Mistral3 models in the right sidebar for more examples of how to apply Mistral3 to different tasks.
@@ -62,14 +61,16 @@ outputs = pipeline(text=messages, max_new_tokens=50, return_full_text=False)
 outputs[0]["generated_text"]
 'The image depicts a vibrant and lush garden scene featuring a variety of wildflowers and plants. The central focus is on a large, pinkish-purple flower, likely a Greater Celandine (Chelidonium majus), with a'
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 
 ```py
 import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device 
+from transformers import AutoProcessor, AutoModelForImageTextToText
+from accelerate import Accelerator 
 
-torch_device = infer_device()
+torch_device = Accelerator().device
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 model = AutoModelForImageTextToText.from_pretrained(
@@ -100,17 +101,20 @@ decoded_output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :
 decoded_output
 'The image depicts a vibrant and lush garden scene featuring a variety of wildflowers and plants. The central focus is on a large, pinkish-purple flower, likely a Greater Celandine (Chelidonium majus), with a'
 ```
+
 </hfoption>
 </hfoptions>
 
-## Notes 
+## Notes
 
-- Mistral 3 supports text-only generation. 
-```py 
+- Mistral 3 supports text-only generation.
+
+```py
 import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
+from transformers import AutoProcessor, AutoModelForImageTextToText
+from accelerate import Accelerator
 
-torch_device = infer_device()
+torch_device = Accelerator().device
 model_checkpoint = ".mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, dtype=torch.bfloat16)
@@ -136,18 +140,22 @@ print(decoded_output)
  5. Je me casse, à plus!
 
 ```
+
  /\_/\
 ( o.o )
  > ^ <
+
 ```"
 ````
 
-- Mistral 3 accepts batched image and text inputs. 
+- Mistral 3 accepts batched image and text inputs.
+
 ```py
 import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
+from transformers import AutoProcessor, AutoModelForImageTextToText
+from accelerate import Accelerator
 
-torch_device = infer_device()
+torch_device = Accelerator().device
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, dtype=torch.bfloat16)
@@ -184,13 +192,14 @@ messages = [
 , "Describe this imageThe image depicts a vibrant street scene in what appears to be a Chinatown district. The focal point is a traditional Chinese"]
 ```
 
-- Mistral 3 also supported batched image and text inputs with a different number of images for each text. The example below quantizes the model with bitsandbytes. 
+- Mistral 3 also supported batched image and text inputs with a different number of images for each text. The example below quantizes the model with bitsandbytes.
 
 ```py
 import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig, infer_device
+from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
+from accelerate import Accelerator
 
-torch_device = infer_device()
+torch_device = Accelerator().device
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
@@ -233,9 +242,9 @@ messages = [
 
 [[autodoc]] Mistral3Config
 
-## MistralCommonTokenizer
+## MistralCommonBackend
 
-[[autodoc]] MistralCommonTokenizer
+[[autodoc]] MistralCommonBackend
 
 ## Mistral3Model
 
@@ -245,3 +254,4 @@ messages = [
 
 [[autodoc]] Mistral3ForConditionalGeneration
     - forward
+    - get_image_features

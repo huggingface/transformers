@@ -21,13 +21,11 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-
 # DeBERTa-v2
 
 [DeBERTa-v2](https://huggingface.co/papers/2006.03654) improves on the original [DeBERTa](./deberta) architecture by using a SentencePiece-based tokenizer and a new vocabulary size of 128K. It also adds an additional convolutional layer within the first transformer layer to better learn local dependencies of input tokens. Finally, the position projection and content projection matrices are shared in the attention layer to reduce the number of parameters.
 
 You can find all the original [DeBERTa-v2] checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=deberta-v2) organization.
-
 
 > [!TIP]
 > This model was contributed by [Pengcheng He](https://huggingface.co/DeBERTa).
@@ -86,6 +84,7 @@ print(f"Predicted label: {predicted_label}")
 ```bash
 echo -e "DeBERTa-v2 is great at understanding context!" | transformers run --task fill-mask --model microsoft/deberta-v2-xlarge-mnli --device 0
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -119,7 +118,6 @@ print(f"Predicted label: {predicted_label}")
 
 ```
 
-
 ## DebertaV2Config
 
 [[autodoc]] DebertaV2Config
@@ -127,16 +125,12 @@ print(f"Predicted label: {predicted_label}")
 ## DebertaV2Tokenizer
 
 [[autodoc]] DebertaV2Tokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## DebertaV2TokenizerFast
 
 [[autodoc]] DebertaV2TokenizerFast
-    - build_inputs_with_special_tokens
-    - create_token_type_ids_from_sequences
 
 ## DebertaV2Model
 

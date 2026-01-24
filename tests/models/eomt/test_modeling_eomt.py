@@ -22,7 +22,7 @@ from transformers.testing_utils import require_torch, require_torch_accelerator,
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -105,10 +105,8 @@ class EomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin, un
     all_model_classes = (EomtForUniversalSegmentation,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-segmentation": EomtForUniversalSegmentation} if is_torch_available() else {}
     is_encoder_decoder = False
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
-    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = EomtForUniversalSegmentationTester(self)
@@ -232,40 +230,6 @@ class EomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin, un
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
-
-    def test_initialization(self):
-        # Apart from the below params, all other parameters are initialized using kaiming uniform.
-        non_uniform_init_parms = [
-            "layernorm.bias",
-            "layernorm.weight",
-            "norm1.bias",
-            "norm1.weight",
-            "norm2.bias",
-            "norm2.weight",
-            "layer_scale1.lambda1",
-            "layer_scale2.lambda1",
-            "register_tokens",
-            "cls_token",
-        ]
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if any(x in name for x in non_uniform_init_parms):
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
 
 @require_torch

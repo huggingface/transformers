@@ -12,17 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
 import gc
+import io
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import torch
 
 from transformers.image_utils import load_image
 from transformers.models.auto.tokenization_auto import AutoTokenizer
-from transformers.testing_utils import require_mistral_common
-from transformers.tokenization_mistral_common import MistralCommonTokenizer
+from transformers.testing_utils import (
+    require_mistral_common,
+)
+from transformers.tokenization_mistral_common import MistralCommonBackend
 from transformers.tokenization_utils_base import BatchEncoding, TruncationStrategy
 from transformers.utils import PaddingStrategy, is_mistral_common_available
 
@@ -31,10 +36,15 @@ if is_mistral_common_available():
     import mistral_common.tokens.tokenizers
     from mistral_common.exceptions import InvalidMessageStructureException
     from mistral_common.protocol.instruct.request import ChatCompletionRequest
+    from mistral_common.protocol.instruct.validator import (
+        ValidationMode,
+    )
+    from mistral_common.protocol.transcription.request import TranscriptionRequest
+    from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
     from mistral_common.tokens.tokenizers.utils import list_local_hf_repo_files
 
-    # To avoid unnecessary `requests.get` calls which give us `Error: Too Many Requests for url` on CircleCI
+    # To avoid unnecessary `httpx.get` calls which give us `Error: Too Many Requests for url` on CircleCI
     mistral_common.tokens.tokenizers.image.download_image = load_image
 
 
@@ -59,7 +69,7 @@ AUDIO_BASE_64 = """//uUxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAHNAAFFIAACAwQGBwkLD
 
 
 @require_mistral_common
-class TestMistralCommonTokenizer(unittest.TestCase):
+class TestMistralCommonBackend(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -68,9 +78,8 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # determine if we already have this downloaded
         cls.local_files_only = len(list_local_hf_repo_files(cls.repo_id, revision=None)) > 0
 
-        cls.tokenizer: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
+        cls.tokenizer = MistralCommonBackend.from_pretrained(
             cls.repo_id,
-            tokenizer_type="mistral",
             local_files_only=cls.local_files_only,
             # This is a hack as `list_local_hf_repo_files` from `mistral_common` has a bug
             # TODO: Discuss with `mistral-common` maintainers: after a fix being done there, remove this `revision` hack
@@ -79,20 +88,22 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         cls.ref_tokenizer: MistralTokenizer = MistralTokenizer.from_hf_hub(
             cls.repo_id, local_files_only=cls.local_files_only
         )
-        # cls.tokenizer_audio: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
+
+        # Define SPM tokenizer to test the private methods that handle SPM and Tekken differencies.
+        cls.spm_repo_id = "mistralai/Mistral-7B-v0.3"
+
+        # cls.tokenizer_audio: MistralCommonBackend = AutoTokenizer.from_pretrained(
         #     "hf-internal-testing/namesspace-mistralai-repo_name-Voxtral-Mini-3B-2507"
         # )
         repo_id = "mistralai/Voxtral-Mini-3B-2507"
         local_files_only = len(list_local_hf_repo_files(repo_id, revision=None)) > 0
 
-        cls.tokenizer_audio: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
+        cls.tokenizer_audio: MistralCommonBackend = AutoTokenizer.from_pretrained(
             repo_id,
             local_files_only=local_files_only,
             revision=None,
         )
-        cls.ref_tokenizer_audio: MistralCommonTokenizer = MistralTokenizer.from_hf_hub(
-            repo_id, local_files_only=local_files_only
-        )
+        cls.ref_tokenizer_audio = MistralTokenizer.from_hf_hub(repo_id, local_files_only=local_files_only)
 
         cls.fixture_conversations = [
             [
@@ -124,12 +135,39 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         del cls.ref_special_ids
         gc.collect()
 
+    # Copy paste of `MistralCommonBackend._tekken_piece_to_id`
     def _ref_piece_to_id(self, piece: str) -> int:
-        pieces = self.ref_tokenizer.instruct_tokenizer.tokenizer._model.encode(
-            piece, allowed_special="all", disallowed_special=set()
+        tekken_tokenizer = self.ref_tokenizer.instruct_tokenizer.tokenizer
+
+        piece_bytes = piece.encode("utf-8")
+        shift = tekken_tokenizer.num_special_tokens
+        try:
+            return shift + tekken_tokenizer._tekken_token2id_nospecial[piece_bytes]
+        except KeyError:
+            piece_str = piece_bytes.decode("utf-8")
+            if piece_str in tekken_tokenizer._special_tokens_reverse_vocab:
+                return tekken_tokenizer._special_tokens_reverse_vocab[piece_str]
+            return tekken_tokenizer.unk_id
+
+    def _get_spm_tokenizer(self, mode: str = "test") -> MistralCommonBackend:
+        local_files_only = len(list_local_hf_repo_files(self.spm_repo_id, revision=None)) > 0
+        return MistralCommonBackend.from_pretrained(
+            self.spm_repo_id, local_files_only=local_files_only, revision=None, mode=mode
         )
-        assert len(pieces) == 1, f"Expected to decode 1 token, got {len(pieces)}"
-        return pieces[0]
+
+    def test_spm_vs_tekken_piece_to_id(self):
+        spm_tokenizer = self._get_spm_tokenizer()
+        self.assertEqual(spm_tokenizer._piece_to_id("<s>", False), 1)
+        self.assertEqual(spm_tokenizer._piece_to_id("h", False), 29484)
+
+        self.assertEqual(self.tokenizer._piece_to_id("<s>", False), 1)
+        self.assertEqual(self._ref_piece_to_id("<s>"), 1)
+        self.assertEqual(self.tokenizer._piece_to_id("\u0000", False), 1000)
+        self.assertEqual(self._ref_piece_to_id("\u0000"), 1000)
+        self.assertEqual(self.tokenizer._piece_to_id(" String", False), 3000)
+        self.assertEqual(self._ref_piece_to_id(" String"), 3000)
+        self.assertEqual(self.tokenizer._piece_to_id("后汉书", False), 131071)
+        self.assertEqual(self._ref_piece_to_id("后汉书"), 131071)
 
     def test_vocab_size(self):
         self.assertEqual(self.tokenizer.vocab_size, self.ref_tokenizer.instruct_tokenizer.tokenizer.n_words)
@@ -137,7 +175,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
     def test_save_pretrained(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             self.tokenizer.save_pretrained(tmp_dir)
-            loaded_tokenizer = MistralCommonTokenizer.from_pretrained(tmp_dir)
+            loaded_tokenizer = MistralCommonBackend.from_pretrained(tmp_dir)
 
         self.assertIsNotNone(loaded_tokenizer)
         self.assertEqual(self.tokenizer.get_vocab(), loaded_tokenizer.get_vocab())
@@ -147,7 +185,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         )
 
         with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.save_pretrained`."
+            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.save_pretrained`."
         ):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 self.tokenizer.save_pretrained(tmp_dir, unk_args="")
@@ -157,7 +195,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 1:
         # encode with add_special_tokens
-        expected_with_special = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(string, bos=True, eos=True)
+        expected_with_special = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(string, bos=True, eos=False)
         tokens_with_special = self.tokenizer.encode(string, add_special_tokens=True)
         self.assertEqual(tokens_with_special, expected_with_special)
 
@@ -168,17 +206,24 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         self.assertEqual(tokens_without_special, expected_without_special)
 
         # Test 3:
+        # encode with add_special_tokens and mode finetuning
+        expected_with_special_ft = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(string, bos=True, eos=True)
+        with patch.object(self.tokenizer, "_mode", ValidationMode.finetuning):
+            tokens_with_special_ft = self.tokenizer.encode(string, add_special_tokens=True)
+        self.assertEqual(tokens_with_special_ft, expected_with_special_ft)
+
+        # Test 4:
         # encode with return_tensors
         tokens_with_return_tensors = self.tokenizer.encode(string, add_special_tokens=False, return_tensors="pt")
         self.assertIsInstance(tokens_with_return_tensors, torch.Tensor)
         self.assertEqual(tokens_with_return_tensors.tolist()[0], expected_without_special)
 
-        # Test 4:
+        # Test 5:
         # encode with max_length
         tokens_with_max_length = self.tokenizer.encode(string, add_special_tokens=False, max_length=3)
         self.assertEqual(tokens_with_max_length, expected_without_special[:3])
 
-        # Test 5:
+        # Test 6:
         # encode with padding
         tokens_with_padding = self.tokenizer.encode(
             string, add_special_tokens=False, padding=True, pad_to_multiple_of=6
@@ -207,14 +252,14 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         )
         expected_long = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(string_long, bos=False, eos=False)
 
-        # Test 6:
+        # Test 7:
         # encode with truncation
         tokens_with_truncation = self.tokenizer.encode(
             string_long, add_special_tokens=False, truncation=True, max_length=12
         )
         self.assertEqual(tokens_with_truncation, expected_long[:12])
 
-        # Test 7:
+        # Test 8:
         # encode with padding and truncation
         tokens_with_padding_and_truncation = self.tokenizer.encode(
             string_long, add_special_tokens=False, padding=True, pad_to_multiple_of=12, truncation=True, max_length=36
@@ -224,9 +269,12 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         ) + expected_long
         self.assertEqual(tokens_with_padding_and_truncation, expected_long_padding)
 
-        # Test encode with unsupported kwargs
+        # Test 9:
+        # encode empty string
+        self.assertEqual(self.tokenizer.encode("", add_special_tokens=False), [])
+
         with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.encode`."
+            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.encode`."
         ):
             self.tokenizer.encode("Hello, world!", add_special_tokens=True, unk_args="")
 
@@ -253,11 +301,81 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         )
 
         # Test 3:
+        # decode one token
+        self.assertEqual(self.tokenizer.decode(tokens_ids[0], skip_special_tokens=False), "<s>")
+
+        # Test 4:
+        # decode numpy
+        self.assertEqual(self.tokenizer.decode(np.array(tokens_ids), skip_special_tokens=True), string)
+
+        # Test 5:
+        # decode empty string
+        self.assertEqual(self.tokenizer.decode([], skip_special_tokens=True), "")
+
+        # Test 6:
         # decode with unsupported kwargs
         with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.decode`."
+            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.decode`."
         ):
             self.tokenizer.decode(tokens_ids, skip_special_tokens=False, unk_args="")
+
+    def test_decode_on_batch(self):
+        string = "Hello, world!"
+        string_with_space = "Hello, world !"
+
+        batch_tokens_ids = [
+            self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(string, bos=True, eos=True),
+            self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(string_with_space, bos=True, eos=True),
+        ]
+
+        # Test 1:
+        # batch_decode with and without skip_special_tokens
+        self.assertEqual(
+            self.tokenizer.decode(batch_tokens_ids, skip_special_tokens=True),
+            [string, string_with_space],
+        )
+        self.assertEqual(
+            self.tokenizer.decode(batch_tokens_ids, skip_special_tokens=False),
+            ["<s>" + string + "</s>", "<s>" + string_with_space + "</s>"],
+        )
+        self.assertEqual(
+            self.tokenizer.decode(batch_tokens_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True),
+            ["Hello, world!", "Hello, world!"],
+        )
+
+        # Test 3:
+        # decode numpy
+        self.assertEqual(
+            self.tokenizer.decode(
+                np.array(batch_tokens_ids), skip_special_tokens=True, clean_up_tokenization_spaces=True
+            ),
+            ["Hello, world!", "Hello, world!"],
+        )
+
+    def test_decode_transcription_mode(self):
+        # in the specific case of Voxtral, the added f"lang:xx" (always a two char language code since it follows ISO 639-1 alpha-2 format)
+        # is not considered as a special token by mistral-common and is encoded/ decoded as normal text.
+        # we made the explicit choice of skipping "lang:xx" it to ease users life, see `[~MistralCommonBackend.decode]`
+        expected_string = "lang:en[TRANSCRIBE]"
+
+        openai_transcription_request = {
+            "model": None,
+            "language": "en",
+            "file": io.BytesIO(base64.b64decode(AUDIO_BASE_64)),
+        }
+        transcription_request = TranscriptionRequest.from_openai(openai_transcription_request)
+        tokenized_transcription_request = self.ref_tokenizer_audio.encode_transcription(transcription_request)
+
+        # without skip_special_tokens
+        self.assertEqual(
+            self.tokenizer_audio.decode(tokenized_transcription_request.tokens, skip_special_tokens=False)[
+                -len(expected_string) :
+            ],
+            expected_string,
+        )
+
+        # with skip_special_tokens
+        self.assertEqual(self.tokenizer.decode(tokenized_transcription_request.tokens, skip_special_tokens=True), "")
 
     def test_batch_decode(self):
         string = "Hello, world!"
@@ -283,10 +401,26 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             ["Hello, world!", "Hello, world!"],
         )
 
-        # Test 2:
+        # Test 3:
+        # decode numpy
+        self.assertEqual(
+            self.tokenizer.batch_decode(
+                np.array(batch_tokens_ids), skip_special_tokens=True, clean_up_tokenization_spaces=True
+            ),
+            ["Hello, world!", "Hello, world!"],
+        )
+
+        # Test 4:
+        # decode empty list
+        self.assertEqual(self.tokenizer.batch_decode([], skip_special_tokens=True), [""])
+        self.assertEqual(
+            self.tokenizer.batch_decode([batch_tokens_ids[0], []], skip_special_tokens=True), [string, ""]
+        )
+
+        # Test 5:
         # batch_decode with unsupported kwargs
         with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.batch_decode`."
+            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.batch_decode`."
         ):
             self.tokenizer.batch_decode(batch_tokens_ids, skip_special_tokens=False, unk_args="")
 
@@ -308,6 +442,11 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         tokens = self.tokenizer.convert_ids_to_tokens(ids, skip_special_tokens=True)
         self.assertEqual(tokens, expected_tokens)
 
+        # Test 3:
+        # with empty list
+        tokens = self.tokenizer.convert_ids_to_tokens([])
+        self.assertEqual(tokens, [])
+
         with self.assertRaises(ValueError):
             self.tokenizer.convert_ids_to_tokens(ids[0], skip_special_tokens=True)
         token = self.tokenizer.convert_ids_to_tokens(ids[1], skip_special_tokens=True)
@@ -327,8 +466,15 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         self.assertEqual(id, expected_ids[0])
         self.assertEqual(id, self.tokenizer.convert_tokens_to_ids(tokens[0]))
 
+        # Test 3:
+        # with empty list
+        ids = self.tokenizer.convert_tokens_to_ids([])
+        self.assertEqual(ids, [])
+
     def test_tokenize(self):
         string = "Hello world!"
+        # Test 1:
+        # with string
         expected_tokens = [
             self.ref_tokenizer.instruct_tokenizer.tokenizer.id_to_piece(id)
             for id in self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(string, bos=False, eos=False)
@@ -336,26 +482,52 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         tokens = self.tokenizer.tokenize(string)
         self.assertEqual(tokens, expected_tokens)
 
+        # Test 2:
+        # with empty string
+        tokens = self.tokenizer.tokenize("")
+        self.assertEqual(tokens, [])
+
         with self.assertRaises(
-            ValueError, msg="Kwargs [add_special_tokens] are not supported by `MistralCommonTokenizer.tokenize`."
+            ValueError, msg="Kwargs [add_special_tokens] are not supported by `MistralCommonBackend.tokenize`."
         ):
             self.tokenizer.tokenize(string, add_special_tokens=True)
 
     def test_get_special_tokens_mask(self):
         # Test 1:
-        # with skip_special_tokens=False
-        ids = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode("Hello world!", bos=True, eos=True)
+        # mode test with special
+        ids = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode("Hello world!", bos=True, eos=False)
         expected_mask = [1 if id in self.ref_special_ids else 0 for id in ids]
 
-        mask = self.tokenizer.get_special_tokens_mask(ids)
+        mask = self.tokenizer.get_special_tokens_mask(ids, already_has_special_tokens=True)
         self.assertEqual(mask, expected_mask)
 
         # Test 2:
-        # already_has_special_tokens=True should raise an error
-        with self.assertRaises(ValueError):
-            self.tokenizer.get_special_tokens_mask(ids, already_has_special_tokens=True)
+        # mode finetuning with special
+        with patch.object(self.tokenizer, "_mode", ValidationMode.finetuning):
+            ids = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode("Hello world!", bos=True, eos=True)
+            expected_mask = [1 if id in self.ref_special_ids else 0 for id in ids]
+
+            mask = self.tokenizer.get_special_tokens_mask(ids, already_has_special_tokens=True)
+            self.assertEqual(mask, expected_mask)
 
         # Test 3:
+        # mode test without special
+        ids = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode("Hello world!", bos=False, eos=False)
+        expected_mask = [1] + [0 for id in ids]
+
+        mask = self.tokenizer.get_special_tokens_mask(ids, already_has_special_tokens=False)
+        self.assertEqual(mask, expected_mask)
+
+        # Test 4:
+        # mode finetuning without special
+        with patch.object(self.tokenizer, "_mode", ValidationMode.finetuning):
+            ids = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode("Hello world!", bos=False, eos=False)
+            expected_mask = [1] + [0 for id in ids] + [1]
+
+            mask = self.tokenizer.get_special_tokens_mask(ids, already_has_special_tokens=False)
+            self.assertEqual(mask, expected_mask)
+
+        # Test 5:
         # token_ids_1 not None should raise an error
         with self.assertRaises(ValueError):
             self.tokenizer.get_special_tokens_mask(ids, token_ids_1=ids)
@@ -420,7 +592,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 4:
         # padding_side="right"
-        right_tokenizer = MistralCommonTokenizer.from_pretrained(
+        right_tokenizer = MistralCommonBackend.from_pretrained(
             self.repo_id,
             local_files_only=self.local_files_only,
             padding_side="right",
@@ -572,7 +744,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 4:
         # padding_side="right"
-        right_tokenizer = MistralCommonTokenizer.from_pretrained(
+        right_tokenizer = MistralCommonBackend.from_pretrained(
             self.repo_id,
             local_files_only=self.local_files_only,
             padding_side="right",
@@ -693,7 +865,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 6:
         # truncation_side="left"
-        left_tokenizer = MistralCommonTokenizer.from_pretrained(
+        left_tokenizer = MistralCommonBackend.from_pretrained(
             self.repo_id,
             local_files_only=self.local_files_only,
             truncation_side="left",
@@ -725,10 +897,12 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 2:
         # without tokenize
-        self.assertEqual(self.tokenizer.apply_chat_template(conversation, tokenize=True), expected_tokenized.tokens)
+        self.assertEqual(
+            self.tokenizer.apply_chat_template(conversation, tokenize=True).input_ids, expected_tokenized.tokens
+        )
 
         with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.apply_chat_template`."
+            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.apply_chat_template`."
         ):
             self.tokenizer.apply_chat_template(conversation, tokenize=True, unk_args="")
 
@@ -750,12 +924,46 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             expected_tokenized.text,
         )
         self.assertEqual(
-            self.tokenizer.apply_chat_template(conversation, tokenize=True, continue_final_message=True),
+            self.tokenizer.apply_chat_template(conversation, tokenize=True, continue_final_message=True).input_ids,
             expected_tokenized.tokens,
         )
 
         with self.assertRaises(InvalidMessageStructureException):
             self.tokenizer.apply_chat_template(conversation, tokenize=False, continue_final_message=False)
+
+    def test_apply_chat_template_with_add_generation_prompt(self):
+        conversation = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hi!"},
+        ]
+
+        # Test 1:
+        # with add_generation_prompt
+        for add_generation_prompt in [False, True]:
+            expected_tokenized = self.ref_tokenizer.encode_chat_completion(
+                ChatCompletionRequest.from_openai(conversation)
+            )
+            token_outputs = self.tokenizer.apply_chat_template(
+                conversation, tokenize=True, add_generation_prompt=add_generation_prompt
+            )
+            self.assertEqual(token_outputs.input_ids, expected_tokenized.tokens)
+
+        # Test 2:
+        # with continue_final_message
+        with self.assertRaises(ValueError):
+            self.tokenizer.apply_chat_template(
+                conversation, tokenize=True, add_generation_prompt=True, continue_final_message=True
+            )
+
+        # Test 3:
+        # with last message with assistant role
+        conversation = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hi!"},
+            {"role": "asistant", "content": "Hey!"},
+        ]
+        with self.assertRaises(ValueError):
+            self.tokenizer.apply_chat_template(conversation, tokenize=True, add_generation_prompt=True)
 
     def test_apply_chat_template_with_tools(self):
         conversation = [
@@ -850,20 +1058,19 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 },
             ]
 
-            output = self.tokenizer.apply_chat_template(conversation, tokenize=True)
+            output = self.tokenizer.apply_chat_template(conversation).input_ids
             self.assertEqual(output, expected_tokenized.tokens)
 
-        output_dict = self.tokenizer.apply_chat_template(conversation, tokenize=True, return_dict=True)
+        output_dict = self.tokenizer.apply_chat_template(conversation, tokenize=True)
         self.assertEqual(output_dict["input_ids"], expected_tokenized.tokens)
         self.assertEqual(len(output_dict["pixel_values"]), len(expected_tokenized.images))
         for o, e in zip(output_dict["pixel_values"], expected_tokenized.images):
             self.assertTrue(np.allclose(o, e))
 
-        output_dict = self.tokenizer.apply_chat_template(
-            conversation, tokenize=True, return_dict=True, return_tensors="pt"
-        )
+        output_dict = self.tokenizer.apply_chat_template(conversation, tokenize=True, return_tensors="pt")
         self.assertEqual(output_dict["input_ids"].tolist()[0], expected_tokenized.tokens)
-        self.assertTrue(torch.allclose(output_dict["pixel_values"], torch.tensor(expected_tokenized.images)))
+        expected_images_pt_tensor = torch.from_numpy(np.stack(expected_tokenized.images))
+        self.assertTrue(torch.allclose(output_dict["pixel_values"], expected_images_pt_tensor))
 
     def test_apply_chat_template_with_audio(self):
         ref_conversation = conversation = [
@@ -904,7 +1111,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 },
             ]
 
-            output = self.tokenizer_audio.apply_chat_template(conversation, tokenize=True)
+            output = self.tokenizer_audio.apply_chat_template(conversation, tokenize=True).input_ids
             self.assertEqual(output, expected_tokenized.tokens)
 
         output_dict = self.tokenizer_audio.apply_chat_template(conversation, tokenize=True, return_dict=True)
@@ -919,7 +1126,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 conversation, tokenize=True, return_dict=True, return_tensors="pt"
             )
 
-    def test_appsly_chat_template_with_truncation(self):
+    def test_apply_chat_template_with_truncation(self):
         conversation = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Hi!"},
@@ -932,20 +1139,20 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 1:
         # with truncation
         self.assertEqual(
-            self.tokenizer.apply_chat_template(conversation, tokenize=True, truncation=True, max_length=20),
+            self.tokenizer.apply_chat_template(conversation, tokenize=True, truncation=True, max_length=20).input_ids,
             expected_tokenized.tokens[:20],
         )
 
         # Test 2:
         # without truncation
         self.assertEqual(
-            self.tokenizer.apply_chat_template(conversation, tokenize=True, truncation=False, max_length=20),
+            self.tokenizer.apply_chat_template(conversation, tokenize=True, truncation=False, max_length=20).input_ids,
             expected_tokenized.tokens,
         )
 
         # Test 3:
         # assert truncation is boolean
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             self.tokenizer.apply_chat_template(
                 conversation, tokenize=True, truncation=TruncationStrategy.LONGEST_FIRST, max_length=20
             )
@@ -1021,7 +1228,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         ]
 
         text_outputs = self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=False)
-        token_outputs = self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=True)
+        token_outputs = self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=True).input_ids
 
         self.assertEqual(len(text_outputs), len(token_outputs))
         self.assertEqual(len(text_outputs), len(expected_tokenized))
@@ -1031,11 +1238,11 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         with self.assertRaises(
             ValueError,
-            msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.batch_apply_chat_template`.",
+            msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.batch_apply_chat_template`.",
         ):
             self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=True, unk_args="")
 
-    def test_batch_apply_images(self):
+    def test_batch_apply_chat_template_images(self):
         conversations = [
             [
                 {"role": "system", "content": "You are a helpful assistant."},
@@ -1093,7 +1300,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             ChatCompletionRequest.from_openai(ref_conversation)
         )
 
-        output = self.tokenizer.apply_chat_template(conversations, tokenize=True)
+        output = self.tokenizer.apply_chat_template(conversations, tokenize=True).input_ids
         self.assertEqual(output, [expected_tokenized.tokens] * 3)
 
         output = self.tokenizer.apply_chat_template(conversations, tokenize=True, return_dict=True)
@@ -1107,7 +1314,8 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         )
         self.assertEqual(output["input_ids"].tolist(), [expected_tokenized.tokens] * 3)
         self.assertEqual(output["input_ids"].shape[0], len(expected_tokenized.images) * 3)
-        self.assertTrue(torch.allclose(output["pixel_values"], torch.tensor([expected_tokenized.images] * 3)))
+        expected_images_pt_tensor = torch.from_numpy(np.stack([expected_tokenized.images] * 3))
+        self.assertTrue(torch.allclose(output["pixel_values"], expected_images_pt_tensor))
 
         output = self.tokenizer.apply_chat_template(
             conversations, tokenize=True, return_dict=True, return_tensors="np"
@@ -1138,7 +1346,9 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             for conversation in conversations
         ]
 
-        token_outputs = self.tokenizer.apply_chat_template(conversations, tokenize=True, continue_final_message=True)
+        token_outputs = self.tokenizer.apply_chat_template(
+            conversations, tokenize=True, continue_final_message=True
+        ).input_ids
 
         for output, expected in zip(token_outputs, expected_tokenized):
             self.assertEqual(output, expected.tokens)
@@ -1166,6 +1376,54 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 continue_final_message=True,
             )
 
+    def test_batch_apply_chat_template_with_add_generation_prompt(self):
+        conversations = [
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hi!"},
+            ],
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hi!"},
+            ],
+        ]
+
+        # Test 1:
+        # with add_generation_prompt
+        for add_generation_prompt in [False, True]:
+            expected_tokenized = [
+                self.ref_tokenizer.encode_chat_completion(ChatCompletionRequest.from_openai(conversation))
+                for conversation in conversations
+            ]
+            token_outputs = self.tokenizer.apply_chat_template(
+                conversations, tokenize=True, add_generation_prompt=add_generation_prompt
+            ).input_ids
+            for output, expected in zip(token_outputs, expected_tokenized):
+                self.assertEqual(output, expected.tokens)
+
+        # Test 2:
+        # with continue_final_message
+        with self.assertRaises(ValueError):
+            self.tokenizer.apply_chat_template(
+                conversations, tokenize=True, add_generation_prompt=True, continue_final_message=True
+            )
+
+        # Test 3:
+        # with last message with assistant role
+        conversations = [
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hi!"},
+                {"role": "asistant", "content": "Hey!"},
+            ],
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hi!"},
+            ],
+        ]
+        with self.assertRaises(ValueError):
+            self.tokenizer.apply_chat_template(conversations, tokenize=True, add_generation_prompt=True)
+
     def test_batch_apply_chat_template_with_truncation(
         self,
     ):
@@ -1173,7 +1431,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # with truncation
         token_outputs = self.tokenizer.apply_chat_template(
             self.fixture_conversations, tokenize=True, truncation=True, max_length=20
-        )
+        ).input_ids
 
         for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
             self.assertEqual(output, expected.tokens[:20])
@@ -1182,14 +1440,14 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # without truncation
         token_outputs = self.tokenizer.apply_chat_template(
             self.fixture_conversations, tokenize=True, truncation=False, max_length=20
-        )
+        ).input_ids
         self.assertEqual(len(token_outputs), len(self.tokenized_fixture_conversations))
         for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
             self.assertEqual(output, expected.tokens)
 
         # Test 3:
         # assert truncation is boolean
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             self.tokenizer.apply_chat_template(
                 self.fixture_conversations, tokenize=True, truncation=TruncationStrategy.LONGEST_FIRST, max_length=20
             )
@@ -1200,7 +1458,9 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         for padding in [True, "max_length", PaddingStrategy.LONGEST, PaddingStrategy.MAX_LENGTH]:
             if padding == PaddingStrategy.MAX_LENGTH:
                 # No padding if no max length is provided
-                token_outputs = self.tokenizer.apply_chat_template(self.fixture_conversations, padding=padding)
+                token_outputs = self.tokenizer.apply_chat_template(
+                    self.fixture_conversations, padding=padding, return_dict=False
+                )
                 self.assertEqual(len(token_outputs), len(self.tokenized_fixture_conversations))
                 for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
                     self.assertEqual(output, expected.tokens)
@@ -1208,7 +1468,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             max_length = 20 if padding == PaddingStrategy.MAX_LENGTH else None
 
             token_outputs = self.tokenizer.apply_chat_template(
-                self.fixture_conversations, tokenize=True, padding=padding, max_length=max_length
+                self.fixture_conversations, tokenize=True, padding=padding, max_length=max_length, return_dict=False
             )
 
             if padding != PaddingStrategy.MAX_LENGTH:
@@ -1232,7 +1492,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         for padding in [False, "do_not_pad", PaddingStrategy.DO_NOT_PAD]:
             token_outputs = self.tokenizer.apply_chat_template(
-                self.fixture_conversations, tokenize=True, padding=padding
+                self.fixture_conversations, tokenize=True, padding=padding, return_dict=False
             )
             self.assertEqual(len(token_outputs), len(self.tokenized_fixture_conversations))
             for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
@@ -1244,7 +1504,12 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         max_length = 20
         for padding in [True, "max_length", PaddingStrategy.LONGEST, PaddingStrategy.MAX_LENGTH]:
             token_outputs = self.tokenizer.apply_chat_template(
-                self.fixture_conversations, tokenize=True, truncation=True, padding=padding, max_length=max_length
+                self.fixture_conversations,
+                tokenize=True,
+                truncation=True,
+                padding=padding,
+                max_length=max_length,
+                return_dict=False,
             )
             self.assertEqual(len(token_outputs), len(self.tokenized_fixture_conversations))
             for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
@@ -1253,7 +1518,12 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 )
         for padding in [False, "do_not_pad", PaddingStrategy.DO_NOT_PAD]:
             token_outputs = self.tokenizer.apply_chat_template(
-                self.fixture_conversations, tokenize=True, truncation=True, padding=padding, max_length=max_length
+                self.fixture_conversations,
+                tokenize=True,
+                truncation=True,
+                padding=padding,
+                max_length=max_length,
+                return_dict=False,
             )
             self.assertEqual(len(token_outputs), len(self.tokenized_fixture_conversations))
             for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
@@ -1263,7 +1533,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 1:
         # with tokenize
         token_outputs = self.tokenizer.apply_chat_template(
-            self.fixture_conversations, tokenize=True, return_tensors="pt", padding=True
+            self.fixture_conversations, tokenize=True, return_tensors="pt", padding=True, return_dict=False
         )
         self.assertIsInstance(token_outputs, torch.Tensor)
         self.assertEqual(
@@ -1274,7 +1544,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 2:
         # without tokenize, should ignore return_tensors
         token_outputs = self.tokenizer.apply_chat_template(
-            self.fixture_conversations, tokenize=False, return_tensors="pt", padding=True
+            self.fixture_conversations, tokenize=False, return_tensors="pt", padding=True, return_dict=False
         )
         self.assertEqual(token_outputs, [t.text for t in self.tokenized_fixture_conversations])
 
@@ -1301,7 +1571,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 1:
         # default case
         text = "Hello world!"
-        expected_tokens = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=True, eos=True)
+        expected_tokens = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=True, eos=False)
         tokens = self.tokenizer(text)
         self.assertIsInstance(tokens, BatchEncoding)
         self.assertEqual(tokens["input_ids"], expected_tokens)
@@ -1326,7 +1596,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         tokens = self.tokenizer(text, return_special_tokens_mask=True)
         self.assertEqual(tokens["input_ids"], expected_tokens)
         self.assertEqual(tokens["attention_mask"], [1] * len(expected_tokens))
-        self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 2) + [1])
+        self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 1))
 
         # Test 5:
         # add_special_tokens=False
@@ -1337,24 +1607,42 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         self.assertEqual(tokens["attention_mask"], [1] * len(expected_tokens))
         self.assertEqual(tokens["special_tokens_mask"], [0] * len(expected_tokens))
 
+        # Test 6:
+        # add_special_tokens=False and mode finetuning
+        text = "Hello world!"
+        expected_tokens = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=True, eos=True)
+        with patch.object(self.tokenizer, "_mode", ValidationMode.finetuning):
+            tokens = self.tokenizer(text, return_special_tokens_mask=True)
+        self.assertIsInstance(tokens, BatchEncoding)
+        self.assertEqual(tokens["input_ids"], expected_tokens)
+        self.assertEqual(tokens["attention_mask"], [1] * len(expected_tokens))
+        self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 2) + [1])
+
+        # Test 7:
+        # empty string
+        tokens = self.tokenizer("", add_special_tokens=False)
+        self.assertIsInstance(tokens, BatchEncoding)
+        self.assertEqual(tokens["input_ids"], [])
+        self.assertEqual(tokens["attention_mask"], [])
+
         with self.assertRaises(
-            ValueError, msg="Kwargs [wrong_kwarg] are not supported by `MistralCommonTokenizer.__call__`."
+            ValueError, msg="Kwargs [wrong_kwarg] are not supported by `MistralCommonBackend.__call__`."
         ):
             self.tokenizer(text, wrong_kwarg=True)
 
         with self.assertRaises(
             ValueError,
-            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonTokenizer`.",
+            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonBackend`.",
         ):
             self.tokenizer(text, text_pair="Hello world!")
         with self.assertRaises(
             ValueError,
-            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonTokenizer`.",
+            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonBackend`.",
         ):
             self.tokenizer(text, text_target="Hello world!")
         with self.assertRaises(
             ValueError,
-            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonTokenizer`.",
+            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonBackend`.",
         ):
             self.tokenizer(text, text_pair_target="Hello world!")
 
@@ -1362,7 +1650,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 1:
         # truncation=True or "longest_first" or TruncationStrategy.LONGEST_FIRST
         text = "Hello world!" * 10
-        expected_tokens = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=True, eos=True)
+        expected_tokens = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=True, eos=False)
 
         for truncation in [True, "longest_first", TruncationStrategy.LONGEST_FIRST]:
             tokens = self.tokenizer(text, truncation=True, max_length=10, return_special_tokens_mask=True)
@@ -1378,7 +1666,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             self.assertIsInstance(tokens, BatchEncoding)
             self.assertEqual(tokens["input_ids"], expected_tokens)
             self.assertEqual(tokens["attention_mask"], [1] * len(expected_tokens))
-            self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 2) + [1])
+            self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 1))
 
         # Test 3:
         # truncation=True or "longest_first" or TruncationStrategy.LONGEST_FIRST with return_overflowing_tokens=True and stride
@@ -1405,13 +1693,13 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         for truncation in ["only_first", TruncationStrategy.ONLY_FIRST, "only_second", TruncationStrategy.ONLY_SECOND]:
             with self.assertRaises(
                 ValueError,
-                msg="Truncation strategy `only_first` and `only_second` are not supported by `MistralCommonTokenizer`.",
+                msg="Truncation strategy `only_first` and `only_second` are not supported by `MistralCommonBackend`.",
             ):
                 self.tokenizer(text, truncation=truncation)
 
     def test_call_with_padding(self):
         text = "Hello world!"
-        expected_tokens = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=True, eos=True)
+        expected_tokens = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=True, eos=False)
 
         # Test 1:
         # padding=False or padding=True or "do_not_pad" or PaddingStrategy.DO_NOT_PAD or padding="longest" or PaddingStrategy.LONGEST
@@ -1420,7 +1708,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             self.assertIsInstance(tokens, BatchEncoding)
             self.assertEqual(tokens["input_ids"], expected_tokens)
             self.assertEqual(tokens["attention_mask"], [1] * len(expected_tokens))
-            self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 2) + [1])
+            self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 1))
 
         # Test 2:
         # padding="max_length" or PaddingStrategy.MAX_LENGTH
@@ -1430,9 +1718,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             num_padding = 20 - len(expected_tokens)
             self.assertEqual(tokens["input_ids"], num_padding * [self.tokenizer.pad_token_id] + expected_tokens)
             self.assertEqual(tokens["attention_mask"], num_padding * [0] + [1] * len(expected_tokens))
-            self.assertEqual(
-                tokens["special_tokens_mask"], num_padding * [1] + [1] + [0] * (len(expected_tokens) - 2) + [1]
-            )
+            self.assertEqual(tokens["special_tokens_mask"], num_padding * [1] + [1] + [0] * (len(expected_tokens) - 1))
 
         # Test 3:
         # pad_to_multiple_of
@@ -1443,9 +1729,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         num_padding = 16 - len(expected_tokens)
         self.assertEqual(tokens["input_ids"], num_padding * [self.tokenizer.pad_token_id] + expected_tokens)
         self.assertEqual(tokens["attention_mask"], num_padding * [0] + [1] * len(expected_tokens))
-        self.assertEqual(
-            tokens["special_tokens_mask"], num_padding * [1] + [1] + [0] * (len(expected_tokens) - 2) + [1]
-        )
+        self.assertEqual(tokens["special_tokens_mask"], num_padding * [1] + [1] + [0] * (len(expected_tokens) - 1))
 
         # Test 4:
         # padding="max_length" and padding_side="right"
@@ -1456,15 +1740,15 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         num_padding = 20 - len(expected_tokens)
         self.assertEqual(tokens["input_ids"], expected_tokens + num_padding * [self.tokenizer.pad_token_id])
         self.assertEqual(tokens["attention_mask"], [1] * len(expected_tokens) + num_padding * [0])
-        self.assertEqual(
-            tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 2) + [1] + num_padding * [1]
-        )
+        self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 1) + num_padding * [1])
 
     def test_batch_call(self):
         # Test 1:
         # default case
         text = ["Hello world!", "Hello world! Longer"]
-        expected_tokens = [self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=True) for t in text]
+        expected_tokens = [
+            self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=False) for t in text
+        ]
         tokens = self.tokenizer(text)
         self.assertIsInstance(tokens, BatchEncoding)
         self.assertEqual(tokens["input_ids"], expected_tokens)
@@ -1510,15 +1794,12 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 torch.Tensor(
                     (len(expected_tokens[1]) - len(expected_tokens[0])) * [1]
                     + [1]
-                    + [0] * (len(expected_tokens[0]) - 2)
-                    + [1]
+                    + [0] * (len(expected_tokens[0]) - 1)
                 ),
             )
         )
         self.assertTrue(
-            torch.equal(
-                tokens["special_tokens_mask"][1], torch.Tensor([1] + [0] * (len(expected_tokens[1]) - 2) + [1])
-            )
+            torch.equal(tokens["special_tokens_mask"][1], torch.Tensor([1] + [0] * (len(expected_tokens[1]) - 1)))
         )
 
         # Test 4:
@@ -1532,11 +1813,45 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         self.assertEqual(tokens["attention_mask"], [[1] * len(t) for t in expected_tokens])
         self.assertEqual(tokens["special_tokens_mask"], [[0] * len(t) for t in expected_tokens])
 
+        # Test 5:
+        # add_special_tokens=True and mode = finetuning
+        expected_tokens = [self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=True) for t in text]
+        with patch.object(self.tokenizer, "_mode", ValidationMode.finetuning):
+            tokens = self.tokenizer(text, add_special_tokens=True, return_special_tokens_mask=True)
+        self.assertIsInstance(tokens, BatchEncoding)
+        self.assertEqual(tokens["input_ids"], expected_tokens)
+        self.assertEqual(
+            tokens["special_tokens_mask"],
+            [[1] + [0] * (len(expected_tokens[0]) - 2) + [1], [1] + [0] * (len(expected_tokens[1]) - 2) + [1]],
+        )
+
+        # Test 6:
+        # empty string in batch
+        expected_tokens = [
+            self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=False, eos=False) for t in text
+        ]
+        expected_tokens.append([])
+        tokens = self.tokenizer(text + [""], add_special_tokens=False, return_special_tokens_mask=True)
+        self.assertIsInstance(tokens, BatchEncoding)
+        self.assertEqual(tokens["input_ids"], expected_tokens)
+        self.assertEqual(tokens["attention_mask"], [[1] * len(t) for t in expected_tokens])
+        self.assertEqual(tokens["special_tokens_mask"], [[0] * len(t) for t in expected_tokens])
+
+        # Test 7:
+        # empty batch
+        tokens = self.tokenizer([""], add_special_tokens=False, return_special_tokens_mask=True)
+        self.assertIsInstance(tokens, BatchEncoding)
+        self.assertEqual(tokens["input_ids"], [[]])
+        self.assertEqual(tokens["attention_mask"], [[]])
+        self.assertEqual(tokens["special_tokens_mask"], [[]])
+
     def test_batch_call_with_truncation(self):
         # Test 1:
         # truncation=True
         text = ["Hello world!", "Hello world! Longer" * 10]
-        expected_tokens = [self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=True) for t in text]
+        expected_tokens = [
+            self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=False) for t in text
+        ]
 
         for truncation in [True, "longest_first", TruncationStrategy.LONGEST_FIRST]:
             tokens = self.tokenizer(text, truncation=True, max_length=10, return_special_tokens_mask=True)
@@ -1557,7 +1872,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             self.assertEqual(tokens["attention_mask"], [[1] * len(t) for t in expected_tokens])
             self.assertEqual(
                 tokens["special_tokens_mask"],
-                [[1] + [0] * (len(t) - 2) + [1] for t in expected_tokens],
+                [[1] + [0] * (len(t) - 1) for t in expected_tokens],
             )
 
         # Test 3:
@@ -1578,11 +1893,9 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 self.assertEqual(tokens["attention_mask"], [[1] * min(len(t), 10) for t in expected_tokens])
                 self.assertEqual(
                     tokens["overflowing_tokens"],
-                    [expected_tokens[0][10 - stride :], expected_tokens[1][10 - stride :]],
+                    [[0], expected_tokens[1][10 - stride :]],
                 )
-                self.assertEqual(
-                    tokens["num_truncated_tokens"], [len(expected_tokens[0]) - 10, len(expected_tokens[1]) - 10]
-                )
+                self.assertEqual(tokens["num_truncated_tokens"], [[0], len(expected_tokens[1]) - 10])
                 self.assertEqual(
                     tokens["special_tokens_mask"],
                     [[1 if id in self.ref_special_ids else 0 for id in ids[:10]] for ids in expected_tokens],
@@ -1592,7 +1905,9 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 1:
         # padding=False or padding=True or "do_not_pad" or PaddingStrategy.DO_NOT_PAD or padding="longest" or PaddingStrategy.LONGEST
         text = ["Hello world!", "Hello world! Longer"]
-        expected_tokens = [self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=True) for t in text]
+        expected_tokens = [
+            self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=False) for t in text
+        ]
         for padding in [False, "do_not_pad", PaddingStrategy.DO_NOT_PAD]:
             tokens = self.tokenizer(text, padding=padding, return_special_tokens_mask=True)
             self.assertIsInstance(tokens, BatchEncoding)
@@ -1600,7 +1915,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             self.assertEqual(tokens["attention_mask"], [[1] * len(t) for t in expected_tokens])
             self.assertEqual(
                 tokens["special_tokens_mask"],
-                [[1] + [0] * (len(t) - 2) + [1] for t in expected_tokens],
+                [[1] + [0] * (len(t) - 1) for t in expected_tokens],
             )
 
         # Test 2:
@@ -1626,8 +1941,8 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             self.assertEqual(
                 tokens["special_tokens_mask"],
                 [
-                    num_padding[0] * [1] + [1] + [0] * (len(expected_tokens[0]) - 2) + [1],
-                    num_padding[1] * [1] + [1] + [0] * (len(expected_tokens[1]) - 2) + [1],
+                    num_padding[0] * [1] + [1] + [0] * (len(expected_tokens[0]) - 1),
+                    num_padding[1] * [1] + [1] + [0] * (len(expected_tokens[1]) - 1),
                 ],
             )
 
@@ -1654,8 +1969,8 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             self.assertEqual(
                 tokens["special_tokens_mask"],
                 [
-                    num_padding[0] * [1] + [1] + [0] * (len(expected_tokens[0]) - 2) + [1],
-                    num_padding[1] * [1] + [1] + [0] * (len(expected_tokens[1]) - 2) + [1],
+                    num_padding[0] * [1] + [1] + [0] * (len(expected_tokens[0]) - 1),
+                    num_padding[1] * [1] + [1] + [0] * (len(expected_tokens[1]) - 1),
                 ],
             )
 
@@ -1683,8 +1998,8 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         self.assertEqual(
             tokens["special_tokens_mask"],
             [
-                num_padding[0] * [1] + [1] + [0] * (len(expected_tokens[0]) - 2) + [1],
-                num_padding[1] * [1] + [1] + [0] * (len(expected_tokens[1]) - 2) + [1],
+                num_padding[0] * [1] + [1] + [0] * (len(expected_tokens[0]) - 1),
+                num_padding[1] * [1] + [1] + [0] * (len(expected_tokens[1]) - 1),
             ],
         )
 
@@ -1713,8 +2028,8 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             self.assertEqual(
                 tokens["special_tokens_mask"],
                 [
-                    [1] + [0] * (len(expected_tokens[0]) - 2) + [1] + num_padding[0] * [1],
-                    [1] + [0] * (len(expected_tokens[1]) - 2) + [1] + num_padding[1] * [1],
+                    [1] + [0] * (len(expected_tokens[0]) - 1) + num_padding[0] * [1],
+                    [1] + [0] * (len(expected_tokens[1]) - 1) + num_padding[1] * [1],
                 ],
             )
 
@@ -1724,7 +2039,9 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # and truncation=True or "longest_first" or TruncationStrategy.LONGEST_FIRST
         # and max_length
         text = ["Hello world!", "Hello world! Longer" * 10]
-        expected_tokens = [self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=True) for t in text]
+        expected_tokens = [
+            self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=False) for t in text
+        ]
         for padding in [True, "longest", PaddingStrategy.LONGEST, "max_length", PaddingStrategy.MAX_LENGTH]:
             for truncation in [True, "longest_first", TruncationStrategy.LONGEST_FIRST]:
                 tokens = self.tokenizer(
@@ -1771,3 +2088,157 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                         for i, ids in enumerate(expected_tokens)
                     ],
                 )
+
+    def test_get_vocab(self):
+        vocab = self.tokenizer.get_vocab()
+        # loss of some tokens due to conversion
+        self.assertNotEqual(len(vocab), len(self.tokenizer))
+        for token, id_token in vocab.items():
+            # Issue during conversion
+            if id_token == 0 and token != "<unk>":
+                continue
+            self.assertEqual(self.tokenizer.convert_tokens_to_ids(token), id_token)
+            self.assertEqual(
+                self.ref_tokenizer.decode([id_token], special_token_policy=SpecialTokenPolicy.KEEP), token
+            )
+
+    def test_get_validation_mode(self):
+        for mode, expected in [
+            ("test", ValidationMode.test),
+            (ValidationMode.test, ValidationMode.test),
+            ("finetuning", ValidationMode.finetuning),
+            (ValidationMode.finetuning, ValidationMode.finetuning),
+        ]:
+            self.assertEqual(MistralCommonBackend._get_validation_mode(mode), expected)
+
+        for invalid_mode in [("serving", ValidationMode.serving, "invalid", 1)]:
+            with self.assertRaises(ValueError):
+                MistralCommonBackend._get_validation_mode(invalid_mode)
+
+    def test_all_special_ids(self):
+        with patch.object(self.tokenizer, "_all_special_ids", {1, 0}):
+            self.assertEqual(self.tokenizer.all_special_ids, [0, 1])
+
+        spm_tokenizer = self._get_spm_tokenizer()
+        with patch.object(spm_tokenizer, "_all_special_ids", {1, 0}):
+            self.assertEqual(spm_tokenizer.all_special_ids, [0, 1])
+
+    def test_all_special_tokens(self):
+        with patch.object(self.tokenizer, "_all_special_tokens", ["<unk>", "<s>"]):
+            self.assertEqual(self.tokenizer.all_special_tokens, ["<unk>", "<s>"])
+
+        spm_tokenizer = self._get_spm_tokenizer()
+        with patch.object(spm_tokenizer, "_all_special_tokens", ["<unk>", "<s>", "spm"]):
+            self.assertEqual(spm_tokenizer.all_special_tokens, ["<unk>", "<s>", "spm"])
+
+    def test_mode(self):
+        # Test 1:
+        # mode property should return ValidationMode
+        self.assertIsInstance(self.tokenizer.mode, ValidationMode)
+        self.assertEqual(self.tokenizer.mode, ValidationMode.test)
+
+        # Test 2:
+        # mode should be settable via instantiation
+        spm_finetuning_tokenizer = self._get_spm_tokenizer(mode="finetuning")
+        self.assertEqual(spm_finetuning_tokenizer.mode, ValidationMode.finetuning)
+
+    def test_build_inputs_with_special_tokens(self):
+        # Test 1:
+        # test mode with bos only
+        token_ids = [100, 200, 300]
+        expected = [self.tokenizer.bos_token_id] + token_ids
+        result = self.tokenizer.build_inputs_with_special_tokens(token_ids)
+        self.assertEqual(result, expected)
+
+        # Test 2:
+        # finetuning mode with bos and eos
+        with patch.object(self.tokenizer, "_mode", ValidationMode.finetuning):
+            expected = [self.tokenizer.bos_token_id] + token_ids + [self.tokenizer.eos_token_id]
+            result = self.tokenizer.build_inputs_with_special_tokens(token_ids)
+            self.assertEqual(result, expected)
+
+        # Test 3:
+        # token_ids_1 should raise ValueError
+        with self.assertRaises(ValueError):
+            self.tokenizer.build_inputs_with_special_tokens(token_ids, [400, 500])
+
+    def test_create_token_type_ids_from_sequences(self):
+        # Test 1:
+        # create token type ids for single sequence
+        token_ids = [100, 200, 300]
+        expected_length = len(token_ids) + 1  # +1 for bos token
+        result = self.tokenizer.create_token_type_ids_from_sequences(token_ids)
+        self.assertEqual(result, [0] * expected_length)
+
+        # Test 2:
+        # token_ids_1 should raise ValueError
+        with self.assertRaises(ValueError):
+            self.tokenizer.create_token_type_ids_from_sequences(token_ids, [400, 500])
+
+    def test_num_special_tokens_to_add(self):
+        # Test 1:
+        # test mode should add 1 token (bos)
+        result = self.tokenizer.num_special_tokens_to_add()
+        self.assertEqual(result, 1)
+
+        # Test 2:
+        # finetuning mode should add 2 tokens (bos and eos)
+        with patch.object(self.tokenizer, "_mode", ValidationMode.finetuning):
+            result = self.tokenizer.num_special_tokens_to_add()
+            self.assertEqual(result, 2)
+
+        # Test 3:
+        # pair=True should raise ValueError
+        with self.assertRaises(ValueError):
+            self.tokenizer.num_special_tokens_to_add(pair=True)
+
+    def test_prepare_for_model(self):
+        # Test 1:
+        # basic prepare_for_model with add_special_tokens=True
+        token_ids = [100, 200, 300]
+        result = self.tokenizer.prepare_for_model(token_ids, add_special_tokens=True)
+        expected_ids = [self.tokenizer.bos_token_id] + token_ids
+        self.assertEqual(result["input_ids"], expected_ids)
+        self.assertEqual(result["attention_mask"], [1] * len(expected_ids))
+
+        # Test 2:
+        # prepare_for_model with add_special_tokens=False
+        result = self.tokenizer.prepare_for_model(token_ids, add_special_tokens=False)
+        self.assertEqual(result["input_ids"], token_ids)
+        self.assertEqual(result["attention_mask"], [1] * len(token_ids))
+
+        # Test 3:
+        # prepare_for_model with padding
+        result = self.tokenizer.prepare_for_model(
+            token_ids, add_special_tokens=False, padding="max_length", max_length=10
+        )
+        expected_ids = [self.tokenizer.pad_token_id] * (10 - len(token_ids)) + token_ids
+        expected_attention_mask = [0] * (10 - len(token_ids)) + [1] * len(token_ids)
+        self.assertEqual(result["input_ids"], expected_ids)
+        self.assertEqual(result["attention_mask"], expected_attention_mask)
+
+        # Test 4:
+        # prepare_for_model with truncation
+        long_token_ids = [100, 200, 300, 400, 500, 600]
+        result = self.tokenizer.prepare_for_model(
+            long_token_ids, add_special_tokens=False, truncation=True, max_length=4
+        )
+        expected_ids = long_token_ids[:4]
+        self.assertEqual(result["input_ids"], expected_ids)
+        self.assertEqual(result["attention_mask"], [1] * len(expected_ids))
+
+        # Test 5:
+        # prepare_for_model with return_tensors
+        result = self.tokenizer.prepare_for_model(token_ids, add_special_tokens=False, return_tensors="pt")
+        self.assertIsInstance(result["input_ids"], torch.Tensor)
+        self.assertEqual(result["input_ids"].tolist(), token_ids)
+
+        # Test 6:
+        # pair_ids should raise ValueError
+        with self.assertRaises(ValueError):
+            self.tokenizer.prepare_for_model(token_ids, pair_ids=[400, 500])
+
+        # Test 7:
+        # unsupported kwargs should raise ValueError
+        with self.assertRaises(ValueError):
+            self.tokenizer.prepare_for_model(token_ids, add_special_tokens=False, unsupported_arg="")

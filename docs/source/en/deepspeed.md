@@ -196,7 +196,7 @@ ZeRO-2 shards the optimizer and gradient states across GPUs. This stage is prima
         "overlap_comm": true,
         "reduce_scatter": true,
         "reduce_bucket_size": 5e8,
-        "contiguous_gradients": true
+        "contiguous_gradients": true,
         "round_robin_gradients": true
     }
 }
@@ -294,7 +294,7 @@ Consider running a [benchmark](https://github.com/microsoft/DeepSpeed/issues/998
 
 The example ZeRO-3 and ZeRO-Infinity config below sets most of the parameter values to `auto`, but you can also manually set configure these values.
 
-```yaml
+```json
 {
     "fp16": {
         "enabled": "auto",
@@ -341,13 +341,6 @@ The example ZeRO-3 and ZeRO-Infinity config below sets most of the parameter val
             "buffer_size": 1e8,
             "max_in_cpu": 1e9
         },
-        "aio": {
-            "block_size": 262144,
-            "queue_depth": 32,
-            "thread_count": 1,
-            "single_submit": false,
-            "overlap_events": true
-        },
         "overlap_comm": true,
         "contiguous_gradients": true,
         "sub_group_size": 1e9,
@@ -358,7 +351,13 @@ The example ZeRO-3 and ZeRO-Infinity config below sets most of the parameter val
         "stage3_max_reuse_distance": 1e9,
         "stage3_gather_16bit_weights_on_model_save": true
     },
-
+    "aio": {
+        "block_size": 262144,
+        "queue_depth": 32,
+        "thread_count": 1,
+        "single_submit": false,
+        "overlap_events": true
+    },
     "gradient_accumulation_steps": "auto",
     "gradient_clipping": "auto",
     "steps_per_print": 2000,
@@ -366,6 +365,108 @@ The example ZeRO-3 and ZeRO-Infinity config below sets most of the parameter val
     "train_micro_batch_size_per_gpu": "auto",
     "wall_clock_breakdown": false
 }
+```
+
+### Sequence Parallelism
+
+DeepSpeed's ALST/Ulysses sequence parallelism enables training with very long sequences by splitting the sequence across multiple GPUs. This is particularly useful for training large language models with very long sequence lengths.
+
+Arctic Long Sequence Training (ALST) uses a combination of sharding inputs along the sequence dimension and attention head parallelism. With this approach, you can train models with sequence lengths up to 500K tokens on a single H100 GPU, 3.7M on a single node, or 15M tokens on just four nodes with Llama-8B. The implementation described here enables one component of the full ALST system. For additional optimizations like TiledMLP and activation checkpoint offloading, refer to the [DeepSpeed ALST tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/).
+
+> [!TIP]
+> For more detailed information about sequence parallelism, see the Accelerate [Sequence Parallelism](https://huggingface.co/docs/accelerate/concept_guides/sequence_parallelism) guide.
+
+To enable ALST/Ulysses sequence parallelism with [`Trainer`], configure `parallelism_config` in [`TrainingArguments`]. Sequence parallelism is configured via Accelerate's `ParallelismConfig` and requires an Accelerate version higher than 1.12.0.
+
+```py
+from accelerate.utils import ParallelismConfig, DeepSpeedSequenceParallelConfig
+
+# Example: 4 GPUs with sp_size=4, dp_replicate_size=1 (no data parallelism)
+# Ensure total_size = dp_replicate_size * dp_shard_size * sp_size = 1 * 1 * 4 = 4 GPUs
+parallelism_config = ParallelismConfig(
+    sp_backend="deepspeed",
+    sp_size=4,  # Number of GPUs to split sequence across
+    dp_replicate_size=1,  # Explicit: no data parallelism
+    sp_handler=DeepSpeedSequenceParallelConfig(
+        sp_seq_length_is_variable=True,
+        sp_attn_implementation="sdpa",
+    ),
+)
+
+training_args = TrainingArguments(
+    ...,
+    deepspeed="path/to/deepspeed_config.json",
+    parallelism_config=parallelism_config,
+)
+```
+
+You can also configure sequence parallelism using an Accelerate config file.
+
+```yaml
+distributed_type: DEEPSPEED
+deepspeed_config:
+  deepspeed_config_file: path/to/ds_config.json
+machine_rank: 0
+num_machines: 1
+num_processes: 4  # Total number of processes
+parallelism_config:
+  parallelism_config_sp_size: 4  # Sequence parallel size
+  parallelism_config_dp_replicate_size: 1  # Must be: dp_replicate_size * dp_shard_size * sp_size = num_processes
+  parallelism_config_sp_backend: deepspeed
+  parallelism_config_sp_seq_length_is_variable: true
+  parallelism_config_sp_attn_implementation: sdpa
+```
+
+Important configuration parameters include the following.
+
+* `sp_backend` must be set to `"deepspeed"` to use ALST/Ulysses sequence parallelism.
+* `sp_size` is the degree of sequence parallelism. For example, `sp_size=4` means 4 GPUs will process a single sequence in parallel. You need at least 2 GPUs to enable sequence parallelism. **Data feeding**: Each rank receives a unique data stream from the DataLoader (like DP). **Batch size calculation**: The effective `dp_world_size = world_size / sp_size`. So with 4 GPUs and `sp_size=4`, each of the 4 ranks gets different samples from the DataLoader, but `dp_world_size=1` for total batch size calculations
+* `sp_seq_length_is_variable` determines how sequence lengths are handled. When set to `True` (recommended), the implementation adapts to varying sequence lengths between batches. When `False`, all sequences must be padded to a fixed length specified by `sp_seq_length`.
+* `sp_attn_implementation` specifies the attention implementation to use. Supported values are `"sdpa"`, `"flash_attention_2"`, or `"flash_attention_3"`. Flash Attention is recommended for best performance, especially with multiple samples in a batch, because SDPA may incorrectly attend across sample boundaries.
+
+> [!WARNING]
+> Sequence parallelism requires your model to use one of the supported attention implementations (`sdpa`, `flash_attention_2`, or `flash_attention_3`). The `eager` attention implementation is not supported because it doesn't properly handle `position_ids`.
+
+When using sequence parallelism, ensure your sequences are properly padded. Use `pad_to_multiple_of` in your data collator to ensure sequences are divisible by `sp_size`. For example, with `sp_size=4`, set `pad_to_multiple_of=4` or higher.
+
+```py
+from transformers import DataCollatorForLanguageModeling
+
+data_collator = DataCollatorForLanguageModeling(
+    tokenizer=tokenizer,
+    mlm=False,
+    pad_to_multiple_of=4,  # Ensure sequences are divisible by sp_size
+)
+```
+
+When using `sp_size` with multiple GPUs, you **must** explicitly set `dp_replicate_size` or `dp_shard_size` to ensure `total_size = dp_replicate_size * dp_shard_size * sp_size` equals your total number of GPUs. For example, with 8 GPUs and `sp_size=4`, you must set `dp_replicate_size=2` (since 2 × 1 × 4 = 8):
+
+```py
+parallelism_config = ParallelismConfig(
+    sp_backend="deepspeed",
+    sp_size=4,
+    dp_replicate_size=2,
+    sp_handler=DeepSpeedSequenceParallelConfig(
+        sp_seq_length_is_variable=True,
+        sp_attn_implementation="flash_attention_2",
+    ),
+)
+```
+
+[`Trainer`] automatically handles the special requirements for sequence parallelism including:
+
+* Adapting the data loader via DeepSpeed's [`UlyssesSPDataLoaderAdapter`](https://github.com/deepspeedai/DeepSpeed/blob/master/deepspeed/runtime/sequence_parallel/ulysses_sp.py) to shard sequences across GPUs. **Important**: Unlike Tensor Parallelism (where all ranks must receive identical data), each rank with SP receives a unique data stream from the DataLoader (similar to DP). The adapter handles distributing sequence chunks across SP ranks internally, so your DataLoader should continue feeding different samples to each rank.
+* Generating `position_ids` when not provided
+* Creating `shift_labels` for causal language modeling
+* Aggregating loss across sequence parallel ranks with proper masking for `-100` labels
+
+You can launch training with sequence parallelism using the `accelerate launch` command.
+
+```bash
+accelerate launch --config_file alst_config.yaml your_training_script.py \
+--output_dir output_dir \
+--per_device_train_batch_size 1 \
+--gradient_accumulation_steps 1
 ```
 
 ## Training features
@@ -383,7 +484,7 @@ Gradient checkpointing saves memory by only storing *some* of the intermediate a
 
 The batch size can be automatically configured or manually set. When you choose the `"auto"` option, [`Trainer`] sets `train_micro_batch_size_per_gpu` and `train_batch_size` to the value of `world_size * per_device_train_batch_size * gradient_accumulation_steps`.
 
-```yaml
+```json
 {
     "train_micro_batch_size_per_gpu": "auto",
     "train_batch_size": "auto"
@@ -400,7 +501,7 @@ Reduce operations are lossy, for example, when gradients are averaged across mul
 
 Choose the communication data type by setting the `communication_data_type` parameter in the config file. For example, choosing fp32 adds a small amount of overhead but ensures the reduction operation is accumulated in fp32 and when it is ready, it's downcasted to whichever half-precision data type you're training in.
 
-```yaml
+```json
 {
     "communication_data_type": "fp32"
 }
@@ -412,7 +513,7 @@ Gradient accumulation accumulates gradients over several mini-batches of data be
 
 Gradient accumulation can be automatically configured or manually set. When you choose the `"auto"` option, [`Trainer`] sets it to the value of `gradient_accumulation_steps`.
 
-```yaml
+```json
 {
     "gradient_accumulation_steps": "auto"
 }
@@ -424,7 +525,7 @@ Gradient clipping is useful for preventing exploding gradients which can lead to
 
 Gradient clipping can be automatically configured or manually set. When you choose the `"auto"` option, [`Trainer`] sets it to the value of `max_grad_norm`.
 
-```yaml
+```json
 {
     "gradient_clipping": "auto"
 }
@@ -439,7 +540,7 @@ Mixed precision accelerates training speed by performing some calculations in ha
 
 Train in fp32 if a model wasn't pretrained in mixed precision because it may cause underflow or overflow errors. Disable fp16, the default, in this case.
 
-```yaml
+```json
 {
     "fp16": {
         "enabled": false
@@ -452,9 +553,9 @@ For Ampere GPUs and PyTorch 1.7+, the more efficient [tf32](https://pytorch.org/
 </hfoption>
 <hfoption id="fp16">
 
-To configure AMP-like fp16 mixed precision, set up the config as shown below with `"auto"` or your own values. [`Trainer`] automatically enables or disables fp16 based on the value of `fp16_backend`, and the rest of the config can be set by you. fp16 is enabled from the command line when the following arguments are passed: `--fp16`, `--fp16_backend amp` or `--fp16_full_eval`.
+To configure fp16 mixed precision, set up the config as shown below with `"auto"` or your own values. [`Trainer`] automatically enables or disables fp16 based on the value of `fp16` or `fp16_full_eval`, and the rest of the config can be set by you. fp16 is enabled from the command line when the following arguments are passed: `--fp16` or `--fp16_full_eval` also.
 
-```yaml
+```json
 {
     "fp16": {
         "enabled": "auto",
@@ -469,28 +570,17 @@ To configure AMP-like fp16 mixed precision, set up the config as shown below wit
 
 For additional DeepSpeed fp16 training options, take a look at the [FP16 Training Options](https://www.deepspeed.ai/docs/config-json/#fp16-training-options) reference.
 
-To configure Apex-like fp16 mixed precision, set up the config as shown below with `"auto"` or your own values. [`Trainer`] automatically configures `amp` based on the values of `fp16_backend` and `fp16_opt_level`. It can also be enabled from the command line when the following arguments are passed: `--fp16`, `--fp16_backend apex` or `--fp16_opt_level 01`.
-
-```yaml
-{
-    "amp": {
-        "enabled": "auto",
-        "opt_level": "auto"
-    }
-}
-```
-
 </hfoption>
 <hfoption id="bf16">
 
 > [!TIP]
 > bf16 requires DeepSpeed 0.6.0.
 
-bf16 has the same dynamic range as fp32, and doesn’t require loss scaling unlike fp16. However, if you use [gradient accumulation](#gradient-accumulation) with bf16, gradients are accumulated in bf16 which may not be desirable because the lower precision can lead to lossy accumulation.
+bf16 has the same dynamic range as fp32, and doesn't require loss scaling unlike fp16. However, if you use [gradient accumulation](#gradient-accumulation) with bf16, gradients are accumulated in bf16 which may not be desirable because the lower precision can lead to lossy accumulation.
 
 bf16 can be set up in the config file or enabled from the command line when the following arguments are passed: `--bf16` or `--bf16_full_eval`.
 
-```yaml
+```json
 {
     "bf16": {
         "enabled": "auto"
@@ -514,7 +604,7 @@ DeepSpeed offers several [optimizers](https://www.deepspeed.ai/docs/config-json/
 
 You can set the parameters to `"auto"` or manually input your own values.
 
-```yaml
+```json
 {
    "optimizer": {
        "type": "AdamW",
@@ -530,7 +620,7 @@ You can set the parameters to `"auto"` or manually input your own values.
 
 Use an unsupported optimizer by adding the following to the top level configuration.
 
-```yaml
+```json
 {
    "zero_allow_untested_optimizer": true
 }
@@ -538,7 +628,7 @@ Use an unsupported optimizer by adding the following to the top level configurat
 
 From DeepSpeed 0.8.3+, if you want to use offload, you'll also need to add the following to the top level configuration because offload works best with DeepSpeed's CPU Adam optimizer.
 
-```yaml
+```json
 {
    "zero_force_ds_cpu_optimizer": false
 }
@@ -558,7 +648,7 @@ If you don't configure the scheduler in the config file, [`Trainer`] automatical
 
 You can set the parameters to `"auto"` or manually input your own values.
 
-```yaml
+```json
 {
    "scheduler": {
          "type": "WarmupDecayLR",
@@ -581,7 +671,7 @@ You can set the parameters to `"auto"` or manually input your own values.
 
 Resume training with a Universal checkpoint by setting `load_universal` to `true` in the config file.
 
-```yaml
+```json
 {
     "checkpoint": {
         "load_universal": true
@@ -604,7 +694,7 @@ To deploy DeepSpeed on multiple GPUs, add `--num_gpus`. You don't need to add `-
 deepspeed --num_gpus=2 examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero3.json \
 --model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --overwrite_output_dir --fp16 \
+--output_dir output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
 --source_lang en --target_lang ro
@@ -627,7 +717,7 @@ To deploy DeepSpeed on a single GPU, add `--num_gpus`. You don't need to add `--
 deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero2.json \
 --model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --overwrite_output_dir --fp16 \
+--output_dir output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
 --source_lang en --target_lang ro
@@ -640,7 +730,7 @@ deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 
 A multi-node setup consists of multiple nodes, where each node has one of more GPUs running a workload. DeepSpeed expects a shared storage system, but if this is not the case, you need to adjust the config file to include a [checkpoint](https://www.deepspeed.ai/docs/config-json/#checkpoint-options) to allow loading without access to a shared filesystem.
 
-```yaml
+```json
 {
   "checkpoint": {
     "use_node_local_storage": true
@@ -824,7 +914,7 @@ ZeRO-2 saves the model weights in fp16. To save the weights in fp16 for ZeRO-3, 
 
 If you don't, [`Trainer`] won't save the weights in fp16 and won't create a `pytorch_model.bin` file. This is because DeepSpeed's state_dict contains a placeholder instead of the real weights, so you won't be able to load it.
 
-```yaml
+```json
 {
     "zero_optimization": {
         "stage": 3,
@@ -986,7 +1076,7 @@ NaN loss often occurs when a model is pretrained in bf16 and you try to use it w
 
 It is also possible that fp16 is causing overflow. For example, if your config file looks like the one below, you may see the following overflow errors in the logs.
 
-```yaml
+```json
 {
     "fp16": {
         "enabled": "auto",

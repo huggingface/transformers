@@ -15,11 +15,10 @@ import argparse
 import json
 import os
 import re
-from typing import Optional
+from io import BytesIO
 
-import requests
+import httpx
 import torch
-from accelerate import init_empty_weights
 from PIL import Image
 
 from transformers import (
@@ -66,7 +65,7 @@ def token_bytes_to_string(b):
 
 
 # Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
-def bpe(mergeable_ranks: dict[bytes, int], token: bytes, max_rank: Optional[int] = None):
+def bpe(mergeable_ranks: dict[bytes, int], token: bytes, max_rank: int | None = None):
     parts = [bytes([b]) for b in token]
     while True:
         min_idx = None
@@ -284,11 +283,11 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
 
     text_config = Emu3TextConfig(
         max_position_embeddings=model_llm.config.max_position_embeddings,
-        rope_scaling={"rope_type": "default"},
+        rope_parameters={"rope_type": "default"},
     )
     config = Emu3Config(text_config=text_config, vocabulary_map=vocabulary_map)
 
-    with init_empty_weights():
+    with torch.device("meta"):
         model = Emu3ForConditionalGeneration(config=config)
         model.generation_config = GenerationConfig(
             do_sample=True,
@@ -303,7 +302,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
     state_dict = convert_state_dict_to_hf(model_vqgan.state_dict(), state_dict)
 
     model.load_state_dict(state_dict, assign=True, strict=True)
-    model.save_pretrained(output_dir, safe_serialization=True)
+    model.save_pretrained(output_dir)
 
     if hub_model_id is not None:
         model.push_to_hub(hub_model_id)
@@ -333,11 +332,9 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
         ]
         prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
 
-        image = Image.open(
-            requests.get(
-                "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg", stream=True
-            ).raw
-        )
+        url = "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg"
+        with httpx.stream("GET", url) as response:
+            image = Image.open(BytesIO(response.read()))
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
         length = inputs.input_ids.shape[1]
 

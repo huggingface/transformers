@@ -72,9 +72,7 @@ BigBird は、質問応答や要約などのさまざまな NLP タスクのパ�
 ## BigBirdTokenizer
 
 [[autodoc]] BigBirdTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## BigBirdTokenizerFast
@@ -85,8 +83,6 @@ BigBird は、質問応答や要約などのさまざまな NLP タスクのパ�
 
 [[autodoc]] models.big_bird.modeling_big_bird.BigBirdForPreTrainingOutput
 
-<frameworkcontent>
-<pt>
 
 ## BigBirdModel
 
@@ -128,6 +124,4 @@ BigBird は、質問応答や要約などのさまざまな NLP タスクのパ�
 [[autodoc]] BigBirdForQuestionAnswering
     - forward
 
-</pt>
-</frameworkcontent>
 

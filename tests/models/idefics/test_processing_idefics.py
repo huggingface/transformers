@@ -12,18 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
 
 from transformers import (
-    AutoProcessor,
-    IdeficsImageProcessor,
     IdeficsProcessor,
-    LlamaTokenizerFast,
-    PreTrainedTokenizerFast,
 )
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -32,7 +26,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_torch_available():
-    import torch
+    pass
 
 if is_vision_available():
     from PIL import Image
@@ -42,29 +36,17 @@ if is_vision_available():
 @require_vision
 class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = IdeficsProcessor
+    input_keys = ["pixel_values", "input_ids", "attention_mask", "image_attention_mask"]
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-
-        image_processor = IdeficsImageProcessor(return_tensors="pt")
-        tokenizer = LlamaTokenizerFast.from_pretrained("HuggingFaceM4/tiny-random-idefics")
-
-        processor = IdeficsProcessor(image_processor, tokenizer)
-
-        processor.save_pretrained(cls.tmpdirname)
-
-        cls.input_keys = ["pixel_values", "input_ids", "attention_mask", "image_attention_mask"]
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class(return_tensors="pt")
 
     @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        return tokenizer_class.from_pretrained("HuggingFaceM4/tiny-random-idefics")
 
     def prepare_prompts(self):
         """This function prepares a list of PIL images"""
@@ -109,58 +91,27 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return prompts
 
     def test_save_load_pretrained_additional_features(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            processor = IdeficsProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
-            processor.save_pretrained(tmpdir)
-
-            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-            image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
-
-            processor = IdeficsProcessor.from_pretrained(
-                tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-            )
+        tokenizer_add_kwargs = self.get_component("tokenizer", bos_token="(BOS)", eos_token="(EOS)")
+        image_processor_add_kwargs = self.get_component("image_processor", do_normalize=False, padding_value=1.0)
+        processor = IdeficsProcessor.from_pretrained(
+            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+        )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
+        self.assertIsInstance(processor.tokenizer, self._get_component_class_from_processor("tokenizer"))
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, IdeficsImageProcessor)
-
-    def test_processor(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        prompts = self.prepare_prompts()
-
-        # test that all prompts succeeded
-        input_processor = processor(text=prompts, return_tensors="pt", padding="longest")
-        for key in self.input_keys:
-            assert torch.is_tensor(input_processor[key])
-
-    def test_tokenizer_decode(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor, return_tensors="pt")
-
-        predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
-
-        decoded_processor = processor.batch_decode(predicted_ids)
-        decoded_tok = tokenizer.batch_decode(predicted_ids)
-
-        self.assertListEqual(decoded_tok, decoded_processor)
+        self.assertIsInstance(processor.image_processor, self._get_component_class_from_processor("image_processor"))
 
     def test_tokenizer_padding(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer(padding_side="right")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer", padding_side="right")
 
         processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor, return_tensors="pt")
 
         predicted_tokens = [
-            "<s> Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk>",
-            "<s> Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk>",
+            "<s>Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk>",
+            "<s>Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk>",
         ]
         predicted_attention_masks = [
             ([1] * 10) + ([0] * 9),
@@ -182,14 +133,11 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_tokenizer_left_padding(self):
         """Identical to test_tokenizer_padding, but with padding_side not explicitly set."""
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = self.get_processor()
 
         predicted_tokens = [
-            "<unk><unk><unk><unk><unk><unk><unk><unk><unk><s> Describe this image.\nAssistant:",
-            "<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><s> Describe this image.\nAssistant:",
+            "<unk><unk><unk><unk><unk><unk><unk><unk><unk><s>Describe this image.\nAssistant:",
+            "<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><s>Describe this image.\nAssistant:",
         ]
         predicted_attention_masks = [
             ([0] * 9) + ([1] * 10),
@@ -207,3 +155,19 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertListEqual(max_length["attention_mask"][-1].tolist(), predicted_attention_masks[1])
         self.assertListEqual(longest["attention_mask"][-1].tolist(), predicted_attention_masks[0])
+
+    def test_tokenizer_defaults(self):
+        # Override to account for the processor prefixing the BOS token to prompts.
+        components = {attribute: self.get_component(attribute) for attribute in self.processor_class.get_attributes()}
+        processor = self.processor_class(**components)
+        tokenizer = components["tokenizer"]
+
+        input_str = ["lower newer"]
+        encoded_processor = processor(text=input_str, padding=False, return_tensors="pt")
+        encoded_tok = tokenizer(
+            [f"{tokenizer.bos_token}{input_str[0]}"], padding=False, add_special_tokens=False, return_tensors="pt"
+        )
+
+        for key in encoded_tok:
+            if key in encoded_processor:
+                self.assertListEqual(encoded_tok[key].tolist(), encoded_processor[key].tolist())

@@ -25,6 +25,7 @@ Run the command below to install autoawq
 ```bash
 pip install autoawq
 ```
+
 > [!WARNING]
 > AutoAWQ downgrades Transformers to version 4.47.1. If you want to do inference with AutoAWQ, you may need to reinstall your Transformers' version after installing AutoAWQ.
 
@@ -54,10 +55,11 @@ Load the AWQ-quantized model with [`~PreTrainedModel.from_pretrained`]. This aut
 If the model is loaded on the CPU, use the `device_map` parameter to move it to an accelerator.
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator
 import torch
 
-device = f"{infer_device()}:0"
+device = Accelerator().device
 
 model = AutoModelForCausalLM.from_pretrained(
   "TheBloke/zephyr-7B-alpha-AWQ",

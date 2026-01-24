@@ -1,4 +1,4 @@
-from typing import Any, Optional, Union, overload
+from typing import Any, Union, overload
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
 from .base import ChunkPipeline, build_pipeline_init_args
@@ -66,7 +66,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
 
     @overload
     def __call__(
-        self, image: Union[str, "Image.Image"], candidate_labels: Union[str, list[str]], **kwargs: Any
+        self, image: Union[str, "Image.Image"], candidate_labels: str | list[str], **kwargs: Any
     ) -> list[dict[str, Any]]: ...
 
     @overload
@@ -75,9 +75,9 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
     def __call__(
         self,
         image: Union[str, "Image.Image", list[dict[str, Any]]],
-        candidate_labels: Optional[Union[str, list[str]]] = None,
+        candidate_labels: str | list[str] | None = None,
         **kwargs: Any,
-    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
+    ) -> list[dict[str, Any]] | list[list[dict[str, Any]]]:
         """
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
 

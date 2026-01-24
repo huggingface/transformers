@@ -22,7 +22,7 @@ from argparse import Namespace
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Literal, Optional, Union, get_args, get_origin
+from typing import Literal, Union, get_args, get_origin
 from unittest.mock import patch
 
 import yaml
@@ -59,7 +59,7 @@ class WithDefaultExample:
 class WithDefaultBoolExample:
     foo: bool = False
     baz: bool = True
-    opt: Optional[bool] = None
+    opt: bool | None = None
 
 
 class BasicEnum(Enum):
@@ -91,11 +91,11 @@ class MixedTypeEnumExample:
 
 @dataclass
 class OptionalExample:
-    foo: Optional[int] = None
-    bar: Optional[float] = field(default=None, metadata={"help": "help message"})
-    baz: Optional[str] = None
-    ces: Optional[list[str]] = list_field(default=[])
-    des: Optional[list[int]] = list_field(default=[])
+    foo: int | None = None
+    bar: float | None = field(default=None, metadata={"help": "help message"})
+    baz: str | None = None
+    ces: list[str] | None = list_field(default=[])
+    des: list[int] | None = list_field(default=[])
 
 
 @dataclass
@@ -120,7 +120,7 @@ class RequiredExample:
 class StringLiteralAnnotationExample:
     foo: int
     required_enum: "BasicEnum" = field()
-    opt: "Optional[bool]" = None
+    opt: "bool | None" = None
     baz: "str" = field(default="toto", metadata={"help": "help message"})
     foo_str: "list[str]" = list_field(default=["Hallo", "Bonjour", "Hello"])
 
@@ -429,14 +429,14 @@ class HfArgumentParserTest(unittest.TestCase):
         raw_dict_fields = []
         optional_dict_fields = []
 
-        for field in fields.values():
+        for field_ in fields.values():
             # First verify raw dict
-            if field.type is dict:
-                raw_dict_fields.append(field)
+            if field_.type is dict:
+                raw_dict_fields.append(field_)
             # Next check for `Union` or `Optional`
-            elif get_origin(field.type) == Union:
-                if any(arg is dict for arg in get_args(field.type)):
-                    optional_dict_fields.append(field)
+            elif get_origin(field_.type) == Union:
+                if any(arg is dict for arg in get_args(field_.type)):
+                    optional_dict_fields.append(field_)
 
         # First check: anything in `raw_dict_fields` is very bad
         self.assertEqual(
@@ -447,27 +447,27 @@ class HfArgumentParserTest(unittest.TestCase):
         )
 
         # Next check raw annotations
-        for field in optional_dict_fields:
-            args = get_args(field.type)
+        for field_ in optional_dict_fields:
+            args = get_args(field_.type)
             # These should be returned as `dict`, `str`, ...
             # we only care about the first two
             self.assertIn(
                 dict,
                 args,
-                f"Expected field `{field.name}` to have a type signature of at least `typing.Union[dict,str,...]` for CLI compatibility, but `dict` not found. Please fix this.",
+                f"Expected field `{field_.name}` to have a type signature of at least `typing.Union[dict,str,...]` for CLI compatibility, but `dict` not found. Please fix this.",
             )
             self.assertIn(
                 str,
                 args,
-                f"Expected field `{field.name}` to have a type signature of at least `typing.Union[dict,str,...]` for CLI compatibility, but `str` not found. Please fix this.",
+                f"Expected field `{field_.name}` to have a type signature of at least `typing.Union[dict,str,...]` for CLI compatibility, but `str` not found. Please fix this.",
             )
 
         # Second check: anything in `optional_dict_fields` is bad if it's not in `base_list`
-        for field in optional_dict_fields:
+        for field_ in optional_dict_fields:
             self.assertIn(
                 field.name,
                 base_list,
-                f"Optional dict field `{field.name}` is not in the base list of valid fields. Please add it to `TrainingArguments._VALID_DICT_FIELDS`",
+                f"Optional dict field `{field_.name}` is not in the base list of valid fields. Please add it to `TrainingArguments._VALID_DICT_FIELDS`",
             )
 
     @require_torch

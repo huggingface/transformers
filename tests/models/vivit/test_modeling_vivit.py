@@ -171,11 +171,7 @@ class VivitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_pruning = False
-    test_torchscript = False
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = VivitModelTester(self)
@@ -217,8 +213,7 @@ class VivitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["pixel_values", "head_mask"]
-            self.assertListEqual(arg_names[:2], expected_arg_names)
+            self.assertEqual(arg_names[0], "pixel_values")
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -359,7 +354,7 @@ class VivitModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-0.9498, 2.7971, -1.4049, 0.1024, -1.8353],
-                ("cuda", 8): [-0.9498, 2.7971, -1.4049, 0.1025, -1.8353],
+                ("cuda", 8): [-0.9502, 2.7967, -1.4046, 0.1027, -1.8345],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

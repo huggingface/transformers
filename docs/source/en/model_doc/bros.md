@@ -57,7 +57,6 @@ def expand_and_normalize_bbox(bboxes, doc_width, doc_height):
 
 - [`~transformers.BrosForTokenClassification.forward`, `~transformers.BrosSpadeEEForTokenClassification.forward`, `~transformers.BrosSpadeEEForTokenClassification.forward`] require not only `input_ids` and `bbox` but also `box_first_token_mask` for loss calculation. It is a mask to filter out non-first tokens of each box. You can obtain this mask by saving start token indices of bounding boxes when creating `input_ids` from words. You can make `box_first_token_mask` with following code,
 
-
 ```python
 def make_box_first_token_mask(bboxes, words, tokenizer, max_seq_length=512):
 
@@ -101,7 +100,6 @@ def make_box_first_token_mask(bboxes, words, tokenizer, max_seq_length=512):
 
 [[autodoc]] BrosModel
     - forward
-
 
 ## BrosForTokenClassification
 

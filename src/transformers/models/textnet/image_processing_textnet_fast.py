@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the Fast authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,12 +13,13 @@
 # limitations under the License.
 """Fast Image processor class for TextNet."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import (
     get_resize_output_image_size,
     group_images_by_shape,
@@ -37,23 +37,8 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
-
-
-class TextNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    size_divisor (`int`, *optional*, defaults to 32):
-        Ensures height and width are rounded to a multiple of this value after resizing.
-    """
-
-    size_divisor: Optional[int]
+from .image_processing_textnet import TextNetImageProcessorKwargs
 
 
 @auto_docstring
@@ -70,20 +55,20 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_convert_rgb = True
     size_divisor = 32
-    valid_kwargs = TextNetFastImageProcessorKwargs
+    valid_kwargs = TextNetImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[TextNetImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[TextNetImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
         size_divisor: int = 32,
         **kwargs,
@@ -114,16 +99,16 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         size: SizeDict,
         size_divisor: int,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -151,7 +136,6 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

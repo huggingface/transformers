@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 import unittest
 
 import torch
-from torch import nn
 
 from transformers import HGNetV2Config
 from transformers.testing_utils import require_torch, torch_device
@@ -179,19 +177,11 @@ class HGNetV2ForImageClassificationTest(ModelTesterMixin, PipelineTesterMixin, u
     all_model_classes = (HGNetV2ForImageClassification, HGNetV2Backbone) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": HGNetV2ForImageClassification} if is_torch_available() else {}
 
-    fx_compatible = False
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torch_exportable = True
     has_attentions = False
 
     def setUp(self):
         self.model_tester = HGNetV2ModelTester(self)
-
-    @unittest.skip(reason="Does not work on the tiny model.")
-    def test_model_parallelism(self):
-        super().test_model_parallelism()
 
     @unittest.skip(reason="HGNetV2 does not output attentions")
     def test_attention_outputs(self):
@@ -209,33 +199,9 @@ class HGNetV2ForImageClassificationTest(ModelTesterMixin, PipelineTesterMixin, u
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="HGNetV2 does not have a model")
-    def test_model(self):
-        pass
-
-    @unittest.skip(reason="Not relevant for the model")
-    def test_can_init_all_missing_weights(self):
-        pass
-
     def test_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(*config_and_inputs)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, module in model.named_modules():
-                if isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
-                    self.assertTrue(
-                        torch.all(module.weight == 1),
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-                    self.assertTrue(
-                        torch.all(module.bias == 0),
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

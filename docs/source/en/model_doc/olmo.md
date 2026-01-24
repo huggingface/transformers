@@ -25,6 +25,7 @@ rendered properly in your Markdown viewer.
 </div>
 
 # OLMo
+
 [OLMo](https://huggingface.co/papers/2402.00838) is a 7B-parameter dense language model. It uses SwiGLU activations, non-parametric layer normalization, rotary positional embeddings, and a BPE tokenizer that masks personally identifiable information. It is pretrained on [Dolma](https://huggingface.co/datasets/allenai/dolma), a 3T-token dataset. OLMo was released to provide complete transparency of not just the model weights but the training data, training code, and evaluation code to enable more research on language models.
 
 You can find all the original OLMo checkpoints under the [OLMo](https://huggingface.co/collections/allenai/olmo-suite-65aeaae8fe5b6b2122b46778) collection.

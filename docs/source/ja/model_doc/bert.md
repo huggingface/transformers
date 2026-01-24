@@ -133,27 +133,22 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 ## BertTokenizer
 
 [[autodoc]] BertTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
-<frameworkcontent>
-<pt>
+## BertTokenizerLegacy
+
+[[autodoc]] BertTokenizerLegacy
 
 ## BertTokenizerFast
 
 [[autodoc]] BertTokenizerFast
 
-</pt>
-</frameworkcontent>
 
 ## Bert specific outputs
 
 [[autodoc]] models.bert.modeling_bert.BertForPreTrainingOutput
 
-<frameworkcontent>
-<pt>
 
 ## BertModel
 
@@ -200,5 +195,3 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 [[autodoc]] BertForQuestionAnswering
     - forward
 
-</pt>
-</frameworkcontent>

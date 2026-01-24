@@ -12,7 +12,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
@@ -27,6 +26,7 @@ limitations under the License.
 </div>
 
 # OLMo3
+
 Olmo3 is an improvement on [OLMo2](./olmo2). More details will be released on *soon*.
 
 > [!TIP]
@@ -88,6 +88,7 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bits.
+
 ```py
 
 #pip install torchao
@@ -117,7 +118,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```
 
-
 ## Notes
 
 - Load specific intermediate checkpoints by adding the `revision` parameter to [`~PreTrainedModel.from_pretrained`].
@@ -127,7 +127,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
     model = AutoModelForCausalLM.from_pretrained("allenai/TBA", revision="stage1-step140000-tokens294B")
     ```
-
 
 ## Olmo3Config
 

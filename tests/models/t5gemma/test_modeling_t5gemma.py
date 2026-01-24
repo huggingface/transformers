@@ -19,12 +19,13 @@ import unittest
 
 import pytest
 from parameterized import parameterized
+from pytest import mark
 
 from transformers import T5GemmaConfig, T5GemmaModuleConfig, is_torch_available
 from transformers.testing_utils import (
+    require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     torch_device,
 )
 
@@ -53,9 +54,9 @@ class T5GemmaModelTester:
 
     if is_torch_available():
         model_class = T5GemmaModel
-        for_causal_lm_class = T5GemmaForConditionalGeneration
-        for_sequence_class = T5GemmaForSequenceClassification
-        for_token_class = T5GemmaForTokenClassification
+        causal_lm_class = T5GemmaForConditionalGeneration
+        sequence_classification_class = T5GemmaForSequenceClassification
+        token_classification_class = T5GemmaForTokenClassification
 
     def __init__(
         self,
@@ -310,7 +311,7 @@ class T5GemmaModelTester:
         decoder_attention_mask,
         lm_labels,
     ):
-        model = self.for_causal_lm_class(config=config).to(torch_device).eval()
+        model = self.causal_lm_class(config=config).to(torch_device).eval()
         outputs = model(
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,
@@ -332,7 +333,7 @@ class T5GemmaModelTester:
         lm_labels,
     ):
         labels = torch.tensor([1] * self.batch_size, dtype=torch.long, device=torch_device)
-        model = self.for_sequence_class(config=config).to(torch_device).eval()
+        model = self.sequence_classification_class(config=config).to(torch_device).eval()
         outputs = model(
             input_ids=input_ids,
             decoder_input_ids=input_ids,
@@ -352,7 +353,7 @@ class T5GemmaModelTester:
         is_encoder_decoder,
     ):
         labels = torch.tensor([1] * self.batch_size, dtype=torch.long, device=torch_device)
-        model = self.for_sequence_class(config=config, is_encoder_decoder=is_encoder_decoder)
+        model = self.sequence_classification_class(config=config, is_encoder_decoder=is_encoder_decoder)
         model = model.to(torch_device).eval()
         outputs = model(
             input_ids=input_ids,
@@ -374,7 +375,7 @@ class T5GemmaModelTester:
         is_encoder_decoder,
     ):
         labels = torch.tensor([1] * self.seq_length * self.batch_size, dtype=torch.long, device=torch_device)
-        model = self.for_token_class(config=config, is_encoder_decoder=is_encoder_decoder)
+        model = self.token_classification_class(config=config, is_encoder_decoder=is_encoder_decoder)
         model = model.to(torch_device).eval()
         outputs = model(
             input_ids=input_ids,
@@ -545,7 +546,7 @@ class T5GemmaModelTester:
         decoder_attention_mask,
         lm_labels,
     ):
-        model = self.for_causal_lm_class(config=config).to(torch_device).eval()
+        model = self.causal_lm_class(config=config).to(torch_device).eval()
         torch.manual_seed(0)
         output_without_past_cache = model.generate(
             input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False
@@ -593,8 +594,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         else {}
     )
 
-    test_headmasking = False
-    test_pruning = False
     _is_stateful = True
     is_encoder_decoder = True
 
@@ -604,7 +603,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     _torch_compile_train_attn_implementation = "eager"
 
     # won't fix
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = T5GemmaModelTester(self)
@@ -636,6 +634,8 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         return False
 
     def test_config(self):
+        # Skip `create_and_test_config_from_and_save_pretrained_composite` because the config has twice the same subconfig
+        self.config_tester.create_and_test_config_from_and_save_pretrained_composite = lambda: None
         self.config_tester.run_common_tests()
 
     def test_shift_right(self):
@@ -767,7 +767,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for is_encoder_decoder in [True, False]:
             model = (
-                self.model_tester.for_sequence_class(config, is_encoder_decoder=is_encoder_decoder)
+                self.model_tester.sequence_classification_class(config, is_encoder_decoder=is_encoder_decoder)
                 .to(torch_device)
                 .eval()
             )
@@ -785,7 +785,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for is_encoder_decoder in [True, False]:
             model = (
-                self.model_tester.for_sequence_class(config, is_encoder_decoder=is_encoder_decoder)
+                self.model_tester.sequence_classification_class(config, is_encoder_decoder=is_encoder_decoder)
                 .to(torch_device)
                 .eval()
             )
@@ -805,7 +805,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for is_encoder_decoder in [True, False]:
             model = (
-                self.model_tester.for_sequence_class(config, is_encoder_decoder=is_encoder_decoder)
+                self.model_tester.sequence_classification_class(config, is_encoder_decoder=is_encoder_decoder)
                 .to(torch_device)
                 .eval()
             )
@@ -822,7 +822,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for is_encoder_decoder in [True, False]:
             model = (
-                self.model_tester.for_token_class(config, is_encoder_decoder=is_encoder_decoder)
+                self.model_tester.token_classification_class(config, is_encoder_decoder=is_encoder_decoder)
                 .to(torch_device)
                 .eval()
             )
@@ -888,7 +888,10 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for model_class in self.all_model_classes:
             # Skip token and sequence classification.
-            if model_class in [self.model_tester.for_token_class, self.model_tester.for_sequence_class]:
+            if model_class in [
+                self.model_tester.token_classification_class,
+                self.model_tester.sequence_classification_class,
+            ]:
                 continue
 
             inputs_dict["output_attentions"] = True
@@ -1000,7 +1003,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_generate_continue_from_past_key_values(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
-            if model_class == self.model_tester.for_token_class:
+            if model_class == self.model_tester.token_classification_class:
                 continue
             if any(model_name in model_class.__name__.lower() for model_name in ["imagegpt", "mllama"]):
                 self.skipTest(reason="Won't fix: old model with unique inputs/caches/other")
@@ -1083,14 +1086,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             # The two sets of generated text and past kv should be equal to each other
             self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
-            for layer_idx in range(len(outputs_cached.past_key_values)):
-                for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
-                    self.assertTrue(
-                        torch.allclose(
-                            outputs.past_key_values[layer_idx][kv_idx],
-                            outputs_cached.past_key_values[layer_idx][kv_idx],
-                        )
-                    )
+            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
     # Based on tests.test_modeling_common.ModelTesterMixin.test_inputs_embeds_matches_input_ids
     # Update encoder and decoder embeddings
@@ -1132,7 +1128,10 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @unittest.skip("This was not properly written, submodules need the attribute to be overwritten")
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
-            if model_class in [self.model_tester.for_token_class, self.model_tester.for_sequence_class]:
+            if model_class in [
+                self.model_tester.token_classification_class,
+                self.model_tester.sequence_classification_class,
+            ]:
                 model = model_class(config, is_encoder_decoder=False)
             else:
                 model = model_class(config)
@@ -1225,7 +1224,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     # Based on tests.test_modeling_common.ModelTesterMixin.test_flex_attention_with_grads
     # Update hidden size for encoder and decoder
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
             # TODO: raushan, fix for composite models after making VLMs support new attn API
@@ -1271,6 +1270,19 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(**dummy_inputs)
+
+    @require_flash_attn
+    @require_torch_accelerator
+    @mark.flash_attn_test
+    def test_generate_beyond_sliding_window_with_flash_attn(self):
+        config, input_ids, _, attention_mask, _, _ = self.model_tester.prepare_config_and_inputs()
+        config.decoder.sliding_window = 2  # arbitrary but less than seq_len
+
+        model = self.model_tester.causal_lm_class(config=config).to(dtype=torch.float16, device=torch_device).eval()
+        model.set_attn_implementation("flash_attention_2")
+
+        # Only generate beyond prefill, we don't care about the output as it only checks for crashes
+        _ = model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=2, use_cache=True)
 
 
 class T5GemmaEncoderOnlyModelTester:
@@ -1454,14 +1466,12 @@ class T5GemmaEncoderOnlyModelTester:
 @require_torch
 class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (T5GemmaEncoderModel, T5GemmaForTokenClassification) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_headmasking = False
     _is_stateful = True
     is_encoder_decoder = False
 
     # won't fix
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = T5GemmaEncoderOnlyModelTester(self)
@@ -1476,6 +1486,8 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
         )
 
     def test_config(self):
+        # Skip `create_and_test_config_from_and_save_pretrained_composite` because the config has twice the same subconfig
+        self.config_tester.create_and_test_config_from_and_save_pretrained_composite = lambda: None
         self.config_tester.run_common_tests()
 
     @unittest.skip("This was not properly written, submodules need the attribute to be overwritten")
@@ -1492,25 +1504,25 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_token_classification_head(*config_and_inputs)
 
-    @unittest.skip("No loss in the output of T5GemmaEncoderModel")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip("No loss in the output of T5GemmaEncoderModel")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip("No loss in the output of T5GemmaEncoderModel")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip("No loss in the output of T5GemmaEncoderModel")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     # Based on tests.test_modeling_common.ModelTesterMixin.test_flex_attention_with_grads
     # Update hidden size for encoder
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
             # TODO: raushan, fix for composite models after making VLMs support new attn API

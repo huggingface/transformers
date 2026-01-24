@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 
 import math
 from functools import lru_cache
-from typing import Optional, Union
 
 import numpy as np
 
@@ -38,15 +36,24 @@ from ...image_utils import (
     to_numpy_array,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, logging
 
 
 if is_vision_available():
-    import PIL
     from PIL import Image
 
 
 logger = logging.get_logger(__name__)
+
+
+class MllamaImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    max_image_tiles (`int`, *optional*):
+        The maximum number of tiles allowed.
+    """
+
+    max_image_tiles: int
 
 
 @lru_cache(maxsize=10)
@@ -327,7 +334,7 @@ def build_aspect_ratio_mask(aspect_ratios: list[list[tuple[int, int]]], max_imag
             The mask contains 1s for valid tiles and 0s for padding.
     """
     batch_size = len(aspect_ratios)
-    max_num_images = max([len(row) for row in aspect_ratios])
+    max_num_images = max(len(row) for row in aspect_ratios)
 
     aspect_ratio_mask = np.zeros((batch_size, max_num_images, max_image_tiles), dtype=np.int64)
 
@@ -374,7 +381,7 @@ def pack_images(
 
     # Determine output shape
     batch_size = len(batch_images)
-    max_num_images = max([len(images) for images in batch_images])
+    max_num_images = max(len(images) for images in batch_images)
     shapes = [image.shape for images in batch_images for image in images]
     _, channels, tile_height, tile_width = shapes[0]
 
@@ -395,30 +402,6 @@ def pack_images(
         all_num_tiles.append(num_sample_tiles)
 
     return stacked_images, all_num_tiles
-
-
-def pack_aspect_ratios(aspect_ratios: list[list[tuple[int, int]]], pad_value: int = 1) -> np.ndarray:
-    """
-    Stack a list of aspect ratios into a numpy array.
-
-    Args:
-        aspect_ratios (`list[list[tuple[int, int]]]`):
-            A list of aspect ratios.
-        pad_value (`int`, *optional*, defaults to 1):
-            The value to pad the aspect ratios with.
-
-    Returns:
-        `np.ndarray`:
-            The aspect ratios stacked into a numpy array with shape (batch_size, max_num_images, 2).
-    """
-    batch_size = len(aspect_ratios)
-    max_num_images = max([len(row) for row in aspect_ratios])
-
-    aspect_ratios_stacked = np.full((batch_size, max_num_images, 2), pad_value, dtype=np.int64)
-    for i, row in enumerate(aspect_ratios):
-        if len(row) > 0:
-            aspect_ratios_stacked[i, : len(row)] = np.array(row)
-    return aspect_ratios_stacked
 
 
 def convert_aspect_ratios_to_ids(aspect_ratios: list[list[tuple[int, int]]], max_image_tiles: int) -> np.ndarray:
@@ -442,7 +425,7 @@ def convert_aspect_ratios_to_ids(aspect_ratios: list[list[tuple[int, int]]], max
     """
 
     batch_size = len(aspect_ratios)
-    max_num_images = max([len(row) for row in aspect_ratios])
+    max_num_images = max(len(row) for row in aspect_ratios)
     supported_aspect_ratios = get_all_supported_aspect_ratios(max_image_tiles)
 
     aspect_ratios_ids = np.zeros((batch_size, max_num_images), dtype=np.int64)
@@ -454,8 +437,8 @@ def convert_aspect_ratios_to_ids(aspect_ratios: list[list[tuple[int, int]]], max
 
 def to_channel_dimension_format(
     image: np.ndarray,
-    channel_dim: Union[ChannelDimension, str],
-    input_channel_dim: Optional[Union[ChannelDimension, str]] = None,
+    channel_dim: ChannelDimension | str,
+    input_channel_dim: ChannelDimension | str | None = None,
 ) -> np.ndarray:
     """
     Converts `image` to the channel dimension format specified by `channel_dim`.
@@ -501,7 +484,7 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
         image (Image):
             The image to convert.
     """
-    if not isinstance(image, PIL.Image.Image):
+    if not isinstance(image, Image.Image):
         return image
 
     # `image.convert("RGB")` would only work for .jpg images, as it creates a wrong background
@@ -567,18 +550,19 @@ class MllamaImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "num_tiles", "aspect_ratio_ids", "aspect_ratio_mask"]
+    valid_kwargs = MllamaImageProcessorKwargs
 
     def __init__(
         self,
         do_convert_rgb: bool = True,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         do_pad: bool = True,
         max_image_tiles: int = 4,
         **kwargs,
@@ -601,19 +585,19 @@ class MllamaImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_convert_rgb: Optional[bool] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_pad: Optional[bool] = None,
-        max_image_tiles: Optional[int] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_convert_rgb: bool | None = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_pad: bool | None = None,
+        max_image_tiles: int | None = None,
+        input_data_format: str | ChannelDimension | None = None,
+        return_tensors: str | TensorType | None = None,
     ):
         """
         Preprocess a batch of images.
@@ -707,7 +691,7 @@ class MllamaImageProcessor(BaseImageProcessor):
             # iterate over images in a batch sample
             for image in images:
                 # default PIL images to channels_last
-                if input_data_format is None and isinstance(image, PIL.Image.Image):
+                if input_data_format is None and isinstance(image, Image.Image):
                     input_data_format = ChannelDimension.LAST
 
                 # convert to numpy array for processing
@@ -789,8 +773,8 @@ class MllamaImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: dict[str, int],
         aspect_ratio: tuple[int, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Pad an image to the `size` x `aspect_ratio`. For example, if size is {height: 224, width: 224} and aspect ratio is
@@ -837,9 +821,9 @@ class MllamaImageProcessor(BaseImageProcessor):
         size: dict[str, int],
         max_image_tiles: int,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> Union[np.ndarray, tuple[int, int]]:
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
+    ) -> np.ndarray | tuple[int, int]:
         """
         Resizes an image to fit within a tiled canvas while maintaining its aspect ratio.
         The optimal canvas size is calculated based on the maximum number of tiles and the tile size.

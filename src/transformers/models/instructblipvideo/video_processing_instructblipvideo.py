@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,25 +16,16 @@
 Video processor class for InstructBLIPVideo
 """
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
-from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, is_torchvision_v2_available
+from ...utils import TensorType
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
-
-
-class InstructBlipVideoVideoProcessorInitKwargs(VideosKwargs): ...
 
 
 class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
@@ -49,11 +39,7 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
     do_normalize = True
     do_convert_rgb = True
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
-    valid_kwargs = InstructBlipVideoVideoProcessorInitKwargs
     model_input_names = ["pixel_values"]
-
-    def __init__(self, **kwargs: Unpack[InstructBlipVideoVideoProcessorInitKwargs]):
-        super().__init__(**kwargs)
 
     def _preprocess(
         self,
@@ -61,15 +47,15 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group videos by size for batched resizing
@@ -97,7 +83,6 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
             processed_videos_grouped[shape] = stacked_videos
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
-        processed_videos = torch.stack(processed_videos, dim=0) if return_tensors else processed_videos
 
         return BatchFeature(data={"pixel_values": processed_videos}, tensor_type=return_tensors)
 

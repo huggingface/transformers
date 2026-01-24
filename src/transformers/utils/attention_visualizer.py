@@ -11,9 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import io
 
-
-import requests
+import httpx
 from PIL import Image
 
 from ..masking_utils import create_causal_mask
@@ -21,7 +21,7 @@ from ..models.auto.auto_factory import _get_model_class
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.modeling_auto import MODEL_FOR_PRETRAINING_MAPPING, MODEL_MAPPING
 from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES, AutoProcessor
-from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES, AutoTokenizer
+from ..models.auto.tokenization_auto import AutoTokenizer
 from .import_utils import is_torch_available
 
 
@@ -76,7 +76,7 @@ def generate_attention_matrix_from_mask(
         f"{YELLOW}{BLACK_SQUARE}{RESET}"
         if mask[0, j]
         else f"{GREEN}{BLACK_SQUARE}{RESET}"
-        if 0 == j
+        if j == 0
         else BLACK_SQUARE
         if mask[0, j]
         else WHITE_SQUARE
@@ -180,7 +180,7 @@ class AttentionMaskVisualizer:
         image_seq_length = None
         if self.config.model_type in PROCESSOR_MAPPING_NAMES:
             img = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg?download=true"
-            img = Image.open(requests.get(img, stream=True).raw)
+            img = Image.open(io.BytesIO(httpx.get(img, follow_redirects=True).content))
             image_seq_length = 5
             processor = AutoProcessor.from_pretrained(self.repo_id, image_seq_length=image_seq_length)
             if hasattr(processor, "image_token"):
@@ -199,12 +199,12 @@ class AttentionMaskVisualizer:
             if "token_type_ids" in inputs:  # TODO inspect signature of update causal mask
                 kwargs["token_type_ids"] = inputs["token_type_ids"]
             tokens = processor.tokenizer.convert_ids_to_tokens(inputs["input_ids"][0])
-        elif self.config.model_type in TOKENIZER_MAPPING_NAMES:
+        else:
             tokenizer = AutoTokenizer.from_pretrained(self.repo_id)
             tokens = tokenizer.tokenize(input_sentence)
             attention_mask = tokenizer(input_sentence, return_tensors="pt")["attention_mask"]
-        else:
-            raise ValueError(f"Model type {model.config.model_type} does not support attention visualization")
+            if attention_mask is None:
+                raise ValueError(f"Model type {self.config.model_type} does not support attention visualization")
 
         model.config._attn_implementation = "eager"
         model.train()

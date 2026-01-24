@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ARG REF=main
 USER root
@@ -17,7 +17,7 @@ RUN make install -j 10
 
 WORKDIR /
 
-RUN uv pip install --no-cache --upgrade 'torch' --index-url https://download.pytorch.org/whl/cpu
+RUN uv pip install --no-cache --upgrade 'torch==2.9.1' --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --no-cache-dir  --no-deps accelerate --extra-index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install  --no-cache-dir "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[ja,testing,sentencepiece,spacy,ftfy,rjieba]" unidic unidic-lite
 # spacy is not used so not tested. Causes to failures. TODO fix later

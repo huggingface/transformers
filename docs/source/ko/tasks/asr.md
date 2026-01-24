@@ -232,8 +232,6 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로([데이터 
 
 ## 훈련하기[[train]]
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]로 모델을 미세 조정하는 것이 익숙하지 않다면, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인해보세요!
@@ -298,8 +296,6 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로([데이터 
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -340,8 +336,6 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로([데이터 
 
 `pipeline`의 결과를 수동으로 재현할 수도 있습니다:
 
-<frameworkcontent>
-<pt>
 오디오 파일과 텍스트를 전처리하고 PyTorch 텐서로 `input`을 반환할 프로세서를 가져오세요:
 
 ```py
@@ -371,5 +365,3 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로([데이터 
 >>> transcription
 ['I WOUL LIKE O SET UP JOINT ACOUNT WTH Y PARTNER']
 ```
-</pt>
-</frameworkcontent>

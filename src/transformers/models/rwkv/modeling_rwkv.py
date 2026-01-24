@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Bo Peng and HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -17,12 +16,11 @@
 
 import math
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
@@ -30,6 +28,7 @@ from ...utils import (
     ModelOutput,
     auto_docstring,
     is_bitsandbytes_available,
+    is_kernels_available,
     is_ninja_available,
     is_torch_cuda_available,
     logging,
@@ -44,34 +43,13 @@ rwkv_cuda_kernel = None
 
 
 def load_wkv_cuda_kernel(context_length):
-    from torch.utils.cpp_extension import load as load_kernel
-
     global rwkv_cuda_kernel
+    if not is_kernels_available():
+        raise ImportError("kernels is not installed, please install it with `pip install kernels`")
 
-    kernel_folder = Path(__file__).resolve().parent.parent.parent / "kernels" / "rwkv"
-    cuda_kernel_files = [kernel_folder / f for f in ["wkv_op.cpp", "wkv_cuda.cu", "wkv_cuda_bf16.cu"]]
+    from ...integrations.hub_kernels import get_kernel
 
-    # Only load the kernel if it's not been loaded yet or if we changed the context length
-    if rwkv_cuda_kernel is not None and rwkv_cuda_kernel.max_seq_length == context_length:
-        return
-
-    logger.info(f"Loading CUDA kernel for RWKV at context length of {context_length}.")
-
-    flags = [
-        "-res-usage",
-        "--maxrregcount 60",
-        "--use_fast_math",
-        "-O3",
-        "-Xptxas -O3",
-        "--extra-device-vectorization",
-        f"-DTmax={context_length}",
-    ]
-    rwkv_cuda_kernel = load_kernel(
-        name=f"wkv_{context_length}",
-        sources=cuda_kernel_files,
-        verbose=(logging.get_verbosity() == logging.DEBUG),
-        extra_cuda_cflags=flags,
-    )
+    rwkv_cuda_kernel = get_kernel("kernels-community/rwkv")
     rwkv_cuda_kernel.max_seq_length = context_length
 
 
@@ -387,6 +365,7 @@ class RwkvPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
         if isinstance(module, RwkvSelfAttention):
@@ -419,12 +398,12 @@ class RwkvPreTrainedModel(PreTrainedModel):
                 * 0.5
             )
 
-            module.time_decay.data = decay_speed
-            module.time_first.data = torch.ones_like(module.time_first * math.log(0.3) + zigzag)
+            init.copy_(module.time_decay, decay_speed)
+            init.copy_(module.time_first, torch.ones_like(module.time_first * math.log(0.3) + zigzag))
 
-            module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
-            module.time_mix_value.data = torch.pow(time_weight, ratio_1_to_almost0) + 0.3 * ratio_0_to_1
-            module.time_mix_receptance.data = torch.pow(time_weight, 0.5 * ratio_1_to_almost0)
+            init.copy_(module.time_mix_key, torch.pow(time_weight, ratio_1_to_almost0))
+            init.copy_(module.time_mix_value, torch.pow(time_weight, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)
+            init.copy_(module.time_mix_receptance, torch.pow(time_weight, 0.5 * ratio_1_to_almost0))
         elif isinstance(module, RwkvFeedForward):
             layer_id = module.layer_id
             num_hidden_layers = module.config.num_hidden_layers
@@ -439,28 +418,28 @@ class RwkvPreTrainedModel(PreTrainedModel):
             )
             time_weight = time_weight[None, None, :]
 
-            module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
-            module.time_mix_receptance.data = torch.pow(time_weight, ratio_1_to_almost0)
+            init.copy_(module.time_mix_key, torch.pow(time_weight, ratio_1_to_almost0))
+            init.copy_(module.time_mix_receptance, torch.pow(time_weight, ratio_1_to_almost0))
         elif isinstance(module, nn.Linear):
-            shape = module.weight.data.shape
+            shape = module.weight.shape
             gain = 1.0
             scale = 1.0  # extra scale for gain
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
             if shape[0] > shape[1]:
                 gain = math.sqrt(shape[0] / shape[1])
             if shape[0] == self.config.vocab_size and shape[1] == self.config.hidden_size:  # final projection?
                 scale = 0.5
 
             gain *= scale
-            nn.init.orthogonal_(module.weight, gain=gain)
+            init.orthogonal_(module.weight, gain=gain)
         elif isinstance(module, nn.Embedding):
-            shape = module.weight.data.shape
+            shape = module.weight.shape
             gain = 1e-4 * math.sqrt(max(shape[0], shape[1]))
-            nn.init.orthogonal_(module.weight, gain=gain)
+            init.orthogonal_(module.weight, gain=gain)
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
 
 
 @dataclass
@@ -476,10 +455,10 @@ class RwkvOutput(ModelOutput):
         avoid providing the old `input_ids`.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    state: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    state: list[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -499,11 +478,11 @@ class RwkvCausalLMOutput(ModelOutput):
         avoid providing the old `input_ids`.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    state: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    state: list[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -531,15 +510,16 @@ class RwkvModel(RwkvPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,  # noqa
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        state: Optional[list[torch.FloatTensor]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, RwkvOutput]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        state: list[torch.FloatTensor] | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | RwkvOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -687,7 +667,7 @@ class RwkvModel(RwkvPreTrainedModel):
     """
 )
 class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["head.weight"]
+    _tied_weights_keys = {"head.weight": "rwkv.embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -729,17 +709,18 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,  # noqa
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        state: Optional[list[torch.FloatTensor]] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        state: list[torch.FloatTensor] | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> Union[tuple, RwkvCausalLMOutput]:
+    ) -> tuple | RwkvCausalLMOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -774,18 +755,15 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        hidden_states = rwkv_outputs[0]
 
-        logits = self.head(hidden_states)
+        hidden_states = rwkv_outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits,
-                labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
             output = (logits,) + rwkv_outputs[1:]

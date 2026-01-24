@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Meta Platforms, Inc. and affiliates, and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,22 +17,23 @@ import math
 
 import numpy as np
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MimiConfig(PretrainedConfig):
+class MimiConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MimiModel`]. It is used to instantiate a
     Mimi model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [kyutai/mimi](https://huggingface.co/kyutai/mimi) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         sampling_rate (`int`, *optional*, defaults to 24000):
@@ -113,8 +113,10 @@ class MimiConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         use_streaming (`bool`, *optional*, defaults to `False`):
             Whether to use streaming mode. If `True`, the model encode method will return the padding cache that can be used in a subsequent call to the encode method.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         sliding_window (`int`, *optional*, defaults to 250):
             Sliding window attention window size. If not specified, will default to `250`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -123,6 +125,8 @@ class MimiConfig(PretrainedConfig):
             Initial scale of the residual rescaling operation done in the Transformer models.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     Example:
 
     ```python
@@ -142,44 +146,45 @@ class MimiConfig(PretrainedConfig):
 
     def __init__(
         self,
-        sampling_rate=24_000,
-        frame_rate=None,
-        audio_channels=1,
-        hidden_size=512,
-        num_filters=64,
-        num_residual_layers=1,
-        upsampling_ratios=None,
-        kernel_size=7,
-        last_kernel_size=3,
-        residual_kernel_size=3,
-        dilation_growth_rate=2,
-        use_causal_conv=True,
-        pad_mode="constant",
-        compress=2,
-        trim_right_ratio=1.0,
-        codebook_size=2048,
-        codebook_dim=256,
-        num_quantizers=32,
-        use_conv_shortcut=False,
-        vector_quantization_hidden_dimension=256,
-        num_semantic_quantizers=1,
-        upsample_groups=512,
-        num_hidden_layers=8,
-        intermediate_size=2048,
-        num_attention_heads=8,
-        num_key_value_heads=8,
-        head_dim=None,
-        hidden_act="gelu",
-        max_position_embeddings=8000,
-        initializer_range=0.02,
-        norm_eps=1e-5,
-        use_cache=False,
-        use_streaming=False,
-        rope_theta=10000.0,
-        sliding_window=250,
-        attention_dropout=0.0,
-        layer_scale_initial_scale=0.01,
-        attention_bias=False,
+        sampling_rate: int | None = 24_000,
+        frame_rate: int | None = None,
+        audio_channels: int | None = 1,
+        hidden_size: int | None = 512,
+        num_filters: int | None = 64,
+        num_residual_layers: int | None = 1,
+        upsampling_ratios: list[int] | None = None,
+        kernel_size: int | None = 7,
+        last_kernel_size: int | None = 3,
+        residual_kernel_size: int | None = 3,
+        dilation_growth_rate: int | None = 2,
+        use_causal_conv: bool | None = True,
+        pad_mode: str | None = "constant",
+        compress: int | None = 2,
+        trim_right_ratio: float | None = 1.0,
+        codebook_size: int | None = 2048,
+        codebook_dim: int | None = 256,
+        num_quantizers: int | None = 32,
+        use_conv_shortcut: bool | None = False,
+        vector_quantization_hidden_dimension: int | None = 256,
+        num_semantic_quantizers: int | None = 1,
+        upsample_groups: int | None = 512,
+        num_hidden_layers: int | None = 8,
+        intermediate_size: int | None = 2048,
+        num_attention_heads: int | None = 8,
+        num_key_value_heads: int | None = 8,
+        head_dim: int | None = None,
+        hidden_act: str | None = "gelu",
+        max_position_embeddings: int | None = 8000,
+        initializer_range: float | None = 0.02,
+        norm_eps: int | None = 1e-5,
+        use_cache: bool | None = False,
+        use_streaming: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        sliding_window: int | None = 250,
+        attention_dropout: float | None = 0.0,
+        layer_scale_initial_scale: float | None = 0.01,
+        attention_bias: bool | None = False,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.sampling_rate = sampling_rate
@@ -212,12 +217,13 @@ class MimiConfig(PretrainedConfig):
         self.norm_eps = norm_eps
         self.use_cache = use_cache
         self.use_streaming = use_streaming
-        self.rope_theta = rope_theta
         self.sliding_window = sliding_window
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim or hidden_size // num_attention_heads
         self.layer_scale_initial_scale = layer_scale_initial_scale
         self.attention_bias = attention_bias
+        self.tie_word_embeddings = tie_word_embeddings
+        self.rope_parameters = rope_parameters
 
         # Handle backward compatibility for frame_rate:
         # If frame_rate is explicitly provided, use it (backward compatibility)

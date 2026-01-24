@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-08-19.*
+*This model was released on 2023-09-20 and added to Hugging Face Transformers on 2025-08-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -18,7 +18,6 @@ specific language governing permissions and limitations under the License.
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
-
 
 # KOSMOS-2.5
 
@@ -46,7 +45,8 @@ import re
 import torch
 import requests
 from PIL import Image, ImageDraw
-from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration, infer_device
+from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
+from accelerate import Accelerator
 
 repo = "microsoft/kosmos-2.5"
 device = "cuda:0"
@@ -85,7 +85,8 @@ import re
 import torch
 import requests
 from PIL import Image, ImageDraw
-from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration, infer_device
+from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
+from accelerate import Accelerator
 
 repo = "microsoft/kosmos-2.5"
 device = "cuda:0"
@@ -159,7 +160,6 @@ image.save("output.png")
 </hfoption>
 </hfoptions>
 
-
 ## Chat version
 
 The authors also released Kosmos-2.5 Chat, which is a chat version optimized for document understanding. You can use it like so:
@@ -224,6 +224,7 @@ print(generated_text[0])
 ## Kosmos2_5Processor
 
 [[autodoc]] Kosmos2_5Processor
+    - __call__
 
 ## Kosmos2_5Model
 

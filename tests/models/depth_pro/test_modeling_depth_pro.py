@@ -22,7 +22,7 @@ from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -210,10 +210,7 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = DepthProModelTester(self)
@@ -270,7 +267,7 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             loss = model(**inputs).loss
             loss.backward()
 
-    def test_training_gradient_checkpointing(self):
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         for model_class in self.all_model_classes:
             if model_class.__name__ == "DepthProForDepthEstimation":
                 continue
@@ -283,62 +280,11 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 continue
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable()
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                non_uniform_init_parms = [
-                    # these encoders are vision transformers
-                    # any layer outside these encoders is either Conv2d or ConvTranspose2d
-                    # which use kaiming initialization
-                    "patch_encoder",
-                    "image_encoder",
-                    "fov_model.encoder",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in non_uniform_init_parms):
-                        # See PR #38607 (to avoid flakiness)
-                        data = torch.flatten(param.data)
-                        n_elements = torch.numel(data)
-                        # skip 2.5% of elements on each side to avoid issues caused by `nn.init.trunc_normal_` described in
-                        # https://github.com/huggingface/transformers/pull/27906#issuecomment-1846951332
-                        n_elements_to_skip_on_each_side = int(n_elements * 0.025)
-                        data_to_check = torch.sort(data).values
-                        if n_elements_to_skip_on_each_side > 0:
-                            data_to_check = data_to_check[
-                                n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side
-                            ]
-                        self.assertIn(
-                            ((data_to_check.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     # this started when switched from normal initialization to kaiming_normal initialization
     # maybe because the magnitude of offset values from ViT-encoders increases when followed by many convolution layers

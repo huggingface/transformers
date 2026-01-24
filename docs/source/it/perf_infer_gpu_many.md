@@ -22,7 +22,3 @@ Questo documento contiene informazioni su come fare inferenza in maniera efficie
 Nota: Un setup con GPU multiple può utilizzare la maggior parte delle strategie descritte nella [sezione con GPU singola](./perf_infer_gpu_one). Tuttavia, è necessario conoscere delle tecniche semplici che possono essere utilizzate per un risultato migliore.
 
 </Tip>
-
-## `BetterTransformer` per inferenza più rapida
-
-Abbiamo recentemente integrato `BetterTransformer` per inferenza più rapida su multi-GPU per modelli su testo, immagini e audio. Controlla il documento con queste integrazioni [qui](https://huggingface.co/docs/optimum/bettertransformer/overview) per maggiori dettagli.

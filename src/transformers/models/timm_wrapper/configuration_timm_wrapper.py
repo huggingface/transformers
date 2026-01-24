@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +14,9 @@
 
 """Configuration for TimmWrapper models"""
 
-from typing import Any, Optional
+from typing import Any
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import is_timm_available, logging, requires_backends
 
 
@@ -28,14 +27,14 @@ if is_timm_available():
 logger = logging.get_logger(__name__)
 
 
-class TimmWrapperConfig(PretrainedConfig):
+class TimmWrapperConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration for a timm backbone [`TimmWrapper`].
 
     It is used to instantiate a timm model according to the specified arguments, defining the model.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Config loads imagenet label descriptions and stores them in `id2label` attribute, `label2id` attribute for default
     imagenet models is set to `None` due to occlusions in the label descriptions.
@@ -70,7 +69,7 @@ class TimmWrapperConfig(PretrainedConfig):
         architecture: str = "resnet50",
         initializer_range: float = 0.02,
         do_pooling: bool = True,
-        model_args: Optional[dict[str, Any]] = None,
+        model_args: dict[str, Any] | None = None,
         **kwargs,
     ):
         self.architecture = architecture
@@ -81,6 +80,9 @@ class TimmWrapperConfig(PretrainedConfig):
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any], **kwargs):
+        # Create a copy to avoid mutating the original dict
+        config_dict = config_dict.copy()
+
         label_names = config_dict.get("label_names")
         is_custom_model = "num_labels" in kwargs or "id2label" in kwargs
 
@@ -121,8 +123,8 @@ class TimmWrapperConfig(PretrainedConfig):
 
     def to_dict(self) -> dict[str, Any]:
         output = super().to_dict()
-        output["num_classes"] = self.num_labels
-        output["label_names"] = list(self.id2label.values())
+        output.setdefault("num_classes", self.num_labels)
+        output.setdefault("label_names", list(self.id2label.values()))
         output.pop("id2label", None)
         output.pop("label2id", None)
         return output

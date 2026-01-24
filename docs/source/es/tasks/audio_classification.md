@@ -187,8 +187,6 @@ Ahora tu función `compute_metrics` (computar métricas) está lista y podrás u
 
 ## Entrenamiento
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 ¡Si no tienes experiencia haciéndo *fine-tuning* a un modelo con el [`Trainer`], échale un vistazo al tutorial básico [aquí](../training#train-with-pytorch-trainer)!
@@ -222,7 +220,7 @@ Al llegar a este punto, solo quedan tres pasos:
 ...     gradient_accumulation_steps=4,
 ...     per_device_eval_batch_size=32,
 ...     num_train_epochs=10,
-...     warmup_ratio=0.1,
+...     warmup_steps=0.1,
 ...     logging_steps=10,
 ...     load_best_model_at_end=True,
 ...     metric_for_best_model="accuracy",
@@ -246,8 +244,6 @@ Una vez que el entrenamiento haya sido completado, comparte tu modelo en el Hub 
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -288,8 +284,6 @@ La manera más simple de probar tu modelo para hacer inferencia es usarlo en un 
 
 También puedes replicar de forma manual los resultados del `pipeline` si lo deseas:
 
-<frameworkcontent>
-<pt>
 Carga el feature extractor para preprocesar el archivo de audio y devuelve el `input` como un tensor de PyTorch:
 
 ```py
@@ -319,5 +313,3 @@ Obtén los identificadores de los clases con mayor probabilidad y usa el *mappin
 >>> predicted_label
 'cash_deposit'
 ```
-</pt>
-</frameworkcontent>

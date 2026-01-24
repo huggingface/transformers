@@ -15,9 +15,7 @@
 
 import unittest
 
-from parameterized import parameterized
-
-from transformers import DbrxConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -30,10 +28,8 @@ if is_torch_available():
 
 
 class DbrxModelTester(CausalLMModelTester):
-    config_class = DbrxConfig
     if is_torch_available():
         base_model_class = DbrxModel
-        causal_lm_class = DbrxForCausalLM
 
     def __init__(
         self,
@@ -67,6 +63,7 @@ class DbrxModelTester(CausalLMModelTester):
         # DBRX takes sub-configurations for the FFN and attention layers, so we need to set that correctly here
         self.ffn_config = {
             "ffn_hidden_size": self.hidden_size,
+            "hidden_size": 2 * self.hidden_size,
             "moe_jitter_eps": moe_jitter_eps,
             "moe_loss_weight": moe_loss_weight,
             "moe_num_experts": moe_num_experts,
@@ -87,26 +84,11 @@ class DbrxModelTester(CausalLMModelTester):
 
 @require_torch
 class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (DbrxModel, DbrxForCausalLM) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": DbrxModel,
-            "text-generation": DbrxForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
     model_tester_class = DbrxModelTester
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "eitanturok/dbrx-tiny"
+        model_name = "trl-internal-testing/tiny-DbrxForCausalLM"
         model = DbrxModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -122,15 +104,6 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="Dbrx models do not work with offload")
     def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip("Dbrx doesn't have RoPE scaling implemented")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("Dbrx doesn't have RoPE scaling implemented")
-    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
 

@@ -98,7 +98,7 @@ def bytes_to_giga_bytes(bytes):
   return bytes / 1024 / 1024 / 1024
 ```
 
-دعونا نستدعي [`torch.cuda.max_memory_allocated`](https://pytorch.org/docs/stable/generated/torch.cuda.max_memory_allocated.html) لقياس ذروة تخصيص ذاكرة وحدة معالجة الرسومات (GPU).
+دعونا نستدعي [`torch.cuda.memory.max_memory_allocated`](https://docs.pytorch.org/docs/stable/generated/torch.cuda.memory.max_memory_allocated.html) لقياس ذروة تخصيص ذاكرة وحدة معالجة الرسومات (GPU).
 
 ```python
 bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
@@ -231,7 +231,7 @@ flush()
 دعنا نرى ما هو استهلاك ذاكرة GPU الذروة الذي يوفره تكميم 4 بت. يمكن تكميم النموذج إلى 4 بت باستخدام نفس واجهة برمجة التطبيقات كما في السابق - هذه المرة عن طريق تمرير `load_in_4bit=True` بدلاً من `load_in_8bit=True`.
 
 ```python
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", load_in_4bit=True, pad_token_id=0)
+model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", quantization_config=BitsAndBytesConfig(load_in_4bit=True), pad_token_id=0)
 
 pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
@@ -273,7 +273,7 @@ flush()
 
 يسمح تكميم 4 بت بتشغيل النموذج على وحدات معالجة الرسومات مثل RTX3090 و V100 و T4 والتي يمكن الوصول إليها بسهولة لمعظم الأشخاص.
 
-لمزيد من المعلومات حول التكميم ولمعرفة كيف يمكن تكميم النماذج لطلب ذاكرة GPU VRAM أقل حتى من 4 بت، نوصي بالاطلاع على تنفيذ [`AutoGPTQ`](https://huggingface.co/docs/transformers/main/en/main_classes/quantization#autogptq-integration%60).
+لمزيد من المعلومات حول التكميم ولمعرفة كيف يمكن تكميم النماذج لطلب ذاكرة GPU VRAM أقل حتى من 4 بت، نوصي بالاطلاع على تنفيذ [`GPT-QModel`](https://huggingface.co/docs/transformers/main/en/main_classes/quantization#gptqmodel).
 
 > كاستنتاج، من المهم تذكر أن تكميم النموذج يتداول كفاءة الذاكرة المحسنة مقابل الدقة وفي بعض الحالات وقت الاستدلال.
 
@@ -328,174 +328,6 @@ $$ \textbf{O}_i \leftarrow s^a_{ij} * \textbf{O}_i + s^b_{ij} * \mathbf{V}_{j} \
 
 لنلقِ نظرة على مثال عملي.
 
-
-يحصل نموذج OctoCoder الخاص بنا الآن على موجه إدخال أطول بشكل كبير يتضمن ما يسمى *موجه النظام*. تُستخدم موجهات النظام لتوجيه LLM إلى مساعد أفضل مصمم لمهام المستخدمين.
-فيما يلي، نستخدم موجه النظام الذي سيجعل OctoCoder مساعد ترميز أفضل.
-
-```python
-system_prompt = """Below are a series of dialogues between various people and an AI technical assistant.
-The assistant tries to be helpful, polite, honest, sophisticated, emotionally aware, and humble but knowledgeable.
-The assistant is happy to help with code questions and will do their best to understand exactly what is needed.
-It also tries to avoid giving false or misleading information, and it caveats when it isn't entirely sure about the right answer.
-That said, the assistant is practical really does its best, and doesn't let caution get too much in the way of being useful.
-
-The Starcoder models are a series of 15.5B parameter models trained on 80+ programming languages from The Stack (v1.2) (excluding opt-out requests).
-The model uses Multi Query Attention, was trained using the Fill-in-the-Middle objective, and with 8,192 tokens context window for a trillion tokens of heavily deduplicated data.
------
-
-Question: Write a function that takes two lists and returns a list that has alternating elements from each input list.
-
-Answer: Sure. Here is a function that does that.
-
-def alternating(list1, list2):
-   results = []
-   for i in range(len(list1)):
-       results.append(list1[i])
-       results.append(list2[i])
-   return results
-
-Question: Can you write some test cases for this function?
-
-Answer: Sure, here are some tests.
-
-assert alternating([10, 20, 30], [1, 2, 3]) == [10, 1, 20, 2, 30, 3]
-assert alternating([True, False], [4, 5]) == [True, 4, False, 5]
-assert alternating([], []) == []
-
-Question: Modify the function so that it returns all input elements when the lists have uneven length. The elements from the longer list should be at the end.
-
-Answer: Here is the modified function.
-
-def alternating(list1, list2):
-   results = []
-   for i in range(min(len(list1), len(list2))):
-       results.append(list1[i])
-       results.append(list2[i])
-   if len(list1) > len(list2):
-       results.extend(list1[i+1:])
-   else:
-       results.extend(list2[i+1:])
-   return results
------
-"""
-```
-لأغراض التوضيح، سنكرر موجه النظام عشر مرات بحيث يكون طول الإدخال طويلاً بما يكفي لملاحظة وفورات ذاكرة Flash Attention.
-نضيف موجه النص الأصلي "سؤال: يرجى كتابة وظيفة في Python تقوم بتحويل البايتات إلى جيجا بايت.
-
-```python
-long_prompt = 10 * system_prompt + prompt
-```
-
-نقوم بتنفيذ نموذجنا مرة أخرى بدقة bfloat16.
-
-```python
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", dtype=torch.bfloat16, device_map="auto")
-tokenizer = AutoTokenizer.from_pretrained("bigcode/octocoder")
-
-pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
-```
-
-دعنا الآن نقوم بتشغيل النموذج تمامًا مثلما كان من قبل *بدون اهتمام فلاشي* وقياس متطلبات ذاكرة GPU وقت الذروة ووقت الاستدلال.
-
-```python
-import time
-
-start_time = time.time()
-result = pipe(long_prompt, max_new_tokens=60)[0]["generated_text"][len(long_prompt):]
-
-print(f"Generated in {time.time() - start_time} seconds.")
-result
-```
-
-**الإخراج**:
-```
-تم التوليد في 10.96854019165039 ثانية.
-بالتأكيد. إليك وظيفة للقيام بذلك.
-
-def bytes_to_giga(bytes):
-return bytes / 1024 / 1024 / 1024
-
-الإجابة: بالتأكيد. إليك وظيفة للقيام بذلك.
-
-ديف
-```
-
-نحصل على نفس الإخراج كما كان من قبل، ولكن هذه المرة، يقوم النموذج بتكرار الإجابة عدة مرات حتى يتم قطعها عند 60 رمزًا. ليس من المستغرب أننا كررنا موجه النظام عشر مرات لأغراض التوضيح وبالتالي قمنا بتشغيل النموذج لتكرار نفسه.
-
-**ملاحظة** لا ينبغي تكرار موجه النظام عشر مرات في التطبيقات الواقعية - مرة واحدة كافية!
-
-دعنا نقيس متطلبات ذاكرة GPU وقت الذروة.
-
-```python
-bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
-```
-
-**الإخراج**:
-```
-37.668193340301514
-```
-
-كما نرى، فإن متطلبات ذاكرة GPU وقت الذروة أعلى بكثير مما كانت عليه في البداية، وهو ما يرجع إلى حد كبير إلى تسلسل الإدخال الأطول. أيضًا، يستغرق التوليد أكثر من دقيقة بقليل الآن.
-
-نستدعي `flush()` لتحرير ذاكرة GPU لتجربتنا التالية.
-
-```python
-flush()
-```
-
-لمقارنة، دعونا نقوم بتشغيل نفس الدالة، ولكن تمكين الاهتمام فلاش بدلا من ذلك.
-للقيام بذلك، نقوم بتحويل النموذج إلى [BetterTransformer](Https://huggingface.co/docs/optimum/bettertransformer/overview) ومن خلال القيام بذلك تمكين PyTorch's [SDPA self-attention](Https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention) والتي بدورها قادرة على استخدام الاهتمام فلاش.
-
-```python
-model.to_bettertransformer()
-```
-
-الآن نقوم بتشغيل نفس مقتطف التعليمات البرمجية بالضبط كما كان من قبل وتحت الغطاء سوف تستخدم المحولات الاهتمام فلاش.
-
-```py
-start_time = time.time()
-with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
-    result = pipe(long_prompt, max_new_tokens=60)[0]["generated_text"][len(long_prompt):]
-
-print(f"Generated in {time.time() - start_time} seconds.")
-result
-```
-
-**الإخراج**:
-```
-تم التوليد في 3.0211617946624756 ثانية.
-بالتأكيد. إليك وظيفة للقيام بذلك.
-
-def bytes_to_giga(bytes):
-return bytes / 1024 / 1024 / 1024
-
-الإجابة: بالتأكيد. إليك وظيفة للقيام بذلك.
-
-ديف
-```
-
-نحصل على نفس النتيجة بالضبط كما كان من قبل، ولكن يمكننا ملاحظة تسريع كبير بفضل الاهتمام فلاش.
-
-دعنا نقيس استهلاك الذاكرة لآخر مرة.
-
-```python
-bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
-```
-
-**الإخراج**:
-```
-32.617331981658936
-```
-
-ونحن تقريبا مرة أخرى إلى ذاكرة GPU الذروة الأصلية لدينا 29GB.
-
-يمكننا أن نلاحظ أننا نستخدم فقط حوالي 100 ميجابايت إضافية من ذاكرة GPU عند تمرير تسلسل إدخال طويل جدًا مع الاهتمام فلاش مقارنة بتمرير تسلسل إدخال قصير كما فعلنا في البداية.
-
-```py
-flush()
-```
-
-لمزيد من المعلومات حول كيفية استخدام Flash Attention، يرجى الاطلاع على [صفحة doc هذه](Https://huggingface.co/docs/transformers/en/perf_infer_gpu_one#flashattention-2).
 
 ## 3. الابتكارات المعمارية
 
@@ -640,7 +472,7 @@ for _ in range(5):
   next_token_id = torch.argmax(next_logits, dim=-1)
 
   print("shape of input_ids", next_token_id.shape)
-  print("length of key-value cache", len(past_key_values[0][0]))  # past_key_values are of shape [num_layers, 0 for k, 1 for v, batch_size, length, hidden_dim]
+  print("length of key-value cache", past_key_values.get_seq_length())  # past_key_values are of shape [num_layers, 0 for k, 1 for v, batch_size, length, hidden_dim]
   generated_tokens.append(next_token_id.item())
 
 generated_text = tokenizer.batch_decode(generated_tokens)

@@ -70,8 +70,8 @@ from transformers import AutoProcessor, Florence2ForConditionalGeneration
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-base", dtype=torch.bfloat16, device_map="auto")
-processor = AutoProcessor.from_pretrained("microsoft/Florence-2-base")
+model = Florence2ForConditionalGeneration.from_pretrained("florence-community/Florence-2-base", dtype=torch.bfloat16, device_map="auto")
+processor = AutoProcessor.from_pretrained("florence-community/Florence-2-base")
 
 task_prompt = "<OD>"
 inputs = processor(text=task_prompt, images=image, return_tensors="pt").to(model.device)
@@ -105,12 +105,12 @@ from transformers import AutoProcessor, Florence2ForConditionalGeneration, BitsA
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 
 model = Florence2ForConditionalGeneration.from_pretrained(
-    "microsoft/Florence-2-large",
+    "florence-community/Florence-2-base",
     dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
-processor = AutoProcessor.from_pretrained("microsoft/Florence-2-large")
+processor = AutoProcessor.from_pretrained("florence-community/Florence-2-base")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
@@ -138,21 +138,21 @@ print(parsed_answer)
 ## Notes
 
 - Florence-2 is a prompt-based model. You need to provide a task prompt to tell the model what to do. Supported tasks are:
-    - `<OCR>`
-    - `<OCR_WITH_REGION>`
-    - `<CAPTION>`
-    - `<DETAILED_CAPTION>`
-    - `<MORE_DETAILED_CAPTION>`
-    - `<OD>`
-    - `<DENSE_REGION_CAPTION>`
-    - `<CAPTION_TO_PHRASE_GROUNDING>`
-    - `<REFERRING_EXPRESSION_SEGMENTATION>`
-    - `<REGION_TO_SEGMENTATION>`
-    - `<OPEN_VOCABULARY_DETECTION>`
-    - `<REGION_TO_CATEGORY>`
-    - `<REGION_TO_DESCRIPTION>`
-    - `<REGION_TO_OCR>`
-    - `<REGION_PROPOSAL>`
+  - `<OCR>`
+  - `<OCR_WITH_REGION>`
+  - `<CAPTION>`
+  - `<DETAILED_CAPTION>`
+  - `<MORE_DETAILED_CAPTION>`
+  - `<OD>`
+  - `<DENSE_REGION_CAPTION>`
+  - `<CAPTION_TO_PHRASE_GROUNDING>`
+  - `<REFERRING_EXPRESSION_SEGMENTATION>`
+  - `<REGION_TO_SEGMENTATION>`
+  - `<OPEN_VOCABULARY_DETECTION>`
+  - `<REGION_TO_CATEGORY>`
+  - `<REGION_TO_DESCRIPTION>`
+  - `<REGION_TO_OCR>`
+  - `<REGION_PROPOSAL>`
 - The raw output of the model is a string that needs to be parsed. The [`Florence2Processor`] has a [`~Florence2Processor.post_process_generation`] method that can parse the string into a more usable format, like bounding boxes and labels for object detection.
 
 ## Resources
@@ -171,16 +171,19 @@ print(parsed_answer)
 ## Florence2Processor
 
 [[autodoc]] Florence2Processor
+    - __call__
 
 ## Florence2Model
 
 [[autodoc]] Florence2Model
     - forward
+    - get_image_features
 
 ## Florence2ForConditionalGeneration
 
 [[autodoc]] Florence2ForConditionalGeneration
     - forward
+    - get_image_features
 
 ## Florence2VisionBackbone
 

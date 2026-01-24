@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-12-13 and added to Hugging Face Transformers on 2025-09-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -24,11 +25,11 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# Byte Lantet Transformer (BLT)
+# Byte Latent Transformer (BLT)
 
 ## Overview
 
-The BLT model was proposed in [Byte Latent Transformer: Patches Scale Better Than Tokens](<https://arxiv.org/pdf/2412.09871>) by Artidoro Pagnoni, Ram Pasunuru, Pedro Rodriguez, John Nguyen, Benjamin Muller, Margaret Li1, Chunting Zhou, Lili Yu, Jason Weston, Luke Zettlemoyer, Gargi Ghosh, Mike Lewis, Ari Holtzman†, Srinivasan Iyer.
+The BLT model was proposed in [Byte Latent Transformer: Patches Scale Better Than Tokens](https://huggingface.co/papers/2412.09871) by Artidoro Pagnoni, Ram Pasunuru, Pedro Rodriguez, John Nguyen, Benjamin Muller, Margaret Li1, Chunting Zhou, Lili Yu, Jason Weston, Luke Zettlemoyer, Gargi Ghosh, Mike Lewis, Ari Holtzman†, Srinivasan Iyer.
 BLT is a byte-level LLM that achieves tokenization-level performance through entropy-based dynamic patching.
 
 The abstract from the paper is the following:
@@ -37,7 +38,7 @@ The abstract from the paper is the following:
 efficiency and robustness. BLT encodes bytes into dynamically sized patches, which serve as the primary units of computation. Patches are segmented based on the entropy of the next byte, allocating
 more compute and model capacity where increased data complexity demands it. We present the first flop controlled scaling study of byte-level models up to 8B parameters and 4T training bytes. Our results demonstrate the feasibility of scaling models trained on raw bytes without a fixed vocabulary. Both training and inference efficiency improve due to dynamically selecting long patches when data is predictable, along with qualitative improvements on reasoning and long tail generalization. Overall, for fixed inference costs, BLT shows significantly better scaling than tokenization-based models, by simultaneously growing both patch and model size.*
 
-## Usage Tips:
+## Usage Tips
 
 - **Dual Model Architecture**: BLT consists of two separate trained models:
   - **Patcher (Entropy Model)**: A smaller transformer model that predicts byte-level entropy to determine patch boundaries and segment input.
@@ -64,8 +65,8 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-hf")
 model = AutoModelForCausalLM.from_pretrained(
-    "itazap/blt-1b-hf", 
-    device_map="auto", 
+    "itazap/blt-1b-hf",
+    device_map="auto",
 )
 
 inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
@@ -82,7 +83,6 @@ print(tokenizer.decode(generated_ids[0]))
 
 This model was contributed by [itazap](https://huggingface.co/<itazap>).
 The original code can be found [here](<https://github.com/facebookresearch/blt>).
-
 
 ## BltConfig
 

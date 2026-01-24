@@ -226,7 +226,7 @@ tokenizer = PreTrainedTokenizerFast.from_pretrained("config/save/dir")
 
 <Youtube id="Yffk5aydLzg"/>
 
-A Transformers model expects the input to be a PyTorch or NumPy tensor. A tokenizers job is to preprocess text into those tensors. Specify the framework tensor type to return with the `return_tensors` parameter.
+A Transformers model expects the input to be a PyTorch or NumPy tensor. A tokenizer's job is to preprocess text into those tensors. Specify the framework tensor type to return with the `return_tensors` parameter.
 
 ```py
 from transformers import AutoTokenizer

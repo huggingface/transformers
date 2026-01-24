@@ -175,11 +175,7 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         else {}
     )
 
-    fx_compatible = True
-    test_head_masking = False
-    test_pruning = False
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = SegformerModelTester(self)

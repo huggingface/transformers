@@ -32,7 +32,6 @@ You can all the original MobileNet checkpoints under the [Google](https://huggin
 
 The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
 
-
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
@@ -84,32 +83,28 @@ print(f"The predicted class label is: {predicted_class_label}")
 <!-- Quantization - Not applicable -->
 <!-- Attention Visualization - Not applicable for this model type -->
 
-
 ## Notes
 
--   Checkpoint names follow the pattern `mobilenet_v1_{depth_multiplier}_{resolution}`, like `mobilenet_v1_1.0_224`. `1.0` is the depth multiplier and `224` is the image resolution.
--   While trained on images of a specific sizes, the model architecture works with images of different sizes (minimum 32x32). The [`MobileNetV1ImageProcessor`] handles the necessary preprocessing.
--   MobileNet is pretrained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k), a dataset with 1000 classes. However, the model actually predicts 1001 classes. The additional class is an extra "background" class (index 0).
--   The original TensorFlow checkpoints determines the padding amount at inference because it depends on the input image size. To use the native PyTorch padding behavior, set `tf_padding=False` in [`MobileNetV1Config`].
+- Checkpoint names follow the pattern `mobilenet_v1_{depth_multiplier}_{resolution}`, like `mobilenet_v1_1.0_224`. `1.0` is the depth multiplier and `224` is the image resolution.
+- While trained on images of a specific sizes, the model architecture works with images of different sizes (minimum 32x32). The [`MobileNetV1ImageProcessor`] handles the necessary preprocessing.
+- MobileNet is pretrained on [ImageNet-1k](https://huggingface.co/datasets/ILSVRC/imagenet-1k), a dataset with 1000 classes. However, the model actually predicts 1001 classes. The additional class is an extra "background" class (index 0).
+- The original TensorFlow checkpoints determines the padding amount at inference because it depends on the input image size. To use the native PyTorch padding behavior, set `tf_padding=False` in [`MobileNetV1Config`].
+
     ```python
     from transformers import MobileNetV1Config
 
     config = MobileNetV1Config.from_pretrained("google/mobilenet_v1_1.0_224", tf_padding=True)
     ```
--   The Transformers implementation does not support the following features.
-    -   Uses global average pooling instead of the optional 7x7 average pooling with stride 2. For larger inputs, this gives a pooled output that is larger than a 1x1 pixel.
-    -   Does not support other `output_stride` values (fixed at 32). For smaller `output_strides`, the original implementation uses dilated convolution to prevent spatial resolution from being reduced further. (which would require dilated convolutions).
-    -   `output_hidden_states=True` returns *all* intermediate hidden states. It is not possible to extract the output from specific layers for other downstream purposes.
-    - Does not include the quantized models from the original checkpoints because they include "FakeQuantization" operations to unquantize the weights.
+
+- The Transformers implementation does not support the following features.
+  - Uses global average pooling instead of the optional 7x7 average pooling with stride 2. For larger inputs, this gives a pooled output that is larger than a 1x1 pixel.
+  - Does not support other `output_stride` values (fixed at 32). For smaller `output_strides`, the original implementation uses dilated convolution to prevent spatial resolution from being reduced further. (which would require dilated convolutions).
+  - `output_hidden_states=True` returns *all* intermediate hidden states. It is not possible to extract the output from specific layers for other downstream purposes.
+  - Does not include the quantized models from the original checkpoints because they include "FakeQuantization" operations to unquantize the weights.
 
 ## MobileNetV1Config
 
 [[autodoc]] MobileNetV1Config
-
-## MobileNetV1FeatureExtractor
-
-[[autodoc]] MobileNetV1FeatureExtractor
-    - preprocess
 
 ## MobileNetV1ImageProcessor
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The SqueezeBert authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,26 +13,22 @@
 # limitations under the License.
 """SqueezeBERT model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class SqueezeBertConfig(PretrainedConfig):
+class SqueezeBertConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SqueezeBertModel`]. It is used to instantiate a
     SqueezeBERT model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SqueezeBERT
     [squeezebert/squeezebert-uncased](https://huggingface.co/squeezebert/squeezebert-uncased) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -59,13 +54,17 @@ class SqueezeBertConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`BertModel`] or [`TFBertModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`BertModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
 
         pad_token_id (`int`, *optional*, defaults to 0):
             The ID of the token in the word embedding to use as padding.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
         embedding_size (`int`, *optional*, defaults to 768):
             The dimension of the word embedding vectors.
 
@@ -81,6 +80,8 @@ class SqueezeBertConfig(PretrainedConfig):
             The number of groups in the second feed forward network layer.
         output_groups (`int`, *optional*, defaults to 4):
             The number of groups in the third feed forward network layer.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -115,6 +116,8 @@ class SqueezeBertConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        bos_token_id=None,
+        eos_token_id=None,
         embedding_size=768,
         q_groups=4,
         k_groups=4,
@@ -122,10 +125,15 @@ class SqueezeBertConfig(PretrainedConfig):
         post_attention_groups=1,
         intermediate_groups=4,
         output_groups=4,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
 
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -147,21 +155,4 @@ class SqueezeBertConfig(PretrainedConfig):
         self.output_groups = output_groups
 
 
-# # Copied from transformers.models.bert.configuration_bert.BertOnxxConfig with Bert->SqueezeBert
-class SqueezeBertOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-                ("token_type_ids", dynamic_axis),
-            ]
-        )
-
-
-__all__ = ["SqueezeBertConfig", "SqueezeBertOnnxConfig"]
+__all__ = ["SqueezeBertConfig"]

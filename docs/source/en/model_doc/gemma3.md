@@ -195,6 +195,7 @@ visualizer("<img>What is shown in this image?")
         },
     ]
     ```
+
 - Text passed to the processor should have a `<start_of_image>` token wherever an image should be inserted.
 - The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.
 - By default, images aren't cropped and only the base image is forwarded to the model. In high resolution images or images with non-square aspect ratios, artifacts can result because the vision encoder uses a fixed resolution of 896x896. To prevent these artifacts and improve performance during inference, set `do_pan_and_scan=True` to crop the image into multiple smaller patches and concatenate them with the base image embedding. You can disable pan and scan for faster inference.
@@ -209,6 +210,7 @@ visualizer("<img>What is shown in this image?")
     +   do_pan_and_scan=True,
         ).to(model.device)
     ```
+
 - For Gemma-3 1B checkpoint trained in text-only mode, use [`AutoModelForCausalLM`] instead.
 
     ```py
@@ -241,6 +243,7 @@ visualizer("<img>What is shown in this image?")
 ## Gemma3Processor
 
 [[autodoc]] Gemma3Processor
+    - __call__
 
 ## Gemma3TextConfig
 
@@ -268,6 +271,7 @@ visualizer("<img>What is shown in this image?")
 
 [[autodoc]] Gemma3ForConditionalGeneration
     - forward
+    - get_image_features
 
 ## Gemma3ForSequenceClassification
 

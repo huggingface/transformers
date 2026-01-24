@@ -13,28 +13,26 @@
 # limitations under the License.
 """Testing suite for the PyTorch emu3 model."""
 
-import tempfile
 import unittest
 
 import numpy as np
 
-from transformers import Emu3Processor, GPT2TokenizerFast
-from transformers.utils import is_vision_available
+from transformers import Emu3Processor
 
 from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_vision_available():
-    from transformers import Emu3ImageProcessor
 
 
 class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Emu3Processor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        image_processor = Emu3ImageProcessor(min_pixels=28 * 28, max_pixels=56 * 56)
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class(min_pixels=28 * 28, max_pixels=56 * 56)
+
+    @classmethod
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         extra_special_tokens = {
             "image_token": "<image>",
             "boi_token": "<|image start|>",
@@ -42,16 +40,10 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "image_wrapper_token": "<|image token|>",
             "eof_token": "<|extra_201|>",
         }
-        tokenizer = GPT2TokenizerFast.from_pretrained(
-            "openai-community/gpt2", extra_special_tokens=extra_special_tokens
-        )
+        tokenizer = tokenizer_class.from_pretrained("openai-community/gpt2", extra_special_tokens=extra_special_tokens)
         tokenizer.pad_token_id = 0
         tokenizer.sep_token_id = 1
-        processor = cls.processor_class(
-            image_processor=image_processor, tokenizer=tokenizer, chat_template="dummy_template"
-        )
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image_token = processor.image_token
+        return tokenizer
 
     @staticmethod
     def prepare_processor_dict():
@@ -84,12 +76,12 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         orig_image_input = self.prepare_image_inputs()
         orig_image = np.array(orig_image_input).transpose(2, 0, 1)
 
-        inputs = processor(text=input_str, images=orig_image, do_resize=False, return_tensors="np")
+        inputs = processor(text=input_str, images=orig_image, do_resize=False, return_tensors="pt")
         normalized_image_input = inputs.pixel_values
-        unnormalized_images = processor.postprocess(normalized_image_input, return_tensors="np")["pixel_values"]
+        unnormalized_images = processor.postprocess(normalized_image_input, return_tensors="pt")["pixel_values"]
 
         # For an image where pixels go from 0 to 255 the diff can be 1 due to some numerical precision errors when scaling and unscaling
-        self.assertTrue(np.abs(orig_image - unnormalized_images).max() >= 1)
+        self.assertTrue(np.abs(orig_image - unnormalized_images.numpy()).max() >= 1)
 
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):

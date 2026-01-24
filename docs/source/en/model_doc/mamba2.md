@@ -1,4 +1,4 @@
-<!--Copyright 2024 The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -26,13 +26,15 @@ rendered properly in your Markdown viewer.
 
 You can find all the original Mamba 2 checkpoints under the [State Space Models](https://huggingface.co/state-spaces) organization, but the examples shown below use [mistralai/Mamba-Codestral-7B-v0.1](https://huggingface.co/mistralai/Mamba-Codestral-7B-v0.1) because a Hugging Face implementation isn't supported yet for the original checkpoints.
 
+Other Mamba 2-based architectures include [Bamba](./bamba), [FalconH1](./falcon_h1), and [Zamba2](./zamba2).
+
 > [!TIP]
 > This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ).
 > Click on the Mamba models in the right sidebar for more examples of how to apply Mamba to different language tasks.
 
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
-hfoptions id="usage">
+<hfoptions id="Usage">
 <hfoption id="Pipeline">
 
 ```python
@@ -89,6 +91,7 @@ input_ids = tokenizer("Plants create energy through a process known as", return_
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 ## Notes
 
 - Codestral Mamba has `groups=8` which are similar to the number of kv heads in an attention-based model.
@@ -121,7 +124,6 @@ trainer = SFTTrainer(
 )
 trainer.train()
 ```
-
 
 ## Mamba2Config
 

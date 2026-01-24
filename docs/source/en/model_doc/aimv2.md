@@ -25,7 +25,6 @@ The abstract from the paper is the following:
 
 *We introduce a novel method for pre-training of large-scale vision encoders. Building on recent advancements in autoregressive pre-training of vision models, we extend this framework to a multimodal setting, i.e., images and text. In this paper, we present AIMV2, a family of generalist vision encoders characterized by a straightforward pre-training process, scalability, and remarkable performance across a range of downstream tasks. This is achieved by pairing the vision encoder with a multimodal decoder that autoregressively generates raw image patches and text tokens. Our encoders excel not only in multimodal evaluations but also in vision benchmarks such as localization, grounding, and classification. Notably, our AIMV2-3B encoder achieves 89.5% accuracy on ImageNet-1k with a frozen trunk. Furthermore, AIMV2 consistently outperforms state-of-the-art contrastive models (e.g., CLIP, SigLIP) in multimodal image understanding across diverse settings.*
 
-
 This model was contributed by [Yaswanth Gali](https://huggingface.co/yaswanthgali).
 The original code can be found [here](https://github.com/apple/ml-aim).
 
@@ -90,6 +89,8 @@ probs = outputs.logits_per_image.softmax(dim=-1)
 
 [[autodoc]] Aimv2Model
     - forward
+    - get_text_features
+    - get_image_features
 
 ## Aimv2VisionModel
 

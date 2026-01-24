@@ -13,17 +13,14 @@
 # limitations under the License.
 """Configuration base class and utilities."""
 
-import copy
-import json
 import os
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
-import requests
+import httpx
 import yaml
-from huggingface_hub import model_info
+from huggingface_hub import is_offline_mode, model_info
 from huggingface_hub.errors import OfflineModeIsEnabled
 from huggingface_hub.utils import HFValidationError
 
@@ -47,10 +44,7 @@ from .models.auto.modeling_auto import (
 )
 from .training_args import ParallelMode
 from .utils import (
-    MODEL_CARD_NAME,
-    cached_file,
     is_datasets_available,
-    is_offline_mode,
     is_tokenizers_available,
     is_torch_available,
     logging,
@@ -75,179 +69,6 @@ TASK_MAPPING = {
 }
 
 logger = logging.get_logger(__name__)
-
-
-class ModelCard:
-    r"""
-    Structured Model Card class. Store model card as well as methods for loading/downloading/saving model cards.
-
-    Please read the following paper for details and explanation on the sections: "Model Cards for Model Reporting" by
-    Margaret Mitchell, Simone Wu, Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer,
-    Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards. Link: https://huggingface.co/papers/1810.03993
-
-    Note: A model card can be loaded and saved to disk.
-    """
-
-    def __init__(self, **kwargs):
-        warnings.warn(
-            "The class `ModelCard` is deprecated and will be removed in version 5 of Transformers", FutureWarning
-        )
-        # Recommended attributes from https://huggingface.co/papers/1810.03993 (see papers)
-        self.model_details = kwargs.pop("model_details", {})
-        self.intended_use = kwargs.pop("intended_use", {})
-        self.factors = kwargs.pop("factors", {})
-        self.metrics = kwargs.pop("metrics", {})
-        self.evaluation_data = kwargs.pop("evaluation_data", {})
-        self.training_data = kwargs.pop("training_data", {})
-        self.quantitative_analyses = kwargs.pop("quantitative_analyses", {})
-        self.ethical_considerations = kwargs.pop("ethical_considerations", {})
-        self.caveats_and_recommendations = kwargs.pop("caveats_and_recommendations", {})
-
-        # Open additional attributes
-        for key, value in kwargs.items():
-            try:
-                setattr(self, key, value)
-            except AttributeError as err:
-                logger.error(f"Can't set {key} with value {value} for {self}")
-                raise err
-
-    def save_pretrained(self, save_directory_or_file):
-        """Save a model card object to the directory or file `save_directory_or_file`."""
-        if os.path.isdir(save_directory_or_file):
-            # If we save using the predefined names, we can load using `from_pretrained`
-            output_model_card_file = os.path.join(save_directory_or_file, MODEL_CARD_NAME)
-        else:
-            output_model_card_file = save_directory_or_file
-
-        self.to_json_file(output_model_card_file)
-        logger.info(f"Model card saved in {output_model_card_file}")
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        r"""
-        Instantiate a [`ModelCard`] from a pre-trained model model card.
-
-        Parameters:
-            pretrained_model_name_or_path: either:
-
-                - a string, the *model id* of a pretrained model card hosted inside a model repo on huggingface.co.
-                - a path to a *directory* containing a model card file saved using the [`~ModelCard.save_pretrained`]
-                  method, e.g.: `./my_model_directory/`.
-                - a path or url to a saved model card JSON *file*, e.g.: `./my_model_directory/modelcard.json`.
-
-            cache_dir: (*optional*) string:
-                Path to a directory in which a downloaded pre-trained model card should be cached if the standard cache
-                should not be used.
-
-            kwargs: (*optional*) dict: key/value pairs with which to update the ModelCard object after loading.
-
-                - The values in kwargs of any keys which are model card attributes will be used to override the loaded
-                  values.
-                - Behavior concerning key/value pairs whose keys are *not* model card attributes is controlled by the
-                  *return_unused_kwargs* keyword parameter.
-
-            proxies: (*optional*) dict, default None:
-                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}. The proxies are used on each request.
-
-            return_unused_kwargs: (*optional*) bool:
-
-                - If False, then this function returns just the final model card object.
-                - If True, then this functions returns a tuple *(model card, unused_kwargs)* where *unused_kwargs* is a
-                  dictionary consisting of the key/value pairs whose keys are not model card attributes: ie the part of
-                  kwargs which has not been used to update *ModelCard* and is otherwise ignored.
-
-        Examples:
-
-        ```python
-        # Download model card from huggingface.co and cache.
-        modelcard = ModelCard.from_pretrained("google-bert/bert-base-uncased")
-        # Model card was saved using *save_pretrained('./test/saved_model/')*
-        modelcard = ModelCard.from_pretrained("./test/saved_model/")
-        modelcard = ModelCard.from_pretrained("./test/saved_model/modelcard.json")
-        modelcard = ModelCard.from_pretrained("google-bert/bert-base-uncased", output_attentions=True, foo=False)
-        ```"""
-        cache_dir = kwargs.pop("cache_dir", None)
-        proxies = kwargs.pop("proxies", None)
-        return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
-        from_pipeline = kwargs.pop("_from_pipeline", None)
-
-        user_agent = {"file_type": "model_card"}
-        if from_pipeline is not None:
-            user_agent["using_pipeline"] = from_pipeline
-
-        is_local = os.path.isdir(pretrained_model_name_or_path)
-        if os.path.isfile(pretrained_model_name_or_path):
-            resolved_model_card_file = pretrained_model_name_or_path
-            is_local = True
-        else:
-            try:
-                # Load from URL or cache if already cached
-                resolved_model_card_file = cached_file(
-                    pretrained_model_name_or_path,
-                    filename=MODEL_CARD_NAME,
-                    cache_dir=cache_dir,
-                    proxies=proxies,
-                    user_agent=user_agent,
-                )
-                if is_local:
-                    logger.info(f"loading model card file {resolved_model_card_file}")
-                else:
-                    logger.info(f"loading model card file {MODEL_CARD_NAME} from cache at {resolved_model_card_file}")
-                # Load model card
-                modelcard = cls.from_json_file(resolved_model_card_file)
-
-            except (OSError, json.JSONDecodeError):
-                # We fall back on creating an empty model card
-                modelcard = cls()
-
-        # Update model card with kwargs if needed
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(modelcard, key):
-                setattr(modelcard, key, value)
-                to_remove.append(key)
-        for key in to_remove:
-            kwargs.pop(key, None)
-
-        logger.info(f"Model card: {modelcard}")
-        if return_unused_kwargs:
-            return modelcard, kwargs
-        else:
-            return modelcard
-
-    @classmethod
-    def from_dict(cls, json_object):
-        """Constructs a `ModelCard` from a Python dictionary of parameters."""
-        return cls(**json_object)
-
-    @classmethod
-    def from_json_file(cls, json_file):
-        """Constructs a `ModelCard` from a json file of parameters."""
-        with open(json_file, encoding="utf-8") as reader:
-            text = reader.read()
-        dict_obj = json.loads(text)
-        return cls(**dict_obj)
-
-    def __eq__(self, other):
-        return self.__dict__ == other.__dict__
-
-    def __repr__(self):
-        return str(self.to_json_string())
-
-    def to_dict(self):
-        """Serializes this instance to a Python dictionary."""
-        output = copy.deepcopy(self.__dict__)
-        return output
-
-    def to_json_string(self):
-        """Serializes this instance to a JSON string."""
-        return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
-
-    def to_json_file(self, json_file_path):
-        """Save this instance to a json file."""
-        with open(json_file_path, "w", encoding="utf-8") as writer:
-            writer.write(self.to_json_string())
 
 
 AUTOGENERATED_TRAINER_COMMENT = """
@@ -353,19 +174,19 @@ def _get_mapping_values(mapping):
 @dataclass
 class TrainingSummary:
     model_name: str
-    language: Optional[Union[str, list[str]]] = None
-    license: Optional[str] = None
-    tags: Optional[Union[str, list[str]]] = None
-    finetuned_from: Optional[str] = None
-    tasks: Optional[Union[str, list[str]]] = None
-    dataset: Optional[Union[str, list[str]]] = None
-    dataset_tags: Optional[Union[str, list[str]]] = None
-    dataset_args: Optional[Union[str, list[str]]] = None
-    dataset_metadata: Optional[dict[str, Any]] = None
-    eval_results: Optional[dict[str, float]] = None
-    eval_lines: Optional[list[str]] = None
-    hyperparameters: Optional[dict[str, Any]] = None
-    source: Optional[str] = "trainer"
+    language: str | list[str] | None = None
+    license: str | None = None
+    tags: str | list[str] | None = None
+    finetuned_from: str | None = None
+    tasks: str | list[str] | None = None
+    dataset: str | list[str] | None = None
+    dataset_tags: str | list[str] | None = None
+    dataset_args: str | list[str] | None = None
+    dataset_metadata: dict[str, Any] | None = None
+    eval_results: dict[str, float] | None = None
+    eval_lines: list[str] | None = None
+    hyperparameters: dict[str, Any] | None = None
+    source: str | None = "trainer"
 
     def __post_init__(self):
         # Infer default license from the checkpoint used, if possible.
@@ -380,12 +201,7 @@ class TrainingSummary:
                 for tag in info.tags:
                     if tag.startswith("license:"):
                         self.license = tag[8:]
-            except (
-                requests.exceptions.HTTPError,
-                requests.exceptions.ConnectionError,
-                HFValidationError,
-                OfflineModeIsEnabled,
-            ):
+            except (httpx.HTTPError, HFValidationError, OfflineModeIsEnabled):
                 pass
 
     def create_model_index(self, metric_mapping):
@@ -654,7 +470,6 @@ def parse_log_history(log_history):
             _ = metrics.pop("eval_runtime", None)
             _ = metrics.pop("eval_samples_per_second", None)
             _ = metrics.pop("eval_steps_per_second", None)
-            _ = metrics.pop("eval_jit_compilation_time", None)
             values = {"Training Loss": training_loss, "Epoch": epoch, "Step": step}
             for k, v in metrics.items():
                 if k == "eval_loss":
@@ -672,8 +487,7 @@ def parse_log_history(log_history):
     if idx > 0:
         eval_results = {}
         for key, value in log_history[idx].items():
-            if key.startswith("eval_"):
-                key = key[5:]
+            key = key.removeprefix("eval_")
             if key not in ["runtime", "samples_per_second", "steps_per_second", "epoch", "step"]:
                 camel_cased_key = " ".join([part.capitalize() for part in key.split("_")])
                 eval_results[camel_cased_key] = value
@@ -759,8 +573,6 @@ def extract_hyperparameters_from_trainer(trainer):
             hyperparameters["optimizer"] = f"Use {optimizer_name} and the args are:\n{optimizer_args}"
 
     hyperparameters["lr_scheduler_type"] = trainer.args.lr_scheduler_type.value
-    if trainer.args.warmup_ratio != 0.0:
-        hyperparameters["lr_scheduler_warmup_ratio"] = trainer.args.warmup_ratio
     if trainer.args.warmup_steps != 0.0:
         hyperparameters["lr_scheduler_warmup_steps"] = trainer.args.warmup_steps
     if trainer.args.max_steps != -1:
@@ -769,10 +581,7 @@ def extract_hyperparameters_from_trainer(trainer):
         hyperparameters["num_epochs"] = trainer.args.num_train_epochs
 
     if trainer.args.fp16:
-        if trainer.use_apex:
-            hyperparameters["mixed_precision_training"] = f"Apex, opt level {trainer.args.fp16_opt_level}"
-        else:
-            hyperparameters["mixed_precision_training"] = "Native AMP"
+        hyperparameters["mixed_precision_training"] = "Native AMP"
 
     if trainer.args.label_smoothing_factor != 0.0:
         hyperparameters["label_smoothing_factor"] = trainer.args.label_smoothing_factor

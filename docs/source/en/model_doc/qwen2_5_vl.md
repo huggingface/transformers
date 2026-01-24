@@ -26,7 +26,6 @@ rendered properly in your Markdown viewer.
 
 [Qwen2.5-VL](https://huggingface.co/papers/2502.13923) is a multimodal vision-language model, available in 3B, 7B, and 72B parameters, pretrained on 4.1T tokens. The model introduces window attention in the ViT encoder to accelerate training and inference, dynamic FPS sampling on the spatial and temporal dimensions for better video understanding across different sampling rates, and an upgraded MRoPE (multi-resolutional rotary positional encoding) mechanism to better capture and learn temporal dynamics.
 
-
 You can find all the original Qwen2.5-VL checkpoints under the [Qwen2.5-VL](https://huggingface.co/collections/Qwen/qwen25-vl-6795ffac22b334a837c0f9a5) collection.
 
 > [!TIP]
@@ -61,6 +60,7 @@ messages = [
 pipe(text=messages,max_new_tokens=20, return_full_text=False)
 
 ```
+
 </hfoption>
 
 <hfoption id="AutoModel">
@@ -110,6 +110,7 @@ output_text = processor.batch_decode(
 )
 print(output_text)
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -130,9 +131,11 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 )
 
 ```
+
 ### Notes
 
 - Use Qwen2.5-VL for video inputs by setting `"type": "video"` as shown below.
+
     ```python
     conversation = [
         {
@@ -159,8 +162,10 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
     print(output_text)
     ```
+
 - Use Qwen2.5-VL for a mixed batch of inputs (images, videos, text). Add labels when handling multiple images or videos for better reference
  as show below.
+
     ```python
     import torch
     from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
@@ -221,14 +226,15 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     max_pixels = 2048*2048
     processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
     ```
-    
+
     Higher resolution can require more compute whereas reducing the resolution can save memory as follows:
-    
+
     ```python
     min_pixels = 256*28*28
     max_pixels = 1024*28*28 
     processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
     ```
+
 ## Qwen2_5_VLConfig
 
 [[autodoc]] Qwen2_5_VLConfig
@@ -240,6 +246,7 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 ## Qwen2_5_VLProcessor
 
 [[autodoc]] Qwen2_5_VLProcessor
+    - __call__
 
 ## Qwen2_5_VLTextModel
 
@@ -250,8 +257,12 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Qwen2_5_VLModel
     - forward
+    - get_video_features
+    - get_image_features
 
 ## Qwen2_5_VLForConditionalGeneration
 
 [[autodoc]] Qwen2_5_VLForConditionalGeneration
     - forward
+    - get_video_features
+    - get_image_features

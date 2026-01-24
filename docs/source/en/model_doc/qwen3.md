@@ -25,7 +25,6 @@ rendered properly in your Markdown viewer.
 
 To be released with the official model launch.
 
-
 ## Usage tips
 
 To be released with the official model launch.

@@ -15,9 +15,7 @@
 
 import unittest
 
-from parameterized import parameterized
-
-from transformers import HunYuanDenseV1Config, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -28,44 +26,19 @@ from transformers.testing_utils import (
 
 if is_torch_available():
     from transformers import (
-        HunYuanDenseV1ForCausalLM,
-        HunYuanDenseV1ForSequenceClassification,
         HunYuanDenseV1Model,
     )
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class HunYuanDenseV1ModelTester(CausalLMModelTester):
-    config_class = HunYuanDenseV1Config
     if is_torch_available():
         base_model_class = HunYuanDenseV1Model
-        causal_lm_class = HunYuanDenseV1ForCausalLM
-        sequence_class = HunYuanDenseV1ForSequenceClassification
 
 
 @require_torch
 class HunYuanDenseV1ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            HunYuanDenseV1Model,
-            HunYuanDenseV1ForCausalLM,
-            HunYuanDenseV1ForSequenceClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = HunYuanDenseV1ModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": HunYuanDenseV1Model,
-            "text-generation": HunYuanDenseV1ForCausalLM,
-            "text-classification": HunYuanDenseV1ForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     def is_pipeline_test_to_skip(
         self,
@@ -78,15 +51,6 @@ class HunYuanDenseV1ModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
-
-    @unittest.skip("HunYuanDenseV1's RoPE has custom parameterization")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("HunYuanDenseV1's RoPE has custom parameterization")
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        pass
 
 
 @require_torch

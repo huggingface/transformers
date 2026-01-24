@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,10 +39,10 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -108,7 +107,6 @@ class GraniteSpeechForConditionalGenerationModelTester:
             "model_type": "blip_2_qformer",
             "num_attention_heads": 4,
             "num_hidden_layers": 2,
-            "position_embedding_type": "absolute",
             "use_qformer_text_input": False,
             "vocab_size": 30522,
         },
@@ -213,14 +211,15 @@ class GraniteSpeechForConditionalGenerationModelTester:
 
 
 @require_torch
-class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class GraniteSpeechForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Model tester for `GraniteSpeechForConditionalGeneration`.
     """
 
     all_model_classes = (GraniteSpeechForConditionalGeneration,) if is_torch_available() else ()
-    test_pruning = False
-    test_head_masking = False
+    pipeline_model_mapping = {"any-to-any": GraniteSpeechForConditionalGeneration} if is_torch_available() else {}
     _is_composite = True
 
     def setUp(self):
@@ -251,22 +250,6 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
 
             with torch.no_grad():
                 model(**inputs)
-
-    def test_initialization(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if name == "projector.query":
-                    continue
-                elif param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Granite Speech is audio+text model (not vision+text)
@@ -309,6 +292,10 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
     @slow
     @unittest.skip(reason="Granite Speech doesn't support SDPA for all backbones")
     def test_eager_matches_sdpa_generate(self):
+        pass
+
+    @unittest.skip(reason="GraniteSpeech has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
 

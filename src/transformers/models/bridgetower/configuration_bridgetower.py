@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License=, Version 2.0 (the "License");
@@ -14,21 +13,21 @@
 # limitations under the License.
 """BridgeTower model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BridgeTowerVisionConfig(PretrainedConfig):
+class BridgeTowerVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the vision configuration of a [`BridgeTowerModel`]. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the bridgetower-base
     [BridgeTower/bridgetower-base](https://huggingface.co/BridgeTower/bridgetower-base/) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -94,15 +93,15 @@ class BridgeTowerVisionConfig(PretrainedConfig):
         self.remove_last_layer = remove_last_layer
 
 
-class BridgeTowerTextConfig(PretrainedConfig):
+class BridgeTowerTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the text configuration of a [`BridgeTowerModel`]. The default values here
     are copied from RoBERTa. Instantiating a configuration with the defaults will yield a similar configuration to that
     of the bridgetower-base [BridegTower/bridgetower-base](https://huggingface.co/BridgeTower/bridgetower-base/)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50265):
@@ -133,12 +132,6 @@ class BridgeTowerTextConfig(PretrainedConfig):
             testing).
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         is_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -177,12 +170,15 @@ class BridgeTowerTextConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        position_embedding_type="absolute",
         use_cache=True,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -195,22 +191,21 @@ class BridgeTowerTextConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
 
-class BridgeTowerConfig(PretrainedConfig):
+class BridgeTowerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BridgeTowerModel`]. It is used to instantiate a
     BridgeTower model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the bridgetower-base
     [BridgeTower/bridgetower-base](https://huggingface.co/BridgeTower/bridgetower-base/) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         share_cross_modal_transformer_layers (`bool`, *optional*, defaults to `True`):
@@ -280,7 +275,6 @@ class BridgeTowerConfig(PretrainedConfig):
         _ = kwargs.pop("text_config_dict", None)
         _ = kwargs.pop("vision_config_dict", None)
 
-        super().__init__(**kwargs)
         self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers
         self.hidden_act = hidden_act
         self.hidden_size = hidden_size
@@ -294,15 +288,21 @@ class BridgeTowerConfig(PretrainedConfig):
         self.init_layernorm_from_vision_encoder = init_layernorm_from_vision_encoder
 
         if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `BridgeTowerTextConfig` with default values.")
+            text_config = BridgeTowerTextConfig()
+            logger.info("`text_config` is `None`. initializing the `BridgeTowerTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = BridgeTowerTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
-            logger.info("`vision_config` is `None`. Initializing the `BridgeTowerVisionConfig` with default values.")
+            vision_config = BridgeTowerVisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `BridgeTowerVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = BridgeTowerVisionConfig(**vision_config)
 
-        self.text_config = BridgeTowerTextConfig(**text_config)
-        self.vision_config = BridgeTowerVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["BridgeTowerConfig", "BridgeTowerTextConfig", "BridgeTowerVisionConfig"]

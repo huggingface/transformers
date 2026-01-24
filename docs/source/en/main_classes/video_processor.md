@@ -22,8 +22,8 @@ The video processor extends the functionality of image processors by allowing Vi
 
 When adding a new VLM or updating an existing one to enable distinct video preprocessing, saving and reloading the processor configuration will store the video related arguments in a dedicated file named `video_preprocessing_config.json`. Don't worry if you haven't updated your VLM, the processor will try to load video related configurations from a file named `preprocessing_config.json`.
 
-
 ### Usage Example
+
 Here's an example of how to load a video processor with [`llava-hf/llava-onevision-qwen2-0.5b-ov-hf`](https://huggingface.co/llava-hf/llava-onevision-qwen2-0.5b-ov-hf) model:
 
 ```python
@@ -59,7 +59,6 @@ The video processor can also sample video frames using the technique best suited
 
 </Tip>
 
-
 ```python
 from transformers import AutoVideoProcessor
 
@@ -92,4 +91,3 @@ print(processed_video_inputs.pixel_values_videos.shape)
 ## BaseVideoProcessor
 
 [[autodoc]] video_processing_utils.BaseVideoProcessor
-

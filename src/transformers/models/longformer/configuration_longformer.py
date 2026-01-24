@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Allen Institute for AI team and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,26 +13,16 @@
 # limitations under the License.
 """Longformer configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Optional, Union
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-
-
-if TYPE_CHECKING:
-    from ...onnx.config import PatchingSpec
-    from ...tokenization_utils_base import PreTrainedTokenizerBase
 
 
 logger = logging.get_logger(__name__)
 
 
-class LongformerConfig(PretrainedConfig):
+class LongformerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LongformerModel`] or a [`TFLongformerModel`]. It
+    This is the configuration class to store the configuration of a [`LongformerModel`]. It
     is used to instantiate a Longformer model according to the specified arguments, defining the model architecture.
 
     This is the configuration class to store the configuration of a [`LongformerModel`]. It is used to instantiate an
@@ -42,13 +31,13 @@ class LongformerConfig(PretrainedConfig):
     [allenai/longformer-base-4096](https://huggingface.co/allenai/longformer-base-4096) architecture with a sequence
     length 4,096.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the Longformer model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`LongformerModel`] or [`TFLongformerModel`].
+            the `inputs_ids` passed when calling [`LongformerModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -68,8 +57,7 @@ class LongformerConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`LongformerModel`] or
-            [`TFLongformerModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`LongformerModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -97,7 +85,7 @@ class LongformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        attention_window: Union[list[int], int] = 512,
+        attention_window: list[int] | int = 512,
         sep_token_id: int = 2,
         pad_token_id: int = 1,
         bos_token_id: int = 0,
@@ -115,11 +103,14 @@ class LongformerConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         layer_norm_eps: float = 1e-12,
         onnx_export: bool = False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         """Constructs LongformerConfig."""
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
 
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.attention_window = attention_window
         self.sep_token_id = sep_token_id
         self.bos_token_id = bos_token_id
@@ -139,71 +130,4 @@ class LongformerConfig(PretrainedConfig):
         self.onnx_export = onnx_export
 
 
-class LongformerOnnxConfig(OnnxConfig):
-    def __init__(
-        self, config: "PretrainedConfig", task: str = "default", patching_specs: "Optional[list[PatchingSpec]]" = None
-    ):
-        super().__init__(config, task, patching_specs)
-        config.onnx_export = True
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-                ("global_attention_mask", dynamic_axis),
-            ]
-        )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        outputs = super().outputs
-        if self.task == "default":
-            outputs["pooler_output"] = {0: "batch"}
-        return outputs
-
-    @property
-    def atol_for_validation(self) -> float:
-        """
-        What absolute tolerance value to use during model conversion validation.
-
-        Returns:
-            Float absolute tolerance value.
-        """
-        return 1e-4
-
-    @property
-    def default_onnx_opset(self) -> int:
-        # needs to be >= 14 to support tril operator
-        return max(super().default_onnx_opset, 14)
-
-    def generate_dummy_inputs(
-        self,
-        tokenizer: "PreTrainedTokenizerBase",
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-    ) -> Mapping[str, Any]:
-        inputs = super().generate_dummy_inputs(
-            preprocessor=tokenizer,
-            batch_size=batch_size,
-            seq_length=seq_length,
-            is_pair=is_pair,
-        )
-        import torch
-
-        # for some reason, replacing this code by inputs["global_attention_mask"] = torch.randint(2, inputs["input_ids"].shape, dtype=torch.int64)
-        # makes the export fail randomly
-        inputs["global_attention_mask"] = torch.zeros_like(inputs["input_ids"])
-        # make every second token global
-        inputs["global_attention_mask"][:, ::2] = 1
-
-        return inputs
-
-
-__all__ = ["LongformerConfig", "LongformerOnnxConfig"]
+__all__ = ["LongformerConfig"]

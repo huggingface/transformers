@@ -30,6 +30,7 @@ token types that encode tabular structure. TAPAS is pre-trained on the masked la
 millions of tables from English Wikipedia and corresponding texts.
 
 For question answering, TAPAS has 2 heads on top: a cell selection head and an aggregation head, for (optionally) performing aggregations (such as counting or summing) among selected cells. TAPAS has been fine-tuned on several datasets:
+
 - [SQA](https://www.microsoft.com/en-us/download/details.aspx?id=54253) (Sequential Question Answering by Microsoft)
 - [WTQ](https://github.com/ppasupat/WikiTableQuestions) (Wiki Table Questions by Stanford University)
 - [WikiSQL](https://github.com/salesforce/WikiSQL) (by Salesforce).
@@ -76,7 +77,6 @@ To summarize:
 | Weak supervision for aggregation    | WTQ                 | Questions might involve aggregation, and the model must learn this given only the answer as supervision |
 | Strong supervision for aggregation  | WikiSQL-supervised  | Questions might involve aggregation, and the model must learn this given the gold aggregation operator  |
 
-
 Initializing a model with a pre-trained base and randomly initialized classification heads from the hub can be done as shown below.
 
 ```py
@@ -105,7 +105,6 @@ Of course, you don't necessarily have to follow one of these three ways in which
 >>> model = TapasForQuestionAnswering.from_pretrained("google/tapas-base", config=config)
 ```
 
-
 What you can also do is start from an already fine-tuned checkpoint. A note here is that the already fine-tuned checkpoint on WTQ has some issues due to the L2-loss which is somewhat brittle. See [here](https://github.com/google-research/tapas/issues/91#issuecomment-735719340) for more info.
 
 For a list of all pre-trained and fine-tuned TAPAS checkpoints available on HuggingFace's  hub, see [here](https://huggingface.co/models?search=tapas).
@@ -127,7 +126,6 @@ Second, no matter what you picked above, you should prepare your dataset in the 
 The tables themselves should be present in a folder, each table being a separate csv file. Note that the authors of the TAPAS algorithm used conversion scripts with some automated logic to convert the other datasets (WTQ, WikiSQL) into the SQA format. The author explains this [here](https://github.com/google-research/tapas/issues/50#issuecomment-705465960). A conversion of this script that works with HuggingFace's implementation can be found [here](https://github.com/NielsRogge/tapas_utils). Interestingly, these conversion scripts are not perfect (the `answer_coordinates` and `float_answer` fields are populated based on the `answer_text`), meaning that WTQ and WikiSQL results could actually be improved.
 
 **STEP 3: Convert your data into tensors using TapasTokenizer**
-
 
 Third, given that you've prepared your data in this TSV/CSV format (and corresponding CSV files containing the tabular data), you can then use [`TapasTokenizer`] to convert table-question pairs into `input_ids`, `attention_mask`, `token_type_ids` and so on. Again, based on which of the three cases you picked above, [`TapasForQuestionAnswering`] requires different
 inputs to be fine-tuned:
@@ -214,12 +212,10 @@ Of course, this only shows how to encode a single training example. It is advise
 >>> train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=32)
 ```
 
-
 Note that here, we encode each table-question pair independently. This is fine as long as your dataset is **not conversational**. In case your dataset involves conversational questions (such as in SQA), then you should first group together the `queries`, `answer_coordinates` and `answer_text` per table (in the order of their `position`
 index) and batch encode each table with its questions. This will make sure that the `prev_labels` token types (see docs of [`TapasTokenizer`]) are set correctly. See [this notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb) for more info.
 
 **STEP 4: Train (fine-tune) the model
-
 
 You can then fine-tune [`TapasForQuestionAnswering`] as follows (shown here for the weak supervision for aggregation case):
 
@@ -272,9 +268,7 @@ You can then fine-tune [`TapasForQuestionAnswering`] as follows (shown here for 
 ...         optimizer.step()
 ```
 
-
 ## Usage: inference
-
 
 Here we explain how you can use [`TapasForQuestionAnswering`] for inference (i.e. making predictions on new data). For inference, only `input_ids`, `attention_mask` and `token_type_ids` (which you can obtain using [`TapasTokenizer`]) have to be provided to the model to obtain the logits. Next, you can use the handy [`~models.tapas.tokenization_tapas.convert_logits_to_predictions`] method to convert these into predicted coordinates and optional aggregation indices.
 
@@ -333,7 +327,6 @@ What is the total number of movies?
 Predicted answer: SUM > 87, 53, 69
 ```
 
-
 In case of a conversational set-up, then each table-question pair must be provided **sequentially** to the model, such that the `prev_labels` token types can be overwritten by the predicted `labels` of the previous table-question pair. Again, more info can be found in [this notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb).
 
 ## Resources
@@ -342,29 +335,36 @@ In case of a conversational set-up, then each table-question pair must be provid
 - [Masked language modeling task guide](../tasks/masked_language_modeling)
 
 ## TAPAS specific outputs
+
 [[autodoc]] models.tapas.modeling_tapas.TableQuestionAnsweringOutput
 
 ## TapasConfig
+
 [[autodoc]] TapasConfig
 
 ## TapasTokenizer
+
 [[autodoc]] TapasTokenizer
     - __call__
     - convert_logits_to_predictions
     - save_vocabulary
 
 ## TapasModel
+
 [[autodoc]] TapasModel
     - forward
 
 ## TapasForMaskedLM
+
 [[autodoc]] TapasForMaskedLM
     - forward
 
 ## TapasForSequenceClassification
+
 [[autodoc]] TapasForSequenceClassification
     - forward
 
 ## TapasForQuestionAnswering
+
 [[autodoc]] TapasForQuestionAnswering
     - forward

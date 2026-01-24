@@ -25,7 +25,6 @@ The model is an enhancement to the original SAM model that produces significantl
 
 ![example image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-output.png)
 
-
 SAM-HQ introduces several key improvements over the original SAM model:
 
 1. High-Quality Output Token: A learnable token injected into SAM's mask decoder for higher quality mask prediction
@@ -57,9 +56,10 @@ Below is an example on how to run mask generation given an image and a 2D point:
 import torch
 from PIL import Image
 import requests
-from transformers import infer_device, SamHQModel, SamHQProcessor
+from transformers import SamHQModel, SamHQProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base").to(device)
 processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
@@ -83,9 +83,10 @@ You can also process your own masks alongside the input images in the processor 
 import torch
 from PIL import Image
 import requests
-from transformers import infer_device, SamHQModel, SamHQProcessor
+from transformers import SamHQModel, SamHQProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base").to(device)
 processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
@@ -104,7 +105,6 @@ masks = processor.image_processor.post_process_masks(
 )
 scores = outputs.iou_scores
 ```
-
 
 ## Resources
 
@@ -132,11 +132,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## SamHQProcessor
 
 [[autodoc]] SamHQProcessor
+    - __call__
 
 ## SamHQVisionModel
 
 [[autodoc]] SamHQVisionModel
-
 
 ## SamHQModel
 

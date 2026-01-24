@@ -102,18 +102,13 @@ RoBERTa를 처음 다룰 때 도움이 되는 Hugging Face 공식 자료와 커�
 ## RobertaTokenizer
 
 [[autodoc]] RobertaTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## RobertaTokenizerFast
 
 [[autodoc]] RobertaTokenizerFast
-    - build_inputs_with_special_tokens
 
-<frameworkcontent>
-<pt>
 
 ## RobertaModel
 
@@ -150,5 +145,3 @@ RoBERTa를 처음 다룰 때 도움이 되는 Hugging Face 공식 자료와 커�
 [[autodoc]] RobertaForQuestionAnswering
     - forward
 
-</pt>
-</frameworkcontent>

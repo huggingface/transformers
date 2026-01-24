@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +27,7 @@ python utils/custom_init_isort.py
 
 which will auto-sort the imports (used in `make style`).
 
-For a check only (as used in `make quality`) run:
+For a check only (as used in `make check-repo`) run:
 
 ```bash
 python utils/custom_init_isort.py --check_only
@@ -38,7 +37,8 @@ python utils/custom_init_isort.py --check_only
 import argparse
 import os
 import re
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 
 # Path is defined with the intent you should run this script from the root of the repo.
@@ -63,7 +63,7 @@ def get_indent(line: str) -> str:
 
 
 def split_code_in_indented_blocks(
-    code: str, indent_level: str = "", start_prompt: Optional[str] = None, end_prompt: Optional[str] = None
+    code: str, indent_level: str = "", start_prompt: str | None = None, end_prompt: str | None = None
 ) -> list[str]:
     """
     Split some code into its indented blocks, starting at a given level.
@@ -140,7 +140,7 @@ def ignore_underscore_and_lowercase(key: Callable[[Any], str]) -> Callable[[Any]
     return _inner
 
 
-def sort_objects(objects: list[Any], key: Optional[Callable[[Any], str]] = None) -> list[Any]:
+def sort_objects(objects: list[Any], key: Callable[[Any], str] | None = None) -> list[Any]:
     """
     Sort a list of objects following the rules of isort (all uppercased first, camel-cased second and lower-cased
     last).
@@ -244,7 +244,7 @@ def sort_imports(file: str, check_only: bool = True):
         code = f.read()
 
     # If the file is not a custom init, there is nothing to do.
-    if "_import_structure" not in code or "define_import_structure" in code:
+    if "_import_structure = {" not in code:
         return
 
     # Blocks of indent level 0

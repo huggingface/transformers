@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Fairseq Authors, Microsoft Research, and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,22 +16,22 @@
 import functools
 import operator
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class SpeechT5Config(PretrainedConfig):
+class SpeechT5Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SpeechT5Model`]. It is used to instantiate a
     SpeechT5 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the SpeechT5
     [microsoft/speecht5_asr](https://huggingface.co/microsoft/speecht5_asr) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 81):
@@ -247,6 +246,7 @@ class SpeechT5Config(PretrainedConfig):
         guided_attention_loss_scale=10.0,
         use_cache=True,
         is_encoder_decoder=True,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -323,29 +323,27 @@ class SpeechT5Config(PretrainedConfig):
 
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
+        self.tie_word_embeddings = tie_word_embeddings
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
 
 
-class SpeechT5HifiGanConfig(PretrainedConfig):
+class SpeechT5HifiGanConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SpeechT5HifiGanModel`]. It is used to instantiate
     a SpeechT5 HiFi-GAN vocoder model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the SpeechT5
     [microsoft/speecht5_hifigan](https://huggingface.co/microsoft/speecht5_hifigan) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         model_in_dim (`int`, *optional*, defaults to 80):

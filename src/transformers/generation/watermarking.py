@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team and Google DeepMind.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,23 +15,22 @@
 import collections
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
 import numpy as np
 import torch
 from torch import nn
 from torch.nn import BCELoss
 
+from .. import initialization as init
+from ..configuration_utils import PreTrainedConfig
 from ..modeling_utils import PreTrainedModel
-from ..utils import ModelOutput, is_torch_available, logging
-from .configuration_utils import PretrainedConfig, WatermarkingConfig
+from ..utils import ModelOutput, logging
+from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
 
-if is_torch_available():
-    import torch
-
-    from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
-
+if TYPE_CHECKING:
+    from .configuration_utils import WatermarkingConfig
 
 logger = logging.get_logger(__name__)
 
@@ -43,31 +41,31 @@ class WatermarkDetectorOutput:
     Outputs of a watermark detector.
 
     Args:
-        num_tokens_scored (np.array of shape (batch_size)):
+        num_tokens_scored (np.ndarray of shape (batch_size)):
             Array containing the number of tokens scored for each element in the batch.
-        num_green_tokens (np.array of shape (batch_size)):
+        num_green_tokens (np.ndarray of shape (batch_size)):
             Array containing the number of green tokens for each element in the batch.
-        green_fraction (np.array of shape (batch_size)):
+        green_fraction (np.ndarray of shape (batch_size)):
             Array containing the fraction of green tokens for each element in the batch.
-        z_score (np.array of shape (batch_size)):
+        z_score (np.ndarray of shape (batch_size)):
             Array containing the z-score for each element in the batch. Z-score here shows
             how many standard deviations away is the green token count in the input text
             from the expected green token count for machine-generated text.
-        p_value (np.array of shape (batch_size)):
+        p_value (np.ndarray of shape (batch_size)):
             Array containing the p-value for each batch obtained from z-scores.
-        prediction (np.array of shape (batch_size)), *optional*:
+        prediction (np.ndarray of shape (batch_size)), *optional*:
             Array containing boolean predictions whether a text is machine-generated for each element in the batch.
-        confidence (np.array of shape (batch_size)), *optional*:
+        confidence (np.ndarray of shape (batch_size)), *optional*:
             Array containing confidence scores of a text being machine-generated for each element in the batch.
     """
 
-    num_tokens_scored: Optional[np.array] = None
-    num_green_tokens: Optional[np.array] = None
-    green_fraction: Optional[np.array] = None
-    z_score: Optional[np.array] = None
-    p_value: Optional[np.array] = None
-    prediction: Optional[np.array] = None
-    confidence: Optional[np.array] = None
+    num_tokens_scored: np.ndarray | None = None
+    num_green_tokens: np.ndarray | None = None
+    green_fraction: np.ndarray | None = None
+    z_score: np.ndarray | None = None
+    p_value: np.ndarray | None = None
+    prediction: np.ndarray | None = None
+    confidence: np.ndarray | None = None
 
 
 class WatermarkDetector:
@@ -80,7 +78,7 @@ class WatermarkDetector:
     See [the paper](https://huggingface.co/papers/2306.04634) for more information.
 
     Args:
-        model_config (`PretrainedConfig`):
+        model_config (`PreTrainedConfig`):
             The model config that will be used to get model specific arguments used when generating.
         device (`str`):
             The device which was used during watermarked text generation.
@@ -124,13 +122,13 @@ class WatermarkDetector:
 
     def __init__(
         self,
-        model_config: PretrainedConfig,
+        model_config: "PreTrainedConfig",
         device: str,
-        watermarking_config: Union[WatermarkingConfig, dict],
+        watermarking_config: Union["WatermarkingConfig", dict] | None,
         ignore_repeated_ngrams: bool = False,
         max_cache_size: int = 128,
     ):
-        if isinstance(watermarking_config, WatermarkingConfig):
+        if not isinstance(watermarking_config, dict):
             watermarking_config = watermarking_config.to_dict()
 
         self.bos_token_id = (
@@ -179,7 +177,7 @@ class WatermarkDetector:
                 )
         return num_tokens_scored_batch, green_token_count_batch
 
-    def _compute_z_score(self, green_token_count: np.ndarray, total_num_tokens: np.ndarray) -> np.array:
+    def _compute_z_score(self, green_token_count: np.ndarray, total_num_tokens: np.ndarray) -> np.ndarray:
         expected_count = self.greenlist_ratio
         numer = green_token_count - expected_count * total_num_tokens
         denom = np.sqrt(total_num_tokens * expected_count * (1 - expected_count))
@@ -195,7 +193,7 @@ class WatermarkDetector:
         input_ids: torch.LongTensor,
         z_threshold: float = 3.0,
         return_dict: bool = False,
-    ) -> Union[WatermarkDetectorOutput, np.array]:
+    ) -> WatermarkDetectorOutput | np.ndarray:
         """
                 Args:
                 input_ids (`torch.LongTensor`):
@@ -207,8 +205,8 @@ class WatermarkDetector:
                     Whether to return `~generation.WatermarkDetectorOutput` or not. If not it will return boolean predictions,
         ma
                 Return:
-                    [`~generation.WatermarkDetectorOutput`] or `np.array`: A [`~generation.WatermarkDetectorOutput`]
-                    if `return_dict=True` otherwise a `np.array`.
+                    [`~generation.WatermarkDetectorOutput`] or `np.ndarray`: A [`~generation.WatermarkDetectorOutput`]
+                    if `return_dict=True` otherwise a `np.ndarray`.
 
         """
 
@@ -242,13 +240,13 @@ class WatermarkDetector:
         return prediction
 
 
-class BayesianDetectorConfig(PretrainedConfig):
+class BayesianDetectorConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`BayesianDetectorModel`]. It is used to
     instantiate a Bayesian Detector model according to the specified arguments.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         watermarking_depth (`int`, *optional*):
@@ -257,7 +255,7 @@ class BayesianDetectorConfig(PretrainedConfig):
             Prior probability P(w) that a text is watermarked.
     """
 
-    def __init__(self, watermarking_depth: Optional[int] = None, base_rate: float = 0.5, **kwargs):
+    def __init__(self, watermarking_depth: int | None = None, base_rate: float = 0.5, **kwargs):
         self.watermarking_depth = watermarking_depth
         self.base_rate = base_rate
         # These can be set later to store information about this detector.
@@ -283,8 +281,8 @@ class BayesianWatermarkDetectorModelOutput(ModelOutput):
             Multiple choice classification loss.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    posterior_probabilities: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    posterior_probabilities: torch.FloatTensor | None = None
 
 
 class BayesianDetectorWatermarkedLikelihood(nn.Module):
@@ -388,10 +386,11 @@ class BayesianDetectorModel(PreTrainedModel):
         )
         self.prior = torch.nn.Parameter(torch.tensor([self.base_rate]))
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Parameter):
-            module.weight.data.normal_(mean=0.0, std=0.02)
+            init.normal_(module.weight, mean=0.0, std=0.02)
 
     def _compute_posterior(
         self,
@@ -439,7 +438,7 @@ class BayesianDetectorModel(PreTrainedModel):
         self,
         g_values: torch.Tensor,
         mask: torch.Tensor,
-        labels: Optional[torch.Tensor] = None,
+        labels: torch.Tensor | None = None,
         loss_batch_weight=1,
         return_dict=False,
     ) -> BayesianWatermarkDetectorModelOutput:

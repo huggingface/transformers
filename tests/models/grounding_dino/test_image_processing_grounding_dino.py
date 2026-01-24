@@ -179,11 +179,8 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
             self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 1333})
             self.assertEqual(image_processor.do_pad, True)
 
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size=42, max_size=84, pad_and_return_pixel_mask=False
-            )
-            self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
-            self.assertEqual(image_processor.do_pad, False)
+            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
+            self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 1333})
 
     def test_post_process_object_detection(self):
         for image_processing_class in self.image_processor_list:

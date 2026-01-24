@@ -17,6 +17,8 @@ import inspect
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import PvtV2Backbone, PvtV2Config, is_torch_available, is_vision_available
 from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
@@ -149,12 +151,8 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_head_masking = False
-    test_pruning = False
     test_resize_embeddings = False
-    test_torchscript = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = PvtV2ModelTester(self)
@@ -177,28 +175,6 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Pvt-V2 does not have get_input_embeddings method and get_output_embeddings methods")
     def test_model_get_set_embeddings(self):
         pass
-
-    @unittest.skip(reason="This architecture does not work with using reentrant.")
-    def test_training_gradient_checkpointing(self):
-        # Scenario - 1 default behaviour
-        self.check_training_gradient_checkpointing()
-
-    @unittest.skip(reason="This architecture does not work with using reentrant.")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        # Scenario - 2 with `use_reentrant=True` - this is the default value that is used in pytorch's
-        # torch.utils.checkpoint.checkpoint
-        self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, param in model.named_parameters():
-                self.assertTrue(
-                    -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -270,6 +246,10 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model_name = "OpenGVLab/pvt_v2_b0"
         model = PvtV2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    @pytest.mark.xfail(reason="This architecture does not seem to be compatible with use_reentrant=True.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
 
 @require_torch

@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # DeepseekVLHybrid
 
-[Deepseek-VL-Hybrid](https://huggingface.co/papers/2403.05525) was introduced by the DeepSeek AI team. It is a vision-language model (VLM) designed to process both text and images for generating contextually relevant responses. The model leverages [LLaMA](./llama) as its text encoder, while [SigLip](./siglip) is used for encoding low-resolution images and [SAM (Segment Anything Model)](./sam) is incorporated to handle high-resolution image encoding, enhancing the model’s ability to process fine-grained visual details. Deepseek-VL-Hybrid is a variant of Deepseek-VL that uses [SAM (Segment Anything Model)](./sam) to handle high-resolution image encoding.
+[Deepseek-VL-Hybrid](https://huggingface.co/papers/2403.05525) was introduced by the DeepSeek AI team. It is a vision-language model (VLM) designed to process both text and images for generating contextually relevant responses. The model leverages [LLaMA](./llama) as its text encoder, while [SigLip](./siglip) is used for encoding low-resolution images and [SAM (Segment Anything Model)](./sam) is incorporated to handle high-resolution image encoding, enhancing the model's ability to process fine-grained visual details. Deepseek-VL-Hybrid is a variant of Deepseek-VL that uses [SAM (Segment Anything Model)](./sam) to handle high-resolution image encoding.
 
 You can find all the original Deepseek-VL-Hybrid checkpoints under the [DeepSeek-community](https://huggingface.co/deepseek-community) organization.
 
@@ -62,6 +62,7 @@ messages = [
 
 pipe(text=messages, max_new_tokens=20, return_full_text=False)
 ```
+
 </hfoption>
 
 <hfoption id="AutoModel">
@@ -114,6 +115,7 @@ output_text = processor.batch_decode(
 
 print(output_text)
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -137,9 +139,11 @@ model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
     quantization_config=quantization_config
 )
 ```
+
 ### Notes
 
 - Do inference with multiple images in a single conversation.
+
     ```py
     import torch
     from transformers import DeepseekVLHybridForConditionalGeneration, AutoProcessor
@@ -204,6 +208,7 @@ model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
 ## DeepseekVLHybridProcessor
 
 [[autodoc]] DeepseekVLHybridProcessor
+    - __call__
 
 ## DeepseekVLHybridImageProcessor
 
@@ -217,6 +222,7 @@ model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
 
 [[autodoc]] DeepseekVLHybridModel
     - forward
+    - get_image_features
 
 ## DeepseekVLHybridForConditionalGeneration
 

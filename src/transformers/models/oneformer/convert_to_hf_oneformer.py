@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 SHI Labs and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,11 +19,12 @@ import sys
 from argparse import ArgumentParser
 from collections.abc import Iterator
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from pprint import pformat
 from typing import Any
 
-import requests
+import httpx
 import torch
 import torchvision.transforms as T
 from PIL import Image
@@ -93,9 +93,9 @@ class TrackedStateDict:
 # Image to verify the result
 def prepare_img():
     url = "https://praeclarumjj3.github.io/files/coco.jpeg"
-    img_data = requests.get(url, stream=True).raw
-    im = Image.open(img_data)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @dataclass
@@ -926,7 +926,7 @@ class OriginalOneFormerCheckpointToOursConverter:
         checkpoints: list[Path] = checkpoints_dir.glob("**/*.pth")
 
         for checkpoint in checkpoints:
-            logger.info(f"💪 Converting {checkpoint.stem}")
+            logger.info(f"Converting {checkpoint.stem}")
             # find associated config file
             config: Path = config_dir / f"{checkpoint.stem}.yaml"
 
@@ -1054,7 +1054,7 @@ def test(
             "The segmentation image is not the same."
         )
 
-        logger.info("✅ Test passed!")
+        logger.info("Test passed!")
 
 
 def get_name(checkpoint_file: Path):
@@ -1175,18 +1175,11 @@ if __name__ == "__main__":
         )
 
         model_name = get_name(checkpoint_file)
-        logger.info(f"🪄 Saving {model_name}")
+        logger.info(f"Saving {model_name}")
 
         processor.save_pretrained(save_directory / model_name)
         oneformer_for_universal_segmentation.save_pretrained(save_directory / model_name)
 
-        processor.push_to_hub(
-            repo_id=os.path.join("shi-labs", config_file.stem),
-            commit_message="Add configs",
-            use_temp_dir=True,
-        )
-        oneformer_for_universal_segmentation.push_to_hub(
-            repo_id=os.path.join("shi-labs", config_file.stem),
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
+        model_id = f"shi-labs/{model_name}"
+        processor.push_to_hub(repo_id=model_id)
+        oneformer_for_universal_segmentation.push_to_hub(repo_id=model_id)

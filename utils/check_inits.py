@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +29,7 @@ Use from the root of the repo with:
 python utils/check_inits.py
 ```
 
-for a check that will error in case of inconsistencies (used by `make repo-consistency`).
+for a check that will error in case of inconsistencies (used by `make check-repo`).
 
 There is no auto-fix possible here sadly :-(
 """
@@ -39,7 +38,6 @@ import collections
 import os
 import re
 from pathlib import Path
-from typing import Optional
 
 
 # Path is set with the intent you should run this script from the root of the repo.
@@ -70,7 +68,7 @@ _re_try = re.compile(r"^\s*try:")
 _re_else = re.compile(r"^\s*else:")
 
 
-def find_backend(line: str) -> Optional[str]:
+def find_backend(line: str) -> str | None:
     """
     Find one (or multiple) backend in a code line of the init.
 
@@ -89,7 +87,7 @@ def find_backend(line: str) -> Optional[str]:
     return "_and_".join(backends)
 
 
-def parse_init(init_file) -> Optional[tuple[dict[str, list[str]], dict[str, list[str]]]]:
+def parse_init(init_file) -> tuple[dict[str, list[str]], dict[str, list[str]]] | None:
     """
     Read an init_file and parse (per backend) the `_import_structure` objects defined and the `TYPE_CHECKING` objects
     defined.

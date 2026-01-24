@@ -100,22 +100,30 @@ for label, prob in zip(labels, probs[0]):
 - [`AltCLIPProcessor`] combines [`CLIPImageProcessor`] and [`XLMRobertaTokenizer`] into a single instance to encode text and prepare images.
 
 ## AltCLIPConfig
+
 [[autodoc]] AltCLIPConfig
 
 ## AltCLIPTextConfig
+
 [[autodoc]] AltCLIPTextConfig
 
 ## AltCLIPVisionConfig
+
 [[autodoc]] AltCLIPVisionConfig
 
 ## AltCLIPModel
+
 [[autodoc]] AltCLIPModel
 
 ## AltCLIPTextModel
+
 [[autodoc]] AltCLIPTextModel
 
 ## AltCLIPVisionModel
+
 [[autodoc]] AltCLIPVisionModel
 
 ## AltCLIPProcessor
+
 [[autodoc]] AltCLIPProcessor
+    - __call__

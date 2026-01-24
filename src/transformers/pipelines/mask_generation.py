@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Optional, Union, overload
+from typing import TYPE_CHECKING, Any, Union, overload
 
 from ..image_utils import load_image
 from ..utils import (
@@ -138,13 +138,11 @@ class MaskGenerationPipeline(ChunkPipeline):
     def __call__(self, image: Union[str, "Image.Image"], *args: Any, **kwargs: Any) -> dict[str, Any]: ...
 
     @overload
-    def __call__(
-        self, image: Union[list[str], list["Image.Image"]], *args: Any, **kwargs: Any
-    ) -> list[dict[str, Any]]: ...
+    def __call__(self, image: list[str] | list["Image.Image"], *args: Any, **kwargs: Any) -> list[dict[str, Any]]: ...
 
     def __call__(
         self, image: Union[str, "Image.Image", list[str], list["Image.Image"]], *args: Any, **kwargs: Any
-    ) -> Union[dict[str, Any], list[dict[str, Any]]]:
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """
         Generates binary segmentation masks
 
@@ -192,9 +190,9 @@ class MaskGenerationPipeline(ChunkPipeline):
         points_per_batch=64,
         crops_n_layers: int = 0,
         crop_overlap_ratio: float = 512 / 1500,
-        points_per_crop: Optional[int] = 32,
-        crop_n_points_downscale_factor: Optional[int] = 1,
-        timeout: Optional[float] = None,
+        points_per_crop: int = 32,
+        crop_n_points_downscale_factor: int = 1,
+        timeout: float | None = None,
     ):
         image = load_image(image, timeout=timeout)
         target_size = self.image_processor.size.get("longest_edge", self.image_processor.size.get("height"))
@@ -255,7 +253,8 @@ class MaskGenerationPipeline(ChunkPipeline):
         input_boxes = model_inputs.pop("input_boxes")
         is_last = model_inputs.pop("is_last")
         original_sizes = model_inputs.pop("original_sizes").tolist()
-        reshaped_input_sizes = model_inputs.pop("reshaped_input_sizes").tolist()
+        reshaped_input_sizes = model_inputs.pop("reshaped_input_sizes", None)
+        reshaped_input_sizes = reshaped_input_sizes.tolist() if reshaped_input_sizes is not None else None
 
         model_outputs = self.model(**model_inputs)
 

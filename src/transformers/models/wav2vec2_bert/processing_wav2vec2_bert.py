@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,83 +15,28 @@
 Speech processor class for Wav2Vec2-BERT
 """
 
-import warnings
-from typing import Optional, Union
-
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
-from ..seamless_m4t.feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
-from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
+from ...utils import auto_docstring
 
 
 class Wav2Vec2BertProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
 
 
+@auto_docstring
 class Wav2Vec2BertProcessor(ProcessorMixin):
-    r"""
-    Constructs a Wav2Vec2-BERT processor which wraps a Wav2Vec2-BERT feature extractor and a Wav2Vec2 CTC tokenizer into a single
-    processor.
-
-    [`Wav2Vec2Processor`] offers all the functionalities of [`SeamlessM4TFeatureExtractor`] and [`PreTrainedTokenizer`].
-    See the docstring of [`~Wav2Vec2Processor.__call__`] and [`~Wav2Vec2Processor.decode`] for more information.
-
-    Args:
-        feature_extractor (`SeamlessM4TFeatureExtractor`):
-            An instance of [`SeamlessM4TFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer ([`PreTrainedTokenizer`]):
-            An instance of [`PreTrainedTokenizer`]. The tokenizer is a required input.
-    """
-
-    feature_extractor_class = "SeamlessM4TFeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        try:
-            return super().from_pretrained(pretrained_model_name_or_path, **kwargs)
-        except OSError:
-            warnings.warn(
-                f"Loading a tokenizer inside {cls.__name__} from a config that does not"
-                " include a `tokenizer_class` attribute is deprecated and will be "
-                "removed in v5. Please add `'tokenizer_class': 'Wav2Vec2CTCTokenizer'`"
-                " attribute to either your `config.json` or `tokenizer_config.json` "
-                "file to suppress this warning: ",
-                FutureWarning,
-            )
-
-            feature_extractor = SeamlessM4TFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-            return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
-
+    @auto_docstring
     def __call__(
         self,
-        audio: Optional[AudioInput] = None,
-        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
-        images=None,
-        videos=None,
+        audio: AudioInput | None = None,
+        text: str | list[str] | TextInput | PreTokenizedInput | None = None,
         **kwargs: Unpack[Wav2Vec2BertProcessorKwargs],
     ):
-        """
-        Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `audio`
-        and `kwargs` arguments to SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.__call__`] if `audio` is not
-        `None` to pre-process the audio. To prepare the target sequences(s), this method forwards the `text` and `kwargs` arguments to
-        PreTrainedTokenizer's [`~PreTrainedTokenizer.__call__`] if `text` is not `None`. Please refer to the docstring of the above two methods for more information.
-
-        Args:
-            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
-                of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
-                and T the sample length of the audio.
-
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+        r"""
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
             - **input_features** -- Audio input features to be fed to a model. Returned when `audio` is not `None`.

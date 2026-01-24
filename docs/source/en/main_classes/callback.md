@@ -36,7 +36,6 @@ By default, `TrainingArguments.report_to` is set to `"all"`, so a [`Trainer`] wi
 - [`~integrations.WandbCallback`] if [wandb](https://www.wandb.com/) is installed.
 - [`~integrations.CometCallback`] if [comet_ml](https://www.comet.com/site/) is installed.
 - [`~integrations.MLflowCallback`] if [mlflow](https://www.mlflow.org/) is installed.
-- [`~integrations.NeptuneCallback`] if [neptune](https://neptune.ai/) is installed.
 - [`~integrations.AzureMLCallback`] if [azureml-sdk](https://pypi.org/project/azureml-sdk/) is
   installed.
 - [`~integrations.CodeCarbonCallback`] if [codecarbon](https://pypi.org/project/codecarbon/) is
@@ -53,7 +52,6 @@ The main class that implements callbacks is [`TrainerCallback`]. It gets the
 [`TrainingArguments`] used to instantiate the [`Trainer`], can access that
 Trainer's internal state via [`TrainerState`], and can take some actions on the training loop via
 [`TrainerControl`].
-
 
 ## Available Callbacks
 
@@ -84,8 +82,6 @@ Here is the list of the available [`TrainerCallback`] in the library:
 [[autodoc]] integrations.AzureMLCallback
 
 [[autodoc]] integrations.CodeCarbonCallback
-
-[[autodoc]] integrations.NeptuneCallback
 
 [[autodoc]] integrations.ClearMLCallback
 

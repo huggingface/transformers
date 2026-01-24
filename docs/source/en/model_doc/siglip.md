@@ -31,7 +31,6 @@ Unlike CLIP, SigLIP employs a pairwise sigmoid loss on image-text pairs during t
 
 You can find all the original SigLIP checkpoints under the [SigLIP](https://huggingface.co/collections/google/siglip-659d5e62f0ae1a57ae0e83ba) collection.
 
-
 > [!TIP]
 > Click on the SigLIP models in the right sidebar for more examples of how to apply SigLIP to different image and text tasks.
 
@@ -107,12 +106,14 @@ logits_per_image = outputs.logits_per_image
 probs = torch.sigmoid(logits_per_image)
 print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 ```
+
 ## Notes
 
 - Training is supported for DDP and FSDP on single-node multi-GPU setups. However, it does not use [torch.distributed](https://pytorch.org/tutorials/beginner/dist_overview.html) utilities which may limit the scalability of batch size.
 - When using the standalone [`SiglipTokenizer`] or [`SiglipProcessor`], make sure to pass `padding="max_length"` because that is how the model was trained.
 - To get the same results as the [`Pipeline`], a prompt template of `"This is a photo of {label}."` should be passed to the processor.
 - Toggle the `attn_implementation` parameter to either `"sdpa"` or `"flash_attention_2"` to use a more memory-efficient attention.
+
     ```py
     # pip install -U flash-attn --no-build-isolation
 
@@ -126,11 +127,9 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
     )
     ```
 
-
 ## SiglipConfig
 
 [[autodoc]] SiglipConfig
-    - from_text_vision_configs
 
 ## SiglipTextConfig
 
@@ -161,6 +160,7 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 ## SiglipProcessor
 
 [[autodoc]] SiglipProcessor
+    - __call__
 
 ## SiglipModel
 
@@ -178,7 +178,6 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 
 [[autodoc]] SiglipVisionModel
     - forward
-
 
 ## SiglipForImageClassification
 

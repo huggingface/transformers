@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,11 +13,10 @@
 # limitations under the License.
 """PyTorch ConvNext model."""
 
-from typing import Optional
-
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BackboneOutput,
@@ -56,7 +54,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class ConvNextDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -219,7 +217,7 @@ class ConvNextEncoder(nn.Module):
             prev_chs = out_chs
 
     def forward(
-        self, hidden_states: torch.Tensor, output_hidden_states: Optional[bool] = False
+        self, hidden_states: torch.Tensor, output_hidden_states: bool | None = False
     ) -> BaseModelOutputWithNoAttention:
         all_hidden_states = [hidden_states] if output_hidden_states else None
 
@@ -236,21 +234,17 @@ class ConvNextPreTrainedModel(PreTrainedModel):
     config: ConvNextConfig
     base_model_prefix = "convnext"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _no_split_modules = ["ConvNextLayer"]
     _can_record_outputs = {}  # hidden states are collected explicitly
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, ConvNextLayerNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, ConvNextLayer):
+        super()._init_weights(module)
+        if isinstance(module, ConvNextLayer):
             if module.layer_scale_parameter is not None:
-                module.layer_scale_parameter.data.fill_(self.config.layer_scale_init_value)
+                init.constant_(module.layer_scale_parameter, self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -271,7 +265,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor] = None, output_hidden_states: Optional[bool] = None
+        self, pixel_values: torch.FloatTensor | None = None, output_hidden_states: bool | None = None, **kwargs
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         if output_hidden_states is None:
             output_hidden_states = self.config.output_hidden_states
@@ -322,7 +316,7 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor] = None, labels: Optional[torch.LongTensor] = None, **kwargs
+        self, pixel_values: torch.FloatTensor | None = None, labels: torch.LongTensor | None = None, **kwargs
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -373,9 +367,7 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self,
-        pixel_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
+        self, pixel_values: torch.Tensor, output_hidden_states: bool | None = None, **kwargs
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -384,10 +376,12 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("facebook/convnext-tiny-224")
         >>> model = AutoBackbone.from_pretrained("facebook/convnext-tiny-224")

@@ -122,8 +122,8 @@ class TableQuestionAnsweringPipeline(Pipeline):
         max_new_tokens=256,
     )
 
-    def __init__(self, args_parser=TableQuestionAnsweringArgumentHandler(), *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, args_parser=TableQuestionAnsweringArgumentHandler(), **kwargs):
+        super().__init__(**kwargs)
         self._args_parser = args_parser
 
         mapping = MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES.copy()
@@ -306,7 +306,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
         return preprocess_params, forward_params, {}
 
-    def preprocess(self, pipeline_input, sequential=None, padding=True, truncation=None):
+    def preprocess(self, pipeline_input, padding=True, truncation=None):
         if truncation is None:
             if self.type == "tapas":
                 truncation = "drop_rows_to_fit"

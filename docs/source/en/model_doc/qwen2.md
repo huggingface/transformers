@@ -142,7 +142,6 @@ outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
-
 ## Notes
 
 - Ensure your Transformers library version is up-to-date. Qwen2 requires Transformers>=4.37.0 for full support.

@@ -35,7 +35,7 @@ SeamlessM4T-v2 enables multiple tasks without relying on separate models:
 
 The abstract from the paper is the following:
 
-*Recent advancements in automatic speech translation have dramatically expanded language coverage, improved multimodal capabilities, and enabled a wide range of tasks and functionalities. That said, large-scale automatic speech translation systems today lack key features that help machine-mediated communication feel seamless when compared to human-to-human dialogue. In this work, we introduce a family of models that enable end-to-end expressive and multilingual translations in a streaming fashion. First, we contribute an improved version of the massively multilingual and multimodal SeamlessM4T model—SeamlessM4T v2. This newer model, incorporating an updated UnitY2 framework, was trained on more low-resource language data. The expanded version of SeamlessAlign adds 114,800 hours of automatically aligned data for a total of 76 languages. SeamlessM4T v2 provides the foundation on which our two newest models, SeamlessExpressive and SeamlessStreaming, are initiated. SeamlessExpressive enables translation that preserves vocal styles and prosody. Compared to previous efforts in expressive speech research, our work addresses certain underexplored aspects of prosody, such as speech rate and pauses, while also preserving the style of one’s voice. As for SeamlessStreaming, our model leverages the Efficient Monotonic Multihead Attention (EMMA) mechanism to generate low-latency target translations without waiting for complete source utterances. As the first of its kind, SeamlessStreaming enables simultaneous speech-to-speech/text translation for multiple source and target languages. To understand the performance of these models, we combined novel and modified versions of existing automatic metrics to evaluate prosody, latency, and robustness. For human evaluations, we adapted existing protocols tailored for measuring the most relevant attributes in the preservation of meaning, naturalness, and expressivity. To ensure that our models can be used safely and responsibly, we implemented the first known red-teaming effort for multimodal machine translation, a system for the detection and mitigation of added toxicity, a systematic evaluation of gender bias, and an inaudible localized watermarking mechanism designed to dampen the impact of deepfakes. Consequently, we bring major components from SeamlessExpressive and SeamlessStreaming together to form Seamless, the first publicly available system that unlocks expressive cross-lingual communication in real-time. In sum, Seamless gives us a pivotal look at the technical foundation needed to turn the Universal Speech Translator from a science fiction concept into a real-world technology. Finally, contributions in this work—including models, code, and a watermark detector—are publicly released and accessible at the link below.*
+*Recent advancements in automatic speech translation have dramatically expanded language coverage, improved multimodal capabilities, and enabled a wide range of tasks and functionalities. That said, large-scale automatic speech translation systems today lack key features that help machine-mediated communication feel seamless when compared to human-to-human dialogue. In this work, we introduce a family of models that enable end-to-end expressive and multilingual translations in a streaming fashion. First, we contribute an improved version of the massively multilingual and multimodal SeamlessM4T model—SeamlessM4T v2. This newer model, incorporating an updated UnitY2 framework, was trained on more low-resource language data. The expanded version of SeamlessAlign adds 114,800 hours of automatically aligned data for a total of 76 languages. SeamlessM4T v2 provides the foundation on which our two newest models, SeamlessExpressive and SeamlessStreaming, are initiated. SeamlessExpressive enables translation that preserves vocal styles and prosody. Compared to previous efforts in expressive speech research, our work addresses certain underexplored aspects of prosody, such as speech rate and pauses, while also preserving the style of one's voice. As for SeamlessStreaming, our model leverages the Efficient Monotonic Multihead Attention (EMMA) mechanism to generate low-latency target translations without waiting for complete source utterances. As the first of its kind, SeamlessStreaming enables simultaneous speech-to-speech/text translation for multiple source and target languages. To understand the performance of these models, we combined novel and modified versions of existing automatic metrics to evaluate prosody, latency, and robustness. For human evaluations, we adapted existing protocols tailored for measuring the most relevant attributes in the preservation of meaning, naturalness, and expressivity. To ensure that our models can be used safely and responsibly, we implemented the first known red-teaming effort for multimodal machine translation, a system for the detection and mitigation of added toxicity, a systematic evaluation of gender bias, and an inaudible localized watermarking mechanism designed to dampen the impact of deepfakes. Consequently, we bring major components from SeamlessExpressive and SeamlessStreaming together to form Seamless, the first publicly available system that unlocks expressive cross-lingual communication in real-time. In sum, Seamless gives us a pivotal look at the technical foundation needed to turn the Universal Speech Translator from a science fiction concept into a real-world technology. Finally, contributions in this work—including models, code, and a watermark detector—are publicly released and accessible at the link below.*
 
 ## Usage
 
@@ -61,12 +61,11 @@ Here is how to use the processor to process text and audio:
 >>> audio_sample = next(iter(dataset))["audio"]
 
 >>> # now, process it
->>> audio_inputs = processor(audios=audio_sample["array"], return_tensors="pt")
+>>> audio_inputs = processor(audio=audio_sample["array"], return_tensors="pt")
 
 >>> # now, process some English text as well
 >>> text_inputs = processor(text = "Hello, my dog is cute", src_lang="eng", return_tensors="pt")
 ```
-
 
 ### Speech
 
@@ -84,7 +83,7 @@ With basically the same code, I've translated English text and Arabic speech to 
 Similarly, you can generate translated text from audio files or from text with the same model. You only have to pass `generate_speech=False` to [`SeamlessM4Tv2Model.generate`].
 This time, let's translate to French.
 
-```python 
+```python
 >>> # from audio
 >>> output_tokens = model.generate(**audio_inputs, tgt_lang="fra", generate_speech=False)
 >>> translated_text_from_audio = processor.decode(output_tokens[0].tolist()[0], skip_special_tokens=True)
@@ -96,11 +95,10 @@ This time, let's translate to French.
 
 ### Tips
 
-
 #### 1. Use dedicated models
 
 [`SeamlessM4Tv2Model`] is transformers top level model to generate speech and text, but you can also use dedicated models that perform the task without additional components, thus reducing the memory footprint.
-For example, you can replace the audio-to-audio generation snippet with the model dedicated to the S2ST task, the rest is exactly the same code: 
+For example, you can replace the audio-to-audio generation snippet with the model dedicated to the S2ST task, the rest is exactly the same code:
 
 ```python
 >>> from transformers import SeamlessM4Tv2ForSpeechToSpeech
@@ -141,6 +139,7 @@ The architecture of this new version differs from the first in a few aspects:
 #### Improvements on the second-pass model
 
 The second seq2seq model, named text-to-unit model, is now non-auto regressive, meaning that it computes units in a **single forward pass**. This achievement is made possible by:
+
 - the use of **character-level embeddings**, meaning that each character of the predicted translated text has its own embeddings, which are then used to predict the unit tokens.
 - the use of an intermediate duration predictor, that predicts speech duration at the **character-level** on the predicted translated text.
 - the use of a new text-to-unit decoder mixing convolutions and self-attention to handle longer context.
@@ -148,6 +147,7 @@ The second seq2seq model, named text-to-unit model, is now non-auto regressive, 
 #### Difference in the speech encoder
 
 The speech encoder, which is used during the first-pass generation process to predict the translated text, differs mainly from the previous speech encoder through these mechanisms:
+
 - the use of chunked attention mask to prevent attention across chunks, ensuring that each position attends only to positions within its own chunk and a fixed number of previous chunks.
 - the use of relative position embeddings which only considers distance between sequence elements rather than absolute positions. Please refer to [Self-Attentionwith Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155) for more details.
 - the use of a causal depth-wise convolution instead of a non-causal one.
@@ -161,7 +161,6 @@ Here's how the generation process works:
 - If speech generation is required, the second seq2seq model, generates unit tokens in an non auto-regressive way.
 - These unit tokens are then passed through the final vocoder to produce the actual speech.
 
-
 This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The original code can be found [here](https://github.com/facebookresearch/seamless_communication).
 
 ## SeamlessM4Tv2Model
@@ -169,18 +168,15 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 [[autodoc]] SeamlessM4Tv2Model
     - generate
 
-
 ## SeamlessM4Tv2ForTextToSpeech
 
 [[autodoc]] SeamlessM4Tv2ForTextToSpeech
     - generate
 
-
 ## SeamlessM4Tv2ForSpeechToSpeech
 
 [[autodoc]] SeamlessM4Tv2ForSpeechToSpeech
     - generate
-
 
 ## SeamlessM4Tv2ForTextToText
 

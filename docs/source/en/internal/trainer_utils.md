@@ -36,10 +36,6 @@ Most of those are only useful if you are studying the code of the Trainer in the
 
 [[autodoc]] trainer_callback.CallbackHandler
 
-## Distributed Evaluation
-
-[[autodoc]] trainer_pt_utils.DistributedTensorGatherer
-
 ## Trainer Argument Parser
 
 [[autodoc]] HfArgumentParser

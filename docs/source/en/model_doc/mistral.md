@@ -86,7 +86,6 @@ echo -e "My favorite condiment is" | transformers chat mistralai/Mistral-7B-v0.3
 </hfoption>
 </hfoptions>
 
-
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
@@ -137,9 +136,9 @@ Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/bl
 
 [[autodoc]] MistralConfig
 
-## MistralCommonTokenizer
+## MistralCommonBackend
 
-[[autodoc]] MistralCommonTokenizer
+[[autodoc]] MistralCommonBackend
 
 ## MistralModel
 
@@ -164,4 +163,4 @@ Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/bl
 ## MistralForQuestionAnswering
 
 [[autodoc]] MistralForQuestionAnswering
-- forward
+    - forward

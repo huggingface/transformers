@@ -63,6 +63,7 @@ messages = [
 
 pipe(text=messages, max_new_tokens=20, return_full_text=False)
 ```
+
 </hfoption>
 
 <hfoption id="AutoModel">
@@ -115,6 +116,7 @@ output_text = processor.batch_decode(
 
 print(output_text)
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -138,9 +140,11 @@ model = DeepseekVLForConditionalGeneration.from_pretrained(
     quantization_config=quantization_config
 )
 ```
+
 ### Notes
 
 - Do inference with multiple images in a single conversation.
+
     ```py
     import torch
     from transformers import DeepseekVLForConditionalGeneration, AutoProcessor
@@ -205,6 +209,7 @@ model = DeepseekVLForConditionalGeneration.from_pretrained(
 ## DeepseekVLProcessor
 
 [[autodoc]] DeepseekVLProcessor
+    - __call__
 
 ## DeepseekVLImageProcessor
 
@@ -218,6 +223,7 @@ model = DeepseekVLForConditionalGeneration.from_pretrained(
 
 [[autodoc]] DeepseekVLModel
     - forward
+    - get_image_features
 
 ## DeepseekVLForConditionalGeneration
 

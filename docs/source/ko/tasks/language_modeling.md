@@ -175,8 +175,6 @@ pip install transformers datasets evaluate
 
 그런 다음 [`DataCollatorForLanguageModeling`]을 사용하여 예제의 배치를 만듭니다. 데이터 세트 전체를 최대 길이로 패딩하는 것보다, 취합 단계에서 각 배치의 최대 길이로 문장을 *동적으로 패딩*하는 것이 더 효율적입니다.
 
-<frameworkcontent>
-<pt>
 패딩 토큰으로 종결 토큰을 사용하고 `mlm=False`로 설정하세요. 이렇게 하면 입력을 오른쪽으로 한 칸씩 시프트한 값을 레이블로 사용합니다:
 
 ```py
@@ -186,24 +184,10 @@ pip install transformers datasets evaluate
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 ```
 
-</pt>
-<tf>
-패딩 토큰으로 종결 토큰을 사용하고 `mlm=False`로 설정하세요. 이렇게 하면 입력을 오른쪽으로 한 칸씩 시프트한 값을 레이블로 사용합니다:
-
-```py
->>> from transformers import DataCollatorForLanguageModeling
-
->>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, return_tensors="tf")
-```
-
-</tf>
-</frameworkcontent>
 
 
 ## 훈련[[train]]
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]를 사용하여 모델을 미세 조정하는 방법을 잘 모르신다면 [기본 튜토리얼](../training#train-with-pytorch-trainer)을 확인해보세요!
@@ -259,75 +243,6 @@ Perplexity: 49.61
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-Keras를 사용하여 모델을 미세 조정하는 방법에 익숙하지 않다면 [기본 튜토리얼](../training#train-a-tensorflow-model-with-keras)을 확인해보세요!
-
-</Tip>
-TensorFlow에서 모델을 미세 조정하려면, 먼저 옵티마이저 함수, 학습률 스케줄 및 일부 훈련 하이퍼파라미터를 설정하세요:
-
-```py
->>> from transformers import create_optimizer, AdamWeightDecay
-
->>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-그런 다음 [`TFAutoModelForCausalLM`]를 사용하여 DistilGPT2를 불러옵니다:
-
-```py
->>> from transformers import TFAutoModelForCausalLM
-
->>> model = TFAutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
-```
-
-[`~transformers.TFPreTrainedModel.prepare_tf_dataset`]을 사용하여 데이터 세트를 `tf.data.Dataset` 형식으로 변환하세요:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     lm_dataset["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_test_set = model.prepare_tf_dataset(
-...     lm_dataset["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-[`compile`](https://keras.io/api/models/model_training_apis/#compile-method)을 사용하여 모델을 훈련하기 위해 구성하세요. Transformers 모델은 모두 기본적인 작업 관련 손실 함수를 가지고 있으므로, 원한다면 별도로 지정하지 않아도 됩니다:
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)  # 별도로 loss 인자를 넣지 않았어요!
-```
-
-[`~transformers.PushToHubCallback`]에서 모델과 토크나이저를 업로드할 위치를 지정할 수 있습니다:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> callback = PushToHubCallback(
-...     output_dir="my_awesome_eli5_clm-model",
-...     tokenizer=tokenizer,
-... )
-```
-
-마지막으로, 모델을 훈련하기 위해 [`fit`](https://keras.io/api/models/model_training_apis/#fit-method)을 호출하세요. 훈련 데이터 세트, 검증 데이터 세트, 에폭 수 및 콜백을 전달하세요:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3, callbacks=[callback])
-```
-
-훈련이 완료되면 모델이 자동으로 허브에 업로드되어 모두가 사용할 수 있습니다!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -355,8 +270,6 @@ TensorFlow에서 모델을 미세 조정하려면, 먼저 옵티마이저 함수
 [{'generated_text': "Somatic hypermutation allows the immune system to be able to effectively reverse the damage caused by an infection.\n\n\nThe damage caused by an infection is caused by the immune system's ability to perform its own self-correcting tasks."}]
 ```
 
-<frameworkcontent>
-<pt>
 텍스트를 토큰화하고 `input_ids`를 PyTorch 텐서로 반환하세요:
 
 ```py
@@ -381,31 +294,3 @@ TensorFlow에서 모델을 미세 조정하려면, 먼저 옵티마이저 함수
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ["Somatic hypermutation allows the immune system to react to drugs with the ability to adapt to a different environmental situation. In other words, a system of 'hypermutation' can help the immune system to adapt to a different environmental situation or in some cases even a single life. In contrast, researchers at the University of Massachusetts-Boston have found that 'hypermutation' is much stronger in mice than in humans but can be found in humans, and that it's not completely unknown to the immune system. A study on how the immune system"]
 ```
-</pt>
-<tf>
-텍스트를 토큰화하고 `input_ids`를 TensorFlow 텐서로 반환하세요:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_eli5_clm-model")
->>> inputs = tokenizer(prompt, return_tensors="tf").input_ids
-```
-
-[`~transformers.generation_tf_utils.TFGenerationMixin.generate`] 메소드를 사용하여 요약을 생성하세요. 생성을 제어하는 다양한 텍스트 생성 전략과 매개변수에 대한 자세한 내용은 [텍스트 생성 전략](../generation_strategies) 페이지를 확인하세요.
-
-```py
->>> from transformers import TFAutoModelForCausalLM
-
->>> model = TFAutoModelForCausalLM.from_pretrained("my_awesome_eli5_clm-model")
->>> outputs = model.generate(input_ids=inputs, max_new_tokens=100, do_sample=True, top_k=50, top_p=0.95)
-```
-
-생성된 토큰 ID를 다시 텍스트로 디코딩하세요:
-
-```py
->>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Somatic hypermutation allows the immune system to detect the presence of other viruses as they become more prevalent. Therefore, researchers have identified a high proportion of human viruses. The proportion of virus-associated viruses in our study increases with age. Therefore, we propose a simple algorithm to detect the presence of these new viruses in our samples as a sign of improved immunity. A first study based on this algorithm, which will be published in Science on Friday, aims to show that this finding could translate into the development of a better vaccine that is more effective for']
-```
-</tf>
-</frameworkcontent>

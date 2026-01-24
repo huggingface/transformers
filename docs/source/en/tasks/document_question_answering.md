@@ -104,6 +104,7 @@ yourself with the features.
 ```
 
 Here's what the individual fields represent:
+
 * `id`: the example's id
 * `image`: a PIL.Image.Image object containing the document image
 * `query`: the question string - natural language asked question, in several languages
@@ -257,6 +258,7 @@ Once examples are encoded, however, they will look like this:
 ```
 
 We'll need to find the position of the answer in the encoded input.
+
 * `token_type_ids` tells us which tokens are part of the question, and which ones are part of the document's words.
 * `tokenizer.cls_token_id` will help find the special token at the beginning of the input.
 * `word_ids` will help match the answer found in the original `words` to the same answer in the full encoded input and determine
@@ -365,6 +367,7 @@ of the Hugging Face course for inspiration.
 
 Congratulations! You've successfully navigated the toughest part of this guide and now you are ready to train your own model.
 Training involves the following steps:
+
 * Load the model with [`AutoModelForDocumentQuestionAnswering`] using the same checkpoint as in the preprocessing.
 * Define your training hyperparameters in [`TrainingArguments`].
 * Define a function to batch examples together, here the [`DefaultDataCollator`] will do just fine
@@ -439,6 +442,7 @@ Now that you have finetuned a LayoutLMv2 model, and uploaded it to the 🤗 Hub,
 way to try out your finetuned model for inference is to use it in a [`Pipeline`].
 
 Let's take an example:
+
 ```py
 >>> example = dataset["test"][2]
 >>> question = example["query"]["en"]
@@ -464,6 +468,7 @@ document question answering with your model, and pass the image + question combi
 ```
 
 You can also manually replicate the results of the pipeline if you'd like:
+
 1. Take an image and a question, prepare them for the model using the processor from your model.
 2. Forward the result or preprocessing through the model.
 3. The model returns `start_logits` and `end_logits`, which indicate which token is at the start of the answer and

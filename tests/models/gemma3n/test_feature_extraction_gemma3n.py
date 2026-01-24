@@ -19,7 +19,6 @@ import random
 import tempfile
 import unittest
 from collections.abc import Sequence
-from typing import Optional
 
 import numpy as np
 from parameterized import parameterized
@@ -78,8 +77,8 @@ class Gemma3nAudioFeatureExtractionTester:
         dither: float = 0.0,
         input_scale_factor: float = 1.0,
         mel_floor: float = 1e-5,
-        per_bin_mean: Optional[Sequence[float]] = None,
-        per_bin_stddev: Optional[Sequence[float]] = None,
+        per_bin_mean: Sequence[float] | None = None,
+        per_bin_stddev: Sequence[float] | None = None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -228,6 +227,13 @@ class Gemma3nAudioFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unit
             ).input_features
             for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
                 self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+    def test_call_unbatched(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        np_audio = floats_list((1, 800))[0]
+        input_features = feature_extractor(np_audio, return_tensors="np").input_features
+        expected_input_features = feature_extractor([np_audio], return_tensors="np").input_features
+        np.testing.assert_allclose(input_features, expected_input_features)
 
     def test_audio_features_attn_mask_consistent(self):
         # regression test for https://github.com/huggingface/transformers/issues/39911

@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import PhiConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -32,41 +32,17 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         PhiForCausalLM,
-        PhiForSequenceClassification,
-        PhiForTokenClassification,
         PhiModel,
     )
 
 
 class PhiModelTester(CausalLMModelTester):
-    config_class = PhiConfig
     if is_torch_available():
         base_model_class = PhiModel
-        causal_lm_class = PhiForCausalLM
-        sequence_class = PhiForSequenceClassification
-        token_class = PhiForTokenClassification
 
 
 @require_torch
 class PhiModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (PhiModel, PhiForCausalLM, PhiForSequenceClassification, PhiForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": PhiModel,
-            "text-classification": PhiForSequenceClassification,
-            "token-classification": PhiForTokenClassification,
-            "text-generation": PhiForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = PhiModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79292/workflows/fa2ba644-8953-44a6-8f67-ccd69ca6a476/jobs/1012905
@@ -109,7 +85,7 @@ class PhiIntegrationTest(unittest.TestCase):
             )
         }
 
-        model = PhiForCausalLM.from_pretrained("microsoft/phi-1_5").to(torch_device)
+        model = PhiForCausalLM.from_pretrained("microsoft/phi-1_5", dtype=torch.float32).to(torch_device)
         model.eval()
 
         output = model(**input_ids).logits
@@ -125,7 +101,7 @@ class PhiIntegrationTest(unittest.TestCase):
             )
         }
 
-        model = PhiForCausalLM.from_pretrained("microsoft/phi-2").to(torch_device)
+        model = PhiForCausalLM.from_pretrained("microsoft/phi-2", dtype=torch.float32).to(torch_device)
         model.eval()
 
         output = model(**input_ids).logits

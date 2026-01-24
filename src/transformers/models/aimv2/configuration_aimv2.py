@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_aimv2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Apple Inc. and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,24 +18,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Aimv2VisionConfig(PretrainedConfig):
+class Aimv2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Aimv2VisionModel`]. It is used to instantiate a
     AIMv2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the AIMv2
     [apple/aimv2-large-patch14-224](https://huggingface.co/apple/aimv2-large-patch14-224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -127,15 +124,15 @@ class Aimv2VisionConfig(PretrainedConfig):
         self.is_native = is_native
 
 
-class Aimv2TextConfig(PretrainedConfig):
+class Aimv2TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Aimv2TextModel`]. It is used to instantiate a
     AIMv2 text encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the text encoder of the AIMv2
     [apple/aimv2-large-patch14-224-lit](https://huggingface.co/apple/aimv2-large-patch14-224-lit) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
@@ -160,10 +157,6 @@ class Aimv2TextConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        pad_token_id (`int`, *optional*, defaults to 1):
-            The id of the padding token in the vocabulary.
-        bos_token_id (`int`, *optional*, defaults to 49406):
-            The id of the beginning-of-sequence token in the vocabulary.
         eos_token_id (`int`, *optional*, defaults to 49407):
             The id of the end-of-sequence token in the vocabulary.
         max_position_embeddings (`int`, *optional*, defaults to 77):
@@ -188,14 +181,13 @@ class Aimv2TextConfig(PretrainedConfig):
         qkv_bias: bool = False,
         mlp_bias: bool = False,
         hidden_act: str = "silu",
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = None,
         eos_token_id: int = 49407,
         max_position_embeddings: int = 77,
         initializer_range: bool = 0.02,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.eos_token_id = eos_token_id
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -212,15 +204,15 @@ class Aimv2TextConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
 
 
-class Aimv2Config(PretrainedConfig):
+class Aimv2Config(PreTrainedConfig):
     r"""
     [`Aimv2Config`] is the configuration class to store the configuration of a [`Aimv2Model`]. It is used to
     instantiate a AIMv2 model according to the specified arguments, defining the text model and vision model configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the AIMv2
     [apple/aimv2-large-patch14-224-lit](https://huggingface.co/apple/aimv2-large-patch14-224-lit) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -264,21 +256,25 @@ class Aimv2Config(PretrainedConfig):
     def __init__(
         self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
     ):
-        super().__init__(**kwargs)
-
-        if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `Aimv2TextConfig` with default values.")
-
-        if vision_config is None:
-            vision_config = {}
-            logger.info("`vision_config` is `None`. initializing the `Aimv2VisionConfig` with default values.")
-
-        self.text_config = Aimv2TextConfig(**text_config)
-        self.vision_config = Aimv2VisionConfig(**vision_config)
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.max_logit_scale = 100.0
+        if text_config is None:
+            text_config = Aimv2TextConfig()
+            logger.info("`text_config` is `None`. Initializing the `Aimv2TextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = Aimv2TextConfig(**text_config)
+
+        if vision_config is None:
+            vision_config = Aimv2VisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `Aimv2VisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = Aimv2VisionConfig(**vision_config)
+
+        self.text_config = text_config
+        self.vision_config = vision_config
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["Aimv2Config", "Aimv2VisionConfig", "Aimv2TextConfig"]

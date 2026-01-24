@@ -47,7 +47,7 @@ Our large model is faster and ahead of its Swin counterpart by 1.5% box AP in CO
 Paired with new frameworks, our large variant is the new state of the art panoptic segmentation model on COCO (58.2 PQ)
 and ADE20K (48.5 PQ), and instance segmentation model on Cityscapes (44.5 AP) and ADE20K (35.4 AP) (no extra data).
 It also matches the state of the art specialized semantic segmentation models on ADE20K (58.2 mIoU),
-and ranks second on Cityscapes (84.5 mIoU) (no extra data). *
+and ranks second on Cityscapes (84.5 mIoU) (no extra data).*
 
 <img
 src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/dilated-neighborhood-attention-pattern.jpg"
@@ -65,6 +65,7 @@ DiNAT can be used as a *backbone*. When `output_hidden_states = True`,
 it will output both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, height, width, num_channels)`.
 
 Notes:
+
 - DiNAT depends on [NATTEN](https://github.com/SHI-Labs/NATTEN/)'s implementation of Neighborhood Attention and Dilated Neighborhood Attention.
 You can install it with pre-built wheels for Linux by referring to [shi-labs.com/natten](https://shi-labs.com/natten), or build on your system by running `pip install natten`.
 Note that the latter will likely take time to compile. NATTEN does not support Windows devices yet.

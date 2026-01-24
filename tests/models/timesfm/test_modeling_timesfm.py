@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google LLC and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -123,11 +122,8 @@ class TimesFmModelTester:
 class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (TimesFmModelForPrediction,) if is_torch_available() else ()
     all_generative_model_classes = ()
-    all_parallelizable_model_classes = ()
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_model_parallel = False
     is_encoder_decoder = False
     test_inputs_embeds = False
 
@@ -149,10 +145,6 @@ class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Model does not have input embeddings")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Model does not have head mask")
-    def test_headmasking(self):
         pass
 
     # the main input name is `inputs`

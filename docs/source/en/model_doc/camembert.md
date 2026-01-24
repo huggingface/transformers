@@ -16,10 +16,10 @@ rendered properly in your Markdown viewer.
 *This model was released on 2019-11-10 and added to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
-	<div class="flex flex-wrap space-x-1">
-		<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+ <div class="flex flex-wrap space-x-1">
+  <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-	</div>
+ </div>
 </div>
 
 # CamemBERT
@@ -50,6 +50,7 @@ from transformers import pipeline
 pipeline = pipeline("fill-mask", model="camembert-base", dtype=torch.float16, device=0)
 pipeline("Le camembert est un délicieux fromage <mask>.")
 ```
+
 </hfoption>
 
 <hfoption id="AutoModel">
@@ -72,6 +73,7 @@ predicted_token = tokenizer.decode(predicted_token_id)
 
 print(f"The predicted token is: {predicted_token}")
 ```
+
 </hfoption>
 
 <hfoption id="transformers CLI">
@@ -83,7 +85,6 @@ echo -e "Le camembert est un délicieux fromage <mask>." | transformers run --ta
 </hfoption>
 
 </hfoptions>
-
 
 Quantization reduces the memory burden of large models by representing weights in lower precision. Refer to the [Quantization](../quantization/overview) overview for available options.
 
@@ -121,9 +122,7 @@ print(f"The predicted token is: {predicted_token}")
 ## CamembertTokenizer
 
 [[autodoc]] CamembertTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## CamembertTokenizerFast

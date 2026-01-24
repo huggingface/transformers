@@ -55,7 +55,6 @@ CLIPSeg를 시작하는 데 도움이 될 Hugging Face 공식 자료와 커뮤�
 ## CLIPSegConfig[[transformers.CLIPSegConfig]]
 
 [[autodoc]] CLIPSegConfig
-    - from_text_vision_configs
 
 ## CLIPSegTextConfig[[transformers.CLIPSegTextConfig]]
 

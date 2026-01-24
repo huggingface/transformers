@@ -19,8 +19,8 @@ from dataclasses import dataclass
 from io import BytesIO
 from typing import Optional, Union
 
+import httpx
 import numpy as np
-import requests
 
 from .utils import (
     ExplicitEnum,
@@ -28,7 +28,6 @@ from .utils import (
     is_torch_available,
     is_torch_tensor,
     is_torchvision_available,
-    is_torchvision_v2_available,
     is_vision_available,
     logging,
     requires_backends,
@@ -54,9 +53,7 @@ if is_vision_available():
         from torchvision.transforms import InterpolationMode
 
         pil_torch_interpolation_mapping = {
-            PILImageResampling.NEAREST: InterpolationMode.NEAREST_EXACT
-            if is_torchvision_v2_available()
-            else InterpolationMode.NEAREST,
+            PILImageResampling.NEAREST: InterpolationMode.NEAREST_EXACT,
             PILImageResampling.BOX: InterpolationMode.BOX,
             PILImageResampling.BILINEAR: InterpolationMode.BILINEAR,
             PILImageResampling.HAMMING: InterpolationMode.HAMMING,
@@ -76,7 +73,7 @@ logger = logging.get_logger(__name__)
 
 ImageInput = Union[
     "PIL.Image.Image", np.ndarray, "torch.Tensor", list["PIL.Image.Image"], list[np.ndarray], list["torch.Tensor"]
-]  # noqa
+]
 
 
 class ChannelDimension(ExplicitEnum):
@@ -94,7 +91,7 @@ class AnnotionFormat(ExplicitEnum):
     COCO_PANOPTIC = AnnotationFormat.COCO_PANOPTIC.value
 
 
-AnnotationType = dict[str, Union[int, str, list[dict]]]
+AnnotationType = dict[str, int | str | list[dict]]
 
 
 def is_pil_image(img):
@@ -202,7 +199,7 @@ def make_list_of_images(images, expected_ndims: int = 3) -> list[ImageInput]:
 
 
 def make_flat_list_of_images(
-    images: Union[list[ImageInput], ImageInput],
+    images: list[ImageInput] | ImageInput,
     expected_ndims: int = 3,
 ) -> ImageInput:
     """
@@ -240,7 +237,7 @@ def make_flat_list_of_images(
 
 
 def make_nested_list_of_images(
-    images: Union[list[ImageInput], ImageInput],
+    images: list[ImageInput] | ImageInput,
     expected_ndims: int = 3,
 ) -> list[ImageInput]:
     """
@@ -288,7 +285,7 @@ def to_numpy_array(img) -> np.ndarray:
 
 
 def infer_channel_dimension_format(
-    image: np.ndarray, num_channels: Optional[Union[int, tuple[int, ...]]] = None
+    image: np.ndarray, num_channels: int | tuple[int, ...] | None = None
 ) -> ChannelDimension:
     """
     Infers the channel dimension format of `image`.
@@ -326,9 +323,7 @@ def infer_channel_dimension_format(
     raise ValueError("Unable to infer channel dimension format")
 
 
-def get_channel_dimension_axis(
-    image: np.ndarray, input_data_format: Optional[Union[ChannelDimension, str]] = None
-) -> int:
+def get_channel_dimension_axis(image: np.ndarray, input_data_format: ChannelDimension | str | None = None) -> int:
     """
     Returns the channel dimension axis of the image.
 
@@ -350,7 +345,7 @@ def get_channel_dimension_axis(
     raise ValueError(f"Unsupported data format: {input_data_format}")
 
 
-def get_image_size(image: np.ndarray, channel_dim: Optional[ChannelDimension] = None) -> tuple[int, int]:
+def get_image_size(image: np.ndarray, channel_dim: ChannelDimension | None = None) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the image.
 
@@ -405,7 +400,7 @@ def get_image_size_for_max_height_width(
     return new_height, new_width
 
 
-def is_valid_annotation_coco_detection(annotation: dict[str, Union[list, tuple]]) -> bool:
+def is_valid_annotation_coco_detection(annotation: dict[str, list | tuple]) -> bool:
     if (
         isinstance(annotation, dict)
         and "image_id" in annotation
@@ -420,7 +415,7 @@ def is_valid_annotation_coco_detection(annotation: dict[str, Union[list, tuple]]
     return False
 
 
-def is_valid_annotation_coco_panoptic(annotation: dict[str, Union[list, tuple]]) -> bool:
+def is_valid_annotation_coco_panoptic(annotation: dict[str, list | tuple]) -> bool:
     if (
         isinstance(annotation, dict)
         and "image_id" in annotation
@@ -436,15 +431,15 @@ def is_valid_annotation_coco_panoptic(annotation: dict[str, Union[list, tuple]])
     return False
 
 
-def valid_coco_detection_annotations(annotations: Iterable[dict[str, Union[list, tuple]]]) -> bool:
+def valid_coco_detection_annotations(annotations: Iterable[dict[str, list | tuple]]) -> bool:
     return all(is_valid_annotation_coco_detection(ann) for ann in annotations)
 
 
-def valid_coco_panoptic_annotations(annotations: Iterable[dict[str, Union[list, tuple]]]) -> bool:
+def valid_coco_panoptic_annotations(annotations: Iterable[dict[str, list | tuple]]) -> bool:
     return all(is_valid_annotation_coco_panoptic(ann) for ann in annotations)
 
 
-def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = None) -> "PIL.Image.Image":
+def load_image(image: Union[str, "PIL.Image.Image"], timeout: float | None = None) -> "PIL.Image.Image":
     """
     Loads `image` to a PIL Image.
 
@@ -462,7 +457,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
         if image.startswith("http://") or image.startswith("https://"):
             # We need to actually check for a real protocol, otherwise it's impossible to use a local file
             # like http_huggingface_co.png
-            image = PIL.Image.open(BytesIO(requests.get(image, timeout=timeout).content))
+            image = PIL.Image.open(BytesIO(httpx.get(image, timeout=timeout, follow_redirects=True).content))
         elif os.path.isfile(image):
             image = PIL.Image.open(image)
         else:
@@ -477,9 +472,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
                 raise ValueError(
                     f"Incorrect image source. Must be a valid URL starting with `http://` or `https://`, a valid path to an image file, or a base64 encoded string. Got {image}. Failed with {e}"
                 )
-    elif isinstance(image, PIL.Image.Image):
-        image = image
-    else:
+    elif not isinstance(image, PIL.Image.Image):
         raise TypeError(
             "Incorrect format used for image. Should be an url linking to an image, a base64 string, a local path, or a PIL image."
         )
@@ -489,7 +482,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
 
 
 def load_images(
-    images: Union[list, tuple, str, "PIL.Image.Image"], timeout: Optional[float] = None
+    images: Union[list, tuple, str, "PIL.Image.Image"], timeout: float | None = None
 ) -> Union["PIL.Image.Image", list["PIL.Image.Image"], list[list["PIL.Image.Image"]]]:
     """Loads images, handling different levels of nesting.
 
@@ -510,17 +503,17 @@ def load_images(
 
 
 def validate_preprocess_arguments(
-    do_rescale: Optional[bool] = None,
-    rescale_factor: Optional[float] = None,
-    do_normalize: Optional[bool] = None,
-    image_mean: Optional[Union[float, list[float]]] = None,
-    image_std: Optional[Union[float, list[float]]] = None,
-    do_pad: Optional[bool] = None,
-    pad_size: Optional[Union[dict[str, int], int]] = None,
-    do_center_crop: Optional[bool] = None,
-    crop_size: Optional[dict[str, int]] = None,
-    do_resize: Optional[bool] = None,
-    size: Optional[dict[str, int]] = None,
+    do_rescale: bool | None = None,
+    rescale_factor: float | None = None,
+    do_normalize: bool | None = None,
+    image_mean: float | list[float] | None = None,
+    image_std: float | list[float] | None = None,
+    do_pad: bool | None = None,
+    pad_size: dict[str, int] | int | None = None,
+    do_center_crop: bool | None = None,
+    crop_size: dict[str, int] | None = None,
+    do_resize: bool | None = None,
+    size: dict[str, int] | None = None,
     resample: Optional["PILImageResampling"] = None,
     interpolation: Optional["InterpolationMode"] = None,
 ):
@@ -569,7 +562,7 @@ class ImageFeatureExtractionMixin:
     def _ensure_format_supported(self, image):
         if not isinstance(image, (PIL.Image.Image, np.ndarray)) and not is_torch_tensor(image):
             raise ValueError(
-                f"Got type {type(image)} which is not supported, only `PIL.Image.Image`, `np.array` and "
+                f"Got type {type(image)} which is not supported, only `PIL.Image.Image`, `np.ndarray` and "
                 "`torch.Tensor` are."
             )
 
@@ -617,7 +610,7 @@ class ImageFeatureExtractionMixin:
 
         return image.convert("RGB")
 
-    def rescale(self, image: np.ndarray, scale: Union[float, int]) -> np.ndarray:
+    def rescale(self, image: np.ndarray, scale: float | int) -> np.ndarray:
         """
         Rescale a numpy image by scale amount
         """
@@ -951,12 +944,12 @@ class SizeDict:
     Hashable dictionary to store image size information.
     """
 
-    height: Optional[int] = None
-    width: Optional[int] = None
-    longest_edge: Optional[int] = None
-    shortest_edge: Optional[int] = None
-    max_height: Optional[int] = None
-    max_width: Optional[int] = None
+    height: int | None = None
+    width: int | None = None
+    longest_edge: int | None = None
+    shortest_edge: int | None = None
+    max_height: int | None = None
+    max_width: int | None = None
 
     def __getitem__(self, key):
         if hasattr(self, key):

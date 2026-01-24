@@ -22,34 +22,32 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
 from parameterized import parameterized
 
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    GptOssConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
     cleanup,
-    require_read_token,
+    require_flash_attn,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        GptOssForCausalLM,
-        GptOssForSequenceClassification,
-        GptOssForTokenClassification,
         GptOssModel,
     )
 
@@ -58,51 +56,45 @@ if is_torch_available():
 
 class GptOssModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = GptOssConfig
         base_model_class = GptOssModel
-        causal_lm_class = GptOssForCausalLM
-        sequence_class = GptOssForSequenceClassification
-        token_class = GptOssForTokenClassification
-
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": GptOssModel,
-            "text-classification": GptOssForSequenceClassification,
-            "text-generation": GptOssForCausalLM,
-            "token-classification": GptOssForTokenClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
 
 @require_torch
 class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (GptOssModel, GptOssForCausalLM, GptOssForSequenceClassification, GptOssForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": GptOssModel,
-            "text-classification": GptOssForSequenceClassification,
-            "text-generation": GptOssForCausalLM,
-            "token-classification": GptOssForTokenClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-
-    test_headmasking = False
-    test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = GptOssModelTester
 
-    def setUp(self):
-        self.model_tester = GptOssModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GptOssConfig, hidden_size=37)
+    @require_kernels
+    @require_flash_attn
+    @pytest.mark.flash_attn_test
+    @require_torch_gpu
+    def test_initialization_raises_error_for_flash_attn(self):
+        """
+        Tests that initializing the model with unsupported Flash Attention implementations raises a ValueError,
+        but allows the specific vllm kernel.
+        """
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        kernel_attn = "kernels-community/vllm-flash-attn3"
+
+        # Checking each via `set_attn_implementation` and manually setting within the config
+        model = GptOssModel(config).to(device=torch_device, dtype=torch.bfloat16)
+        model.set_attn_implementation("kernels-community/vllm-flash-attn3")
+        self.assertTrue(model.config._attn_implementation == kernel_attn)
+
+        config._attn_implementation = kernel_attn
+        self.assertTrue(model.config._attn_implementation == kernel_attn)
+
+        with torch.no_grad():
+            output = model(**inputs_dict)
+        self.assertIsNotNone(output)
+
+        with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
+            model.set_attn_implementation("flash_attention_2")
+
+        with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
+            config._attn_implementation = "flash_attention_2"
 
     @unittest.skip("GptOss's forcefully disables sdpa due to Sink")
     def test_sdpa_can_dispatch_non_composite_models(self):
@@ -127,6 +119,9 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skipIf(torch_device == "cpu", "GptOss does not support flex officially")
     def test_generate_compile_model_forward_fullgraph(self):
         return super().test_generate_compile_model_forward_fullgraph()
+
+    def test_reverse_loading_mapping(self, check_keys_were_modified=False):
+        super().test_reverse_loading_mapping(check_keys_were_modified)
 
 
 RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/gpt_oss/integration_tests.json"
@@ -244,7 +239,7 @@ class GptOssIntegrationTest(unittest.TestCase):
     # Non-distributed inference
     # ------------------------
     @staticmethod
-    def load_and_forward(model_id, attn_implementation, input_text, **pretrained_kwargs):
+    def load_and_forward(model_id, attn_implementation, input_text, mode="eval", **pretrained_kwargs):
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             dtype=torch.bfloat16,
@@ -252,6 +247,13 @@ class GptOssIntegrationTest(unittest.TestCase):
             attn_implementation=attn_implementation,
             **pretrained_kwargs,
         )
+
+        # Set the correct mode
+        if mode == "train":
+            model.train()
+        else:
+            model.eval()
+
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
         inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(model.device)
@@ -343,13 +345,13 @@ if __name__ == "__main__":
     # Non-distributed test
     # ------------------------
     @parameterized.expand(PARAMETERS)
-    @require_read_token
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
         model_id = f"openai/gpt-oss-{model}"
         output_texts = self.load_and_forward(
             model_id,
             attn_impl,
             self.input_text,
+            mode=mode,
             use_kernels=kernels,
         )
 
@@ -405,7 +407,6 @@ if __name__ == "__main__":
     # Distributed test
     # ------------------------
     @parameterized.expand(PARAMETERS)
-    @require_read_token
     def test_model_outputs_distributed(self, quantized, model, kernels, attn_impl, mode):
         self.run_distributed_test(quantized, model, kernels, attn_impl, mode)
 
@@ -413,7 +414,6 @@ if __name__ == "__main__":
     # Training test
     # ------------------------
     @parameterized.expand(PARAMETERS)
-    @require_read_token
     def test_training_step(self, quantized, model, kernels, attn_impl, mode):
         if mode != "train":
             self.skipTest("This test is only for training mode.")

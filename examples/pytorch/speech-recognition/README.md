@@ -66,11 +66,10 @@ The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface
 
 ```bash
 python run_speech_recognition_ctc.py \
-	--dataset_name="common_voice" \
+	--dataset_name="mozilla-foundation/common_voice_17_0" \
 	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
 	--dataset_config_name="tr" \
 	--output_dir="./wav2vec2-common_voice-tr-demo" \
-	--overwrite_output_dir \
 	--num_train_epochs="15" \
 	--per_device_train_batch_size="16" \
 	--gradient_accumulation_steps="2" \
@@ -102,11 +101,10 @@ The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface
 ```bash
 torchrun \
 	--nproc_per_node 8 run_speech_recognition_ctc.py \
-	--dataset_name="common_voice" \
+	--dataset_name="mozilla-foundation/common_voice_17_0" \
 	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
 	--dataset_config_name="tr" \
 	--output_dir="./wav2vec2-common_voice-tr-demo-dist" \
-	--overwrite_output_dir \
 	--num_train_epochs="15" \
 	--per_device_train_batch_size="4" \
 	--learning_rate="3e-4" \
@@ -149,14 +147,13 @@ However, the `--shuffle_buffer_size` argument controls how many examples we can 
 ```bash
 **torchrun \
 	--nproc_per_node 4 run_speech_recognition_ctc_streaming.py \
-	--dataset_name="common_voice" \
+	--dataset_name="mozilla-foundation/common_voice_17_0" \
 	--model_name_or_path="facebook/wav2vec2-xls-r-300m" \
 	--tokenizer_name_or_path="anton-l/wav2vec2-tokenizer-turkish" \
 	--dataset_config_name="tr" \
 	--train_split_name="train+validation" \
 	--eval_split_name="test" \
 	--output_dir="wav2vec2-xls-r-common_voice-tr-ft" \
-	--overwrite_output_dir \
 	--max_steps="5000" \
 	--per_device_train_batch_size="8" \
 	--gradient_accumulation_steps="2" \
@@ -314,7 +311,7 @@ below 27%.
 For an example run, you can have a look at [`patrickvonplaten/wav2vec2-common_voice-tr-mms-demo`](https://huggingface.co/patrickvonplaten/wav2vec2-common_voice-tr-mms-demo).
 
 
-If you'd like to train another adapter model with the same base model, you can simply re-use the same `--output_dir`,
+If you'd like to train another adapter model with the same base model, you can simply reuse the same `--output_dir`,
 but make sure to pass the `--output_dir` folder also to `--tokenizer_name_or_path` so that the vocabulary is not 
 overwritten but **extended**. Assuming you would like to train adapter weights on Swedish in addition to Turkish and save 
 the adapter weights in the same model repo, you can run:
@@ -390,11 +387,9 @@ python run_speech_recognition_seq2seq.py \
 	--freeze_feature_encoder="False" \
 	--gradient_checkpointing \
 	--fp16 \
-	--overwrite_output_dir \
 	--do_train \
 	--do_eval \
-	--predict_with_generate \
-	--use_auth_token
+	--predict_with_generate
 ```
 On a single V100, training should take approximately 8 hours, with a final cross-entropy loss of **1e-4** and word error rate of **32.6%**.
 
@@ -431,11 +426,9 @@ torchrun \
 	--freeze_feature_encoder="False" \
 	--gradient_checkpointing \
 	--fp16 \
-	--overwrite_output_dir \
 	--do_train \
 	--do_eval \
-	--predict_with_generate \
-	--use_auth_token
+	--predict_with_generate
 ```
 On two V100s, training should take approximately 4 hours, with a final cross-entropy loss of **1e-4** and word error rate of **32.6%**.
 
@@ -539,7 +532,6 @@ python run_speech_recognition_seq2seq.py \
 	--output_dir="./" \
 	--preprocessing_num_workers="16" \
 	--length_column_name="input_length" \
-	--overwrite_output_dir \
 	--num_train_epochs="5" \
 	--per_device_train_batch_size="8" \
 	--per_device_eval_batch_size="8" \
@@ -581,7 +573,6 @@ torchrun \
 	--output_dir="./" \
 	--preprocessing_num_workers="16" \
 	--length_column_name="input_length" \
-	--overwrite_output_dir \
 	--num_train_epochs="5" \
 	--per_device_train_batch_size="8" \
 	--per_device_eval_batch_size="8" \

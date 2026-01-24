@@ -60,11 +60,8 @@ This model was contributed by [sanchit-gandhi](https://huggingface.co/sanchit-ga
 
 ```bash
 python src/transformers/models/musicgen/convert_musicgen_transformers.py \
-    --checkpoint small --pytorch_dump_folder /output/path --safe_serialization 
+    --checkpoint small --pytorch_dump_folder /output/path
 ```
-
-> [!NOTE]
-> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
 
 ## Generation
 
@@ -77,9 +74,9 @@ Generation is limited by the sinusoidal positional embeddings to 30 second input
 than 30 seconds of audio (1503 tokens), and input audio passed by Audio-Prompted Generation contributes to this limit so,
 given an input of 20 seconds of audio, MusicGen cannot generate more than 10 seconds of additional audio.
 
-Transformers supports both mono (1-channel) and stereo (2-channel) variants of MusicGen. The mono channel versions 
-generate a single set of codebooks. The stereo versions generate 2 sets of codebooks, 1 for each channel (left/right), 
-and each set of codebooks is decoded independently through the audio compression model. The audio streams for each 
+Transformers supports both mono (1-channel) and stereo (2-channel) variants of MusicGen. The mono channel versions
+generate a single set of codebooks. The stereo versions generate 2 sets of codebooks, 1 for each channel (left/right),
+and each set of codebooks is decoded independently through the audio compression model. The audio streams for each
 channel are combined to give the final stereo output.
 
 ### Unconditional Generation
@@ -208,7 +205,7 @@ For batched audio-prompted generation, the generated `audio_values` can be post-
 
 ### Generation Configuration
 
-The default parameters that control the generation process, such as sampling, guidance scale and number of generated 
+The default parameters that control the generation process, such as sampling, guidance scale and number of generated
 tokens, can be found in the model's generation config, and updated as desired:
 
 ```python
@@ -226,20 +223,21 @@ tokens, can be found in the model's generation config, and updated as desired:
 >>> model.generation_config.max_length = 256
 ```
 
-Note that any arguments passed to the generate method will **supersede** those in the generation config, so setting 
-`do_sample=False` in the call to generate will supersede the setting of `model.generation_config.do_sample` in the 
+Note that any arguments passed to the generate method will **supersede** those in the generation config, so setting
+`do_sample=False` in the call to generate will supersede the setting of `model.generation_config.do_sample` in the
 generation config.
 
 ## Model Structure
 
 The MusicGen model can be de-composed into three distinct stages:
+
 1. Text encoder: maps the text inputs to a sequence of hidden-state representations. The pre-trained MusicGen models use a frozen text encoder from either T5 or Flan-T5
 2. MusicGen decoder: a language model (LM) that auto-regressively generates audio tokens (or codes) conditional on the encoder hidden-state representations
 3. Audio encoder/decoder: used to encode an audio prompt to use as prompt tokens, and recover the audio waveform from the audio tokens predicted by the decoder
 
 Thus, the MusicGen model can either be used as a standalone decoder model, corresponding to the class [`MusicgenForCausalLM`],
 or as a composite model that includes the text encoder and audio encoder/decoder, corresponding to the class
-[`MusicgenForConditionalGeneration`]. If only the decoder needs to be loaded from the pre-trained checkpoint, it can be loaded by first 
+[`MusicgenForConditionalGeneration`]. If only the decoder needs to be loaded from the pre-trained checkpoint, it can be loaded by first
 specifying the correct config, or be accessed through the `.decoder` attribute of the composite model:
 
 ```python
@@ -259,6 +257,7 @@ be combined with the frozen text encoder and audio encoder/decoders to recover t
 model.
 
 Tips:
+
 * MusicGen is trained on the 32kHz checkpoint of Encodec. You should ensure you use a compatible version of the Encodec model.
 * Sampling mode tends to deliver better results than greedy - you can toggle sampling with the variable `do_sample` in the call to [`MusicgenForConditionalGeneration.generate`]
 
@@ -273,6 +272,7 @@ Tips:
 ## MusicgenProcessor
 
 [[autodoc]] MusicgenProcessor
+    - __call__
 
 ## MusicgenModel
 

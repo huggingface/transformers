@@ -1,39 +1,14 @@
 name: Benchmark v2 Framework
 
 on:
-  workflow_call:
-    inputs:
-      runner:
-        description: 'GH Actions runner group to use'
-        required: true
-        type: string
-      commit_sha:
-        description: 'Commit SHA to benchmark'
-        required: false
-        type: string
-        default: ''
-      upload_to_hub:
-        description: 'Uploading results to a HuggingFace Dataset'
-        required: false
-        type: string
-        default: 'false'
-      run_id:
-        description: 'Custom run ID for organizing results (auto-generated if not provided)'
-        required: false
-        type: string
-        default: ''
-      benchmark_repo_id:
-        description: 'HuggingFace Dataset to upload results to (e.g., "org/benchmark-results")'
-        required: false
-        type: string
-        default: ''
+  workflow_dispatch:
 
 env:
   HF_HOME: /mnt/cache
   TRANSFORMERS_IS_CI: yes
   # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
   # This token is created under the bot `hf-transformers-bot`.
-  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
 
 jobs:
   benchmark-v2:
@@ -43,8 +18,8 @@ jobs:
       (github.event_name == 'pull_request' && contains( github.event.pull_request.labels.*.name, 'run-benchmark')) ||
       (github.event_name == 'schedule')
     container:
-      image: huggingface/transformers-pytorch-gpu
-      options: --gpus all --privileged --ipc host --shm-size "16gb"
+      image: ${{ inputs.container_image }}
+      options: ${{ inputs.container_options }}
     steps:
       - name: Get repo
         uses: actions/checkout@v4
@@ -74,9 +49,9 @@ jobs:
           echo "Running benchmarks"
           python3 run_benchmarks.py \
           --commit-id '${{ inputs.commit_sha || github.sha }}' \
-          --upload-to-hub '${{ inputs.upload_to_hub || false}}' \
           --run-id '${{ inputs.run_id }}' \
-          --benchmark-repo-id '${{ inputs.benchmark_repo_id}}' \
+          --push-to-hub '${{ inputs.benchmark_repo_id}}' \
+          --token '${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}' \
           --log-level INFO
         env:
           HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}

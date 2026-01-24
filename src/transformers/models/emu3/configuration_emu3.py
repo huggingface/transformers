@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -14,20 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Optional, Union
 
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 
 
-class Emu3VQVAEConfig(PretrainedConfig):
+class Emu3VQVAEConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Emu3VQVAE`]. It is used to instantiate an VQ-VAE
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a configuration to the VQ model presented in Emu3 paper.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
     Args:
         codebook_size (`int`, *optional*, defaults to 32768):
             Codebook size of the VQ model.
@@ -110,15 +108,15 @@ class Emu3VQVAEConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class Emu3TextConfig(PretrainedConfig):
+class Emu3TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Emu3TextModel`]. It is used to instantiate a
     emu3 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
     [Emu3-community/Emu3-Chat-hf](https://huggingface.co/Emu3-community/Emu3-Chat-hf).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -156,47 +154,10 @@ class Emu3TextConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 151850):
             End of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -223,6 +184,7 @@ class Emu3TextConfig(PretrainedConfig):
     model_type = "emu3_text_model"
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
 
     def __init__(
         self,
@@ -231,7 +193,7 @@ class Emu3TextConfig(PretrainedConfig):
         intermediate_size: int = 14336,
         num_hidden_layers: int = 32,
         num_attention_heads: int = 32,
-        num_key_value_heads: Optional[int] = 8,
+        num_key_value_heads: int | None = 8,
         hidden_act: str = "silu",
         max_position_embeddings: int = 9216,
         rms_norm_eps: float = 1e-5,
@@ -239,9 +201,7 @@ class Emu3TextConfig(PretrainedConfig):
         pad_token_id: int = 151643,
         bos_token_id: int = 151849,
         eos_token_id: int = 151850,
-        tie_word_embeddings: bool = False,
-        rope_theta: float = 1000000.0,
-        rope_scaling: Optional[dict[str, Any]] = None,
+        rope_parameters: RopeParameters | None = None,
         mlp_bias=False,
         attention_bias=False,
         attention_dropout: float = 0.1,
@@ -258,33 +218,27 @@ class Emu3TextConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.mlp_bias = mlp_bias
         self.attention_bias = attention_bias
         self.initializer_range = initializer_range
-        rope_config_validation(self)
-
         self.attention_dropout = attention_dropout
+        self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
-class Emu3Config(PretrainedConfig):
+class Emu3Config(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`Emu3Model`]. It is used to instantiate a
     emu3 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
     [Emu3-community/Emu3-Chat-hf](https://huggingface.co/Emu3-community/Emu3-Chat-hf).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -294,6 +248,8 @@ class Emu3Config(PretrainedConfig):
             Emu3TextConfig instance containing the configuration for the language model.
         vocabulary_map (`dict`, *optional*):
             A dictionary containing the vocabulary map from the tokenizer. Used to obtain tokens from the image inputs.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
     """
 
     model_type = "emu3"
@@ -302,9 +258,10 @@ class Emu3Config(PretrainedConfig):
 
     def __init__(
         self,
-        vq_config: Union[dict, Emu3VQVAEConfig] = None,
-        text_config: Union[dict, Emu3TextConfig] = None,
-        vocabulary_map: Optional[dict[int, int]] = None,
+        vq_config: dict | Emu3VQVAEConfig = None,
+        text_config: dict | Emu3TextConfig = None,
+        vocabulary_map: dict[int, int] | None = None,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         if vq_config is None:
@@ -321,6 +278,7 @@ class Emu3Config(PretrainedConfig):
         self.text_config = text_config
         self.vocabulary_map = vocabulary_map
         self.image_token_id = vocabulary_map.get("<image>") if vocabulary_map is not None else None
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

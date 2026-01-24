@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
+import gc
 import os
 import re
 import tempfile
@@ -19,7 +19,7 @@ import unittest
 
 from datasets import Dataset, DatasetDict
 from huggingface_hub import hf_hub_download
-from packaging import version
+from torch import nn
 
 from transformers import (
     AutoModelForCausalLM,
@@ -94,7 +94,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
                 with CaptureLogger(logger) as cl:
-                    peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                    peft_model = transformers_class.from_pretrained(model_id, use_safetensors=False).to(torch_device)
                 # ensure that under normal circumstances, there  are no warnings about keys
                 self.assertNotIn("unexpected keys", cl.out)
                 self.assertNotIn("missing keys", cl.out)
@@ -111,7 +111,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                peft_model = transformers_class.from_pretrained(model_id, revision="refs/pr/2").to(torch_device)
 
                 state_dict = peft_model.get_adapter_state_dict()
 
@@ -125,7 +125,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                peft_model = transformers_class.from_pretrained(model_id, revision="refs/pr/2").to(torch_device)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -136,13 +136,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     self.assertTrue("config.json" not in os.listdir(tmpdirname))
                     self.assertTrue("pytorch_model.bin" not in os.listdir(tmpdirname))
                     self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
-
-                    peft_model = transformers_class.from_pretrained(tmpdirname).to(torch_device)
-                    self.assertTrue(self._check_lora_correctly_converted(peft_model))
-
-                    peft_model.save_pretrained(tmpdirname, safe_serialization=False)
-                    self.assertTrue("adapter_model.bin" in os.listdir(tmpdirname))
-                    self.assertTrue("adapter_config.json" in os.listdir(tmpdirname))
 
                     peft_model = transformers_class.from_pretrained(tmpdirname).to(torch_device)
                     self.assertTrue(self._check_lora_correctly_converted(peft_model))
@@ -337,11 +330,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 model.set_adapter("default")
                 self.assertTrue(model.active_adapters() == ["default"])
-                self.assertTrue(model.active_adapter() == "default")
 
                 model.set_adapter("adapter-2")
                 self.assertTrue(model.active_adapters() == ["adapter-2"])
-                self.assertTrue(model.active_adapter() == "adapter-2")
 
                 # Logits comparison
                 self.assertFalse(
@@ -351,7 +342,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 model.set_adapter(["adapter-2", "default"])
                 self.assertTrue(model.active_adapters() == ["adapter-2", "default"])
-                self.assertTrue(model.active_adapter() == "adapter-2")
 
                 logits_adapter_mixed = model(dummy_input)
                 self.assertFalse(
@@ -429,6 +419,30 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 self.assertNotIn("adapter_1", model.peft_config)
                 self.assertIn("adapter_2", model.peft_config)
 
+    def test_delete_adapter_with_modules_to_save(self):
+        """
+        Ensure that modules_to_save is accounted for when deleting an adapter.
+        """
+        from peft import LoraConfig
+
+        # the test assumes a specific model architecture, so only test this one:
+        model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+        peft_config = LoraConfig(init_lora_weights=False, modules_to_save=["lm_head"])
+        model.add_adapter(peft_config, adapter_name="adapter_1")
+
+        # sanity checks
+        self.assertIn("adapter_1", model.peft_config)
+        self.assertNotIsInstance(model.lm_head, nn.Linear)  # a ModulesToSaveWrapper
+        self.assertTrue(hasattr(model.lm_head, "modules_to_save"))
+        self.assertTrue("adapter_1" in model.lm_head.modules_to_save)
+
+        # now delete the adapter
+        model.delete_adapter("adapter_1")
+        self.assertFalse(hasattr(model, "peft_config"))
+        self.assertFalse("adapter_1" in model.lm_head.modules_to_save)
+        self.assertFalse(model.lm_head.modules_to_save)  # i.e. empty ModuleDict
+
     @require_torch_accelerator
     @require_bitsandbytes
     def test_peft_from_pretrained_kwargs(self):
@@ -500,7 +514,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
     def test_peft_save_quantized_regression(self):
         """
         Simple test that tests the basic usage of PEFT model save_pretrained with quantized base models
-        Regression test to make sure everything works as expected before the safetensors integration.
         """
         # 4bit
         for model_id in self.peft_test_model_ids:
@@ -515,10 +528,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
-                    peft_model.save_pretrained(tmpdirname, safe_serialization=False)
-                    self.assertTrue("adapter_model.bin" in os.listdir(tmpdirname))
+                    peft_model.save_pretrained(tmpdirname)
+                    self.assertTrue("adapter_model.safetensors" in os.listdir(tmpdirname))
                     self.assertTrue("adapter_config.json" in os.listdir(tmpdirname))
-                    self.assertTrue("pytorch_model.bin" not in os.listdir(tmpdirname))
                     self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
 
         # 8-bit
@@ -534,11 +546,10 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
-                    peft_model.save_pretrained(tmpdirname, safe_serialization=False)
+                    peft_model.save_pretrained(tmpdirname)
 
-                    self.assertTrue("adapter_model.bin" in os.listdir(tmpdirname))
+                    self.assertTrue("adapter_model.safetensors" in os.listdir(tmpdirname))
                     self.assertTrue("adapter_config.json" in os.listdir(tmpdirname))
-                    self.assertTrue("pytorch_model.bin" not in os.listdir(tmpdirname))
                     self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
 
     def test_peft_pipeline(self):
@@ -592,9 +603,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         from peft import LoraConfig
 
-        min_version_lcmu = "0.13.0"
-        is_lcmu_supported = version.parse(importlib.metadata.version("peft")) >= version.parse(min_version_lcmu)
-
         for model_id, peft_model_id in zip(self.transformers_test_model_ids, self.peft_test_model_ids):
             for transformers_class in self.transformers_test_model_classes:
                 model = transformers_class.from_pretrained(model_id).to(torch_device)
@@ -609,25 +617,14 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     adapter_state_dict=dummy_state_dict, peft_config=peft_config, low_cpu_mem_usage=False
                 )
 
-                if is_lcmu_supported:
-                    # if supported, this should not raise an error
-                    model.load_adapter(
-                        adapter_state_dict=dummy_state_dict,
-                        adapter_name="other",
-                        peft_config=peft_config,
-                        low_cpu_mem_usage=True,
-                    )
-                    # after loading, no meta device should be remaining
-                    self.assertFalse(any((p.device.type == "meta") for p in model.parameters()))
-                else:
-                    err_msg = r"The version of PEFT you are using does not support `low_cpu_mem_usage` yet"
-                    with self.assertRaisesRegex(ValueError, err_msg):
-                        model.load_adapter(
-                            adapter_state_dict=dummy_state_dict,
-                            adapter_name="other",
-                            peft_config=peft_config,
-                            low_cpu_mem_usage=True,
-                        )
+                model.load_adapter(
+                    adapter_state_dict=dummy_state_dict,
+                    adapter_name="other",
+                    peft_config=peft_config,
+                    low_cpu_mem_usage=True,
+                )
+                # after loading, no meta device should be remaining
+                self.assertFalse(any((p.device.type == "meta") for p in model.parameters()))
 
     def test_peft_from_pretrained_hub_kwargs(self):
         """
@@ -639,20 +636,21 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         with self.assertRaises(OSError):
             _ = AutoModelForCausalLM.from_pretrained(peft_model_id)
 
-        adapter_kwargs = {"revision": "test"}
-
         # This should work
+        adapter_kwargs = {"revision": "test"}
         model = AutoModelForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
         self.assertTrue(self._check_lora_correctly_converted(model))
 
+        # note: always create new adapter_kwargs, avoid the test relying on the previous calls possibly mutating them
+        adapter_kwargs = {"revision": "test"}
         model = OPTForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
         self.assertTrue(self._check_lora_correctly_converted(model))
 
         adapter_kwargs = {"revision": "main", "subfolder": "test_subfolder"}
-
         model = AutoModelForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
         self.assertTrue(self._check_lora_correctly_converted(model))
 
+        adapter_kwargs = {"revision": "main", "subfolder": "test_subfolder"}
         model = OPTForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
         self.assertTrue(self._check_lora_correctly_converted(model))
 
@@ -677,11 +675,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 dummy_state_dict["foobar"] = next(iter(dummy_state_dict.values()))
 
                 with CaptureLogger(logger) as cl:
-                    model.load_adapter(
-                        adapter_state_dict=dummy_state_dict, peft_config=peft_config, low_cpu_mem_usage=False
-                    )
+                    model.load_adapter(adapter_state_dict=dummy_state_dict, peft_config=peft_config)
 
-                msg = "Loading adapter weights from state_dict led to unexpected keys not found in the model: foobar"
+                msg = "foobar | UNEXPECTED"
                 self.assertIn(msg, cl.out)
 
     def test_peft_from_pretrained_missing_keys_warning(self):
@@ -715,14 +711,12 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 # Here we need to adjust the key name a bit to account for PEFT-specific naming.
                 # 1. Remove PEFT-specific prefix
-                # If merged after dropping Python 3.8, we can use: key = key.removeprefix(peft_prefix)
                 peft_prefix = "base_model.model."
-                key = key[len(peft_prefix) :]
+                key = key.removeprefix(peft_prefix)
                 # 2. Insert adapter name
                 prefix, _, suffix = key.rpartition(".")
-                key = f"{prefix}.other.{suffix}"
-
-                msg = f"Loading adapter weights from state_dict led to missing keys in the model: {key}"
+                key = f".other.{suffix}"
+                msg = f"{key} | MISSING |"
                 self.assertIn(msg, cl.out)
 
     def test_peft_load_adapter_training_inference_mode_true(self):
@@ -738,8 +732,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     peft_model.save_pretrained(tmpdirname)
                     model = transformers_class.from_pretrained(peft_model.config._name_or_path)
                     model.load_adapter(tmpdirname)
-                    assert not any(p.requires_grad for p in model.parameters())
                     assert not any(m.training for m in model.modules())
+                    grads = [n for n, p in model.named_parameters() if p.requires_grad]
+                    assert len(grads) == 0
                     del model
 
     def test_peft_load_adapter_training_inference_mode_false(self):
@@ -749,7 +744,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                peft_model = transformers_class.from_pretrained(model_id, use_safetensors=False).to(torch_device)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -881,3 +876,245 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
             # Generate text to verify pipeline works
             _ = lora_generator(text, max_new_tokens=20)
+
+    def test_non_lora_load_adapter(self):
+        """
+        Check that loading a non-LoRA adapter works. Using LoKr as an example, not testing all possible PEFT methods.
+        """
+        from peft import LoKrConfig, get_peft_model
+
+        inputs = torch.randint(0, 100, (1, 10)).to(torch_device)
+        atol, rtol = 1e-4, 1e-4
+
+        for model_id in self.transformers_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+                with torch.inference_mode():
+                    output_base = model(inputs).logits
+
+                peft_config = LoKrConfig(init_weights=False)
+                peft_model = get_peft_model(model, peft_config)
+                with torch.inference_mode():
+                    output_peft = peft_model(inputs).logits
+
+                # sanity check: should be different
+                assert not torch.allclose(output_base, output_peft, atol=atol, rtol=rtol)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    peft_model.save_pretrained(tmpdirname)
+                    del model, peft_model
+
+                    model = transformers_class.from_pretrained(tmpdirname).to(torch_device)
+                    with torch.inference_mode():
+                        output_transformers = model(inputs).logits
+                    self.assertTrue(torch.allclose(output_peft, output_transformers, atol=atol, rtol=rtol))
+
+    def test_non_lora_add_adapter(self):
+        """
+        Check that adding a non-LoRA adapter works. Using LoKr as an example, not testing all possible PEFT methods.
+        """
+        from peft import LoKrConfig
+
+        inputs = torch.randint(0, 100, (1, 10)).to(torch_device)
+        atol, rtol = 1e-4, 1e-4
+
+        for model_id in self.transformers_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+                with torch.inference_mode():
+                    output_base = model(inputs).logits
+
+                peft_config = LoKrConfig(init_weights=False)
+                model.add_adapter(peft_config)
+                with torch.inference_mode():
+                    output_peft = model(inputs).logits
+                # should be different
+                assert not torch.allclose(output_base, output_peft, atol=atol, rtol=rtol)
+
+
+@require_peft
+@require_torch
+@slow
+class PeftHotswapIntegrationTest(unittest.TestCase):
+    def tearDown(self):
+        # It is critical that the dynamo cache is reset for each test. Otherwise, if the test re-uses the same model,
+        # there will be recompilation errors, as torch caches the model when run in the same process.
+        torch.compiler.reset()
+        gc.collect()
+
+    def _check_model_hotswap(self, *, rank1, rank2, do_compile):
+        # utility method that checks that we can successfully hotswap adapters, with the model outputs corresponding to
+        # the respective adapters
+        from peft import LoraConfig
+
+        torch.manual_seed(0)
+        model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+        input = torch.randint(0, 100, (1, 10)).to(torch_device)
+        with torch.inference_mode():
+            base_output = model(input).logits
+
+        # create 2 adapters
+        model.add_adapter(LoraConfig(r=rank1, init_lora_weights=False), adapter_name="adapter_1")
+        with torch.inference_mode():
+            lora_1_output = model(input).logits
+
+        # second adapter may have a different rank
+        model.add_adapter(LoraConfig(r=rank2, init_lora_weights=False), adapter_name="adapter_2")
+        model.set_adapter("adapter_2")
+        with torch.inference_mode():
+            lora_2_output = model(input).logits
+
+        # sanity checks
+        self.assertFalse(torch.allclose(base_output, lora_1_output, atol=1e-6, rtol=1e-6))
+        self.assertFalse(torch.allclose(base_output, lora_2_output, atol=1e-6, rtol=1e-6))
+        self.assertFalse(torch.allclose(lora_1_output, lora_2_output, atol=1e-6, rtol=1e-6))
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            path_1 = os.path.join(tmpdirname, "adapter_1")
+            path_2 = os.path.join(tmpdirname, "adapter_2")
+            model.set_adapter("adapter_1")
+            model.save_pretrained(path_1)
+            model.set_adapter("adapter_2")
+            model.save_pretrained(path_2)
+            del model
+
+            model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+            enable_hotswap = do_compile or (rank1 != rank2)
+            if enable_hotswap:
+                # calling this is only needed if we want to compile the model or if the ranks are different
+                model.enable_peft_hotswap(target_rank=max(rank1, rank2))
+
+            # load the first adapter without hotswap (hotswap requires an existing adapter)
+            model.load_adapter(path_1, adapter_name="adapter_1")
+            if do_compile:
+                # compile the model after loading the first adapter
+                model = torch.compile(model, mode="reduce-overhead")
+
+            with torch.inference_mode():
+                lora_1_output_loaded = model(input).logits
+            self.assertTrue(torch.allclose(lora_1_output, lora_1_output_loaded, atol=1e-6, rtol=1e-6))
+
+            # hotswap in adapter_2 again, output should be same as lora_2_output
+            if enable_hotswap:
+                # after calling enable_peft_hotswap, hotswap will automatically be enabled
+                model.load_adapter(path_2, adapter_name="adapter_1")
+            else:
+                # enable_peft_hotswap was not called, need to explicitly pass hotswap=True
+                model.load_adapter(path_2, adapter_name="adapter_1", hotswap=True)
+
+            with torch.inference_mode():
+                lora_2_output_loaded = model(input).logits
+            self.assertTrue(torch.allclose(lora_2_output, lora_2_output_loaded, atol=1e-6, rtol=1e-6))
+
+    def test_hotswap_wrong_peft_type_raises(self):
+        # only LoRA is supported for now
+        from peft import IA3Config
+
+        model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
+        peft_id = "peft-internal-testing/tiny-OPTForCausalLM-lora"
+        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+        peft_config = IA3Config(feedforward_modules=[])
+        model.add_adapter(peft_config, adapter_name="ia3")
+
+        msg = "Hotswapping is currently only supported for LoRA"
+        with self.assertRaisesRegex(ValueError, msg):
+            model.load_adapter(peft_id, adapter_name="ia3", hotswap=True)
+
+    def test_hotswap_without_existing_adapter_raises(self):
+        # we can only hotswap if there is already an adapter with the same name
+        model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
+        peft_id = "peft-internal-testing/tiny-OPTForCausalLM-lora"
+        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+
+        msg = "To hotswap an adapter, there must already be an existing adapter with the same adapter name"
+        with self.assertRaisesRegex(ValueError, msg):
+            model.load_adapter(peft_id, adapter_name="adapter_1", hotswap=True)
+
+    def test_hotswap_different_adapter_name_raises(self):
+        # we can only hotswap if there is already an adapter with the same name
+        model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
+        peft_id = "peft-internal-testing/tiny-OPTForCausalLM-lora"
+        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+        model.load_adapter(peft_id, adapter_name="adapter_1")
+
+        other_name = "does_not_exist_yet"
+        msg = "To hotswap an adapter, there must already be an existing adapter with the same adapter name"
+        with self.assertRaisesRegex(ValueError, msg):
+            model.load_adapter(peft_id, adapter_name=other_name, hotswap=True)
+
+    def test_enable_peft_hotswap_called_after_adapter_added_raises(self):
+        # ensure that when enable_peft_hotswap is called *after* loading the first adapter, an error is raised
+        from peft import LoraConfig
+
+        model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+        lora_config = LoraConfig()
+        model.add_adapter(lora_config)
+        msg = re.escape("Call `enable_peft_hotswap` before loading the first adapter.")
+
+        with self.assertRaisesRegex(RuntimeError, msg):
+            model.enable_peft_hotswap(target_rank=32)
+
+    def test_enable_peft_hotswap_called_after_adapter_added_warns(self):
+        # ensure that when enable_peft_hotswap is called *after* loading the first adapter, there is a warning if
+        # check_compiled="warn"
+        from peft import LoraConfig
+
+        logger = logging.get_logger("transformers.integrations.peft")
+        model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+        lora_config = LoraConfig()
+        model.add_adapter(lora_config)
+        msg = "It is recommended to call `enable_peft_hotswap` before loading the first adapter to avoid recompilation"
+
+        with self.assertLogs(logger=logger, level="WARNING") as cm:
+            model.enable_peft_hotswap(target_rank=32, check_compiled="warn")
+            assert any(msg in log for log in cm.output)
+
+    def test_enable_peft_hotswap_called_after_adapter_added_ignored(self):
+        # Ensure that when enable_peft_hotswap is called *after* loading the first adapter, there is no error or
+        # warning if check_compiled="ignore". Note that assertNoLogs only works with Python 3.10+.
+        from peft import LoraConfig
+
+        logger = logging.get_logger("transformers.integrations.peft")
+        model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+        lora_config = LoraConfig()
+        model.add_adapter(lora_config)
+
+        with self.assertNoLogs(logger, level="WARNING"):
+            model.enable_peft_hotswap(target_rank=32, check_compiled="ignore")
+
+    def test_hotswap_without_compile_and_same_ranks_works(self):
+        self._check_model_hotswap(rank1=8, rank2=8, do_compile=False)
+
+    def test_hotswap_without_compile_and_with_lower_rank_works(self):
+        self._check_model_hotswap(rank1=13, rank2=7, do_compile=False)
+
+    def test_hotswap_without_compile_and_with_higher_rank_works(self):
+        self._check_model_hotswap(rank1=7, rank2=13, do_compile=False)
+
+    def test_hotswap_with_compile_and_same_ranks_works(self):
+        # It's important to add this context to raise an error on recompilation
+        with (
+            torch._dynamo.config.patch(error_on_recompile=True),
+            torch._inductor.utils.fresh_inductor_cache(),
+        ):
+            self._check_model_hotswap(rank1=8, rank2=8, do_compile=True)
+
+    def test_hotswap_with_compile_and_lower_rank_works(self):
+        # It's important to add this context to raise an error on recompilation
+        with (
+            torch._dynamo.config.patch(error_on_recompile=True),
+            torch._inductor.utils.fresh_inductor_cache(),
+        ):
+            self._check_model_hotswap(rank1=13, rank2=7, do_compile=True)
+
+    def test_hotswap_with_compile_and_higher_rank_works(self):
+        # It's important to add this context to raise an error on recompilation
+        with (
+            torch._dynamo.config.patch(error_on_recompile=True),
+            torch._inductor.utils.fresh_inductor_cache(),
+        ):
+            self._check_model_hotswap(rank1=7, rank2=13, do_compile=True)

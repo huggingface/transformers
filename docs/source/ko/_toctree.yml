@@ -84,6 +84,8 @@
       title: Transformers로 채팅하기
     - local: chat_templating
       title: 챗봇 템플릿 익히기
+    - local: chat_extras
+      title: Tools 와 RAG
     - local: in_translation
       title: (번역중) Multimodal templates
     - local: in_translation
@@ -210,8 +212,6 @@
     title: ONNX로 내보내기
   - local: executorch
     title: ExecuTorch
-  - local: torchscript
-    title: TorchScript로 내보내기
   title: 배포환경에 내보내기
 - isExpanded: false
   sections:
@@ -406,8 +406,6 @@
       title: Models
     - local: main_classes/text_generation
       title: 텍스트 생성
-    - local: main_classes/onnx
-      title: ONNX
     - local: main_classes/optimizer_schedules
       title: 최적화
     - local: main_classes/output
@@ -459,7 +457,7 @@
         title: BertJapanese
       - local: model_doc/bertweet
         title: BERTweet
-      - local: in_translation
+      - local: model_doc/big_bird
         title: BigBird
       - local: in_translation
         title: BigBirdPegasus
@@ -483,7 +481,7 @@
         title: CANINE
       - local: model_doc/codegen
         title: CodeGen
-      - local: in_translation
+      - local: model_doc/code_llama
         title: CodeLlama
       - local: model_doc/cohere
         title: Cohere
@@ -601,7 +599,7 @@
         title: Jukebox
       - local: in_translation
         title: LED
-      - local: in_translation
+      - local: model_doc/lfm2
         title: LFM2
       - local: in_translation
         title: LFM2-VL
@@ -881,6 +879,8 @@
         title: SegFormer
       - local: in_translation
         title: SegGpt
+      - local: model_doc/sam_hq
+        title: Segment Anything High Quality (SAM-HQ)
       - local: in_translation
         title: SuperGlue
       - local: in_translation
@@ -1055,7 +1055,7 @@
         title: FLAVA
       - local: model_doc/gemma3
         title: Gemma3
-      - local: in_translation
+      - local: model_doc/gemma3n
         title: Gemma3n
       - local: in_translation
         title: GIT
@@ -1097,7 +1097,7 @@
         title: LayoutXLM
       - local: in_translation
         title: LiLT
-      - local: in_translation
+      - local: model_doc/llama4
         title: Llama4
       - local: in_translation
         title: Llava
@@ -1193,8 +1193,6 @@
     - sections:
       - local: in_translation
         title: Decision Transformer
-      - local: model_doc/trajectory_transformer
-        title: Trajectory Transformer
       title: 강화학습 모델
     - sections:
       - local: model_doc/autoformer
@@ -1210,10 +1208,6 @@
       - local: in_translation
         title: TimesFM
       title: 시게열 모델
-    - sections:
-      - local: model_doc/graphormer
-        title: Graphormer
-      title: 그래프 모델
     title: 모델
   - sections:
     - local: internal/modeling_utils

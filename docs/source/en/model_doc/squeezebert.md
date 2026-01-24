@@ -70,9 +70,7 @@ This model was contributed by [forresti](https://huggingface.co/forresti).
 ## SqueezeBertTokenizer
 
 [[autodoc]] SqueezeBertTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## SqueezeBertTokenizerFast

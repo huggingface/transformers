@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Microsoft Research & University of Wisconsin-Madison and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +12,7 @@
 # limitations under the License.
 """VipLlava model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -21,7 +20,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class VipLlavaConfig(PretrainedConfig):
+class VipLlavaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VipLlavaForConditionalGeneration`]. It is used to instantiate an
     VipLlava model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -29,8 +28,8 @@ class VipLlavaConfig(PretrainedConfig):
 
     e.g. [ybelkada/vip-llava-7b-hf](https://huggingface.co/ybelkada/vip-llava-7b-hf)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`VipLlavaVisionConfig`,  *optional*):
@@ -47,6 +46,8 @@ class VipLlavaConfig(PretrainedConfig):
             The vision feature layer, or list of layers to select the vision features from.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -84,6 +85,7 @@ class VipLlavaConfig(PretrainedConfig):
         projector_layernorm_eps=1e-5,
         vision_feature_layers=[-2, -5, -8, -11, 6],
         image_seq_length=576,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -92,6 +94,7 @@ class VipLlavaConfig(PretrainedConfig):
         self.vision_feature_layers = vision_feature_layers
         self.image_seq_length = image_seq_length
         self.vision_config = vision_config
+        self.tie_word_embeddings = tie_word_embeddings
 
         if isinstance(self.vision_config, dict):
             vision_config["model_type"] = vision_config.get("model_type", "clip_vision_model")

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,14 +19,14 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, GenerationConfig, MinistralConfig, is_torch_available
+from transformers import AutoTokenizer, BitsAndBytesConfig, GenerationConfig, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -39,9 +38,6 @@ if is_torch_available():
     from transformers import (
         AutoModelForCausalLM,
         MinistralForCausalLM,
-        MinistralForQuestionAnswering,
-        MinistralForSequenceClassification,
-        MinistralForTokenClassification,
         MinistralModel,
     )
 
@@ -50,42 +46,13 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class MinistralModelTester(CausalLMModelTester):
-    config_class = MinistralConfig
     if is_torch_available():
         base_model_class = MinistralModel
-        causal_lm_class = MinistralForCausalLM
-        sequence_class = MinistralForSequenceClassification
-        token_class = MinistralForTokenClassification
-        question_answering_class = MinistralForQuestionAnswering
 
 
 @require_torch
 class MinistralModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            MinistralModel,
-            MinistralForCausalLM,
-            MinistralForSequenceClassification,
-            MinistralForTokenClassification,
-            MinistralForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = MinistralModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": MinistralModel,
-            "text-classification": MinistralForSequenceClassification,
-            "token-classification": MinistralForTokenClassification,
-            "text-generation": MinistralForCausalLM,
-            "question-answering": MinistralForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
@@ -101,7 +68,7 @@ class MinistralModelTest(CausalLMModelTest, unittest.TestCase):
         return True
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
@@ -175,7 +142,6 @@ class MinistralIntegrationTest(unittest.TestCase):
         assistant_model.generation_config.num_assistant_tokens = 2
         assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        print(generated_ids[0][-2:].tolist())
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
         del assistant_model
@@ -208,7 +174,7 @@ class MinistralIntegrationTest(unittest.TestCase):
             ),
         )
 
-        # Export + HybridCache
+        # Export
         model.eval()
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
         exported_program = exportable_module.export(
@@ -241,6 +207,7 @@ class MinistralIntegrationTest(unittest.TestCase):
 
         self.assertEqual(export_generated_text, eager_generated_text)
 
+    @pytest.mark.flash_attn_test
     @require_flash_attn
     @slow
     def test_past_sliding_window_generation(self):
@@ -252,7 +219,7 @@ class MinistralIntegrationTest(unittest.TestCase):
         model = MinistralForCausalLM.from_pretrained(
             "mistralai/Ministral-8B-Instruct-2410",
             device_map="auto",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Ministral-8B-Instruct-2410", legacy=False)
 
@@ -265,7 +232,6 @@ class MinistralIntegrationTest(unittest.TestCase):
         input_length = inputs.input_ids.shape[1]  # around 33k tokens > 32k sliding window
         outputs = model.generate(**inputs, max_new_tokens=100, do_sample=False)
         output_text = tokenizer.decode(outputs[0][input_length:], skip_special_tokens=True)
-        print(output_text)
         self.assertEqual(
             output_text,
             " H. Gammarus lives on the continental shelf at depths of 0 – 150 metres ( 0 – 492 ft ) , although not normally deeper than 50 m ( 160 ft ) .",

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@
 
 from copy import deepcopy
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 
@@ -24,15 +23,15 @@ from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class DepthProConfig(PretrainedConfig):
+class DepthProConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DepthProModel`]. It is used to instantiate a
     DepthPro model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the DepthPro
     [apple/DepthPro](https://huggingface.co/apple/DepthPro) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         fusion_hidden_size (`int`, *optional*, defaults to 256):
@@ -61,13 +60,13 @@ class DepthProConfig(PretrainedConfig):
             Whether to use `DepthProFovModel` to generate the field of view.
         num_fov_head_layers (`int`, *optional*, defaults to 2):
             Number of convolution layers in the head of `DepthProFovModel`.
-        image_model_config (`Union[dict[str, Any], PretrainedConfig]`, *optional*):
+        image_model_config (`Union[dict[str, Any], PreTrainedConfig]`, *optional*):
             The configuration of the image encoder model, which is loaded using the [`AutoModel`] API.
             By default, Dinov2 model is used as backbone.
-        patch_model_config (`Union[dict[str, Any], PretrainedConfig]`, *optional*):
+        patch_model_config (`Union[dict[str, Any], PreTrainedConfig]`, *optional*):
             The configuration of the patch encoder model, which is loaded using the [`AutoModel`] API.
             By default, Dinov2 model is used as backbone.
-        fov_model_config (`Union[dict[str, Any], PretrainedConfig]`, *optional*):
+        fov_model_config (`Union[dict[str, Any], PreTrainedConfig]`, *optional*):
             The configuration of the fov encoder model, which is loaded using the [`AutoModel`] API.
             By default, Dinov2 model is used as backbone.
 
@@ -109,8 +108,6 @@ class DepthProConfig(PretrainedConfig):
         fov_model_config=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         # scaled_images_ratios is sorted
         if scaled_images_ratios != sorted(scaled_images_ratios):
             raise ValueError(
@@ -187,8 +184,7 @@ class DepthProConfig(PretrainedConfig):
                     )
                     sub_config.update({"image_size": patch_size})
                 sub_config = CONFIG_MAPPING[sub_config["model_type"]](**sub_config)
-            elif isinstance(sub_config, PretrainedConfig):
-                sub_config = sub_config
+            elif isinstance(sub_config, PreTrainedConfig):
                 image_size = getattr(sub_config, "image_size", None)
                 if image_size != patch_size:
                     raise ValueError(
@@ -196,10 +192,12 @@ class DepthProConfig(PretrainedConfig):
                     )
             else:
                 raise TypeError(
-                    f"Invalid type for `sub_config`. Expected `PretrainedConfig`, `dict`, or `None`, but got {type(sub_config)}."
+                    f"Invalid type for `sub_config`. Expected `PreTrainedConfig`, `dict`, or `None`, but got {type(sub_config)}."
                 )
 
             setattr(self, sub_config_key, sub_config)
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["DepthProConfig"]

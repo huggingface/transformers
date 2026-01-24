@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Meta Platforms, Inc. and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,11 +13,7 @@
 """Video processor class for PerceptionLM."""
 
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
-from ...processing_utils import Unpack, VideosKwargs
 from ...video_processing_utils import BaseVideoProcessor
-
-
-class PerceptionLMFastVideoProcessorInitKwargs(VideosKwargs): ...
 
 
 class PerceptionLMVideoProcessor(BaseVideoProcessor):
@@ -31,11 +26,6 @@ class PerceptionLMVideoProcessor(BaseVideoProcessor):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    valid_kwargs = PerceptionLMFastVideoProcessorInitKwargs
-    model_input_names = ["pixel_values_videos"]
-
-    def __init__(self, **kwargs: Unpack[PerceptionLMFastVideoProcessorInitKwargs]):
-        super().__init__(**kwargs)
 
 
 __all__ = ["PerceptionLMVideoProcessor"]

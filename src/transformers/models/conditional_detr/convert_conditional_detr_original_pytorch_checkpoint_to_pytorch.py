@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,9 +16,10 @@
 import argparse
 import json
 from collections import OrderedDict
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -213,9 +213,10 @@ def read_in_q_k_v(state_dict, is_panoptic=False):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
 
-    return im
+    return image
 
 
 @torch.no_grad()
@@ -292,7 +293,7 @@ def convert_conditional_detr_checkpoint(model_name, pytorch_dump_folder_path):
     model = ConditionalDetrForSegmentation(config) if is_panoptic else ConditionalDetrForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
-    model.push_to_hub(repo_id=model_name, organization="DepuMeng", commit_message="Add model")
+    model.push_to_hub(repo_id=f"DepuMeng/{model_name}", commit_message="Add model")
     # verify our conversion
     original_outputs = conditional_detr(pixel_values)
     outputs = model(pixel_values)

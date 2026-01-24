@@ -70,7 +70,6 @@ def write_model(
     input_base_path,
     include_tokenizer=True,
     tokenizer_path=None,
-    safe_serialization=True,
     fix_eos_token_id=True,
     tmp_cleanup=True,
 ):
@@ -209,7 +208,7 @@ def write_model(
     # Avoid saving this as part of the config.
     del model.config._name_or_path
     print("Saving in the Transformers format.")
-    model.save_pretrained(model_path, safe_serialization=safe_serialization)
+    model.save_pretrained(model_path)
     if tmp_cleanup:
         # Make cleanup optional; attempting to `rmtree` the `tmp_model_path` causes
         # errors if using NFS.
@@ -284,17 +283,10 @@ def main():
         dest="tmp_cleanup",
         help="If passed, don't remove temp dir at end of HF conversion.",
     )
-    parser.add_argument(
-        "--no_safe_serialization",
-        action="store_false",
-        dest="safe_serialization",
-        help="Whether or not to save using `safetensors`.",
-    )
     args = parser.parse_args()
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
-        safe_serialization=args.safe_serialization,
         include_tokenizer=args.include_tokenizer,
         tokenizer_path=args.tokenizer_json_path,
         fix_eos_token_id=args.fix_eos_token_id,

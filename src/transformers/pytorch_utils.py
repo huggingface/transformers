@@ -14,8 +14,8 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable
 from functools import lru_cache, wraps
-from typing import Callable
 
 import torch
 from safetensors.torch import storage_ptr, storage_size
@@ -24,7 +24,6 @@ from torch import nn
 from .utils import (
     is_torch_greater_or_equal,
     is_torch_xla_available,
-    is_torch_xpu_available,
     is_torchdynamo_compiling,
     logging,
 )
@@ -50,7 +49,7 @@ is_torch_greater_or_equal_than_1_12 = is_torch_greater_or_equal("1.12", accept_d
 _torch_distributed_available = torch.distributed.is_available()
 
 
-def softmax_backward_data(parent, grad_output, output, dim, self):
+def softmax_backward_data(parent, grad_output, output):
     """
     A function that calls the internal `_softmax_backward_data` PyTorch method and that adjusts the arguments according
     to the torch version detected.
@@ -58,7 +57,7 @@ def softmax_backward_data(parent, grad_output, output, dim, self):
 
     from torch import _softmax_backward_data
 
-    return _softmax_backward_data(grad_output, output, parent.dim, self.dtype)
+    return _softmax_backward_data(grad_output, output, parent.dim, output.dtype)
 
 
 def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) -> nn.Linear:
@@ -122,61 +121,6 @@ class Conv1D(nn.Module):
         x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
         x = x.view(size_out)
         return x
-
-
-def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> Conv1D:
-    """
-    Prune a Conv1D layer to keep only entries in index. A Conv1D work as a Linear layer (see e.g. BERT) but the weights
-    are transposed.
-
-    Used to remove heads.
-
-    Args:
-        layer ([`~pytorch_utils.Conv1D`]): The layer to prune.
-        index (`torch.LongTensor`): The indices to keep in the layer.
-        dim (`int`, *optional*, defaults to 1): The dimension on which to keep the indices.
-
-    Returns:
-        [`~pytorch_utils.Conv1D`]: The pruned layer as a new layer with `requires_grad=True`.
-    """
-    index = index.to(layer.weight.device)
-    W = layer.weight.index_select(dim, index).detach().clone()
-    if dim == 0:
-        b = layer.bias.detach().clone()
-    else:
-        b = layer.bias[index].detach().clone()
-    new_size = list(layer.weight.size())
-    new_size[dim] = len(index)
-    new_layer = Conv1D(new_size[1], new_size[0]).to(layer.weight.device)
-    new_layer.weight.requires_grad = False
-    new_layer.weight.copy_(W.contiguous())
-    new_layer.weight.requires_grad = True
-    new_layer.bias.requires_grad = False
-    new_layer.bias.copy_(b.contiguous())
-    new_layer.bias.requires_grad = True
-    return new_layer
-
-
-def prune_layer(layer: nn.Linear | Conv1D, index: torch.LongTensor, dim: int | None = None) -> nn.Linear | Conv1D:
-    """
-    Prune a Conv1D or linear layer to keep only entries in index.
-
-    Used to remove heads.
-
-    Args:
-        layer (`Union[torch.nn.Linear, Conv1D]`): The layer to prune.
-        index (`torch.LongTensor`): The indices to keep in the layer.
-        dim (`int`, *optional*): The dimension on which to keep the indices.
-
-    Returns:
-        `torch.nn.Linear` or [`~pytorch_utils.Conv1D`]: The pruned layer as a new layer with `requires_grad=True`.
-    """
-    if isinstance(layer, nn.Linear):
-        return prune_linear_layer(layer, index, dim=0 if dim is None else dim)
-    elif isinstance(layer, Conv1D):
-        return prune_conv1d_layer(layer, index, dim=1 if dim is None else dim)
-    else:
-        raise ValueError(f"Can't prune layer of class {layer.__class__}")
 
 
 def apply_chunking_to_forward(
@@ -255,33 +199,6 @@ def apply_chunking_to_forward(
         return torch.cat(output_chunks, dim=chunk_dim)
 
     return forward_fn(*input_tensors)
-
-
-def find_pruneable_heads_and_indices(
-    heads: list[int], n_heads: int, head_size: int, already_pruned_heads: set[int]
-) -> tuple[set[int], torch.LongTensor]:
-    """
-    Finds the heads and their indices taking `already_pruned_heads` into account.
-
-    Args:
-        heads (`list[int]`): List of the indices of heads to prune.
-        n_heads (`int`): The number of heads in the model.
-        head_size (`int`): The size of each head.
-        already_pruned_heads (`Set[int]`): A set of already pruned heads.
-
-    Returns:
-        `tuple[Set[int], torch.LongTensor]`: A tuple with the indices of heads to prune taking `already_pruned_heads`
-        into account and the indices of rows/columns to keep in the layer weight.
-    """
-    mask = torch.ones(n_heads, head_size)
-    heads = set(heads) - already_pruned_heads  # Convert to set and remove already pruned heads
-    for head in heads:
-        # Compute how many pruned heads are before the head and move the index accordingly
-        head = head - sum(1 if h < head else 0 for h in already_pruned_heads)
-        mask[head] = 0
-    mask = mask.view(-1).contiguous().eq(1)
-    index: torch.LongTensor = torch.arange(len(mask))[mask].long()
-    return heads, index
 
 
 def meshgrid(*tensors: torch.Tensor | list[torch.Tensor], indexing: str | None = None) -> tuple[torch.Tensor, ...]:
@@ -365,16 +282,3 @@ def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
         return wrapper
 
     return decorator
-
-
-def infer_device():
-    """
-    Infers available device.
-    """
-    torch_device = "cpu"
-    if torch.cuda.is_available():
-        torch_device = "cuda"
-    elif is_torch_xpu_available():
-        torch_device = "xpu"
-
-    return torch_device

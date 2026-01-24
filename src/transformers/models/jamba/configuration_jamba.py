@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 AI21 Labs Ltd. and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,14 +15,14 @@
 
 import math
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class JambaConfig(PretrainedConfig):
+class JambaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JambaModel`]. It is used to instantiate a
     Jamba model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -31,8 +30,8 @@ class JambaConfig(PretrainedConfig):
 
     [ai21labs/Jamba-v0.1](https://huggingface.co/ai21labs/Jamba-v0.1)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -66,12 +65,6 @@ class JambaConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        num_logits_to_keep (`int` or `None`, *optional*, defaults to 1):
-            Number of prompt logits to calculate during generation. If `None`, all logits will be calculated. If an
-            integer value, only last `num_logits_to_keep` logits will be calculated. Default is 1 because only the
-            logits of the last prompt token are needed for generation. For long sequences, the logits for the entire
-            sequence may use a lot of memory so, setting `num_logits_to_keep=1` will reduce memory footprint
-            significantly.
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss. See [here]() for more details
@@ -83,8 +76,6 @@ class JambaConfig(PretrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 2):
             The id of the "end-of-sequence" token.
-        sliding_window (`int`, *optional*):
-            Sliding window attention window size. If not specified, will default to `None`.
         max_position_embeddings (`int`, *optional*, defaults to 262144):
             This value doesn't have any real effect. The maximum sequence length that this model is intended to be
             used with. It can be used with longer sequences, but performance may degrade.
@@ -124,6 +115,9 @@ class JambaConfig(PretrainedConfig):
 
     model_type = "jamba"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "num_local_experts": "num_experts",
+    }
 
     def __init__(
         self,
@@ -138,13 +132,11 @@ class JambaConfig(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
-        num_logits_to_keep=1,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        sliding_window=None,
         max_position_embeddings=262144,
         attention_dropout=0.0,
         num_experts_per_tok=2,
@@ -168,7 +160,6 @@ class JambaConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
         self.max_position_embeddings = max_position_embeddings
         self.attention_dropout = attention_dropout
 
@@ -182,7 +173,6 @@ class JambaConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
 
         self.use_cache = use_cache
-        self.num_logits_to_keep = num_logits_to_keep
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
 
@@ -204,13 +194,11 @@ class JambaConfig(PretrainedConfig):
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
     @property
     def layers_block_type(self):

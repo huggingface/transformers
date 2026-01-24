@@ -1,9 +1,8 @@
 import inspect
-from typing import Union
 
 import numpy as np
 
-from ..tokenization_utils import TruncationStrategy
+from ..tokenization_python import TruncationStrategy
 from ..utils import add_end_docstrings, logging
 from .base import ArgumentHandler, ChunkPipeline, build_pipeline_init_args
 
@@ -52,7 +51,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     Any combination of sequences and labels can be passed and each combination will be posed as a premise/hypothesis
     pair and passed to the pretrained model. Then, the logit for *entailment* is taken as the logit for the candidate
     label being valid. Any NLI model can be used, but the id of the *entailment* label must be included in the model
-    config's :attr:*~transformers.PretrainedConfig.label2id*.
+    config's :attr:*~transformers.PreTrainedConfig.label2id*.
 
     Example:
 
@@ -87,9 +86,9 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     _load_feature_extractor = False
     _load_tokenizer = True
 
-    def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
+    def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), **kwargs):
         self._args_parser = args_parser
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
         if self.entailment_id == -1:
             logger.warning(
                 "Failed to determine 'entailment' label id from the label2id mapping in the model config. Setting to "
@@ -146,12 +145,6 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         return inputs
 
     def _sanitize_parameters(self, **kwargs):
-        if kwargs.get("multi_class") is not None:
-            kwargs["multi_label"] = kwargs["multi_class"]
-            logger.warning(
-                "The `multi_class` argument has been deprecated and renamed to `multi_label`. "
-                "`multi_class` will be removed in a future version of Transformers."
-            )
         preprocess_params = {}
         if "candidate_labels" in kwargs:
             preprocess_params["candidate_labels"] = self._args_parser._parse_labels(kwargs["candidate_labels"])
@@ -165,7 +158,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
 
     def __call__(
         self,
-        sequences: Union[str, list[str]],
+        sequences: str | list[str],
         *args,
         **kwargs,
     ):

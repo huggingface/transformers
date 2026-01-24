@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,14 +14,14 @@
 """Fast Image processor class for BridgeTower."""
 
 from collections.abc import Iterable
-from typing import Optional, Union
+from typing import Optional
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorKwargs,
     ImageInput,
     SizeDict,
     TensorType,
@@ -31,13 +30,8 @@ from ...image_processing_utils_fast import (
     reorder_images,
 )
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from ...utils import auto_docstring, is_torchvision_v2_available
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
+from ...utils import auto_docstring
+from .image_processing_bridgetower import BridgeTowerImageProcessorKwargs
 
 
 def make_pixel_mask(
@@ -90,17 +84,6 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
-class BridgeTowerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-        size_divisor (`int`, *optional*, defaults to 32):
-            The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
-            is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
-    """
-
-    size_divisor: Optional[int]
-
-
 @auto_docstring
 class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
@@ -115,14 +98,14 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_pad = True
     size_divisor = 32
-    valid_kwargs = BridgeTowerFastImageProcessorKwargs
+    valid_kwargs = BridgeTowerImageProcessorKwargs
     model_input_names = ["pixel_values", "pixel_mask"]
 
-    def __init__(self, **kwargs: Unpack[BridgeTowerFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[BridgeTowerImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[BridgeTowerFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[BridgeTowerImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(
@@ -130,7 +113,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         image: "torch.Tensor",
         size: SizeDict,
         size_divisor: int = 32,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -154,7 +137,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `torch.Tensor`: The resized image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
         if not size.shortest_edge:
             raise ValueError(f"The `size` dictionary must contain the key `shortest_edge`. Got {size.keys()}")
         shorter = size.shortest_edge
@@ -189,7 +172,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
                 Size of the output image in the form `{"height": h, "width": w}`.
         """
         output_size = size.shortest_edge
-        return F.center_crop(
+        return tvF.center_crop(
             image,
             output_size=(output_size, output_size),
             **kwargs,
@@ -199,7 +182,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         output_size: tuple[int, int],
-        constant_values: Union[float, Iterable[float]] = 0,
+        constant_values: float | Iterable[float] = 0,
     ) -> "torch.Tensor":
         """
         Pad an image with zeros to the given size.
@@ -210,7 +193,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         pad_bottom = output_height - input_height
         pad_right = output_width - input_width
         padding = (0, 0, pad_right, pad_bottom)
-        padded_image = F.pad(
+        padded_image = tvF.pad(
             image,
             padding,
             fill=constant_values,
@@ -222,18 +205,18 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        size_divisor: Optional[int],
-        interpolation: Optional["F.InterpolationMode"],
+        size_divisor: int | None,
+        interpolation: Optional["tvF.InterpolationMode"],
         do_pad: bool,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -267,10 +250,8 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
             processed_images, processed_masks = self.pad(
                 processed_images, return_mask=True, disable_grouping=disable_grouping
             )
-            processed_masks = torch.stack(processed_masks, dim=0) if return_tensors else processed_masks
             data["pixel_mask"] = processed_masks
 
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         data["pixel_values"] = processed_images
 
         return BatchFeature(data=data, tensor_type=return_tensors)

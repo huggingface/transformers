@@ -42,16 +42,16 @@ The original code can be found [here](https://github.com/MCG-NJU/VideoMAE).
 
 ## Using Scaled Dot Product Attention (SDPA)
 
-PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
-encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
-[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
 or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
 page for more information.
 
-SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
 `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
-```
+```py
 from transformers import VideoMAEForVideoClassification
 model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics", attn_implementation="sdpa", dtype=torch.float16)
 ...
@@ -75,6 +75,7 @@ you're interested in submitting a resource to be included here, please feel free
 review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 **Video classification**
+
 - [A notebook](https://github.com/huggingface/notebooks/blob/main/examples/video_classification.ipynb) that shows how
 to fine-tune a VideoMAE model on a custom dataset.
 - [Video classification task guide](../tasks/video_classification)
@@ -84,14 +85,14 @@ to fine-tune a VideoMAE model on a custom dataset.
 
 [[autodoc]] VideoMAEConfig
 
-## VideoMAEFeatureExtractor
-
-[[autodoc]] VideoMAEFeatureExtractor
-    - __call__
-
 ## VideoMAEImageProcessor
 
 [[autodoc]] VideoMAEImageProcessor
+    - preprocess
+
+## VideoMAEVideoProcessor
+
+[[autodoc]] VideoMAEVideoProcessor
     - preprocess
 
 ## VideoMAEModel

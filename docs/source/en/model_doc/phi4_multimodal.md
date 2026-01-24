@@ -47,10 +47,11 @@ print(result[0]['generated_text'])
 
 ```python
 import torch
-from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig, infer_device
+from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig
+from accelerate import Accelerator
 
 model_path = "microsoft/Phi-4-multimodal-instruct"
-device = f"{infer_device()}:0"
+device = Accelerator().device
 
 processor = AutoProcessor.from_pretrained(model_path)
 model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device, dtype=torch.float16)
@@ -97,10 +98,11 @@ The example below demonstrates inference with an audio and text input.
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig, infer_device
+from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig
+from accelerate import Accelerator
 
 model_path = "microsoft/Phi-4-multimodal-instruct"
-device = f"{infer_device()}:0"
+device = Accelerator().device
 
 processor = AutoProcessor.from_pretrained(model_path)
 model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device,  dtype=torch.float16)
@@ -150,6 +152,7 @@ print(f'>>> Response\n{response}')
 ## Phi4MultimodalProcessor
 
 [[autodoc]] Phi4MultimodalProcessor
+    - __call__
 
 ## Phi4MultimodalAudioConfig
 

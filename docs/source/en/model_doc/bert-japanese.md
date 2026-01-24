@@ -81,7 +81,6 @@ API reference information.
 
 </Tip>
 
-
 ## BertJapaneseTokenizer
 
 [[autodoc]] BertJapaneseTokenizer

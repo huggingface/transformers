@@ -22,7 +22,7 @@ specific language governing permissions and limitations under the License. -->
 
 # Donut
 
-[Donut (Document Understanding Transformer)](https://huggingface.co/papers/2111.15664) is a visual document understanding model that doesn't require an Optical Character Recognition (OCR) engine. Unlike traditional approaches that extract text using OCR before processing, Donut employs an end-to-end Transformer-based architecture to directly analyze document images. This eliminates OCR-related inefficiencies making it more accurate and adaptable to diverse languages and formats. 
+[Donut (Document Understanding Transformer)](https://huggingface.co/papers/2111.15664) is a visual document understanding model that doesn't require an Optical Character Recognition (OCR) engine. Unlike traditional approaches that extract text using OCR before processing, Donut employs an end-to-end Transformer-based architecture to directly analyze document images. This eliminates OCR-related inefficiencies making it more accurate and adaptable to diverse languages and formats.
 
 Donut features vision encoder ([Swin](./swin)) and a text decoder ([BART](./bart)). Swin converts document images into embeddings and BART processes them into meaningful text sequences.
 
@@ -61,10 +61,10 @@ pipeline(image=image, question="What time is the coffee break?")
 # pip install datasets
 import torch
 from datasets import load_dataset
-from transformers import AutoProcessor, AutoModelForVision2Seq
+from transformers import AutoProcessor, AutoModelForImageTextToText
 
 processor = AutoProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
-model = AutoModelForVision2Seq.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
+model = AutoModelForImageTextToText.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
 
 dataset = load_dataset("hf-internal-testing/example-documents", split="test")
 image = dataset[0]["image"]
@@ -92,11 +92,11 @@ The example below uses [torchao](../quantization/torchao) to only quantize the w
 # pip install datasets torchao
 import torch
 from datasets import load_dataset
-from transformers import TorchAoConfig, AutoProcessor, AutoModelForVision2Seq
+from transformers import TorchAoConfig, AutoProcessor, AutoModelForImageTextToText
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 processor = AutoProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
-model = AutoModelForVision2Seq.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa", quantization_config=quantization_config)
+model = AutoModelForImageTextToText.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa", quantization_config=quantization_config)
 
 dataset = load_dataset("hf-internal-testing/example-documents", split="test")
 image = dataset[0]["image"]
@@ -119,14 +119,15 @@ print(answer)
 
     ```py
     >>> import re
-    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel, infer_device
+    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel
+    >>> from accelerate import Accelerator
     >>> from datasets import load_dataset
     >>> import torch
 
     >>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
     >>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
 
-    >>> device = infer_device()
+    >>> device = Accelerator().device
     >>> model.to(device)  # doctest: +IGNORE_RESULT
 
     >>> # load document image
@@ -161,14 +162,15 @@ print(answer)
 
     ```py
     >>> import re
-    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel, infer_device
+    >>> from accelerate import Accelerator
     >>> from datasets import load_dataset
+    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel
     >>> import torch
 
     >>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
     >>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
 
-    >>> device = infer_device()
+    >>> device = Accelerator().device
     >>> model.to(device)  # doctest: +IGNORE_RESULT
 
     >>> # load document image
@@ -213,11 +215,6 @@ print(answer)
 
 [[autodoc]] DonutImageProcessorFast
     - preprocess
-
-## DonutFeatureExtractor
-
-[[autodoc]] DonutFeatureExtractor
-    - __call__
 
 ## DonutProcessor
 

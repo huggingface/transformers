@@ -148,12 +148,12 @@ for label, score in zip(candidate_labels, probs):
   ```
 
 ## Resources
+
 - Refer to the [Kakao Brain’s Open Source ViT, ALIGN, and the New COYO Text-Image Dataset](https://huggingface.co/blog/vit-align) blog post for more details.
 
 ## AlignConfig
 
 [[autodoc]] AlignConfig
-    - from_text_vision_configs
 
 ## AlignTextConfig
 
@@ -166,6 +166,7 @@ for label, score in zip(candidate_labels, probs):
 ## AlignProcessor
 
 [[autodoc]] AlignProcessor
+    - __call__
 
 ## AlignModel
 

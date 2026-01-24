@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,14 +16,14 @@
 import logging
 from copy import deepcopy
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.getLogger(__name__)
 
 
-class ColPaliConfig(PretrainedConfig):
+class ColPaliConfig(PreTrainedConfig):
     r"""
     Configuration class to store the configuration of a [`ColPaliForRetrieval`]. It is used to instantiate an instance
     of `ColPaliForRetrieval` according to the specified arguments, defining the model architecture following the methodology
@@ -36,13 +35,13 @@ class ColPaliConfig(PretrainedConfig):
     Note that contrarily to what the class name suggests (actually the name refers to the ColPali **methodology**), you can
     use a different VLM backbone model than PaliGemma by passing the corresponding VLM configuration to the class constructor.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        vlm_config (`PretrainedConfig`, *optional*):
+        vlm_config (`PreTrainedConfig`, *optional*):
             Configuration of the VLM backbone model.
-        text_config (`PretrainedConfig`, *optional*):
+        text_config (`PreTrainedConfig`, *optional*):
             Configuration of the text backbone model. Overrides the `text_config` attribute of the `vlm_config` if provided.
         embedding_dim (`int`, *optional*, defaults to 128):
             Dimension of the multi-vector embeddings produced by the model.
@@ -58,7 +57,7 @@ class ColPaliConfig(PretrainedConfig):
     """
 
     model_type = "colpali"
-    sub_configs = {"vlm_config": PretrainedConfig, "text_config": AutoConfig}
+    sub_configs = {"vlm_config": PreTrainedConfig, "text_config": AutoConfig}
 
     def __init__(
         self,
@@ -83,11 +82,9 @@ class ColPaliConfig(PretrainedConfig):
                     f"The model type `{vlm_config['model_type']}` is not supported. Please provide a valid model type."
                 )
             vlm_config = CONFIG_MAPPING[vlm_config["model_type"]](**vlm_config)
-        elif isinstance(vlm_config, PretrainedConfig):
-            vlm_config = vlm_config
-        else:
+        elif not isinstance(vlm_config, PreTrainedConfig):
             raise TypeError(
-                f"Invalid type for `vlm_config`. Expected `PretrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
+                f"Invalid type for `vlm_config`. Expected `PreTrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
             )
 
         self.vlm_config = vlm_config

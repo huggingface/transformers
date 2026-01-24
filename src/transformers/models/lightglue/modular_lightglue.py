@@ -11,47 +11,46 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Union
 
 import numpy as np
 import torch
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 
-from ...configuration_utils import PretrainedConfig
-from ...image_utils import ImageInput, is_vision_available, to_numpy_array
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TensorType, auto_docstring, is_matplotlib_available, logging
+from ...utils import ModelOutput, TensorType, auto_docstring, logging
 from ...utils.generic import can_return_tuple
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere.modeling_cohere import apply_rotary_pos_emb
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
-from ..superglue.image_processing_superglue import SuperGlueImageProcessor, validate_and_format_image_pairs
+from ..superglue.image_processing_superglue import (
+    SuperGlueImageProcessor,
+    SuperGlueImageProcessorKwargs,
+)
+from ..superglue.image_processing_superglue_fast import SuperGlueImageProcessorFast
 from ..superpoint import SuperPointConfig
-
-
-if is_vision_available():
-    from PIL import Image, ImageDraw
 
 
 logger = logging.get_logger(__name__)
 
 
-class LightGlueConfig(PretrainedConfig):
+class LightGlueConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LightGlueForKeypointMatching`]. It is used to
     instantiate a LightGlue model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the LightGlue
     [ETH-CVG/lightglue_superpoint](https://huggingface.co/ETH-CVG/lightglue_superpoint) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):
@@ -206,142 +205,38 @@ class LightGlueKeypointMatchingOutput(ModelOutput):
         `config.output_attentions=True`
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    matches: Optional[torch.FloatTensor] = None
-    matching_scores: Optional[torch.FloatTensor] = None
-    keypoints: Optional[torch.FloatTensor] = None
-    prune: Optional[torch.IntTensor] = None
-    mask: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    matches: torch.FloatTensor | None = None
+    matching_scores: torch.FloatTensor | None = None
+    keypoints: torch.FloatTensor | None = None
+    prune: torch.IntTensor | None = None
+    mask: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+
+
+class LightGlueImageProcessorKwargs(SuperGlueImageProcessorKwargs):
+    pass
 
 
 class LightGlueImageProcessor(SuperGlueImageProcessor):
     def post_process_keypoint_matching(
         self,
-        outputs: LightGlueKeypointMatchingOutput,
-        target_sizes: Union[TensorType, list[tuple]],
+        outputs: "LightGlueKeypointMatchingOutput",
+        target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
 
-    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr.EfficientLoFTRImageProcessor.visualize_keypoint_matching with EfficientLoFTR->LightGlue
-    def visualize_keypoint_matching(
+
+class LightGlueImageProcessorFast(SuperGlueImageProcessorFast):
+    def post_process_keypoint_matching(
         self,
-        images: ImageInput,
-        keypoint_matching_output: list[dict[str, torch.Tensor]],
-    ) -> list["Image.Image"]:
-        """
-        Plots the image pairs side by side with the detected keypoints as well as the matching between them.
-
-        Args:
-            images (`ImageInput`):
-                Image pairs to plot. Same as `LightGlueImageProcessor.preprocess`. Expects either a list of 2
-                images or a list of list of 2 images list with pixel values ranging from 0 to 255.
-            keypoint_matching_output (List[Dict[str, torch.Tensor]]]):
-                A post processed keypoint matching output
-
-        Returns:
-            `List[PIL.Image.Image]`: A list of PIL images, each containing the image pairs side by side with the detected
-            keypoints as well as the matching between them.
-        """
-        images = validate_and_format_image_pairs(images)
-        images = [to_numpy_array(image) for image in images]
-        image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]
-
-        results = []
-        for image_pair, pair_output in zip(image_pairs, keypoint_matching_output):
-            height0, width0 = image_pair[0].shape[:2]
-            height1, width1 = image_pair[1].shape[:2]
-            plot_image = np.zeros((max(height0, height1), width0 + width1, 3), dtype=np.uint8)
-            plot_image[:height0, :width0] = image_pair[0]
-            plot_image[:height1, width0:] = image_pair[1]
-
-            plot_image_pil = Image.fromarray(plot_image)
-            draw = ImageDraw.Draw(plot_image_pil)
-
-            keypoints0_x, keypoints0_y = pair_output["keypoints0"].unbind(1)
-            keypoints1_x, keypoints1_y = pair_output["keypoints1"].unbind(1)
-            for keypoint0_x, keypoint0_y, keypoint1_x, keypoint1_y, matching_score in zip(
-                keypoints0_x, keypoints0_y, keypoints1_x, keypoints1_y, pair_output["matching_scores"]
-            ):
-                color = self._get_color(matching_score)
-                draw.line(
-                    (keypoint0_x, keypoint0_y, keypoint1_x + width0, keypoint1_y),
-                    fill=color,
-                    width=3,
-                )
-                draw.ellipse((keypoint0_x - 2, keypoint0_y - 2, keypoint0_x + 2, keypoint0_y + 2), fill="black")
-                draw.ellipse(
-                    (keypoint1_x + width0 - 2, keypoint1_y - 2, keypoint1_x + width0 + 2, keypoint1_y + 2),
-                    fill="black",
-                )
-
-            results.append(plot_image_pil)
-        return results
-
-    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr.EfficientLoFTRImageProcessor._get_color
-    def _get_color(self, score):
-        """Maps a score to a color."""
-        r = int(255 * (1 - score))
-        g = int(255 * score)
-        b = 0
-        return (r, g, b)
-
-    def plot_keypoint_matching(self, images: ImageInput, keypoint_matching_output: LightGlueKeypointMatchingOutput):
-        """
-        Plots the image pairs side by side with the detected keypoints as well as the matching between them. Requires
-        matplotlib to be installed.
-
-        .. deprecated::
-            `plot_keypoint_matching` is deprecated and will be removed in a future version. Use `visualize_keypoint_matching` instead.
-
-        Args:
-            images (`ImageInput`):
-                Image pairs to plot. Same as `LightGlueImageProcessor.preprocess`. Expects either a list of 2 images or
-                a list of list of 2 images list with pixel values ranging from 0 to 255.
-            keypoint_matching_output ([`LightGlueKeypointMatchingOutput`]):
-                Raw outputs of the model.
-        """
-        warnings.warn(
-            "`plot_keypoint_matching` is deprecated and will be removed in transformers v. "
-            "Use `visualize_keypoint_matching` instead.",
-            FutureWarning,
-        )
-
-        if is_matplotlib_available():
-            import matplotlib.pyplot as plt
-        else:
-            raise ImportError("Please install matplotlib to use `plot_keypoint_matching` method")
-
-        images = validate_and_format_image_pairs(images)
-        images = [to_numpy_array(image) for image in images]
-        image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]
-
-        for image_pair, pair_output in zip(image_pairs, keypoint_matching_output):
-            height0, width0 = image_pair[0].shape[:2]
-            height1, width1 = image_pair[1].shape[:2]
-            plot_image = np.zeros((max(height0, height1), width0 + width1, 3))
-            plot_image[:height0, :width0] = image_pair[0] / 255.0
-            plot_image[:height1, width0:] = image_pair[1] / 255.0
-            plt.imshow(plot_image)
-            plt.axis("off")
-
-            keypoints0_x, keypoints0_y = pair_output["keypoints0"].unbind(1)
-            keypoints1_x, keypoints1_y = pair_output["keypoints1"].unbind(1)
-            for keypoint0_x, keypoint0_y, keypoint1_x, keypoint1_y, matching_score in zip(
-                keypoints0_x, keypoints0_y, keypoints1_x, keypoints1_y, pair_output["matching_scores"]
-            ):
-                plt.plot(
-                    [keypoint0_x, keypoint1_x + width0],
-                    [keypoint0_y, keypoint1_y],
-                    color=plt.get_cmap("RdYlGn")(matching_score.item()),
-                    alpha=0.9,
-                    linewidth=0.5,
-                )
-                plt.scatter(keypoint0_x, keypoint0_y, c="black", s=2)
-                plt.scatter(keypoint1_x + width0, keypoint1_y, c="black", s=2)
-            plt.show()
+        outputs: "LightGlueKeypointMatchingOutput",
+        target_sizes: TensorType | list[tuple],
+        threshold: float = 0.0,
+    ) -> list[dict[str, torch.Tensor]]:
+        return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
 
 
 class LightGluePositionalEncoder(nn.Module):
@@ -350,8 +245,8 @@ class LightGluePositionalEncoder(nn.Module):
         self.projector = nn.Linear(2, config.descriptor_dim // config.num_attention_heads // 2, bias=False)
 
     def forward(
-        self, keypoints: torch.Tensor, output_hidden_states: Optional[bool] = False
-    ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+        self, keypoints: torch.Tensor, output_hidden_states: bool | None = False
+    ) -> tuple[torch.Tensor] | tuple[torch.Tensor, torch.Tensor]:
         projected_keypoints = self.projector(keypoints)
         embeddings = projected_keypoints.repeat_interleave(2, dim=-1)
         cosines = torch.cos(embeddings)
@@ -362,15 +257,19 @@ class LightGluePositionalEncoder(nn.Module):
 
 
 class LightGlueAttention(LlamaAttention):
+    def __init__(self, config: LightGlueConfig, layer_idx: int):
+        super().__init__()
+        del self.rotary_emb
+
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -434,9 +333,9 @@ class LightGlueTransformerLayer(nn.Module):
         descriptors: torch.Tensor,
         keypoints: torch.Tensor,
         attention_mask: torch.Tensor,
-        output_hidden_states: Optional[bool] = False,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]], Optional[tuple[torch.Tensor]]]:
+        output_hidden_states: bool | None = False,
+        output_attentions: bool | None = False,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor] | None, tuple[torch.Tensor] | None]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -582,6 +481,7 @@ class LightGluePreTrainedModel(PreTrainedModel):
     config: LightGlueConfig
     base_model_prefix = "lightglue"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = False
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -699,7 +599,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         return np.clip(threshold, 0, 1)
 
     def _keypoint_processing(
-        self, descriptors: torch.Tensor, keypoints: torch.Tensor, output_hidden_states: Optional[bool] = False
+        self, descriptors: torch.Tensor, keypoints: torch.Tensor, output_hidden_states: bool | None = False
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         descriptors = descriptors.detach().contiguous()
         projected_descriptors = self.input_projection(descriptors)
@@ -852,9 +752,9 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         descriptors: torch.Tensor,
         height: int,
         width: int,
-        mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, tuple, tuple]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1024,10 +924,11 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-    ) -> Union[tuple, LightGlueKeypointMatchingOutput]:
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        **kwargs,
+    ) -> Union[tuple, "LightGlueKeypointMatchingOutput"]:
         loss = None
         if labels is not None:
             raise ValueError("LightGlue is not trainable, no labels should be provided.")
@@ -1075,4 +976,10 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         )
 
 
-__all__ = ["LightGluePreTrainedModel", "LightGlueForKeypointMatching", "LightGlueConfig", "LightGlueImageProcessor"]
+__all__ = [
+    "LightGluePreTrainedModel",
+    "LightGlueForKeypointMatching",
+    "LightGlueConfig",
+    "LightGlueImageProcessor",
+    "LightGlueImageProcessorFast",
+]

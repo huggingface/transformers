@@ -130,11 +130,13 @@ visualizer("Plants create energy through a process known as")
     # update model config with padding token
     model.config.pad_token_id
     ```
+
 - It is recommended to initialize the `embed_tokens` layer with the following code to ensure encoding the padding token outputs zeros.
 
     ```py
     self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.config.padding_idx)
     ```
+
 - The tokenizer is a byte-pair encoding model based on [SentencePiece](https://github.com/google/sentencepiece). During decoding, if the first token is the start of the word (for example, "Banana"), the tokenizer doesn't prepend the prefix space to the string.
 - Don't use the `dtype` parameter in [`~AutoModel.from_pretrained`] if you're using FlashAttention-2 because it only supports fp16 or bf16. You should use [Automatic Mixed Precision](https://pytorch.org/tutorials/recipes/recipes/amp_recipe.html), set fp16 or bf16 to `True` if using [`Trainer`], or use [torch.autocast](https://pytorch.org/docs/stable/amp.html#torch.autocast).
 
@@ -142,21 +144,16 @@ visualizer("Plants create energy through a process known as")
 
 [[autodoc]] LlamaConfig
 
-
 ## LlamaTokenizer
 
 [[autodoc]] LlamaTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## LlamaTokenizerFast
 
 [[autodoc]] LlamaTokenizerFast
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - update_post_processor
     - save_vocabulary
 
@@ -164,7 +161,6 @@ visualizer("Plants create energy through a process known as")
 
 [[autodoc]] LlamaModel
     - forward
-
 
 ## LlamaForCausalLM
 

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_siglip2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,22 +18,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Siglip2TextConfig(PretrainedConfig):
+class Siglip2TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Siglip2TextModel`]. It is used to instantiate a
     Siglip2 text encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the text encoder of the Siglip2
     [google/siglip2-base-patch16-224](https://huggingface.co/google/siglip2-base-patch16-224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
@@ -104,7 +104,10 @@ class Siglip2TextConfig(PretrainedConfig):
         projection_size=None,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -118,15 +121,15 @@ class Siglip2TextConfig(PretrainedConfig):
         self.projection_size = projection_size if projection_size is not None else hidden_size
 
 
-class Siglip2VisionConfig(PretrainedConfig):
+class Siglip2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Siglip2VisionModel`]. It is used to instantiate a
     Siglip2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the Siglip2
     [google/siglip2-base-patch16-naflex](https://huggingface.co/google/siglip2-base-patch16-naflex) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -200,15 +203,15 @@ class Siglip2VisionConfig(PretrainedConfig):
         self.num_patches = num_patches
 
 
-class Siglip2Config(PretrainedConfig):
+class Siglip2Config(PreTrainedConfig):
     r"""
     [`Siglip2Config`] is the configuration class to store the configuration of a [`Siglip2Model`]. It is used to
     instantiate a Siglip2 model according to the specified arguments, defining the text model and vision model configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Siglip2
     [google/siglip2-base-patch16-224](https://huggingface.co/google/siglip2-base-patch16-224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -239,27 +242,30 @@ class Siglip2Config(PretrainedConfig):
     >>> config_text = Siglip2TextConfig()
     >>> config_vision = Siglip2VisionConfig()
 
-    >>> config = Siglip2Config.from_text_vision_configs(config_text, config_vision)
+    >>> config = Siglip2Config(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "siglip2"
     sub_configs = {"text_config": Siglip2TextConfig, "vision_config": Siglip2VisionConfig}
 
     def __init__(self, text_config=None, vision_config=None, **kwargs):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = {}
+            text_config = Siglip2TextConfig()
             logger.info("`text_config` is `None`. Initializing the `Siglip2TextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = Siglip2TextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
+            vision_config = Siglip2VisionConfig()
             logger.info("`vision_config` is `None`. initializing the `Siglip2VisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = Siglip2VisionConfig(**vision_config)
 
-        self.text_config = Siglip2TextConfig(**text_config)
-        self.vision_config = Siglip2VisionConfig(**vision_config)
-
+        self.text_config = text_config
+        self.vision_config = vision_config
         self.initializer_factor = 1.0
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["Siglip2Config", "Siglip2TextConfig", "Siglip2VisionConfig"]

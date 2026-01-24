@@ -54,7 +54,7 @@ else:
     from builtins import object as DeepSpeedConfig
 
 
-class HfDeepSpeedConfig(DeepSpeedConfig):
+class HfDeepSpeedConfig(DeepSpeedConfig):  # noqa UP004
     """
     This object contains a DeepSpeed configuration dictionary and can be quickly queried for things like zero stage.
 
@@ -130,58 +130,11 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
     fill_only = partialmethod(fill_match, must_match=False)
 
-    def override_training_args_from_deepspeed(self, args):
-        """
-        Override TrainingArguments based on DeepSpeed config values to ensure compatibility.
-
-        This method ensures that the DeepSpeed config takes precedence over TrainingArguments
-        defaults when there are conflicts, particularly for mixed precision settings.
-
-        Args:
-            args: TrainingArguments object to potentially modify
-        """
-        # Check precision settings in DeepSpeed config and override TrainingArguments accordingly
-        # Only override defaults, not explicit user settings
-
-        # Check if user explicitly set precision options (we assume defaults are False)
-        user_set_fp16 = args.fp16 is True
-        user_set_bf16 = args.bf16 is True
-
-        if self.is_true("fp16.enabled"):
-            # DeepSpeed config explicitly enables fp16
-            if not user_set_fp16 and not user_set_bf16:
-                # User didn't explicitly set either, so apply DeepSpeed config
-                args.fp16 = True
-                args.bf16 = False
-            elif user_set_bf16 and not user_set_fp16:
-                # User explicitly chose bf16, but DeepSpeed config wants fp16
-                # This is a potential conflict - let user choice win but log a warning
-                pass  # Keep user's bf16=True, fp16=False
-        elif self.is_true("bf16.enabled"):
-            # DeepSpeed config explicitly enables bf16
-            if not user_set_fp16 and not user_set_bf16:
-                # User didn't explicitly set either, so apply DeepSpeed config
-                args.bf16 = True
-                args.fp16 = False
-            elif user_set_fp16 and not user_set_bf16:
-                # User explicitly chose fp16, but DeepSpeed config wants bf16
-                # This is a potential conflict - let user choice win but log a warning
-                pass  # Keep user's fp16=True, bf16=False
-        elif self.is_false("fp16.enabled") and self.is_false("bf16.enabled"):
-            # Both are explicitly disabled in DeepSpeed config
-            if not user_set_fp16 and not user_set_bf16:
-                # User didn't explicitly set either, so apply DeepSpeed config (fp32)
-                args.fp16 = False
-                args.bf16 = False
-
     def trainer_config_process(self, args, auto_find_batch_size=False):
         """
         Adjust the config with `TrainingArguments` values. This stage is run during `TrainingArguments` object
         creation.
         """
-        # First, override TrainingArguments based on DeepSpeed config to ensure compatibility
-        self.override_training_args_from_deepspeed(args)
-
         # DeepSpeed does:
         # train_batch_size = world_size * train_micro_batch_size_per_gpu * gradient_accumulation_steps
         train_batch_size = args.world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
@@ -217,12 +170,6 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         self.fill_match("scheduler.params.warmup_max_lr", args.learning_rate, "learning_rate")
         # total_num_steps - will get set in trainer_config_finalize
 
-        # fp16
-        if args.fp16 or args.fp16_full_eval:
-            fp16_backend = "apex" if args.fp16_backend == "apex" else "amp"
-        else:
-            fp16_backend = None
-
         if args.save_on_each_node:
             # deepspeed uses shared storage by default. Let's override this setting if save_on_each_node == True
             self.config["checkpoint"] = self.config.get("checkpoint", {})
@@ -230,26 +177,16 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         # amp: similar to the pytorch native amp - it has a bunch of optional params but we won't set
         # any here unless the user did the work
-        self.fill_match(
-            "fp16.enabled",
-            ((args.fp16 or args.fp16_full_eval) and fp16_backend == "amp"),
-            "fp16|fp16_full_eval+fp16_backend(amp)",
-        )
-
-        # apex: delegates amp work to apex (which needs to be available), but it cannot be used with any
-        # ZeRO features
-        self.fill_match("amp.enabled", fp16_backend == "apex", "fp16+fp16_backend(apex)")
-        self.fill_match("amp.opt_level", args.fp16_opt_level, "fp16_opt_level")
-
+        self.fill_match("fp16.enabled", (args.fp16 or args.fp16_full_eval), "fp16|fp16_full_eval")
         self.fill_match("bf16.enabled", (args.bf16 or args.bf16_full_eval), "bf16|bf16_full_eval")
 
         # deepspeed's default mode is fp16 unless there is a config that says differently
         if self.is_true("bf16.enabled"):
             self._dtype = torch.bfloat16
-        elif self.is_false("fp16.enabled"):
-            self._dtype = torch.float32
-        else:
+        elif self.is_true("fp16.enabled"):
             self._dtype = torch.float16
+        else:
+            self._dtype = torch.float32
 
     def trainer_config_finalize(self, args, model, num_training_steps):
         """
@@ -268,17 +205,20 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         hidden_size_auto_keys = [x for x in hidden_size_based_keys if self.is_auto(x)]
 
         if len(hidden_size_auto_keys) > 0:
-            if hasattr(model.config, "hidden_size"):
-                hidden_size = model.config.hidden_size
-            elif hasattr(model.config, "hidden_sizes"):
-                # if there are many hidden sizes pick the largest one
-                hidden_size = max(model.config.hidden_sizes)
-            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_size"):
-                hidden_size = model.config.text_config.hidden_size
-            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_sizes"):
-                # if there are many hidden sizes pick the largest one
-                hidden_size = max(model.config.text_config.hidden_sizes)
-            else:
+            hidden_size = None
+            if hasattr(model, "config"):
+                if hasattr(model.config, "hidden_size"):
+                    hidden_size = model.config.hidden_size
+                elif hasattr(model.config, "hidden_sizes"):
+                    # if there are many hidden sizes pick the largest one
+                    hidden_size = max(model.config.hidden_sizes)
+                elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_size"):
+                    hidden_size = model.config.text_config.hidden_size
+                elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_sizes"):
+                    # if there are many hidden sizes pick the largest one
+                    hidden_size = max(model.config.text_config.hidden_sizes)
+
+            if hidden_size is None:
                 raise ValueError(
                     "The model's config file has neither `hidden_size` nor `hidden_sizes` entry, "
                     "therefore it's not possible to automatically fill out the following `auto` entries "
@@ -364,6 +304,15 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict):
         state_dict._metadata = metadata
 
     error_msgs = []
+    meta_model_state_dict = model_to_load.state_dict()
+    missing_keys = set(meta_model_state_dict.keys())
+
+    prefix_model = getattr(model_to_load, "base_model_prefix", None)
+    # take care of the case where in the checkpoint we don't have the prefix
+    state_dict = {
+        (f"{prefix_model}.{k}" if meta_model_state_dict.get(f"{prefix_model}.{k}") is not None else k): v
+        for k, v in state_dict.items()
+    }
 
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
@@ -374,13 +323,21 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict):
         args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
         # Parameters of module and children will start with prefix. We can exit early if there are none in this
         # state_dict
-        if is_deepspeed_zero3_enabled() and len([key for key in state_dict if key.startswith(prefix)]) > 0:
+        if is_deepspeed_zero3_enabled():
             import deepspeed
 
             # In sharded models, each shard has only part of the full state_dict, so only gather
             # parameters that are in the current state_dict.
             named_parameters = dict(module.named_parameters(prefix=prefix[:-1], recurse=False))
-            params_to_gather = [named_parameters[k] for k in state_dict if k in named_parameters]
+            params_to_gather = []
+            for k in named_parameters:
+                if k in state_dict:
+                    param = named_parameters[k]
+                    # crutial to not init the weight again
+                    param._is_hf_initialized = True
+                    params_to_gather.append(param)
+                    missing_keys.discard(k)
+
             if len(params_to_gather) > 0:
                 # because zero3 puts placeholders in model params, this context
                 # manager gathers (unpartitions) the params of the current layer, then loads from
@@ -395,7 +352,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict):
 
     load(model_to_load, state_dict, assign_to_params_buffers=False)
 
-    return error_msgs
+    return error_msgs, missing_keys
 
 
 def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps, model_parameters):
@@ -416,11 +373,6 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
 
     optimizer = None
     if "optimizer" in config:
-        if args.adafactor:
-            raise ValueError(
-                "--adafactor was passed, but also found `optimizer` configured in the DeepSpeed config. "
-                "Only one optimizer can be configured."
-            )
         optimizer = DummyOptim(params=model_parameters)
     else:
         if hf_deepspeed_config.is_offload():

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -18,9 +17,8 @@
 import os
 import warnings
 from enum import Enum
-from typing import Optional, Union
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 from .utils import DataProcessor, InputExample, InputFeatures
 
@@ -28,7 +26,7 @@ from .utils import DataProcessor, InputExample, InputFeatures
 logger = logging.get_logger(__name__)
 
 DEPRECATION_WARNING = (
-    "This {0} will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets "
+    "This {0} will be removed from the library soon, preprocessing should be handled with the Hugging Face Datasets "
     "library. You can have a look at this example script for pointers: "
     "https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py"
 )
@@ -37,7 +35,7 @@ DEPRECATION_WARNING = (
 def glue_convert_examples_to_features(
     examples: list[InputExample],
     tokenizer: PreTrainedTokenizer,
-    max_length: Optional[int] = None,
+    max_length: int | None = None,
     task=None,
     label_list=None,
     output_mode=None,
@@ -66,7 +64,7 @@ def glue_convert_examples_to_features(
 def _glue_convert_examples_to_features(
     examples: list[InputExample],
     tokenizer: PreTrainedTokenizer,
-    max_length: Optional[int] = None,
+    max_length: int | None = None,
     task=None,
     label_list=None,
     output_mode=None,
@@ -85,7 +83,7 @@ def _glue_convert_examples_to_features(
 
     label_map = {label: i for i, label in enumerate(label_list)}
 
-    def label_from_example(example: InputExample) -> Union[int, float, None]:
+    def label_from_example(example: InputExample) -> int | float | None:
         if example.label is None:
             return None
         if output_mode == "classification":

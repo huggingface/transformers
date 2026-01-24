@@ -17,14 +17,13 @@ Processor class for Phi4Multimodal
 """
 
 import re
-from typing import Optional, Union
 
 from ...audio_utils import AudioInput
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
@@ -38,31 +37,8 @@ class Phi4MultimodalProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Phi4MultimodalProcessor(ProcessorMixin):
-    r"""
-    Constructs a Phi4Multimodal processor which raps an image processor, a audio processor, and a GPT tokenizer into a single processor.
-
-    [`Phi4MultimodalProcessor`] offers all the functionalities of [`Phi4MultimodalImageProcessorFast`] and [`GPT2Tokenizer`]. See the
-    [`~Phi4MultimodalProcessor.__call__`] and [`~Phi4MultimodalProcessor.decode`] for more information.
-
-    Args:
-        image_processor (`Phi4MultimodalImageProcessorFast`):
-            The image processor to use for images.
-        audio_processor (`Phi4MultimodalFeatureExtractor`):
-            The audio processor to use for audio inputs.
-        tokenizer (`GPT2TokenizerFast`):
-            The tokenizer to use for text.
-        fake_image_token_pattern (`str`, *optional*, defaults to `r"<\|image_\d+\|>"`):
-            The fake image token pattern.
-        fake_audio_token_pattern (`str`, *optional*, defaults to `r"<\|audio_\d+\|>"`):
-            The fake audio token pattern.
-    """
-
-    attributes = ["image_processor", "audio_processor", "tokenizer"]
-    tokenizer_class = "GPT2TokenizerFast"
-    image_processor_class = "Phi4MultimodalImageProcessorFast"
-    audio_processor_class = "Phi4MultimodalFeatureExtractor"
-
     def __init__(
         self,
         image_processor,
@@ -76,31 +52,15 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         self.audio_token_id = tokenizer.audio_token_id
         super().__init__(image_processor, audio_processor, tokenizer, **kwargs)
 
+    @auto_docstring
     def __call__(
         self,
-        text: Union[TextInput, list[TextInput]],
-        images: Optional[ImageInput] = None,
-        audio: Optional[AudioInput] = None,
+        text: TextInput | list[TextInput],
+        images: ImageInput | None = None,
+        audio: AudioInput | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forards the `text`
-        and `kwargs` arguments to GPT2Tokenizer's [`~GPT2Tokenizer.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        Phi4MultimodalImageProcessorFast's [`~Phi4MultimodalImageProcessorFast.__call__`] if `images` is not `None`. Please refer to the doctsring
-        of the above two methods for more information.
-
-        Args:
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            audio (`list[Union[np.ndarray, torch.Tensor]]`):
-                List of the audios to be prepared.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

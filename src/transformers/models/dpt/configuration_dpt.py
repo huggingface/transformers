@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,27 +13,25 @@
 # limitations under the License.
 """DPT model configuration"""
 
-import copy
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto.configuration_auto import CONFIG_MAPPING
+from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from ..bit import BitConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class DPTConfig(PretrainedConfig):
+class DPTConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DPTModel`]. It is used to instantiate an DPT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the DPT
     [Intel/dpt-large](https://huggingface.co/Intel/dpt-large) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -104,7 +101,7 @@ class DPTConfig(PretrainedConfig):
             Used only for the `hybrid` embedding type. The shape of the feature maps of the backbone.
         neck_ignore_stages (`list[int]`, *optional*, defaults to `[0, 1]`):
             Used only for the `hybrid` embedding type. The stages of the readout layers to ignore.
-        backbone_config (`Union[dict[str, Any], PretrainedConfig]`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `BitConfig()`):
             The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to
             leverage the [`AutoBackbone`] API.
         backbone (`str`, *optional*):
@@ -140,6 +137,7 @@ class DPTConfig(PretrainedConfig):
     ```"""
 
     model_type = "dpt"
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
@@ -181,8 +179,6 @@ class DPTConfig(PretrainedConfig):
         pooler_act="tanh",
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         self.hidden_size = hidden_size
         self.is_hybrid = is_hybrid
 
@@ -200,11 +196,9 @@ class DPTConfig(PretrainedConfig):
             if isinstance(backbone_config, dict):
                 logger.info("Initializing the config with a `BiT` backbone.")
                 backbone_config = BitConfig(**backbone_config)
-            elif isinstance(backbone_config, PretrainedConfig):
-                backbone_config = backbone_config
-            else:
+            elif not isinstance(backbone_config, PreTrainedConfig):
                 raise ValueError(
-                    f"backbone_config must be a dictionary or a `PretrainedConfig`, got {backbone_config.__class__}."
+                    f"backbone_config must be a dictionary or a `PreTrainedConfig`, got {backbone_config.__class__}."
                 )
             self.backbone_config = backbone_config
             self.backbone_featmap_shape = backbone_featmap_shape
@@ -276,27 +270,7 @@ class DPTConfig(PretrainedConfig):
         self.semantic_classifier_dropout = semantic_classifier_dropout
         self.pooler_output_size = pooler_output_size if pooler_output_size else hidden_size
         self.pooler_act = pooler_act
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
-            `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-
-        if output["backbone_config"] is not None:
-            output["backbone_config"] = self.backbone_config.to_dict()
-
-        output["model_type"] = self.__class__.model_type
-        return output
-
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["DPTConfig"]

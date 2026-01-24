@@ -33,7 +33,6 @@ The instruction-tuned variant was fine-tuned with supervised learning on instruc
 
 You can find all the original Gemma checkpoints under the [Gemma](https://huggingface.co/collections/google/gemma-release-65d5efbccdbb8c4202ec078b) release.
 
-
 > [!TIP]
 > Click on the Gemma models in the right sidebar for more examples of how to apply Gemma to different language tasks.
 
@@ -162,7 +161,6 @@ visualizer("LLMs generate text through a process known as")
 ## GemmaTokenizer
 
 [[autodoc]] GemmaTokenizer
-
 
 ## GemmaTokenizerFast
 

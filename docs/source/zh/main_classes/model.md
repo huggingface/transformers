@@ -8,14 +8,14 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 # 模型
 
-基类 [`PreTrainedModel`]、[`TFPreTrainedModel`] 和 [`FlaxPreTrainedModel`] 实现了从本地文件或目录加载/保存模型的常用方法，或者从库上提供的预训练模型配置（从 HuggingFace 的 AWS S3 存储库下载）加载模型。
+基类 [`PreTrainedModel`] 实现了从本地文件或目录加载/保存模型的常用方法，或者从库上提供的预训练模型配置（从 HuggingFace 的 AWS S3 存储库下载）加载模型。
 
 [`PreTrainedModel`] 和 [`TFPreTrainedModel`] 还实现了一些所有模型共有的方法：
 
 - 在向量词嵌入增加新词汇时调整输入标记（token）的大小
 - 对模型的注意力头进行修剪。
 
-其他的通用方法在 [`~modeling_utils.ModuleUtilsMixin`]（用于 PyTorch 模型）和 [`~modeling_tf_utils.TFModuleUtilsMixin`]（用于 TensorFlow 模型）中定义；文本生成方面的方法则定义在 [`~generation.GenerationMixin`]（用于 PyTorch 模型）、[`~generation.TFGenerationMixin`]（用于 TensorFlow 模型）和 [`~generation.FlaxGenerationMixin`]（用于 Flax/JAX 模型）中。
+其他的通用方法在 [`~modeling_utils.ModuleUtilsMixin`]（用于 PyTorch 模型）中定义；文本生成方面的方法则定义在 [`~generation.GenerationMixin`]（用于 PyTorch 模型）中。
 
 ## PreTrainedModel
 
@@ -109,6 +109,3 @@ model = AutoModel.from_config(config)
 
 ## 推送到 Hub
 [[autodoc]] utils.PushToHubMixin
-
-## 分片检查点
-[[autodoc]] modeling_utils.load_sharded_checkpoint

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +14,7 @@
 """Video processor class for LLaVa-NeXT-Video."""
 
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from ...processing_utils import Unpack, VideosKwargs
 from ...video_processing_utils import BaseVideoProcessor
-
-
-class LlavaNextVideoFastVideoProcessorInitKwargs(VideosKwargs): ...
 
 
 class LlavaNextVideoVideoProcessor(BaseVideoProcessor):
@@ -35,11 +30,6 @@ class LlavaNextVideoVideoProcessor(BaseVideoProcessor):
     do_normalize = True
     do_convert_rgb = True
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
-    valid_kwargs = LlavaNextVideoFastVideoProcessorInitKwargs
-    model_input_names = ["pixel_values_videos"]
-
-    def __init__(self, **kwargs: Unpack[LlavaNextVideoFastVideoProcessorInitKwargs]):
-        super().__init__(**kwargs)
 
 
 __all__ = ["LlavaNextVideoVideoProcessor"]

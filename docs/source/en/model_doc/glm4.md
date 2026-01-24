@@ -1,4 +1,4 @@
-<!--Copyright 2025 The GLM & ZhipuAI team and The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The ZhipuAI Inc. and The HuggingFace Inc. team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -15,18 +15,18 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2024-06-18 and added to Hugging Face Transformers on 2025-04-09.*
 
-# Glm4
+# GLM-4-0414
 
 ## Overview
 
 The GLM family welcomes new members [GLM-4-0414](https://huggingface.co/papers/2406.12793) series models.
 
-The **GLM-4-32B-0414** series models, featuring 32 billion parameters. Its performance is comparable to OpenAI’s GPT
-series and DeepSeek’s V3/R1 series. It also supports very user-friendly local deployment features. GLM-4-32B-Base-0414
+The **GLM-4-32B-0414** series models, featuring 32 billion parameters. Its performance is comparable to OpenAI's GPT
+series and DeepSeek's V3/R1 series. It also supports very user-friendly local deployment features. GLM-4-32B-Base-0414
 was pre-trained on 15T of high-quality data, including substantial reasoning-type synthetic data. This lays the
 foundation for subsequent reinforcement learning extensions. In the post-training stage, we employed human preference
 alignment for dialogue scenarios. Additionally, using techniques like rejection sampling and reinforcement learning, we
-enhanced the model’s performance in instruction following, engineering code, and function calling, thus strengthening
+enhanced the model's performance in instruction following, engineering code, and function calling, thus strengthening
 the atomic capabilities required for agent tasks. GLM-4-32B-0414 achieves good results in engineering code, Artifact
 generation, function calling, search-based Q&A, and report generation. In particular, on several benchmarks, such as
 code generation or specific Q&A tasks, GLM-4-32B-Base-0414 achieves comparable performance with those larger models like

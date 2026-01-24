@@ -16,14 +16,13 @@ import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Union
 
 import torch
 from filelock import FileLock
 from torch.utils.data import Dataset
 
 from ...models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import check_torch_load_is_safe, logging
 from ..processors.squad import SquadFeatures, SquadV1Processor, SquadV2Processor, squad_convert_examples_to_features
 
@@ -116,11 +115,11 @@ class SquadDataset(Dataset):
         self,
         args: SquadDataTrainingArguments,
         tokenizer: PreTrainedTokenizer,
-        limit_length: Optional[int] = None,
-        mode: Union[str, Split] = Split.train,
-        is_language_sensitive: Optional[bool] = False,
-        cache_dir: Optional[str] = None,
-        dataset_format: Optional[str] = "pt",
+        limit_length: int | None = None,
+        mode: str | Split = Split.train,
+        is_language_sensitive: bool = False,
+        cache_dir: str | None = None,
+        dataset_format: str = "pt",
     ):
         self.args = args
         self.is_language_sensitive = is_language_sensitive

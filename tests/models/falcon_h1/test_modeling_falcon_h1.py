@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ from transformers.testing_utils import (
     Expectations,
     get_device_properties,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -259,9 +258,6 @@ class FalconH1ModelTester:
 @require_torch
 class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FalconH1Model, FalconH1ForCausalLM) if is_torch_available() else ()
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -271,25 +267,38 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         {"feature-extraction": FalconH1Model, "text-generation": FalconH1ForCausalLM} if is_torch_available() else {}
     )
 
-    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        self.assertIsInstance(decoder_past_key_values, FalconHybridMambaAttentionDynamicCache)
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, FalconHybridMambaAttentionDynamicCache)
 
-        # (batch, head, seq_length, head_features)
-        expected_shape = (
-            batch_size,
-            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
-            cache_length,
-            config.hidden_size // config.num_attention_heads,
-        )
+        # (batch, kv heads, seq_length, head_dim)
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        expected_shape = (batch_size, num_heads, seq_length, head_dim)
 
         self.assertListEqual(
-            [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
-            [expected_shape] * len(decoder_past_key_values.key_cache),
+            [key_tensor.shape for key_tensor in past_key_values.key_cache],
+            [expected_shape] * len(past_key_values.key_cache),
         )
         self.assertListEqual(
-            [value_cache.shape for value_cache in decoder_past_key_values.value_cache],
-            [expected_shape] * len(decoder_past_key_values.value_cache),
+            [value_cache.shape for value_cache in past_key_values.value_cache],
+            [expected_shape] * len(past_key_values.value_cache),
         )
+
+    def _check_caches_are_equal(self, cache1, cache2):
+        if not isinstance(cache1, FalconHybridMambaAttentionDynamicCache) or not isinstance(
+            cache2, FalconHybridMambaAttentionDynamicCache
+        ):
+            raise ValueError("The wrong cache is being used!")
+
+        if not len(cache1) == len(cache2):
+            raise ValueError("Both caches do not have the same number of layers.")
+
+        num_layers = len(cache1)
+        for idx in range(num_layers):
+            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
+            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
+            torch.testing.assert_close(cache1.conv_states[idx], cache2.conv_states[idx])
+            torch.testing.assert_close(cache1.ssm_states[idx], cache2.ssm_states[idx])
 
     def setUp(self):
         self.model_tester = FalconH1ModelTester(self)
@@ -309,37 +318,6 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    # def test_initialization(self):
-    #     r"""
-    #     Overriding the test_initialization test as the A_log and D params of the FalconH1 mixer are initialized differently
-    #     """
-    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-    #     configs_no_init = _config_zero_init(config)
-    #     for model_class in self.all_model_classes:
-    #         model = model_class(config=configs_no_init)
-    #         for name, param in model.named_parameters():
-    #             if param.requires_grad:
-    #                 if "A_log" in name:
-    #                     A = torch.arange(1, config.mamba_n_heads + 1, dtype=torch.float32)
-    #                     torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
-    #                 elif "D" in name:
-    #                     D = torch.ones(config.mamba_n_heads, dtype=torch.float32)
-    #                     torch.testing.assert_close(param.data, D, rtol=1e-5, atol=1e-5)
-    #                 else:
-    #                     self.assertIn(
-    #                         ((param.data.mean() * 1e9).round() / 1e9).item(),
-    #                         [0.0, 1.0],
-    #                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-    #                     )
-
-    def test_mismatched_shapes_have_properly_initialized_weights(self):
-        r"""
-        Overriding the test_mismatched_shapes_have_properly_initialized_weights test because A_log and D params of the
-        FalconH1 mixer are initialized differently and we tested that in test_initialization
-        """
-        self.skipTest(reason="Cumbersome and redundant for FalconH1")
 
     def test_attention_outputs(self):
         r"""
@@ -421,7 +399,7 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
 @slow
 @require_torch
-@require_torch_gpu
+@require_torch_accelerator
 class FalconH1ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_falcon_h1_hard(self):
@@ -469,10 +447,36 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
             6.
         """
 
+        EXPECTED_TEXT_XPU = """
+            user
+            Tell me about the french revolution.
+            assistant
+            The French Revolution (1789–1799) was a period of radical social and political upheaval in France that fundamentally transformed the nation and had profound effects on the rest of Europe and the world. Here are the key aspects of the revolution:
+
+            ### **Causes**
+            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), extravagant spending by the monarchy, and inefficient taxation.
+            2. **Social Inequality**: The rigid class system (the Ancien Régime) favored the nobility and clergy while the majority of the population (the Third Estate) bore the brunt of taxation and had limited rights.
+            3. **Enlightenment Ideas**: Philosophers like Rousseau, Voltaire, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty.
+            4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to debates that exposed the weaknesses of the monarchy and the grievances of the common people.
+
+            ### **Key Events**
+            1. **Opening of the Revolution (1789)**:
+               - **Storming of the Bastille**: A symbol of royal tyranny, marking the start of the revolution.
+               - **Declaration of the Rights of Man and of the Citizen**: A foundational document proclaiming liberty, equality, and fraternity.
+
+            2. **Stages of the Revolution**:
+               - **Staffords' Reforms (1789–1791)**: Attempts to address grievances, including the abolition of feudal privileges and the introduction of the Civil Constitution of the Church.
+               - **Reign of Terror (1793–1794)**: Led by Maximilien Robespierre, characterized by mass executions of perceived enemies of the revolution, including King Louis XVI and Queen Marie Antoinette.
+               - **Thermidorian Reaction (1794)**: The fall of Robespierre and the end of the Reign of Terror.
+
+            3. **
+        """
+
         expected_texts = Expectations(
             {
                 (None, None): EXPECTED_TEXT_DEFAULT,
                 ("cuda", 8): EXPECTED_TEXT_A10,
+                ("xpu", None): EXPECTED_TEXT_XPU,
             }
         )
         EXPECTED_TEXT = expected_texts.get_expectation()
@@ -487,10 +491,9 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
         model_id = "tiiuae/Falcon-H1-1.5B-Deep-Instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = FalconH1ForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
-        device = "cuda"
         messages = [{"role": "user", "content": "Tell me about the french revolution."}]
         input_text = tokenizer.apply_chat_template(messages, tokenize=False)
-        inputs = tokenizer.encode(input_text, return_tensors="pt").to(device)
+        inputs = tokenizer.encode(input_text, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model.generate(inputs, max_new_tokens=512, do_sample=False)

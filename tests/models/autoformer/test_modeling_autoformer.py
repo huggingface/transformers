@@ -17,6 +17,7 @@ import inspect
 import tempfile
 import unittest
 
+import pytest
 from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
@@ -206,10 +207,8 @@ class AutoformerModelTester:
 class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AutoformerModel, AutoformerForPrediction) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": AutoformerModel} if is_torch_available() else {}
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
-    test_torchscript = False
     test_inputs_embeds = False
 
     def setUp(self):
@@ -234,7 +233,7 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -244,23 +243,17 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     # # Input is 'static_categorical_features' not 'input_ids'
     def test_model_main_input_name(self):
@@ -288,15 +281,12 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 "future_time_features",
             ]
 
-            if model.__class__.__name__ in ["AutoformerForPrediction"]:
+            if model.__class__.__name__ == "AutoformerForPrediction":
                 expected_arg_names.append("future_observed_mask")
 
             expected_arg_names.extend(
                 [
                     "decoder_attention_mask",
-                    "head_mask",
-                    "decoder_head_mask",
-                    "cross_attn_head_mask",
                     "encoder_outputs",
                     "past_key_values",
                     "output_hidden_states",

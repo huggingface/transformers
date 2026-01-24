@@ -390,7 +390,6 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
     model_split_percents = [0.5, 0.8, 0.9]
 
     # Overwriting to add `is_decoder` flag
@@ -412,14 +411,6 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_model_various_embeddings
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            config_and_inputs[0]._attn_implementation = "eager"
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_model_as_decoder
     def test_model_as_decoder(self):
@@ -583,7 +574,7 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
-                # Drop all keys except for the minimal set. Hard to manipulate with multimodals/head_mask/etc
+                # Drop all keys except for the minimal set. Hard to manipulate with multimodals  etc
                 inputs_dict = {k: v for k, v in inputs_dict.items() if k in ["input_ids", "attention_mask"]}
 
                 # Ensure left padding, to adapt for some models

@@ -42,7 +42,6 @@ BLIP は、次のようなさまざまなマルチモーダル タスクを実�
 ## BlipConfig
 
 [[autodoc]] BlipConfig
-    - from_text_vision_configs
 
 ## BlipTextConfig
 
@@ -66,8 +65,6 @@ BLIP は、次のようなさまざまなマルチモーダル タスクを実�
 [[autodoc]] BlipImageProcessorFast
     - preprocess
 
-<frameworkcontent>
-<pt>
 
 ## BlipModel
 
@@ -101,5 +98,3 @@ BLIP は、次のようなさまざまなマルチモーダル タスクを実�
 [[autodoc]] BlipForQuestionAnswering
     - forward
 
-</pt>
-</frameworkcontent>

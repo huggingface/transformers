@@ -39,7 +39,7 @@ This model was contributed by [Jitesh Jain](https://huggingface.co/praeclarumjj3
 
 ## Usage tips
 
--  OneFormer requires two inputs during inference: *image* and *task token*.
+- OneFormer requires two inputs during inference: *image* and *task token*.
 - During training, OneFormer only uses panoptic annotations.
 - If you want to train the model in a distributed environment across multiple nodes, then one should update the
   `get_num_masks` function inside in the `OneFormerLoss` class of `modeling_oneformer.py`. When training on multiple nodes, this should be
@@ -85,6 +85,7 @@ The resource should ideally demonstrate something new instead of duplicating an 
 ## OneFormerProcessor
 
 [[autodoc]] OneFormerProcessor
+    - __call__
 
 ## OneFormerModel
 

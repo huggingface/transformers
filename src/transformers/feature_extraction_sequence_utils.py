@@ -15,10 +15,9 @@
 Sequence feature extraction class for common feature extractors to preprocess sequences.
 """
 
-from typing import Optional, Union
-
 import numpy as np
 
+from .audio_utils import is_valid_audio, load_audio
 from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from .utils import PaddingStrategy, TensorType, is_torch_tensor, logging, to_numpy
 
@@ -51,19 +50,17 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
     def pad(
         self,
-        processed_features: Union[
-            BatchFeature,
-            list[BatchFeature],
-            dict[str, BatchFeature],
-            dict[str, list[BatchFeature]],
-            list[dict[str, BatchFeature]],
-        ],
-        padding: Union[bool, str, PaddingStrategy] = True,
-        max_length: Optional[int] = None,
+        processed_features: BatchFeature
+        | list[BatchFeature]
+        | dict[str, BatchFeature]
+        | dict[str, list[BatchFeature]]
+        | list[dict[str, BatchFeature]],
+        padding: bool | str | PaddingStrategy = True,
+        max_length: int | None = None,
         truncation: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        pad_to_multiple_of: int | None = None,
+        return_attention_mask: bool | None = None,
+        return_tensors: str | TensorType | None = None,
     ) -> BatchFeature:
         """
         Pad input values / input vectors or a batch of input values / input vectors up to predefined length or to the
@@ -122,8 +119,9 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(processed_features, (list, tuple)) and isinstance(processed_features[0], (dict, BatchFeature)):
+            # Call .keys() explicitly for compatibility with TensorDict and other Mapping subclasses
             processed_features = {
-                key: [example[key] for example in processed_features] for key in processed_features[0]
+                key: [example[key] for example in processed_features] for key in processed_features[0].keys()
             }
 
         # The model's main input name, usually `input_values`, has be passed for padding
@@ -222,11 +220,11 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
     def _pad(
         self,
-        processed_features: Union[dict[str, np.ndarray], BatchFeature],
-        max_length: Optional[int] = None,
+        processed_features: dict[str, np.ndarray] | BatchFeature,
+        max_length: int | None = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        return_attention_mask: bool | None = None,
     ) -> dict:
         """
         Pad inputs (on left/right and up to predefined length or max length in the batch)
@@ -294,10 +292,10 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
     def _truncate(
         self,
-        processed_features: Union[dict[str, np.ndarray], BatchFeature],
-        max_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        truncation: Optional[bool] = None,
+        processed_features: dict[str, np.ndarray] | BatchFeature,
+        max_length: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        truncation: bool | None = None,
     ):
         """
         Truncate inputs to predefined length or max length in the batch
@@ -366,3 +364,19 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             )
 
         return padding_strategy
+
+    def fetch_audio(self, audio_url_or_urls: str | list[str] | list[list[str]]):
+        """
+        Convert a single or a list of urls into the corresponding `np.ndarray` objects.
+
+        If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
+        returned.
+        """
+        if isinstance(audio_url_or_urls, list):
+            return [self.fetch_audio(x) for x in audio_url_or_urls]
+        elif isinstance(audio_url_or_urls, str):
+            return load_audio(audio_url_or_urls)
+        elif is_valid_audio(audio_url_or_urls):
+            return audio_url_or_urls
+        else:
+            raise TypeError(f"only a single or a list of entries is supported but got type={type(audio_url_or_urls)}")

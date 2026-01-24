@@ -29,7 +29,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from itertools import chain
 from logging import StreamHandler
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -132,7 +132,7 @@ def get_dataloader_sampler(dataloader):
         return dataloader.sampler
 
 
-def atleast_1d(tensor_or_array: Union[torch.Tensor, np.ndarray]):
+def atleast_1d(tensor_or_array: torch.Tensor | np.ndarray):
     if isinstance(tensor_or_array, torch.Tensor):
         if hasattr(torch, "atleast_1d"):
             tensor_or_array = torch.atleast_1d(tensor_or_array)
@@ -262,7 +262,7 @@ def nested_xla_mesh_reduce(tensors, name):
         raise ImportError("Torch xla must be installed to use `nested_xla_mesh_reduce`")
 
 
-def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) -> Any:
+def distributed_concat(tensor: Any, num_total_examples: int | None = None) -> Any:
     try:
         if isinstance(tensor, (tuple, list)):
             return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
@@ -282,9 +282,9 @@ def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) ->
 
 
 def distributed_broadcast_scalars(
-    scalars: list[Union[int, float]],
-    num_total_examples: Optional[int] = None,
-    device: Optional[torch.device] = torch.device("cuda"),
+    scalars: list[int | float],
+    num_total_examples: int | None = None,
+    device: torch.device | None = torch.device("cuda"),
 ) -> torch.Tensor:
     try:
         tensorized_scalar = torch.tensor(scalars, device=device)
@@ -403,62 +403,6 @@ class EvalLoopContainer:
         return self.arrays
 
 
-class SequentialDistributedSampler(Sampler):
-    """
-    Distributed Sampler that subsamples indices sequentially, making it easier to collate all results at the end.
-
-    Even though we only use this sampler for eval and predict (no training), which means that the model params won't
-    have to be synced (i.e. will not hang for synchronization even if varied number of forward passes), we still add
-    extra samples to the sampler to make it evenly divisible (like in `DistributedSampler`) to make it easy to `gather`
-    or `reduce` resulting tensors at the end of the loop.
-    """
-
-    def __init__(self, dataset, num_replicas=None, rank=None, batch_size=None):
-        warnings.warn(
-            "SequentialDistributedSampler is deprecated and will be removed in v5 of Transformers.",
-            FutureWarning,
-        )
-        if num_replicas is None:
-            if not dist.is_available():
-                raise RuntimeError("Requires distributed package to be available")
-            num_replicas = dist.get_world_size()
-        if rank is None:
-            if not dist.is_available():
-                raise RuntimeError("Requires distributed package to be available")
-            rank = dist.get_rank()
-        self.dataset = dataset
-        self.num_replicas = num_replicas
-        self.rank = rank
-        num_samples = len(self.dataset)
-        # Add extra samples to make num_samples a multiple of batch_size if passed
-        if batch_size is not None:
-            self.num_samples = int(math.ceil(num_samples / (batch_size * num_replicas))) * batch_size
-        else:
-            self.num_samples = int(math.ceil(num_samples / num_replicas))
-        self.total_size = self.num_samples * self.num_replicas
-        self.batch_size = batch_size
-
-    def __iter__(self):
-        indices = list(range(len(self.dataset)))
-
-        # add extra samples to make it evenly divisible
-        indices += indices[: (self.total_size - len(indices))]
-        assert len(indices) == self.total_size, (
-            f"Indices length {len(indices)} and total size {self.total_size} mismatched"
-        )
-
-        # subsample
-        indices = indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
-        assert len(indices) == self.num_samples, (
-            f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
-        )
-
-        return iter(indices)
-
-    def __len__(self):
-        return self.num_samples
-
-
 def get_tpu_sampler(dataset: torch.utils.data.Dataset, batch_size: int):
     if xr.world_size() <= 1:
         return RandomSampler(dataset)
@@ -487,114 +431,6 @@ def nested_truncate(tensors, limit):
         return type(tensors)({k: nested_truncate(t, limit) for k, t in tensors.items()})
 
     return tensors[:limit]
-
-
-class DistributedTensorGatherer:
-    """
-    A class responsible for properly gathering tensors (or nested list/tuple of tensors) on the CPU by chunks.
-
-    If our dataset has 16 samples with a batch size of 2 on 3 processes and we gather then transfer on CPU at every
-    step, our sampler will generate the following indices:
-
-        `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1]`
-
-    to get something of size a multiple of 3 (so that each process gets the same dataset length). Then process 0, 1 and
-    2 will be responsible of making predictions for the following samples:
-
-        - P0: `[0, 1, 2, 3, 4, 5]`
-        - P1: `[6, 7, 8, 9, 10, 11]`
-        - P2: `[12, 13, 14, 15, 0, 1]`
-
-    The first batch treated on each process will be:
-
-        - P0: `[0, 1]`
-        - P1: `[6, 7]`
-        - P2: `[12, 13]`
-
-    So if we gather at the end of the first batch, we will get a tensor (nested list/tuple of tensor) corresponding to
-    the following indices:
-
-        `[0, 1, 6, 7, 12, 13]`
-
-    If we directly concatenate our results without taking any precautions, the user will then get the predictions for
-    the indices in this order at the end of the prediction loop:
-
-        `[0, 1, 6, 7, 12, 13, 2, 3, 8, 9, 14, 15, 4, 5, 10, 11, 0, 1]`
-
-    For some reason, that's not going to roll their boat. This class is there to solve that problem.
-
-    Args:
-        world_size (`int`):
-            The number of processes used in the distributed training.
-        num_samples (`int`):
-            The number of samples in our dataset.
-        make_multiple_of (`int`, *optional*):
-            If passed, the class assumes the datasets passed to each process are made to be a multiple of this argument
-            (by adding samples).
-        padding_index (`int`, *optional*, defaults to -100):
-            The padding index to use if the arrays don't all have the same sequence length.
-    """
-
-    def __init__(self, world_size, num_samples, make_multiple_of=None, padding_index=-100):
-        warnings.warn(
-            "DistributedTensorGatherer is deprecated and will be removed in v5 of Transformers.",
-            FutureWarning,
-        )
-        self.world_size = world_size
-        self.num_samples = num_samples
-        total_size = world_size if make_multiple_of is None else world_size * make_multiple_of
-        self.total_samples = int(np.ceil(num_samples / total_size)) * total_size
-        self.process_length = self.total_samples // world_size
-        self._storage = None
-        self._offsets = None
-        self.padding_index = padding_index
-
-    def add_arrays(self, arrays):
-        """
-        Add `arrays` to the internal storage, Will initialize the storage to the full size at the first arrays passed
-        so that if we're bound to get an OOM, it happens at the beginning.
-        """
-        if arrays is None:
-            return
-        if self._storage is None:
-            self._storage = nested_new_like(arrays, self.total_samples, padding_index=self.padding_index)
-            self._offsets = list(range(0, self.total_samples, self.process_length))
-
-        slice_len, self._storage = self._nested_set_tensors(self._storage, arrays)
-        for i in range(self.world_size):
-            self._offsets[i] += slice_len
-
-    def _nested_set_tensors(self, storage, arrays):
-        if isinstance(arrays, (list, tuple)):
-            result = [self._nested_set_tensors(x, y) for x, y in zip(storage, arrays)]
-            return result[0][0], type(arrays)(r[1] for r in result)
-        assert arrays.shape[0] % self.world_size == 0, (
-            f"Arrays passed should all have a first dimension multiple of {self.world_size}, found {arrays.shape[0]}."
-        )
-
-        slice_len = arrays.shape[0] // self.world_size
-        for i in range(self.world_size):
-            if len(arrays.shape) == 1:
-                storage[self._offsets[i] : self._offsets[i] + slice_len] = arrays[i * slice_len : (i + 1) * slice_len]
-            else:
-                # Expand the array on the fly if needed.
-                if len(storage.shape) > 1 and storage.shape[1] < arrays.shape[1]:
-                    storage = expand_like(storage, arrays.shape[1], padding_index=self.padding_index)
-                storage[self._offsets[i] : self._offsets[i] + slice_len, : arrays.shape[1]] = arrays[
-                    i * slice_len : (i + 1) * slice_len
-                ]
-        return slice_len, storage
-
-    def finalize(self):
-        """
-        Return the properly gathered arrays and truncate to the number of samples (since the sampler added some extras
-        to get each process a dataset of the same length).
-        """
-        if self._storage is None:
-            return
-        if self._offsets[0] != self.process_length:
-            logger.warning("Not all data has been set. Are you sure you passed all values?")
-        return nested_truncate(self._storage, self.num_samples)
 
 
 @dataclass
@@ -684,9 +520,9 @@ class LengthGroupedSampler(Sampler):
     def __init__(
         self,
         batch_size: int,
-        dataset: Optional[Dataset] = None,
-        lengths: Optional[list[int]] = None,
-        model_input_name: Optional[str] = None,
+        dataset: Dataset | None = None,
+        lengths: list[int] | None = None,
+        model_input_name: str | None = None,
         generator=None,
     ):
         if dataset is None and lengths is None:
@@ -728,13 +564,13 @@ class DistributedLengthGroupedSampler(DistributedSampler):
     def __init__(
         self,
         batch_size: int,
-        dataset: Optional[Dataset] = None,
-        num_replicas: Optional[int] = None,
-        rank: Optional[int] = None,
+        dataset: Dataset | None = None,
+        num_replicas: int | None = None,
+        rank: int | None = None,
         seed: int = 0,
         drop_last: bool = False,
-        lengths: Optional[list[int]] = None,
-        model_input_name: Optional[str] = None,
+        lengths: list[int] | None = None,
+        model_input_name: str | None = None,
     ):
         if dataset is None and lengths is None:
             raise ValueError("One of dataset and lengths must be provided.")
@@ -992,7 +828,7 @@ def _secs2timedelta(secs):
     return f"{datetime.timedelta(seconds=int(secs))}.{msec:02d}"
 
 
-def metrics_format(self, metrics: dict[str, float]) -> dict[str, float]:
+def metrics_format(metrics: dict[str, float]) -> dict[str, float]:
     """
     Reformat Trainer metrics values to a human-readable format.
 
@@ -1101,7 +937,7 @@ def log_metrics(self, split, metrics):
         return
 
     print(f"***** {split} metrics *****")
-    metrics_formatted = self.metrics_format(metrics)
+    metrics_formatted = metrics_format(metrics)
     k_width = max(len(str(x)) for x in metrics_formatted)
     v_width = max(len(str(x)) for x in metrics_formatted.values())
     for key in sorted(metrics_formatted.keys()):
@@ -1322,7 +1158,7 @@ class AcceleratorConfig:
             " in your script multiplied by the number of processes."
         },
     )
-    dispatch_batches: Optional[bool] = field(
+    dispatch_batches: bool | None = field(
         default=None,
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"
@@ -1348,7 +1184,7 @@ class AcceleratorConfig:
         },
     )
 
-    non_blocking: Optional[bool] = field(
+    non_blocking: bool = field(
         default=False,
         metadata={
             "help": "Whether to use non-blocking CUDA calls to help minimize synchronization during "
@@ -1358,7 +1194,7 @@ class AcceleratorConfig:
         },
     )
 
-    gradient_accumulation_kwargs: Optional[dict] = field(
+    gradient_accumulation_kwargs: dict | None = field(
         default=None,
         metadata={
             "help": "Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`]. "
@@ -1412,7 +1248,7 @@ class LayerWiseDummyOptimizer(torch.optim.Optimizer):
     https://github.com/hiyouga/LLaMA-Factory/commit/8664262cde3919e10eaecbd66e8c5d356856362e#diff-ebe08ab14496dfb9e06075f0fdd36799ef6d1535cc4dd4715b74c4e3e06fe3ba
     """
 
-    def __init__(self, optimizer_dict=None, *args, **kwargs):
+    def __init__(self, optimizer_dict=None, **kwargs):
         dummy_tensor = torch.randn(1, 1)
         self.optimizer_dict = optimizer_dict
         super().__init__([dummy_tensor], {"lr": kwargs.get("lr", 1e-03)})
@@ -1420,7 +1256,7 @@ class LayerWiseDummyOptimizer(torch.optim.Optimizer):
     def zero_grad(self, set_to_none: bool = True) -> None:
         pass
 
-    def step(self, closure=None) -> Optional[float]:
+    def step(self, closure=None) -> float | None:
         pass
 
 

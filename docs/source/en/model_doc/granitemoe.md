@@ -65,7 +65,6 @@ for i in output:
 
 This model was contributed by [mayank-mishra](https://huggingface.co/mayank-mishra).
 
-
 ## GraniteMoeConfig
 
 [[autodoc]] GraniteMoeConfig

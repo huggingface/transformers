@@ -155,24 +155,12 @@ pip install transformers datasets evaluate seqeval
 
 次に、[`DataCollat​​orWithPadding`] を使用してサンプルのバッチを作成します。データセット全体を最大長までパディングするのではなく、照合中にバッチ内の最長の長さまで文を *動的にパディング* する方が効率的です。
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import DataCollatorForTokenClassification
 
 >>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
 ```
-</pt>
-<tf>
-
-```py
->>> from transformers import DataCollatorForTokenClassification
-
->>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## Evaluate
 
@@ -252,8 +240,6 @@ pip install transformers datasets evaluate seqeval
 ... }
 ```
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
@@ -308,102 +294,6 @@ pip install transformers datasets evaluate seqeval
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-Keras を使用したモデルの微調整に慣れていない場合は、[こちら](../training#train-a-tensorflow-model-with-keras) の基本的なチュートリアルをご覧ください。
-
-</Tip>
-TensorFlow でモデルを微調整するには、オプティマイザー関数、学習率スケジュール、およびいくつかのトレーニング ハイパーパラメーターをセットアップすることから始めます。
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 16
->>> num_train_epochs = 3
->>> num_train_steps = (len(tokenized_wnut["train"]) // batch_size) * num_train_epochs
->>> optimizer, lr_schedule = create_optimizer(
-...     init_lr=2e-5,
-...     num_train_steps=num_train_steps,
-...     weight_decay_rate=0.01,
-...     num_warmup_steps=0,
-... )
-```
-次に、[`TFAutoModelForTokenClassification`] を使用して、予期されるラベルの数とラベル マッピングを指定して DistilBERT をロードできます。
-
-```py
->>> from transformers import TFAutoModelForTokenClassification
-
->>> model = TFAutoModelForTokenClassification.from_pretrained(
-...     "distilbert/distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
-... )
-```
-[`~transformers.TFPreTrainedModel.prepare_tf_dataset`] を使用して、データセットを `tf.data.Dataset` 形式に変換します。
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_wnut["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_validation_set = model.prepare_tf_dataset(
-...     tokenized_wnut["validation"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-[`compile`](https://keras.io/api/models/model_training_apis/#compile-method) を使用してトレーニング用のモデルを設定します。 Transformers モデルにはすべてデフォルトのタスク関連の損失関数があるため、次の場合を除き、損失関数を指定する必要はないことに注意してください。
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)  # No loss argument!
-```
-
-トレーニングを開始する前にセットアップする最後の 2 つのことは、予測から連続スコアを計算することと、モデルをハブにプッシュする方法を提供することです。どちらも [Keras コールバック](../main_classes/keras_callbacks) を使用して行われます。
-
-`compute_metrics` 関数を [`~transformers.KerasMetricCallback`] に渡します。
-
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback
-
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
-```
-
-[`~transformers.PushToHubCallback`] でモデルとトークナイザーをプッシュする場所を指定します。
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="my_awesome_wnut_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-次に、コールバックをまとめてバンドルします。
-
-```py
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-ついに、モデルのトレーニングを開始する準備が整いました。トレーニングおよび検証データセット、エポック数、コールバックを指定して [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) を呼び出し、モデルを微調整します。
-
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3, callbacks=callbacks)
-```
-
-トレーニングが完了すると、モデルは自動的にハブにアップロードされ、誰でも使用できるようになります。
-
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -465,8 +355,6 @@ TensorFlow でモデルを微調整するには、オプティマイザー関数
 
 必要に応じて、`pipeline`の結果を手動で複製することもできます。
 
-<frameworkcontent>
-<pt>
 テキストをトークン化して PyTorch テンソルを返します。
 
 ```py
@@ -511,51 +399,3 @@ TensorFlow でモデルを微調整するには、オプティマイザー関数
  'O']
 ```
 
-</pt>
-<tf>
-
-テキストをトークン化し、TensorFlow テンソルを返します。
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("stevhliu/my_awesome_wnut_model")
->>> inputs = tokenizer(text, return_tensors="tf")
-```
-
-入力をモデルに渡し、`logits`を返します。
-
-
-```py
->>> from transformers import TFAutoModelForTokenClassification
-
->>> model = TFAutoModelForTokenClassification.from_pretrained("stevhliu/my_awesome_wnut_model")
->>> logits = model(**inputs).logits
-```
-
-最も高い確率でクラスを取得し、モデルの `id2label` マッピングを使用してそれをテキスト ラベルに変換します。
-
-```py
->>> predicted_token_class_ids = tf.math.argmax(logits, axis=-1)
->>> predicted_token_class = [model.config.id2label[t] for t in predicted_token_class_ids[0].numpy().tolist()]
->>> predicted_token_class
-['O',
- 'O',
- 'B-location',
- 'I-location',
- 'B-group',
- 'O',
- 'O',
- 'O',
- 'O',
- 'O',
- 'O',
- 'O',
- 'O',
- 'B-location',
- 'B-location',
- 'O',
- 'O']
-```
-</tf>
-</frameworkcontent>

@@ -39,7 +39,6 @@ The example below demonstrates how to chat with the model with [`Pipeline`] or t
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-
 ```python
 import torch
 from transformers import pipeline
@@ -86,9 +85,10 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 <hfoption id="transformers CLI">
 
-```
+```bash
 echo -e "Write me a poem about Machine Learning. Answer:" | transformers run --task text2text-generation --model google/t5gemma-2b-2b-prefixlm --device 0
 ```
+
 </hfoption>
 </hfoptions>
 

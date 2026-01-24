@@ -2,7 +2,7 @@ import argparse
 import json
 import logging
 import os
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from huggingface_hub import hf_hub_download, upload_folder
@@ -87,7 +87,7 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> dict[str
         "max_position_embeddings": unified_config.get("max_encoder_seq_length")
         or unified_config.get("max_seqlen", 1024),
         "rope_theta": unified_config.get("rope_theta", 10000.0),
-        "rope_scaling": {"rope_type": "default"},
+        "rope_parameters": {"rope_type": "default"},
         "hidden_act": unified_config.get("hidden_act", "silu"),
         "_attn_implementation": unified_config.get("_attn_implementation", "sdpa"),
         "intermediate_size": encoder_intermediate_size,
@@ -114,7 +114,7 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> dict[str
         "max_position_embeddings": unified_config.get("max_encoder_seq_length")
         or unified_config.get("max_seqlen", 1024),
         "rope_theta": unified_config.get("rope_theta", 10000.0),
-        "rope_scaling": {"rope_type": "default"},
+        "rope_parameters": {"rope_type": "default"},
         "hidden_act": unified_config.get("hidden_act", "silu"),
         "_attn_implementation": unified_config.get("_attn_implementation", "sdpa"),
         "intermediate_size": decoder_intermediate_size,
@@ -136,7 +136,7 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> dict[str
         "dropout": unified_config.get("dropout", 0.0),
         "max_position_embeddings": unified_config.get("max_seqlen", 1024),
         "rope_theta": unified_config.get("rope_theta", 10000.0),
-        "rope_scaling": {"rope_type": "default"},
+        "rope_parameters": {"rope_type": "default"},
         "hidden_act": unified_config.get("hidden_act", "silu"),
         "_attn_implementation": unified_config.get("_attn_implementation", "sdpa"),
         "intermediate_size": global_intermediate_size,
@@ -342,7 +342,7 @@ def push_to_hub(
     repo_id: str,
     commit_message: str = "Upload converted Blt model",
     private: bool = False,
-    token: Optional[str] = None,
+    token: str | None = None,
 ) -> None:
     try:
         upload_folder(
@@ -364,10 +364,10 @@ def convert_hf_blt_to_unified(
     output_dir: str,
     config_name: str = "config.json",
     weights_name: str = "model.bin",
-    cache_dir: Optional[str] = None,
-    push_to_hub_repo: Optional[str] = None,
+    cache_dir: str | None = None,
+    push_to_hub_repo: str | None = None,
     hub_private: bool = False,
-    hub_token: Optional[str] = None,
+    hub_token: str | None = None,
 ) -> None:
     # Download model files
     config_path = hf_hub_download(repo_id=model_id, filename="config.json", cache_dir=cache_dir)

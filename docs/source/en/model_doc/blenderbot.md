@@ -71,7 +71,6 @@ An example:
   `facebook/blenderbot_small_90M`, have a different architecture and consequently should be used with
   [BlenderbotSmall](blenderbot-small).
 
-
 ## Resources
 
 - [Causal language modeling task guide](../tasks/language_modeling)
@@ -85,12 +84,10 @@ An example:
 ## BlenderbotTokenizer
 
 [[autodoc]] BlenderbotTokenizer
-    - build_inputs_with_special_tokens
 
 ## BlenderbotTokenizerFast
 
 [[autodoc]] BlenderbotTokenizerFast
-    - build_inputs_with_special_tokens
 
 ## BlenderbotModel
 

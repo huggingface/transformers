@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Trax Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -21,7 +20,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import reduce
 from operator import mul
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -29,6 +28,7 @@ from torch import nn
 from torch.autograd.function import Function
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutput, MaskedLMOutput, QuestionAnsweringModelOutput, SequenceClassifierOutput
@@ -66,7 +66,7 @@ class ReformerDynamicCache:
     A dynamic cache that stores past buckets instead of key/values.
     """
 
-    def __init__(self, _distributed_cache_data: Optional[Iterable] = None) -> None:
+    def __init__(self, _distributed_cache_data: Iterable | None = None) -> None:
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         self.buckets_cache: list[torch.Tensor] = []
         self.states_cache: list[torch.Tensor] = []
@@ -75,24 +75,6 @@ class ReformerDynamicCache:
             for buckets, states in _distributed_cache_data:
                 self.buckets_cache.append(buckets)
                 self.states_cache.append(states)
-
-    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Support for backwards-compatible `past_key_values` indexing, e.g. `past_key_values[0][0].shape[2]` to get the
-        sequence length.
-        """
-        if layer_idx < len(self):
-            return (self.buckets_cache[layer_idx], self.states_cache[layer_idx])
-        else:
-            raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
-
-    def __iter__(self):
-        """
-        Support for backwards-compatible `past_key_values` iteration, e.g. `for x in past_key_values:` to iterate over
-        keys and values
-        """
-        for layer_idx in range(len(self)):
-            yield (self.buckets_cache[layer_idx], self.states_cache[layer_idx])
 
     def __len__(self):
         """
@@ -106,7 +88,7 @@ class ReformerDynamicCache:
         buckets: torch.Tensor,
         states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[dict[str, Any]] = None,
+        cache_kwargs: dict[str, Any] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
@@ -146,31 +128,23 @@ class ReformerDynamicCache:
 
         return self.buckets_cache[layer_idx], self.states_cache[layer_idx]
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+    def get_seq_length(self, layer_idx: int | None = 0) -> int:
         return None
 
-    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
-        """Converts the `ReformerDynamicCache` instance into the its equivalent in the legacy cache format. Used for
-        backward compatibility."""
-        legacy_cache = ()
-        for layer_idx in range(len(self)):
-            buckets, states = self.buckets_cache[layer_idx], self.states_cache[layer_idx]
-            buckets = buckets if buckets.numel() != 0 else None
-            legacy_cache += ((buckets, states),)
-        return legacy_cache
+    def get_start_idx(self) -> int:
+        if len(self) == 0:
+            return 0
+        return self.states_cache[0].shape[1]
 
-    @classmethod
-    def from_legacy_cache(
-        cls, past_buckets_states: Optional[tuple[tuple[torch.FloatTensor, torch.FloatTensor]]] = None
-    ) -> "ReformerDynamicCache":
-        """Converts a cache in the legacy cache format into an equivalent `ReformerDynamicCache`. Used for
-        backward compatibility."""
-        cache = cls()
-        if past_buckets_states is not None:
-            for layer_idx in range(len(past_buckets_states)):
-                buckets, states = past_buckets_states[layer_idx]
-                cache.update(buckets, states, layer_idx)
-        return cache
+    def reorder_cache(self, beam_idx):
+        for layer_idx in range(len(self)):
+            if self.buckets_cache[layer_idx] is not None and self.buckets_cache[layer_idx].numel() > 0:
+                device = self.buckets_cache[layer_idx].device
+                self.buckets_cache[layer_idx] = self.buckets_cache[layer_idx].index_select(0, beam_idx.to(device))
+
+            if self.states_cache[layer_idx] is not None and self.states_cache[layer_idx].numel() > 0:
+                device = self.states_cache[layer_idx].device
+                self.states_cache[layer_idx] = self.states_cache[layer_idx].index_select(0, beam_idx.to(device))
 
 
 def _stable_argsort(vector, dim):
@@ -464,7 +438,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         num_hashes=None,
         buckets=None,
         past_buckets_states=None,
@@ -639,7 +612,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             value_vectors=value_vectors,
             sorted_bucket_idx_per_hash=sorted_bucket_idx_per_hash,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             do_standard_self_attention=do_standard_self_attention,
             use_cache=exists_cache,
         )
@@ -834,7 +806,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         value_vectors,
         sorted_bucket_idx_per_hash,
         attention_mask,
-        head_mask,
         do_standard_self_attention,
         use_cache,
     ):
@@ -921,10 +892,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         # dropout
         attention_probs = nn.functional.dropout(attention_probs, p=self.dropout, training=self.training)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         # attend values
         out_vectors = torch.matmul(attention_probs, value_vectors)
@@ -1161,7 +1128,6 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         past_buckets_states=None,
         use_cache=False,
         output_attentions=False,
@@ -1299,10 +1265,6 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         # dropout
         attention_probs = nn.functional.dropout(attention_probs, p=self.dropout, training=self.training)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
         # attend values
         out_vectors = torch.matmul(attention_probs, value_vectors)
 
@@ -1401,7 +1363,6 @@ class ReformerAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         num_hashes=None,
         past_buckets_states=None,
         use_cache=False,
@@ -1415,7 +1376,6 @@ class ReformerAttention(nn.Module):
         # use cached buckets for backprob if buckets not None for LSHSelfAttention
         self_attention_outputs = self.self_attention(
             hidden_states=hidden_states,
-            head_mask=head_mask,
             attention_mask=attention_mask,
             num_hashes=num_hashes,
             past_buckets_states=past_buckets_states,
@@ -1569,7 +1529,6 @@ class ReformerLayer(nn.Module):
         prev_attn_output,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         num_hashes=None,
         past_buckets_states=None,
         use_cache=False,
@@ -1585,7 +1544,6 @@ class ReformerLayer(nn.Module):
 
             attn_outputs = self.attention(
                 hidden_states=hidden_states,
-                head_mask=head_mask,
                 attention_mask=attention_mask,
                 num_hashes=num_hashes,
                 past_buckets_states=past_buckets_states,
@@ -1624,7 +1582,6 @@ class ReformerLayer(nn.Module):
         grad_attn_output,
         grad_hidden_states,
         attention_mask=None,
-        head_mask=None,
         buckets=None,
     ):
         # Implements the backward pass for reversible ResNets.
@@ -1663,7 +1620,6 @@ class ReformerLayer(nn.Module):
             # use cached buckets for backprob if buckets not None for LSHSelfAttention
             output = self.attention(
                 hidden_states=hidden_states,
-                head_mask=head_mask,
                 attention_mask=attention_mask,
                 buckets=buckets,
             ).hidden_states
@@ -1699,7 +1655,6 @@ class _ReversibleFunction(Function):
         hidden_states,
         layers,
         attention_mask,
-        head_mask,
         num_hashes,
         all_hidden_states,
         all_attentions,
@@ -1714,7 +1669,7 @@ class _ReversibleFunction(Function):
         # split duplicated tensor
         hidden_states, attn_output = torch.chunk(hidden_states, 2, dim=-1)
 
-        for layer_id, (layer, layer_head_mask) in enumerate(zip(layers, head_mask)):
+        for layer in layers:
             if output_hidden_states is True:
                 all_hidden_states.append(hidden_states)
 
@@ -1722,7 +1677,6 @@ class _ReversibleFunction(Function):
                 prev_attn_output=attn_output,
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
-                head_mask=layer_head_mask,
                 num_hashes=num_hashes,
                 past_buckets_states=past_buckets_states,
                 use_cache=use_cache,
@@ -1745,7 +1699,6 @@ class _ReversibleFunction(Function):
         ctx.save_for_backward(attn_output.detach(), hidden_states.detach())
         ctx.layers = layers
         ctx.all_buckets = all_buckets
-        ctx.head_mask = head_mask
         ctx.attention_mask = attention_mask
 
         # Concatenate 2 RevNet outputs
@@ -1771,7 +1724,6 @@ class _ReversibleFunction(Function):
 
         layers = ctx.layers
         all_buckets = ctx.all_buckets
-        head_mask = ctx.head_mask
         attention_mask = ctx.attention_mask
 
         for idx, layer in enumerate(layers[::-1]):
@@ -1785,7 +1737,6 @@ class _ReversibleFunction(Function):
                 hidden_states=output.hidden_states,
                 grad_attn_output=output.grad_attn_output,
                 grad_hidden_states=output.grad_hidden_states,
-                head_mask=head_mask[len(layers) - idx - 1],
                 attention_mask=attention_mask,
                 buckets=buckets,
             )
@@ -1812,7 +1763,6 @@ class ReformerEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         num_hashes=None,
         past_buckets_states=None,
         use_cache=False,
@@ -1827,13 +1777,6 @@ class ReformerEncoder(nn.Module):
         # init cached hidden states if necessary
         if use_cache and past_buckets_states is None:
             past_buckets_states = ReformerDynamicCache()
-        elif use_cache and isinstance(past_buckets_states, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `ReformerDynamicCache` instead, e.g. "
-                "`past_key_values=ReformerDynamicCache.from_legacy_cache(past_key_values)`."
-            )
-            past_buckets_states = ReformerDynamicCache.from_legacy_cache(past_buckets_states)
 
         # concat same tensor for reversible ResNet
         hidden_states = torch.cat([hidden_states, hidden_states], dim=-1)
@@ -1841,7 +1784,6 @@ class ReformerEncoder(nn.Module):
             hidden_states,
             self.layers,
             attention_mask,
-            head_mask,
             num_hashes,
             all_hidden_states,
             all_attentions,
@@ -1877,7 +1819,6 @@ class ReformerOnlyLMHead(nn.Module):
         self.chunk_size_lm_head = config.chunk_size_lm_head
         self.decoder = nn.Linear(2 * config.hidden_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
         return apply_chunking_to_forward(self.forward_chunk, self.chunk_size_lm_head, self.seq_len_dim, hidden_states)
@@ -1885,14 +1826,6 @@ class ReformerOnlyLMHead(nn.Module):
     def forward_chunk(self, hidden_states):
         hidden_states = self.decoder(hidden_states)
         return hidden_states
-
-    def _tie_weights(self) -> None:
-        # For accelerate compatibility and to not break backward compatibility
-        if self.decoder.bias.device.type == "meta":
-            self.decoder.bias = self.bias
-        else:
-            # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-            self.bias = self.decoder.bias
 
 
 @auto_docstring
@@ -1910,22 +1843,21 @@ class ReformerPreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, AxialPositionEmbeddings):
             for weight in module.weights:
-                nn.init.normal_(weight, std=self.config.axial_norm_std)
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+                init.normal_(weight, std=self.config.axial_norm_std)
+        elif isinstance(module, LSHSelfAttention):
+            init.constant_(module.self_mask_value_float16, -1e3)
+            init.constant_(module.self_mask_value_float32, -1e5)
+            init.constant_(module.mask_value_float16, -1e4)
+            init.constant_(module.mask_value_float32, -1e9)
+        elif isinstance(module, LocalSelfAttention):
+            init.constant_(module.mask_value_float16, -1e4)
+            init.constant_(module.mask_value_float32, -1e9)
 
 
 @dataclass
@@ -1951,9 +1883,9 @@ class ReformerModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    past_buckets_states: Optional[list[tuple[torch.LongTensor, torch.FloatTensor]]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    past_buckets_states: list[tuple[torch.LongTensor, torch.FloatTensor]] | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -1980,11 +1912,11 @@ class ReformerModelWithLMHeadOutput(ModelOutput):
         up sequential decoding.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_buckets_states: Optional[list[tuple[torch.LongTensor, torch.FloatTensor]]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_buckets_states: list[tuple[torch.LongTensor, torch.FloatTensor]] | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring
@@ -2008,29 +1940,21 @@ class ReformerModel(ReformerPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        num_hashes: Optional[int] = None,
-        past_buckets_states: Optional[list[tuple[torch.Tensor]]] = None,
-        use_cache: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ReformerModelOutput]:
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        num_hashes: int | None = None,
+        past_buckets_states: ReformerDynamicCache | None = None,
+        use_cache: bool | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | ReformerModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. During training the input_ids sequence_length has to be
@@ -2046,7 +1970,7 @@ class ReformerModel(ReformerPreTrainedModel):
             the default defined in `config.num_hashes`.
 
             For more information, see `num_hashes` in [`ReformerConfig`].
-        past_buckets_states (`list[tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*):
+        past_buckets_states (`ReformerDynamicCache`, *optional*):
             List of `tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
             being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
             second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
@@ -2065,10 +1989,10 @@ class ReformerModel(ReformerPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            input_shape = input_ids.size()  # noqa: F841
+            input_shape = input_ids.size()
             device = input_ids.device
         elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]  # noqa: F841
+            input_shape = inputs_embeds.size()[:-1]
             device = inputs_embeds.device
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
@@ -2079,9 +2003,6 @@ class ReformerModel(ReformerPreTrainedModel):
 
         if past_buckets_states is not None:
             assert not self.training, "`past_buckets_states` can only be used for inference, not for training`."
-
-        # prepare head mask
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers, is_attention_chunked=True)
 
         # original sequence length for padding
         orig_sequence_length = input_shape[-1]
@@ -2119,10 +2040,7 @@ class ReformerModel(ReformerPreTrainedModel):
             )
 
         # start index for position encoding depends on incremental decoding
-        if past_buckets_states is not None:
-            start_idx_pos_encodings = past_buckets_states[0][1].shape[1]
-        else:
-            start_idx_pos_encodings = 0
+        start_idx_pos_encodings = past_buckets_states.get_start_idx() if past_buckets_states is not None else 0
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
@@ -2133,7 +2051,6 @@ class ReformerModel(ReformerPreTrainedModel):
 
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,
-            head_mask=head_mask,
             attention_mask=attention_mask,
             num_hashes=num_hashes,
             past_buckets_states=past_buckets_states,
@@ -2223,8 +2140,6 @@ class ReformerModel(ReformerPreTrainedModel):
     """
 )
 class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
-
     def __init__(self, config):
         super().__init__(config)
         assert config.is_decoder, "If you want to use `ReformerModelWithLMHead` make sure that `is_decoder=True`."
@@ -2253,20 +2168,20 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        num_hashes: Optional[int] = None,
-        past_buckets_states: Optional[list[tuple[torch.Tensor]]] = None,
-        use_cache: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        num_hashes: int | None = None,
+        past_buckets_states: list[tuple[torch.Tensor]] | None = None,
+        use_cache: bool | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
+        labels: torch.Tensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> Union[tuple, CausalLMOutput]:
+    ) -> tuple | CausalLMOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. During training the input_ids sequence_length has to be
@@ -2300,7 +2215,6 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
             input_ids,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             num_hashes=num_hashes,
             past_buckets_states=past_buckets_states,
@@ -2310,17 +2224,14 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
             return_dict=return_dict,
         )
 
-        sequence_output = reformer_outputs[0]
-        logits = self.lm_head(sequence_output)
+        hidden_states = reformer_outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits,
-                labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
             output = (logits,) + reformer_outputs[1:]
@@ -2335,7 +2246,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, **kwargs
+        self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, is_first_iteration=False, **kwargs
     ):
         # Overitten -- different expected inputs/outputs
 
@@ -2360,28 +2271,9 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
 
         return model_inputs
 
-    def _reorder_cache(self, past_key_values, beam_idx):
-        reord_past_buckets_states = []
-        for buckets, hidden_states in past_key_values:
-            # buckets
-            if buckets is not None and buckets.numel() > 0:
-                reord_buckets = buckets.index_select(0, beam_idx.to(buckets.device))
-            else:
-                reord_buckets = None
-
-            # hidden states
-            reord_hidden_states = hidden_states.index_select(0, beam_idx.to(hidden_states.device))
-            reord_past_buckets_states.append((reord_buckets, reord_hidden_states))
-
-        if isinstance(past_key_values, ReformerDynamicCache):
-            reord_past_buckets_states = ReformerDynamicCache.from_legacy_cache(reord_past_buckets_states)
-        return reord_past_buckets_states
-
 
 @auto_docstring
 class ReformerForMaskedLM(ReformerPreTrainedModel):
-    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
-
     def __init__(self, config):
         super().__init__(config)
         assert not config.is_decoder, (
@@ -2404,17 +2296,17 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        num_hashes: Optional[int] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, MaskedLMOutput]:
+        input_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        num_hashes: int | None = None,
+        labels: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | MaskedLMOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. During training the input_ids sequence_length has to be
@@ -2485,7 +2377,6 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
             input_ids,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             num_hashes=num_hashes,
             use_cache=False,  # no causal mask
@@ -2537,17 +2428,17 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        num_hashes: Optional[int] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, SequenceClassifierOutput]:
+        input_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        num_hashes: int | None = None,
+        labels: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | SequenceClassifierOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. During training the input_ids sequence_length has to be
@@ -2603,7 +2494,6 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
             input_ids,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             num_hashes=num_hashes,
             output_hidden_states=output_hidden_states,
@@ -2687,18 +2577,18 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        num_hashes: Optional[int] = None,
-        start_positions: Optional[torch.Tensor] = None,
-        end_positions: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, QuestionAnsweringModelOutput]:
+        input_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        num_hashes: int | None = None,
+        start_positions: torch.Tensor | None = None,
+        end_positions: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | QuestionAnsweringModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. During training the input_ids sequence_length has to be
@@ -2721,7 +2611,6 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
             input_ids,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             num_hashes=num_hashes,
             use_cache=False,  # no causal mask

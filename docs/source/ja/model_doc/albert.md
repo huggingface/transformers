@@ -60,9 +60,7 @@ ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Lan
 ## AlbertTokenizer
 
 [[autodoc]] AlbertTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## AlbertTokenizerFast
@@ -73,8 +71,6 @@ ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Lan
 
 [[autodoc]] models.albert.modeling_albert.AlbertForPreTrainingOutput
 
-<frameworkcontent>
-<pt>
 
 ## AlbertModel
 
@@ -110,4 +106,3 @@ ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Lan
 [[autodoc]] AlbertForQuestionAnswering
     - forward
 
-</pt>

@@ -46,12 +46,13 @@ class ImageToImagePipeline(Pipeline):
 
     ```python
     >>> from PIL import Image
-    >>> import requests
+    >>> import httpx
+    >>> import io
 
     >>> from transformers import pipeline
 
     >>> upscaler = pipeline("image-to-image", model="caidas/swin2SR-classical-sr-x2-64")
-    >>> img = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+    >>> img = Image.open(io.BytesIO(httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg").content))
     >>> img = img.resize((64, 64))
     >>> upscaled_img = upscaler(img)
     >>> img.size
@@ -84,8 +85,6 @@ class ImageToImagePipeline(Pipeline):
 
         if "timeout" in kwargs:
             preprocess_params["timeout"] = kwargs["timeout"]
-        if "head_mask" in kwargs:
-            forward_params["head_mask"] = kwargs["head_mask"]
 
         return preprocess_params, forward_params, postprocess_params
 
@@ -93,7 +92,7 @@ class ImageToImagePipeline(Pipeline):
     def __call__(self, images: Union[str, "Image.Image"], **kwargs: Any) -> "Image.Image": ...
 
     @overload
-    def __call__(self, images: Union[list[str], list["Image.Image"]], **kwargs: Any) -> list["Image.Image"]: ...
+    def __call__(self, images: list[str] | list["Image.Image"], **kwargs: Any) -> list["Image.Image"]: ...
 
     def __call__(
         self, images: Union[str, list[str], "Image.Image", list["Image.Image"]], **kwargs: Any

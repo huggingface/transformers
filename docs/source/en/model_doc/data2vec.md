@@ -53,7 +53,6 @@ The original code for vision can be found [here](https://github.com/facebookrese
 - For Data2VecAudio, preprocessing is identical to [`Wav2Vec2Model`], including feature extraction
 - For Data2VecText, preprocessing is identical to [`RobertaModel`], including tokenization.
 - For Data2VecVision, preprocessing is identical to [`BeitModel`], including feature extraction.
-- The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
 
 ### Using Scaled Dot Product Attention (SDPA)
 
@@ -68,7 +67,7 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 
 The SDPA implementation is currently available for the Data2VecAudio and Data2VecVision models.
 
-```
+```py
 from transformers import Data2VecVisionForImageClassification
 model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base", attn_implementation="sdpa", dtype=torch.float16)
 ...
@@ -104,6 +103,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [`Data2VecVisionForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
 
 **Data2VecText documentation resources**
+
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
 - [Question answering task guide](../tasks/question_answering)
@@ -112,10 +112,12 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [Multiple choice task guide](../tasks/multiple_choice)
 
 **Data2VecAudio documentation resources**
+
 - [Audio classification task guide](../tasks/audio_classification)
 - [Automatic speech recognition task guide](../tasks/asr)
 
 **Data2VecVision documentation resources**
+
 - [Image classification](../tasks/image_classification)
 - [Semantic segmentation](../tasks/semantic_segmentation)
 

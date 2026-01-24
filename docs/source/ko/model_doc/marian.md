@@ -169,8 +169,6 @@ GROUP_MEMBERS = {
 [[autodoc]] MarianTokenizer
     - build_inputs_with_special_tokens
 
-<frameworkcontent>
-<pt>
 
 ## MarianModel
 
@@ -187,5 +185,3 @@ GROUP_MEMBERS = {
 [[autodoc]] MarianForCausalLM
     - forward
 
-</pt>
-</frameworkcontent>

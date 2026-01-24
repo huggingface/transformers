@@ -78,10 +78,10 @@ Wenn Sie an der grundlegenden Verwendung von LLMs interessiert sind, ist unsere 
 Zunächst müssen Sie das Modell laden.
 
 ```py
->>> from transformers import AutoModelForCausalLM
+>>> from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 >>> model = AutoModelForCausalLM.from_pretrained(
-...     "openlm-research/open_llama_7b", device_map="auto", load_in_4bit=True
+...     "openlm-research/open_llama_7b", device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
 ... )
 ```
 
@@ -119,12 +119,12 @@ Und das war's! Mit ein paar Zeilen Code können Sie sich die Macht eines LLM zun
 Es gibt viele [Generierungsstrategien](generation_strategies), und manchmal sind die Standardwerte für Ihren Anwendungsfall vielleicht nicht geeignet. Wenn Ihre Ausgaben nicht mit dem übereinstimmen, was Sie erwarten, haben wir eine Liste der häufigsten Fallstricke erstellt und wie Sie diese vermeiden können.
 
 ```py
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 >>> tokenizer = AutoTokenizer.from_pretrained("openlm-research/open_llama_7b")
 >>> tokenizer.pad_token = tokenizer.eos_token  # Llama has no pad token by default
 >>> model = AutoModelForCausalLM.from_pretrained(
-...     "openlm-research/open_llama_7b", device_map="auto", load_in_4bit=True
+...     "openlm-research/open_llama_7b", device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
 ... )
 ```
 

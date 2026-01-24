@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,14 +13,13 @@
 # limitations under the License.
 import math
 from functools import lru_cache
-from typing import Optional, Union
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -32,21 +30,13 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import (
-    Unpack,
-)
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
     logging,
 )
 
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
 
@@ -177,24 +167,55 @@ def pad_along_first_dim(
     return images, pixel_mask
 
 
-class Lfm2VlFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+class Lfm2VlImageProcessorKwargs(ImagesKwargs, total=False):
     """
     downsample_factor (`int`, *optional*, defaults to `2`):
         The downsampling factor for images used when resizing the image.
+    do_image_splitting (`bool`, *optional*, defaults to `True`):
+        Whether to split large images into a grid of smaller tiles. When enabled, images exceeding the maximum token
+        limit are divided into multiple tiles based on `min_tiles` and `max_tiles` constraints.
+    min_tiles (`int`, *optional*, defaults to `2`):
+        Minimum number of tiles (width × height) to use when splitting an image into a grid. The grid configuration
+        is chosen to maintain the original aspect ratio while staying within the `min_tiles` and `max_tiles` range.
+    max_tiles (`int`, *optional*, defaults to `10`):
+        Maximum number of tiles (width × height) to use when splitting an image into a grid. The grid configuration
+        is chosen to maintain the original aspect ratio while staying within the `min_tiles` and `max_tiles` range.
+    use_thumbnail (`bool`, *optional*, defaults to `True`):
+        Whether to include a thumbnail version of the image when splitting into tiles. The thumbnail provides a
+        low-resolution overview of the entire image and is added as an additional patch when the grid has more than
+        one tile.
+    min_image_tokens (`int`, *optional*, defaults to `64`):
+        Minimum number of image tokens (patches) to generate for an image. Images smaller than this threshold will
+        be upscaled to meet the minimum token requirement.
+    max_image_tokens (`int`, *optional*, defaults to `256`):
+        Maximum number of image tokens (patches) allowed for a single image. Images exceeding this limit will be
+        split into multiple tiles or downscaled accordingly.
+    encoder_patch_size (`int`, *optional*, defaults to `16`):
+        The patch size used by the vision encoder. Images are divided into patches of this size, and both height
+        and width must be divisible by this value (after accounting for the downsampling factor).
+    tile_size (`int`, *optional*, defaults to `512`):
+        The size of each tile when splitting large images into a grid. Each tile will be resized to this dimension
+        before being processed into patches.
+    max_pixels_tolerance (`float`, *optional*, defaults to `2.0`):
+        Tolerance factor for determining if an image is too large. An image is considered too large if its pixel
+        count exceeds `max_image_tokens * encoder_patch_size^2 * downsample_factor^2 * max_pixels_tolerance`.
+    return_row_col_info (`bool`, *optional*, defaults to `False`):
+        Whether to return row and column information for each image in the batch. When enabled, the output includes
+        `image_rows`, `image_cols`, and `image_sizes` fields indicating the grid layout and dimensions of processed images.
     """
 
-    downsample_factor: Optional[int]
-    do_image_splitting: Optional[bool]
-    min_tiles: Optional[int]
-    max_tiles: Optional[int]
-    use_thumbnail: Optional[bool]
-    min_image_tokens: Optional[int]
-    max_image_tokens: Optional[int]
-    encoder_patch_size: Optional[int]
-    tile_size: Optional[int]
-    max_pixels_tolerance: Optional[float]
-    do_pad: Optional[bool]
-    return_row_col_info: Optional[bool]
+    downsample_factor: int
+    do_image_splitting: bool
+    min_tiles: int
+    max_tiles: int
+    use_thumbnail: bool
+    min_image_tokens: int
+    max_image_tokens: int
+    encoder_patch_size: int
+    tile_size: int
+    max_pixels_tolerance: float
+    do_pad: bool
+    return_row_col_info: bool
 
 
 @auto_docstring
@@ -217,12 +238,12 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_pad = True
     return_row_col_info = False
-    image_mean = IMAGENET_STANDARD_STD
-    image_std = IMAGENET_STANDARD_MEAN
-    valid_kwargs = Lfm2VlFastImageProcessorKwargs
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    valid_kwargs = Lfm2VlImageProcessorKwargs
     model_input_names = ["pixel_values", "pixel_attention_mask", "spatial_shapes"]
 
-    def __init__(self, **kwargs: Unpack[Lfm2VlFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Lfm2VlImageProcessorKwargs]):
         super().__init__(**kwargs)
 
         max_thumbnail_image_patches = self.max_image_tokens * self.downsample_factor**2
@@ -271,7 +292,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         tile_size: int,
         use_thumbnail: bool,
         thumbnail_size: tuple[int],
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: "tvF.InterpolationMode" = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -284,7 +305,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         grid_width, grid_height, target_width, target_height, total_patches = self._get_grid_layout(
             height, width, min_tiles=min_tiles, max_tiles=max_tiles, tile_size=tile_size
         )
-        resized_image = F.resize(
+        resized_image = tvF.resize(
             image, (target_height, target_width), interpolation=interpolation, antialias=antialias
         )
 
@@ -305,7 +326,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
 
         if use_thumbnail and grid_width * grid_height != 1:
             total_patches += 1
-            thumbnail_image = F.resize(image, thumbnail_size, interpolation=interpolation, antialias=antialias)
+            thumbnail_image = tvF.resize(image, thumbnail_size, interpolation=interpolation, antialias=antialias)
             for i in range(batch_size):
                 processed_images[i] = list(processed_images[i]) + list(thumbnail_image[i][None, ...])
 
@@ -375,7 +396,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         encoder_patch_size: int,
         tile_size: int,
         max_pixels_tolerance: float,
-        interpolation: "F.InterpolationMode",
+        interpolation: "tvF.InterpolationMode",
     ) -> "torch.Tensor":
         batch_size, _, height, width = images.shape
         do_image_splitting = not min_tiles == max_tiles == 1
@@ -399,7 +420,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
 
         # Big image will be cropped into patches and small images are just resized
         if is_image_large and do_image_splitting:
-            images, num_rows, num_cols = self.crop_image_to_patches(
+            images, num_cols, num_rows = self.crop_image_to_patches(
                 images,
                 min_tiles=min_tiles,
                 max_tiles=max_tiles,
@@ -410,7 +431,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
             )
         else:
             num_rows = num_cols = 1
-            images = F.resize(images, (new_height, new_width), interpolation=interpolation)
+            images = tvF.resize(images, (new_height, new_width), interpolation=interpolation)
             # Make a list and treat it as single crop per image so it can be re-grouped back correctly
             images = [[image] for image in images]
 
@@ -423,13 +444,13 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         size: SizeDict,
-        interpolation: "F.InterpolationMode",
+        interpolation: "tvF.InterpolationMode",
         do_resize: bool,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Union[float, list[float]],
-        image_std: Union[float, list[float]],
+        image_mean: float | list[float],
+        image_std: float | list[float],
         downsample_factor: int,
         do_image_splitting: bool,
         min_tiles: int,
@@ -440,7 +461,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         encoder_patch_size: int,
         tile_size: int,
         max_pixels_tolerance: float,
-        return_tensors: Union[str, TensorType],
+        return_tensors: str | TensorType,
         disable_grouping: bool,
         do_pad: bool,
         return_row_col_info: bool,

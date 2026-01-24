@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """Image processor class for Kosmos2_5."""
 
 import math
-from typing import Optional, Union
 
 import numpy as np
 
@@ -34,6 +32,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_torch_available, logging
 from ...utils.import_utils import requires_backends
 
@@ -43,6 +42,19 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 DEFAULT_FONT_PATH = "ybelkada/fonts"
+
+
+class Kosmos2_5ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
+        The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.
+    max_patches (`int`, *optional*, defaults to 4096):
+        The maximum number of patches to extract from the image as per the
+        [KOSMOS 2.5 paper](https://huggingface.co/papers/2309.11419).
+    """
+
+    patch_size: dict[str, int]
+    max_patches: int
 
 
 # Copied from transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches
@@ -92,12 +104,13 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["flattened_patches"]
+    valid_kwargs = Kosmos2_5ImageProcessorKwargs
 
     def __init__(
         self,
         do_convert_rgb: bool = True,
         do_normalize: bool = True,
-        patch_size: Optional[dict[str, int]] = None,
+        patch_size: dict[str, int] | None = None,
         max_patches: int = 4096,
         **kwargs,
     ) -> None:
@@ -112,7 +125,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         max_patches: int,
         patch_size: dict,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -202,8 +215,8 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
     def normalize(
         self,
         image: np.ndarray,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -238,13 +251,13 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_convert_rgb: Optional[bool] = None,
-        do_normalize: Optional[bool] = None,
-        max_patches: Optional[int] = None,
-        patch_size: Optional[dict[str, int]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_convert_rgb: bool | None = None,
+        do_normalize: bool | None = None,
+        max_patches: int | None = None,
+        patch_size: dict[str, int] | None = None,
+        return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> ImageInput:
         """

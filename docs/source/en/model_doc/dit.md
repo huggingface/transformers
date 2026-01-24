@@ -85,6 +85,7 @@ print(f"The predicted class label is: {predicted_class_label}")
 ## Notes
 
 - The pretrained DiT weights can be loaded in a [BEiT] model with a modeling head to predict visual tokens.
+
    ```py
    from transformers import BeitForMaskedImageModeling
 

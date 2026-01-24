@@ -56,19 +56,13 @@ v2의 새로운 점:
 ## DebertaV2Tokenizer
 
 [[autodoc]] DebertaV2Tokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## DebertaV2TokenizerFast
 
 [[autodoc]] DebertaV2TokenizerFast
-    - build_inputs_with_special_tokens
-    - create_token_type_ids_from_sequences
 
-<frameworkcontent>
-<pt>
 
 ## DebertaV2Model
 
@@ -105,5 +99,3 @@ v2의 새로운 점:
 [[autodoc]] DebertaV2ForMultipleChoice
     - forward
 
-</pt>
-</frameworkcontent>

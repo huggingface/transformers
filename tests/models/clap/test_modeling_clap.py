@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch CLAP model."""
 
 import inspect
-import os
 import tempfile
 import unittest
 
@@ -28,7 +27,6 @@ from transformers.utils import is_torch_available
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -160,10 +158,8 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (ClapAudioModel, ClapAudioModelWithProjection) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = ClapAudioModelTester(self)
@@ -244,22 +240,6 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="ClapAudioModel does not output any loss term in the forward pass")
     def test_training(self):
-        pass
-
-    @unittest.skip(reason="ClapAudioModel does not output any loss term in the forward pass")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @slow
@@ -380,9 +360,6 @@ class ClapTextModelTester:
 @require_torch
 class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ClapTextModel, ClapTextModelWithProjection) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = ClapTextModelTester(self)
@@ -401,22 +378,6 @@ class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="ClapTextModel does not output any loss term in the forward pass")
     def test_training(self):
-        pass
-
-    @unittest.skip(reason="ClapTextModel does not output any loss term in the forward pass")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="ClapTextModel does not use inputs_embeds")
@@ -492,9 +453,7 @@ class ClapModelTester:
 class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ClapModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": ClapModel} if is_torch_available() else {}
-    fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
 
@@ -527,101 +486,6 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="ClapModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-
-    # override as the `logit_scale` parameter initialization is different for CLAP
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initialized as per the original implementation
-                    if "logit_scale" in name:
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
-    def _create_and_check_torchscript(self, config, inputs_dict):
-        if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to False")
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.torchscript = True
-        configs_no_init.return_dict = False
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-
-            try:
-                input_ids = inputs_dict["input_ids"]
-                input_features = inputs_dict["input_features"]  # CLAP needs input_features
-                traced_model = torch.jit.trace(model, (input_ids, input_features))
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
-
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
-                try:
-                    torch.jit.save(traced_model, pt_file_name)
-                except Exception:
-                    self.fail("Couldn't save module.")
-
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
-
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
-            loaded_model.eval()
-
-            model_state_dict = model.state_dict()
-            loaded_model_state_dict = loaded_model.state_dict()
-
-            non_persistent_buffers = {}
-            for key in loaded_model_state_dict:
-                if key not in model_state_dict:
-                    non_persistent_buffers[key] = loaded_model_state_dict[key]
-
-            loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
-            }
-
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
-
-            model_buffers = list(model.buffers())
-            for non_persistent_buffer in non_persistent_buffers.values():
-                found_buffer = False
-                for i, model_buffer in enumerate(model_buffers):
-                    if torch.equal(non_persistent_buffer, model_buffer):
-                        found_buffer = True
-                        break
-
-                self.assertTrue(found_buffer)
-                model_buffers.pop(i)
-
-            models_equal = True
-            for layer_name, p1 in model_state_dict.items():
-                p2 = loaded_model_state_dict[layer_name]
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
-
-            self.assertTrue(models_equal)
 
     def test_load_audio_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -666,7 +530,7 @@ class ClapModelIntegrationTest(unittest.TestCase):
         processor = ClapProcessor.from_pretrained(model_id)
 
         for padding in self.paddings:
-            inputs = processor(audios=audio_sample["audio"]["array"], return_tensors="pt", padding=padding).to(
+            inputs = processor(audio=audio_sample["audio"]["array"], return_tensors="pt", padding=padding).to(
                 torch_device
             )
 
@@ -694,7 +558,7 @@ class ClapModelIntegrationTest(unittest.TestCase):
 
         for padding in self.paddings:
             inputs = processor(
-                audios=audio_sample["audio"]["array"], return_tensors="pt", padding=padding, truncation="fusion"
+                audio=audio_sample["audio"]["array"], return_tensors="pt", padding=padding, truncation="fusion"
             ).to(torch_device)
 
             audio_embed = model.get_audio_features(**inputs)
@@ -720,7 +584,7 @@ class ClapModelIntegrationTest(unittest.TestCase):
         processor = ClapProcessor.from_pretrained(model_id)
 
         for padding in self.paddings:
-            inputs = processor(audios=audio_samples, return_tensors="pt", padding=padding, truncation="fusion").to(
+            inputs = processor(audio=audio_samples, return_tensors="pt", padding=padding, truncation="fusion").to(
                 torch_device
             )
 
@@ -747,7 +611,7 @@ class ClapModelIntegrationTest(unittest.TestCase):
         processor = ClapProcessor.from_pretrained(model_id)
 
         for padding in self.paddings:
-            inputs = processor(audios=audio_samples, return_tensors="pt", padding=padding).to(torch_device)
+            inputs = processor(audio=audio_samples, return_tensors="pt", padding=padding).to(torch_device)
 
             audio_embed = model.get_audio_features(**inputs)
             expected_mean = EXPECTED_MEANS_FUSED[padding]

@@ -21,9 +21,9 @@ import os
 import re
 import sys
 import time
-from typing import Any, Optional, Union
+from typing import Any
 
-import requests
+import httpx
 from compare_test_runs import compare_job_sets
 from get_ci_error_statistics import get_jobs
 from get_previous_daily_ci import get_last_daily_ci_reports, get_last_daily_ci_run, get_last_daily_ci_workflow_run_id
@@ -40,6 +40,7 @@ job_to_test_map = {
     "run_examples_gpu": "Examples directory",
     "run_torch_cuda_extensions_gpu": "DeepSpeed",
     "run_quantization_torch_gpu": "Quantization",
+    "run_kernels_gpu": "Kernels",
 }
 
 # The values are used as the file names where to save the corresponding CI job results.
@@ -50,6 +51,7 @@ test_to_result_name = {
     "Examples directory": "example",
     "DeepSpeed": "deepspeed",
     "Quantization": "quantization",
+    "Kernels": "kernels",
 }
 
 NON_MODEL_TEST_MODULES = [
@@ -65,6 +67,7 @@ NON_MODEL_TEST_MODULES = [
     "utils",
     "fsdp",
     "quantization",
+    "kernels",
 ]
 
 
@@ -120,7 +123,7 @@ def handle_stacktraces(test_results):
     return stacktraces
 
 
-def dicts_to_sum(objects: Union[dict[str, dict], list[dict]]):
+def dicts_to_sum(objects: dict[str, dict] | list[dict]):
     if isinstance(objects, dict):
         lists = objects.values()
     else:
@@ -139,7 +142,7 @@ class Message:
         ci_title: str,
         model_results: dict,
         additional_results: dict,
-        selected_warnings: Optional[list] = None,
+        selected_warnings: list | None = None,
         prev_ci_artifacts=None,
         other_ci_artifacts=None,
     ):
@@ -224,7 +227,7 @@ class Message:
             "type": "section",
             "text": {
                 "type": "plain_text",
-                "text": f"🌞 There were no failures: all {self.n_tests} tests passed. The suite ran in {self.time}.",
+                "text": f"[SUCCESS] There were no failures: all {self.n_tests} tests passed. The suite ran in {self.time}.",
                 "emoji": True,
             },
             "accessory": {
@@ -242,7 +245,7 @@ class Message:
                 "type": "plain_text",
                 "text": (
                     f"There were {self.n_failures} failures, out of {self.n_tests} tests.\n"
-                    f"🚨 There were {self.n_jobs_errored_out} jobs errored out (not producing test output files).\n"
+                    f"[ERROR] There were {self.n_jobs_errored_out} jobs errored out (not producing test output files).\n"
                     f"The suite ran in {self.time}."
                 ),
                 "emoji": True,
@@ -709,16 +712,16 @@ class Message:
 
         offline_runners = []
         if runner_not_available:
-            text = "💔 CI runners are not available! Tests are not run. 😭"
+            text = "[FAIL] CI runners are not available! Tests are not run."
             result = os.environ.get("OFFLINE_RUNNERS")
             if result is not None:
                 offline_runners = json.loads(result)
         elif runner_failed:
-            text = "💔 CI runners have problems! Tests are not run. 😭"
+            text = "[FAIL] CI runners have problems! Tests are not run."
         elif setup_failed:
-            text = "💔 Setup job failed. Tests are not run. 😭"
+            text = "[FAIL] Setup job failed. Tests are not run."
         else:
-            text = "💔 There was an issue running the tests. 😭"
+            text = "[FAIL] There was an issue running the tests."
 
         error_block_1 = {
             "type": "header",
@@ -732,7 +735,7 @@ class Message:
         if len(offline_runners) > 0:
             text = "\n  • " + "\n  • ".join(offline_runners)
             text = f"The following runners are offline:\n{text}\n\n"
-        text += "🙏 Let's fix it ASAP! 🙏"
+        text += "Let's fix it ASAP!"
 
         error_block_2 = {
             "type": "section",
@@ -941,7 +944,7 @@ class Message:
                     time.sleep(1)
 
 
-def retrieve_artifact(artifact_path: str, gpu: Optional[str]):
+def retrieve_artifact(artifact_path: str, gpu: str | None):
     if gpu not in [None, "single", "multi"]:
         raise ValueError(f"Invalid GPU for artifact. Passed GPU: `{gpu}`.")
 
@@ -970,7 +973,7 @@ def retrieve_available_artifacts():
         def __str__(self):
             return self.name
 
-        def add_path(self, path: str, gpu: Optional[str] = None):
+        def add_path(self, path: str, gpu: str | None = None):
             self.paths.append({"name": self.name, "path": path, "gpu": gpu})
 
     _available_artifacts: dict[str, Artifact] = {}
@@ -1089,7 +1092,7 @@ if __name__ == "__main__":
         # Retrieve the PR title and author login to complete the report
         commit_number = ci_url.split("/")[-1]
         ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/commits/{commit_number}"
-        ci_details = requests.get(ci_detail_url).json()
+        ci_details = httpx.get(ci_detail_url).json()
         ci_author = ci_details["author"]["login"]
 
         merged_by = None
@@ -1098,7 +1101,7 @@ if __name__ == "__main__":
         if len(numbers) > 0:
             pr_number = numbers[0]
             ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/pulls/{pr_number}"
-            ci_details = requests.get(ci_detail_url).json()
+            ci_details = httpx.get(ci_detail_url).json()
 
             ci_author = ci_details["user"]["login"]
             ci_url = f"https://github.com/{repository_full_name}/pull/{pr_number}"
@@ -1117,7 +1120,7 @@ if __name__ == "__main__":
         ci_title = ""
 
     # `title` will be updated at the end before calling `Message()`.
-    title = f"🤗 Results of {ci_event}"
+    title = f"[INFO] Results of {ci_event}"
     if runner_not_available or runner_failed or setup_failed:
         Message.error_out(title, ci_title, runner_not_available, runner_failed, setup_failed)
         exit(0)
@@ -1301,6 +1304,7 @@ if __name__ == "__main__":
         "PyTorch pipelines": "run_pipelines_torch_gpu_test_reports",
         "Examples directory": "run_examples_gpu_test_reports",
         "DeepSpeed": "run_torch_cuda_extensions_gpu_test_reports",
+        "Kernels": "run_kernels_gpu_test_reports",
     }
 
     if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
@@ -1407,7 +1411,10 @@ if __name__ == "__main__":
     if not os.path.isdir(os.path.join(os.getcwd(), f"ci_results_{job_name}")):
         os.makedirs(os.path.join(os.getcwd(), f"ci_results_{job_name}"))
 
-    nvidia_daily_ci_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml"
+    nvidia_daily_ci_workflow = (
+        "huggingface/transformers/.github/workflows/self-scheduled-caller.yml",
+        "huggingface/transformers/.github/workflows/self-scheduled-flash-attn-caller.yml",
+    )
     amd_daily_ci_workflows = (
         "huggingface/transformers/.github/workflows/self-scheduled-amd-mi325-caller.yml",
         "huggingface/transformers/.github/workflows/self-scheduled-amd-mi355-caller.yml",
@@ -1518,6 +1525,16 @@ if __name__ == "__main__":
                 token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=other_workflow_id, commit_sha=ci_sha
             )
             other_workflow_run_ids.append(other_workflow_run_id)
+    # triggered via `issue_comment` for CI on pull requests (e.g. using the comment `run-slow:`)
+    elif os.environ.get("GITHUB_EVENT_NAME") in ["issue_comment"]:
+        # TODO (ydshieh): Make this flexible once we implement `run-slow` for AMD CI and others.
+        # The id of the workflow `.github/workflows/self-scheduled-caller.yml` (not of a workflow run of it).
+        prev_workflow_id = "90575235"
+        # TODO (ydshieh): It's better to make sure using the last completed scheduled workflow run with the commit being a parent
+        #  of the PR's `merge_commit`.
+        prev_workflow_run_id = get_last_daily_ci_workflow_run_id(
+            token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=prev_workflow_id
+        )
     else:
         prev_workflow_run_id = os.environ["PREV_WORKFLOW_RUN_ID"]
         other_workflow_run_id = os.environ["OTHER_WORKFLOW_RUN_ID"]
@@ -1587,7 +1604,7 @@ if __name__ == "__main__":
     if job_name in job_to_test_map:
         ci_name_in_report = job_to_test_map[job_name]
 
-    title = f"🤗 Results of {ci_event}: {ci_name_in_report}"
+    title = f"[INFO] Results of {ci_event}: {ci_name_in_report}"
 
     message = Message(
         title,

@@ -51,7 +51,7 @@ Helper class to enable loading timm models to be used with the transformers libr
 >>> top5_probabilities, top5_class_indices = torch.topk(logits.softmax(dim=1) * 100, k=5)
 ```
 
-## Resources:
+## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with TimmWrapper.
 

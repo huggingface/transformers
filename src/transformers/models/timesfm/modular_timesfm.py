@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google LLC and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,14 +14,14 @@
 """PyTorch TimesFM model."""
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -46,8 +45,8 @@ class TimesFmOutput(BaseModelOutput):
         The scale of the time series inputs.
     """
 
-    loc: Optional[torch.Tensor] = None
-    scale: Optional[torch.Tensor] = None
+    loc: torch.Tensor | None = None
+    scale: torch.Tensor | None = None
 
 
 @dataclass
@@ -62,9 +61,9 @@ class TimesFmOutputForPrediction(BaseModelOutput):
         The loss of the TimesFM model.
     """
 
-    mean_predictions: Optional[torch.Tensor] = None
-    full_predictions: Optional[torch.Tensor] = None
-    loss: Optional[Union[torch.Tensor, float]] = None
+    mean_predictions: torch.Tensor | None = None
+    full_predictions: torch.Tensor | None = None
+    loss: torch.Tensor | float | None = None
 
 
 class TimesFmMLP(nn.Module):
@@ -122,6 +121,7 @@ class TimesFmPositionalEmbedding(nn.Module):
         super().__init__()
         min_timescale = config.min_timescale
         max_timescale = config.max_timescale
+        self.min_timescale, self.max_timescale = min_timescale, max_timescale
         self.embedding_dims = config.hidden_size
 
         num_timescales = self.embedding_dims // 2
@@ -190,9 +190,9 @@ class TimesFmAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -236,7 +236,7 @@ class TimesFmDecoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         paddings: torch.Tensor,
         output_attentions: bool = False,
-    ) -> tuple[Optional[torch.Tensor], torch.Tensor]:
+    ) -> tuple[torch.Tensor | None, torch.Tensor]:
         # Self Attention
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -259,13 +259,26 @@ class TimesFmPreTrainedModel(PreTrainedModel):
     base_model_prefix = "timesfm"
     _no_split_modules = ["TimesFmDecoderLayer"]
     main_input_name = "past_values"
+    input_modalities = ("time",)
     _supports_sdpa = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, TimesFmAttention):
             # Initialize scaling parameter
-            nn.init.ones_(module.scaling)
+            init.ones_(module.scaling)
+        elif isinstance(module, TimesFmPositionalEmbedding):
+            num_timescales = module.embedding_dims // 2
+            max_timescale, min_timescale = module.max_timescale, module.min_timescale
+            log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(
+                num_timescales - 1, 1
+            )
+            init.copy_(
+                module.inv_timescales,
+                min_timescale
+                * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment),
+            )
 
 
 @auto_docstring
@@ -294,11 +307,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """Input is of shape [B, N, P]."""
         mu, sigma = self._timesfm_masked_mean_std(inputs, patched_pads)
-        sigma = torch.where(
-            sigma < self.config.tolerance,
-            torch.tensor(1.0, dtype=sigma.dtype, device=sigma.device),
-            sigma,
-        )
+        sigma = torch.clamp(sigma, min=self.config.tolerance)
 
         # Normalize each patch
         outputs = (inputs - mu[:, None, None]) / sigma[:, None, None]
@@ -318,6 +327,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         freq: torch.Tensor,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        **kwargs,
     ) -> TimesFmOutput:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -400,12 +410,12 @@ class TimesFmModel(TimesFmPreTrainedModel):
 
     @staticmethod
     def _prepare_4d_attention_mask(
-        attention_mask: Optional[torch.Tensor],
+        attention_mask: torch.Tensor | None,
         sequence_length: int,
         dtype: torch.dtype,
         device: torch.device,
         is_causal: bool = True,
-    ) -> Optional[torch.Tensor]:
+    ) -> torch.Tensor | None:
         """
         Creates 4D attention mask and combines causal and padding masks if needed.
 
@@ -477,24 +487,16 @@ class TimesFmModel(TimesFmPreTrainedModel):
 
         # Calculate the number of valid elements
         num_valid_elements = torch.sum(mask, dim=1)
-        num_valid_elements = torch.where(
-            num_valid_elements == 0,
-            torch.tensor(1, dtype=num_valid_elements.dtype, device=num_valid_elements.device),
-            num_valid_elements,
-        )
+        num_valid_elements = torch.clamp(num_valid_elements, min=1.0)
 
-        # Calculate the masked sum and squared sum
+        # Calculate the masked sum and mean
         masked_sum = torch.sum(arr * mask, dim=1)
-        masked_squared_sum = torch.sum((arr * mask) ** 2, dim=1)
+        masked_mean = masked_sum / num_valid_elements  # [b]
 
-        # Calculate the masked mean and standard deviation
-        masked_mean = masked_sum / num_valid_elements
-        masked_var = masked_squared_sum / num_valid_elements - masked_mean**2
-        masked_var = torch.where(
-            masked_var < 0.0,
-            torch.tensor(0.0, dtype=masked_var.dtype, device=masked_var.device),
-            masked_var,
-        )
+        # Calculate the masked variance using centered values
+        masked_centered_arr = (arr - masked_mean.unsqueeze(-1)) * mask
+        masked_var = torch.sum(masked_centered_arr**2, dim=1) / num_valid_elements
+        masked_var = torch.clamp(masked_var, min=0.0)
         masked_std = torch.sqrt(masked_var)
 
         return masked_mean, masked_std
@@ -574,7 +576,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         - the number of padded examples for SPMD so that each core has the same
             number (a multiple of `batch_size`) of examples.
         """
-        input_ts, input_padding, inp_freq = [], [], []
+        input_ts, input_padding = [], []
 
         for i, ts in enumerate(inputs):
             input_len = ts.shape[0]
@@ -589,12 +591,11 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 
             input_ts.append(ts)
             input_padding.append(padding)
-            inp_freq.append(freq[i])
 
         return (
             torch.stack(input_ts, dim=0),
             torch.stack(input_padding, dim=0),
-            torch.tensor(inp_freq, dtype=torch.int32).reshape(-1, 1),
+            torch.tensor(freq[: len(inputs)], dtype=torch.int32).reshape(-1, 1),
         )
 
     def _postprocess_output(
@@ -625,14 +626,15 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
     def forward(
         self,
         past_values: Sequence[torch.Tensor],
-        freq: Optional[Sequence[Union[torch.Tensor, int]]] = None,
-        window_size: Optional[int] = None,
-        future_values: Optional[torch.Tensor] = None,
-        forecast_context_len: Optional[int] = None,
+        freq: Sequence[torch.Tensor | int] | None = None,
+        window_size: int | None = None,
+        future_values: torch.Tensor | None = None,
+        forecast_context_len: int | None = None,
         return_forecast_on_context: bool = False,
         truncate_negative: bool = False,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        **kwargs,
     ) -> TimesFmOutputForPrediction:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):

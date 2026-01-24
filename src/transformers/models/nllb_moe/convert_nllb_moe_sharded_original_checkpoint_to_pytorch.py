@@ -85,7 +85,7 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, num_experts, dtype, weig
             )
             torch.save(expert_state, save_path)
             sharded_state_dicts.append(expert_state.keys())
-            total_size += sum([value.numel() for key, value in expert_state.items()]) * (
+            total_size += sum(value.numel() for key, value in expert_state.items()) * (
                 expert_state[list(expert_state)[0]].element_size()
             )
 

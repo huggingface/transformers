@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Meta Platforms, Inc. and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +15,6 @@ Processor class for PerceptionLM.
 """
 
 from collections.abc import Iterable
-from typing import Optional, Union
 
 import numpy as np
 
@@ -24,7 +22,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
 
 
@@ -40,33 +38,8 @@ class PerceptionLMProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class PerceptionLMProcessor(ProcessorMixin):
-    r"""
-    Constructs a PerceptionLM processor which wraps a PerceptionLM image processor, a PerceptionLM video processor, and a tokenizer into a single processor.
-
-    [`PerceptionLMProcessor`] offers all the functionalities of [`PerceptionLMImageProcessorFast`], [`PerceptionLMVideoProcessor`], and the tokenizer (e.g. [`LlamaTokenizerFast`]). See the
-    [`~PerceptionLMProcessor.__call__`] and [`~PerceptionLMProcessor.decode`] for more information.
-
-    Args:
-        video_processor ([`PerceptionLMVideoProcessor`], *optional*):
-            The video processor to process video inputs.
-        image_processor ([`PerceptionLMImageProcessorFast`], *optional*):
-            The image processor to process image inputs.
-        tokenizer ([`LlamaTokenizerFast`] or similar, *optional*):
-            The tokenizer to process text inputs.
-        patch_size (`int`, *optional*):
-            Patch size from the vision tower.
-        chat_template (`str`, *optional*):
-            A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
-        pooling_ratio (`int`, *optional*, defaults to 2):
-            Pooling ratio for vision tokens. If not 1, 2D adaptive pooling is applied over projected vision tokens.
-    """
-
-    attributes = ["video_processor", "image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    video_processor_class = "AutoVideoProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         video_processor=None,
@@ -77,6 +50,12 @@ class PerceptionLMProcessor(ProcessorMixin):
         pooling_ratio=2,
         **kwargs,
     ):
+        r"""
+        patch_size (`int`, *optional*):
+            Patch size from the vision tower.
+        pooling_ratio (`int`, *optional*, defaults to 2):
+            Pooling ratio for vision tokens. If not 1, 2D adaptive pooling is applied over projected vision tokens.
+        """
         self.patch_size = patch_size
         self.pooling_ratio = pooling_ratio
         self.image_token = tokenizer.image_token
@@ -85,34 +64,15 @@ class PerceptionLMProcessor(ProcessorMixin):
         self.video_token_id = tokenizer.video_token_id
         super().__init__(video_processor, image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos: Optional[VideoInput] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        videos: VideoInput | None = None,
         **kwargs: Unpack[PerceptionLMProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Prepares a batch containing one or more sequences of text and/or images and/or videos.
-
-        If `text` is provided, it is tokenized using the tokenizer.
-        If `images` is provided, they are processed using the image processor.
-        If `videos` is provided, they are processed using the video processor.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
-                The image or batch of images to be processed. Each image can be a PIL image, NumPy array, or PyTorch tensor.
-                Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, *optional*):
-                The sequence or batch of sequences to be tokenized. Each sequence can be a string.
-            videos (`Any`, *optional*):
-                The video or batch of videos to be processed.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -145,7 +105,7 @@ class PerceptionLMProcessor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         # try to expand inputs in processing if we have the necessary parts
         prompt_strings = []

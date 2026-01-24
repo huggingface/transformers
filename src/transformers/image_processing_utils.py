@@ -14,13 +14,13 @@
 
 import math
 from collections.abc import Iterable
-from typing import Optional, Union
 
 import numpy as np
 
 from .image_processing_base import BatchFeature, ImageProcessingMixin
 from .image_transforms import center_crop, normalize, rescale
-from .image_utils import ChannelDimension, get_image_size
+from .image_utils import ChannelDimension, ImageInput, get_image_size
+from .processing_utils import ImagesKwargs, Unpack
 from .utils import logging
 from .utils.import_utils import requires
 
@@ -36,8 +36,7 @@ INIT_SERVICE_KWARGS = [
 
 @requires(backends=("vision",))
 class BaseImageProcessor(ImageProcessingMixin):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    valid_kwargs = ImagesKwargs
 
     @property
     def is_fast(self) -> bool:
@@ -46,9 +45,9 @@ class BaseImageProcessor(ImageProcessingMixin):
         """
         return False
 
-    def __call__(self, images, **kwargs) -> BatchFeature:
+    def __call__(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
         """Preprocess an image or a batch of images."""
-        return self.preprocess(images, **kwargs)
+        return self.preprocess(images, *args, **kwargs)
 
     def preprocess(self, images, **kwargs) -> BatchFeature:
         raise NotImplementedError("Each image processor must implement its own preprocess method")
@@ -57,8 +56,8 @@ class BaseImageProcessor(ImageProcessingMixin):
         self,
         image: np.ndarray,
         scale: float,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -88,10 +87,10 @@ class BaseImageProcessor(ImageProcessingMixin):
     def normalize(
         self,
         image: np.ndarray,
-        mean: Union[float, Iterable[float]],
-        std: Union[float, Iterable[float]],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        mean: float | Iterable[float],
+        std: float | Iterable[float],
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -126,8 +125,8 @@ class BaseImageProcessor(ImageProcessingMixin):
         self,
         image: np.ndarray,
         size: dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -188,7 +187,7 @@ def is_valid_size_dict(size_dict):
 
 
 def convert_to_size_dict(
-    size, max_size: Optional[int] = None, default_to_square: bool = True, height_width_order: bool = True
+    size, max_size: int | None = None, default_to_square: bool = True, height_width_order: bool = True
 ):
     # By default, if size is an int we assume it represents a tuple of (size, size).
     if isinstance(size, int) and default_to_square:
@@ -216,8 +215,8 @@ def convert_to_size_dict(
 
 
 def get_size_dict(
-    size: Optional[Union[int, Iterable[int], dict[str, int]]] = None,
-    max_size: Optional[int] = None,
+    size: int | Iterable[int] | dict[str, int] | None = None,
+    max_size: int | None = None,
     height_width_order: bool = True,
     default_to_square: bool = True,
     param_name="size",

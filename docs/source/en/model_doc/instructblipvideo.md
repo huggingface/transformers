@@ -45,7 +45,6 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 ## InstructBlipVideoConfig
 
 [[autodoc]] InstructBlipVideoConfig
-    - from_vision_qformer_text_configs
 
 ## InstructBlipVideoVisionConfig
 
@@ -59,15 +58,9 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 
 [[autodoc]] InstructBlipVideoProcessor
 
-
 ## InstructBlipVideoVideoProcessor
 
 [[autodoc]] InstructBlipVideoVideoProcessor
-    - preprocess
-
-## InstructBlipVideoImageProcessor
-
-[[autodoc]] InstructBlipVideoImageProcessor
     - preprocess
 
 ## InstructBlipVideoVisionModel
@@ -81,6 +74,7 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
     - forward
 
 ## InstructBlipVideoModel
+
 [[autodoc]] InstructBlipVideoModel
     - forward
 
@@ -89,3 +83,4 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 [[autodoc]] InstructBlipVideoForConditionalGeneration
     - forward
     - generate
+    - get_video_features

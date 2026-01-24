@@ -25,22 +25,16 @@ rendered properly in your Markdown viewer.
 
 # MarianMT
 
-
-
 [MarianMT](https://huggingface.co/papers/1804.00344) is a machine translation model trained with the Marian framework which is written in pure C++. The framework includes its own custom auto-differentiation engine and efficient meta-algorithms to train encoder-decoder models like BART.
 
 All MarianMT models are transformer encoder-decoders with 6 layers in each component, use static sinusoidal positional embeddings, don't have a layernorm embedding, and the model starts generating with the prefix `pad_token_id` instead of `<s/>`.
 
-
-
 You can find all the original MarianMT checkpoints under the [Language Technology Research Group at the University of Helsinki](https://huggingface.co/Helsinki-NLP/models?search=opus-mt) organization.
-
 
 > [!TIP]
 > This model was contributed by [sshleifer](https://huggingface.co/sshleifer).
 >
 > Click on the MarianMT models in the right sidebar for more examples of how to apply MarianMT to translation tasks.
-
 
 The example below demonstrates how to translate text using [`Pipeline`] or the [`AutoModel`] class.
 
@@ -78,7 +72,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
-
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
 ```python
@@ -87,6 +80,7 @@ from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 visualizer = AttentionMaskVisualizer("Helsinki-NLP/opus-mt-en-de")
 visualizer("Hello, how are you?")
 ```
+
 <div class="flex justify-center">
    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/marianmt-attn-mask.png"/>
 </div>

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The rednote-hilab team and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,22 +11,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Dots1Config(PretrainedConfig):
+class Dots1Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Dots1Model`]. It is used to instantiate a
     `dots.llm1` model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     [rednote-hilab/dots.llm1.base](https://huggingface.co/rednote-hilab/dots.llm1.base).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 152064):
@@ -73,10 +74,10 @@ class Dots1Config(PretrainedConfig):
             Whether or not the model should return the last key/values attentions. Only relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie the input and output word embeddings.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`dict`, *optional*):
-            Dictionary for scaling RoPE embeddings. Supports `{"type": strategy name, "factor": scaling factor}`.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the self-attention projections.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -90,6 +91,12 @@ class Dots1Config(PretrainedConfig):
             additional layer afterwards will use SWA (Sliding Window Attention).
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     Examples:
         ```python
@@ -106,23 +113,20 @@ class Dots1Config(PretrainedConfig):
     model_type = "dots1"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    base_model_tp_plan = {  # TODO: only replicate attention layers when > first_k_dense_replace
+    base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.*.gate_proj": "local_colwise",
-        "layers.*.mlp.experts.*.up_proj": "local_colwise",
-        "layers.*.mlp.experts.*.down_proj": "local_rowwise",
-        "layers.*.mlp.experts.*": "local",  # each expert is wrapped in a module list
-        "layers.*.mlp.shared_experts.gate_proj": "local_colwise",
-        "layers.*.mlp.shared_experts.up_proj": "local_colwise",
-        "layers.*.mlp.shared_experts.down_proj": "local_rowwise",
-        "layers.*.mlp.shared_experts": "local",
-        "layers.*.mlp.gate_proj": "local_colwise",
-        "layers.*.mlp.up_proj": "local_colwise",
-        "layers.*.mlp.down_proj": "local_rowwise",
-        "layers.*.mlp": "gather",  # This is the only moment where results are gathered
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
 
     base_model_pp_plan = {
@@ -130,37 +134,42 @@ class Dots1Config(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
 
     def __init__(
         self,
-        vocab_size=152064,
-        hidden_size=4608,
-        intermediate_size=10944,
-        moe_intermediate_size=1408,
-        num_hidden_layers=62,
-        num_attention_heads=32,
-        num_key_value_heads=32,
-        n_shared_experts=None,
-        n_routed_experts=None,
-        n_group=1,
-        topk_group=1,
-        num_experts_per_tok=None,
-        first_k_dense_replace=0,
-        norm_topk_prob=False,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        routed_scaling_factor=1.0,
-        sliding_window=4096,
-        max_window_layers=62,
-        layer_types=None,
+        vocab_size: int | None = 152064,
+        hidden_size: int | None = 4608,
+        intermediate_size: int | None = 10944,
+        moe_intermediate_size: int | None = 1408,
+        num_hidden_layers: int | None = 62,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 32,
+        n_shared_experts: int | None = None,
+        n_routed_experts: int | None = None,
+        n_group: int | None = 1,
+        topk_group: int | None = 1,
+        num_experts_per_tok: int | None = None,
+        first_k_dense_replace: int | None = 0,
+        norm_topk_prob: bool | None = False,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 2048,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        routed_scaling_factor: float | None = 1.0,
+        sliding_window: int | None = 4096,
+        max_window_layers: int | None = 62,
+        layer_types: list[str] | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -184,8 +193,6 @@ class Dots1Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.routed_scaling_factor = routed_scaling_factor
@@ -202,10 +209,13 @@ class Dots1Config(PretrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.rope_parameters = rope_parameters
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["Dots1Config"]

@@ -85,9 +85,6 @@ class MPNetModelTester:
         self.num_choices = num_choices
         self.scope = scope
 
-    def get_large_model_config(self):
-        return MPNetConfig.from_pretrained("microsoft/mpnet-base")
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -215,7 +212,7 @@ class MPNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     test_resize_embeddings = True
 
     def setUp(self):
@@ -244,10 +241,6 @@ class MPNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mpnet_for_question_answering(*config_and_inputs)
-
-    @unittest.skip(reason="TFMPNet adds poolers to all models, unlike the PT model class.")
-    def test_tf_from_pt_safetensors(self):
-        return
 
 
 @require_torch

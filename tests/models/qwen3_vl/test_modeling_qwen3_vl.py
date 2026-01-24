@@ -65,7 +65,7 @@ class Qwen3VLVisionText2TextModelTester:
             "num_key_value_heads": 2,
             "rope_theta": 10000,
             "tie_word_embeddings": True,
-            "rope_scaling": {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
+            "rope_parameters": {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
         },
         vision_config={
             "depth": 2,
@@ -106,7 +106,7 @@ class Qwen3VLVisionText2TextModelTester:
         self.num_attention_heads = text_config["num_attention_heads"]
         self.num_key_value_heads = text_config["num_key_value_heads"]
         self.rope_theta = text_config["rope_theta"]
-        self.rope_scaling = text_config["rope_scaling"]
+        self.rope_parameters = text_config["rope_parameters"]
         self.hidden_act = text_config["hidden_act"]
         self.max_position_embeddings = text_config["max_position_embeddings"]
         self.model_type = text_config["model_type"]
@@ -182,8 +182,6 @@ class Qwen3VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         if is_torch_available()
         else ()
     )
-    test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Qwen3VLVisionText2TextModelTester(self)
@@ -201,6 +199,7 @@ class Qwen3VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            model.eval()
             _ = model(**input_dict)  # successful forward with no modifications
             curr_input_dict = copy.deepcopy(input_dict)
 

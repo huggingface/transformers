@@ -139,7 +139,6 @@ outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
-
 ## Notes
 
 - Ensure your Transformers library version is up-to-date. SmolLM3 requires Transformers>=4.53.0 for full support.

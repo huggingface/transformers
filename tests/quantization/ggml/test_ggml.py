@@ -26,7 +26,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_gguf,
-    require_read_token,
     require_torch_accelerator,
     slow,
     torch_device,
@@ -311,6 +310,7 @@ class GgufModelTests(unittest.TestCase):
     qwen3_model_id = "Qwen/Qwen3-0.6B-GGUF"
     qwen3moe_model_id = "Qwen/Qwen3-30B-A3B-GGUF"
     umt5_encoder_model_id = "city96/umt5-xxl-encoder-gguf"
+    lfm2_model_id = "LiquidAI/LFM2-1.2B-GGUF"
 
     q4_0_phi3_model_id = "Phi-3-mini-4k-instruct-q4.gguf"
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
@@ -350,6 +350,7 @@ class GgufModelTests(unittest.TestCase):
     q8_0_qwen3_model_id = "Qwen3-0.6B-Q8_0.gguf"
     q4_k_m_qwen3moe_model_id = "Qwen3-30B-A3B-Q4_K_M.gguf"
     q8_0_umt5_encoder_model_id = "umt5-xxl-encoder-Q8_0.gguf"
+    q4_k_m_lfm2_model_id = "LFM2-1.2B-Q4_K_M.gguf"
 
     example_text = "Hello"
 
@@ -884,7 +885,6 @@ class GgufModelTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello! 👋\n\nI'm a large language model"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
-    @require_read_token
     def test_gemma2_weights_conversion_fp32(self):
         original_model = AutoModelForCausalLM.from_pretrained(
             self.original_gemma2_model_id,
@@ -907,7 +907,6 @@ class GgufModelTests(unittest.TestCase):
             else:
                 raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
-    @require_read_token
     @unittest.skipUnless(is_gguf_available("0.16.0"), "test requires gguf version >= 0.16.0")
     def test_gemma3_qat_q4_0(self):
         model = AutoModelForCausalLM.from_pretrained(
@@ -924,7 +923,6 @@ class GgufModelTests(unittest.TestCase):
 
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
-    @require_read_token
     @unittest.skipUnless(is_gguf_available("0.16.0"), "test requires gguf version >= 0.16.0")
     def test_gemma3_text_weights_conversion_bf16(self):
         original_model = AutoModelForCausalLM.from_pretrained(
@@ -949,7 +947,7 @@ class GgufModelTests(unittest.TestCase):
                 raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
     # Test text backbone conversion for gemma3 vision models
-    @require_read_token
+
     @unittest.skipUnless(is_gguf_available("0.16.0"), "test requires gguf version >= 0.16.0")
     def test_gemma3_vision_weights_conversion_bf16(self):
         original_model = AutoModelForCausalLM.from_pretrained(
@@ -1052,7 +1050,6 @@ class GgufModelTests(unittest.TestCase):
         self.assertEqual(GGUF_TO_FAST_CONVERTERS["deci"], GGUFLlamaConverter)
         self.assertEqual(GGUF_TO_FAST_CONVERTERS["decilm"], GGUFLlamaConverter)
 
-    @require_read_token
     @unittest.skipUnless(is_gguf_available("0.16.0"), "test requires gguf version >= 0.16.0")
     def test_qwen3_q8_0(self):
         tokenizer = AutoTokenizer.from_pretrained(self.qwen3_model_id, gguf_file=self.q8_0_qwen3_model_id)
@@ -1116,3 +1113,19 @@ class GgufModelTests(unittest.TestCase):
         ).to(torch_device)
 
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], EXPECTED_OUTPUT, rtol=6e-3, atol=4e-4)
+
+    ## to be precise, it currently require upstream gguf-py to be installed as lfm2 is not yet present in gguf 0.17.1
+    @unittest.skipUnless(is_gguf_available("0.17.0"), "test requires gguf version >= 0.17.0")
+    def test_lfm2_q4_k_m(self):
+        tokenizer = AutoTokenizer.from_pretrained("LiquidAI/LFM2-1.2B")
+        model = AutoModelForCausalLM.from_pretrained(
+            self.lfm2_model_id,
+            gguf_file=self.q4_k_m_lfm2_model_id,
+            dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
+        out = model.generate(text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello Atari 2600! es un videoj"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)

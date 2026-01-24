@@ -1,4 +1,3 @@
-import warnings
 from collections import UserDict
 from typing import Any, Union, overload
 
@@ -78,7 +77,7 @@ class ZeroShotImageClassificationPipeline(Pipeline):
 
     @overload
     def __call__(
-        self, image: Union[list[str], list["Image.Image"]], candidate_labels: list[str], **kwargs: Any
+        self, image: list[str] | list["Image.Image"], candidate_labels: list[str], **kwargs: Any
     ) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
@@ -86,7 +85,7 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         image: Union[str, list[str], "Image.Image", list["Image.Image"]],
         candidate_labels: list[str],
         **kwargs: Any,
-    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
+    ) -> list[dict[str, Any]] | list[list[dict[str, Any]]]:
         """
         Assign labels to the image(s) passed as inputs.
 
@@ -132,12 +131,6 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             preprocess_params["timeout"] = kwargs["timeout"]
         if "hypothesis_template" in kwargs:
             preprocess_params["hypothesis_template"] = kwargs["hypothesis_template"]
-        if tokenizer_kwargs is not None:
-            warnings.warn(
-                "The `tokenizer_kwargs` argument is deprecated and will be removed in version 5 of Transformers",
-                FutureWarning,
-            )
-            preprocess_params["tokenizer_kwargs"] = tokenizer_kwargs
 
         return preprocess_params, {}, {}
 

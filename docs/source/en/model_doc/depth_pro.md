@@ -46,9 +46,10 @@ The DepthPro model processes an input image by first downsampling it at multiple
 >>> import requests
 >>> from PIL import Image
 >>> import torch
->>> from transformers import DepthProImageProcessorFast, DepthProForDepthEstimation, infer_device
+>>> from transformers import DepthProImageProcessorFast, DepthProForDepthEstimation
+from accelerate import Accelerator
 
->>> device = infer_device()
+>>> device = Accelerator().device
 
 >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -84,12 +85,13 @@ alt="drawing" width="600"/>
 The `DepthProForDepthEstimation` model uses a `DepthProEncoder`, for encoding the input image and a `FeatureFusionStage` for fusing the output features from encoder.
 
 The `DepthProEncoder` further uses two encoders:
+
 - `patch_encoder`
-   - Input image is scaled with multiple ratios, as specified in the `scaled_images_ratios` configuration.
-   - Each scaled image is split into smaller **patches** of size `patch_size` with overlapping areas determined by `scaled_images_overlap_ratios`.
-   - These patches are processed by the **`patch_encoder`**
+  - Input image is scaled with multiple ratios, as specified in the `scaled_images_ratios` configuration.
+  - Each scaled image is split into smaller **patches** of size `patch_size` with overlapping areas determined by `scaled_images_overlap_ratios`.
+  - These patches are processed by the **`patch_encoder`**
 - `image_encoder`
-   - Input image is also rescaled to `patch_size` and processed by the **`image_encoder`**
+  - Input image is also rescaled to `patch_size` and processed by the **`image_encoder`**
 
 Both these encoders can be configured via `patch_model_config` and `image_model_config` respectively, both of which are separate `Dinov2Model` by default.
 
@@ -102,12 +104,14 @@ The network is supplemented with a focal length estimation head. A small convolu
 The `use_fov_model` parameter in `DepthProConfig` controls whether **FOV prediction** is enabled. By default, it is set to `False` to conserve memory and computation. When enabled, the **FOV encoder** is instantiated based on the `fov_model_config` parameter, which defaults to a `Dinov2Model`. The `use_fov_model` parameter can also be passed when initializing the `DepthProForDepthEstimation` model.
 
 The pretrained model at checkpoint `apple/DepthPro-hf` uses the FOV encoder. To use the pretrained-model without FOV encoder, set `use_fov_model=False` when loading the model, which saves computation.
+
 ```py
 >>> from transformers import DepthProForDepthEstimation
 >>> model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf", use_fov_model=False)
 ```
 
 To instantiate a new model with FOV encoder, set `use_fov_model=True` in the config.
+
 ```py
 >>> from transformers import DepthProConfig, DepthProForDepthEstimation
 >>> config = DepthProConfig(use_fov_model=True)
@@ -115,6 +119,7 @@ To instantiate a new model with FOV encoder, set `use_fov_model=True` in the con
 ```
 
 Or set `use_fov_model=True` when initializing the model, which overrides the value in config.
+
 ```py
 >>> from transformers import DepthProConfig, DepthProForDepthEstimation
 >>> config = DepthProConfig()
@@ -123,13 +128,13 @@ Or set `use_fov_model=True` when initializing the model, which overrides the val
 
 ### Using Scaled Dot Product Attention (SDPA)
 
-PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
-encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
-[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
 or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
 page for more information.
 
-SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
 `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
 ```py
@@ -156,8 +161,8 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - Official Implementation: [apple/ml-depth-pro](https://github.com/apple/ml-depth-pro)
 - DepthPro Inference Notebook: [DepthPro Inference](https://github.com/qubvel/transformers-notebooks/blob/main/notebooks/DepthPro_inference.ipynb)
 - DepthPro for Super Resolution and Image Segmentation
-    - Read blog on Medium: [Depth Pro: Beyond Depth](https://medium.com/@raoarmaghanshakir040/depth-pro-beyond-depth-9d822fc557ba)
-    - Code on Github: [geetu040/depthpro-beyond-depth](https://github.com/geetu040/depthpro-beyond-depth)
+  - Read blog on Medium: [Depth Pro: Beyond Depth](https://medium.com/@raoarmaghanshakir040/depth-pro-beyond-depth-9d822fc557ba)
+  - Code on Github: [geetu040/depthpro-beyond-depth](https://github.com/geetu040/depthpro-beyond-depth)
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 

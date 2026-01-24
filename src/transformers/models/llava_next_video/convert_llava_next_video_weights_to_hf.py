@@ -23,7 +23,6 @@ import json
 from pathlib import Path
 
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import hf_hub_download, snapshot_download
 from safetensors import safe_open
 
@@ -34,8 +33,8 @@ from transformers import (
     LlavaNextImageProcessor,
     LlavaNextVideoConfig,
     LlavaNextVideoForConditionalGeneration,
-    LlavaNextVideoImageProcessor,
     LlavaNextVideoProcessor,
+    LlavaNextVideoVideoProcessor,
 )
 
 
@@ -187,7 +186,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
 
     image_processor = LlavaNextImageProcessor.from_pretrained(vision_model_id)
-    video_processor = LlavaNextVideoImageProcessor.from_pretrained(vision_model_id)
+    video_processor = LlavaNextVideoVideoProcessor.from_pretrained(vision_model_id)
     processor = LlavaNextVideoProcessor(
         tokenizer=tokenizer,
         video_processor=video_processor,
@@ -203,7 +202,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         image_token_id=image_token_id,
     )
 
-    with init_empty_weights():
+    with torch.device("meta"):
         model = LlavaNextVideoForConditionalGeneration(config)
 
     # load original state dict
@@ -267,7 +266,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     args = parser.parse_args()
 

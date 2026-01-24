@@ -40,7 +40,6 @@ Finetuning the model in `float16` is not recommended and known to produce `nan`,
 
 </Tip>
 
-
 Tips:
 
 - To convert the model, you need to clone the original repository using `git clone https://github.com/persimmon-ai-labs/adept-inference`, then get the checkpoints:
@@ -55,10 +54,12 @@ python src/transformers/models/fuyu/convert_fuyu_weights_to_hf.py  --input_dir /
 ```
 
 For the chat model:
+
 ```bash
 wget https://axtkn4xl5cip.objectstorage.us-phoenix-1.oci.customer-oci.com/n/axtkn4xl5cip/b/adept-public-data/o/8b_chat_model_release.tar
 tar -xvf 8b_base_model_release.tar
 ```
+
 Then, model can be loaded via:
 
 ```py
@@ -74,11 +75,11 @@ A processor requires an image_processor and a tokenizer. Hence, inputs can be lo
 from PIL import Image
 from transformers import AutoTokenizer
 from transformers.models.fuyu.processing_fuyu import FuyuProcessor
-from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
+from transformers.models.fuyu.image_processing_fuyu_fast import FuyuImageProcessorFast
 
 
 tokenizer = AutoTokenizer.from_pretrained('adept-hf-collab/fuyu-8b')
-image_processor = FuyuImageProcessor()
+image_processor = FuyuImageProcessorFast()
 
 
 processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
@@ -99,7 +100,6 @@ The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece.
 
 - The authors suggest to use the following prompt for image captioning: `f"Generate a coco-style caption.\\n"`
 
-
 ## FuyuConfig
 
 [[autodoc]] FuyuConfig
@@ -116,6 +116,11 @@ The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece.
 ## FuyuImageProcessor
 
 [[autodoc]] FuyuImageProcessor
+    - __call__
+
+## FuyuImageProcessor
+
+[[autodoc]] FuyuImageProcessorFast
     - __call__
 
 ## FuyuProcessor

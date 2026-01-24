@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-# LFM2-VL   
+# LFM2-VL
 
 ## Overview
 
@@ -28,10 +28,11 @@ rendered properly in your Markdown viewer.
 ## Architecture
 
 LFM2-VL consists of three main components: a language model backbone, a vision encoder, and a multimodal projector. LFM2-VL builds upon the LFM2 backbone, inheriting from either LFM2-1.2B (for LFM2-VL-1.6B) or LFM2-350M (for LFM2-VL-450M). For the vision tower, LFM2-VL uses SigLIP2 NaFlex encoders to convert input images into token sequences. Two variants are implemented:
+
 * Shape-optimized (400M) for more fine-grained vision capabilities for LFM2-VL-1.6B
 * Base (86M) for fast image processing for LFM2-VL-450M
 
-The encoder processes images at their native resolution up to 512×512 pixels, efficiently handling smaller images without upscaling and supporting non-standard aspect ratios without distortion. Larger images are split into non-overlapping square patches of 512×512 each, preserving detail. In LFM2-VL-1.6B, the model also receives a thumbnail (a small, downscaled version of the original image capturing the overall scene) to enhance global context understanding and alignment. Special tokens mark each patch’s position and indicate the thumbnail’s start. The multimodal connector is a 2-layer MLP connector with pixel unshuffle to reduce image token count. 
+The encoder processes images at their native resolution up to 512×512 pixels, efficiently handling smaller images without upscaling and supporting non-standard aspect ratios without distortion. Larger images are split into non-overlapping square patches of 512×512 each, preserving detail. In LFM2-VL-1.6B, the model also receives a thumbnail (a small, downscaled version of the original image capturing the overall scene) to enhance global context understanding and alignment. Special tokens mark each patch’s position and indicate the thumbnail’s start. The multimodal connector is a 2-layer MLP connector with pixel unshuffle to reduce image token count.
 
 ## Example
 
@@ -81,6 +82,7 @@ processor.batch_decode(outputs, skip_special_tokens=True)[0]
 ## Lfm2VlProcessor
 
 [[autodoc]] Lfm2VlProcessor
+    - __call__
 
 ## Lfm2VlConfig
 
@@ -90,8 +92,10 @@ processor.batch_decode(outputs, skip_special_tokens=True)[0]
 
 [[autodoc]] Lfm2VlModel
     - forward
+    - get_image_features
 
 ## Lfm2VlForConditionalGeneration
 
 [[autodoc]] Lfm2VlForConditionalGeneration
     - forward
+    - get_image_features

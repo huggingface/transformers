@@ -36,11 +36,11 @@ rendered properly in your Markdown viewer.
 그런 다음 몇 가지 유효성을 확인한 후 해당 인수를 저장합니다.
 
 ```python
-from transformers import PretrainedConfig
+from transformers import PreTrainedConfig
 from typing import List
 
 
-class ResnetConfig(PretrainedConfig):
+class ResnetConfig(PreTrainedConfig):
     model_type = "resnet"
 
     def __init__(
@@ -74,12 +74,12 @@ class ResnetConfig(PretrainedConfig):
 ```
 
 사용자 정의 `configuration`을 작성할 때 기억해야 할 세 가지 중요한 사항은 다음과 같습니다:
-- `PretrainedConfig`을 상속해야 합니다.
-- `PretrainedConfig`의 `__init__`은 모든 kwargs를 허용해야 하고,
+- `PreTrainedConfig`을 상속해야 합니다.
+- `PreTrainedConfig`의 `__init__`은 모든 kwargs를 허용해야 하고,
 - 이러한 `kwargs`는 상위 클래스 `__init__`에 전달되어야 합니다.
 
 상속은 🤗 Transformers 라이브러리에서 모든 기능을 가져오는 것입니다.
-이러한 점으로부터 비롯되는 두 가지 제약 조건은 `PretrainedConfig`에 설정하는 것보다 더 많은 필드가 있습니다.
+이러한 점으로부터 비롯되는 두 가지 제약 조건은 `PreTrainedConfig`에 설정하는 것보다 더 많은 필드가 있습니다.
 `from_pretrained` 메서드로 구성을 다시 로드할 때 해당 필드는 구성에서 수락한 후 상위 클래스로 보내야 합니다.
 
 모델을 auto 클래스에 등록하지 않는 한, `configuration`에서 `model_type`을 정의(여기서 `model_type="resnet"`)하는 것은 필수 사항이 아닙니다 (마지막 섹션 참조).
@@ -99,7 +99,7 @@ resnet50d_config.save_pretrained("custom-resnet")
 resnet50d_config = ResnetConfig.from_pretrained("custom-resnet")
 ```
 
-구성을 Hub에 직접 업로드하기 위해 [`PretrainedConfig`] 클래스의 [`~PretrainedConfig.push_to_hub`]와 같은 다른 메서드를 사용할 수 있습니다.
+구성을 Hub에 직접 업로드하기 위해 [`PreTrainedConfig`] 클래스의 [`~PreTrainedConfig.push_to_hub`]와 같은 다른 메서드를 사용할 수 있습니다.
 
 
 ## 사용자 정의 모델 작성하기[[writing-a-custom-model]]

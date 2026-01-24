@@ -13,7 +13,7 @@
 """Image processor class for PromptDepthAnything."""
 
 import math
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
@@ -38,6 +38,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
@@ -51,6 +52,22 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class PromptDepthAnythingImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    keep_aspect_ratio (`bool`, *optional*):
+        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
+    ensure_multiple_of (`int`, *optional*):
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value.
+    prompt_scale_to_meter (`float`, *optional*):
+        Scale factor to convert the prompt depth to meters.
+    """
+
+    keep_aspect_ratio: bool
+    ensure_multiple_of: int
+    size_divisor: int
+    prompt_scale_to_meter: float
 
 
 def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
@@ -70,7 +87,7 @@ def _get_resize_output_image_size(
     output_size: tuple[int, int],
     keep_aspect_ratio: bool,
     multiple: int,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: str | ChannelDimension | None = None,
 ) -> tuple[int, int]:
     input_height, input_width = get_image_size(input_image, input_data_format)
     output_height, output_width = output_size
@@ -136,21 +153,22 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "prompt_depth"]
+    valid_kwargs = PromptDepthAnythingImageProcessorKwargs
 
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         do_pad: bool = False,
-        size_divisor: Optional[int] = None,
+        size_divisor: int | None = None,
         prompt_scale_to_meter: float = 0.001,  # default unit is mm
         **kwargs,
     ):
@@ -178,8 +196,8 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -227,8 +245,8 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size_divisor: int,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Center pad an image to be a multiple of `multiple`.
@@ -275,23 +293,23 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        prompt_depth: Optional[ImageInput] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[int] = None,
-        keep_aspect_ratio: Optional[bool] = None,
-        ensure_multiple_of: Optional[int] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_pad: Optional[bool] = None,
-        size_divisor: Optional[int] = None,
-        prompt_scale_to_meter: Optional[float] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        prompt_depth: ImageInput | None = None,
+        do_resize: bool | None = None,
+        size: int | None = None,
+        keep_aspect_ratio: bool | None = None,
+        ensure_multiple_of: int | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_pad: bool | None = None,
+        size_divisor: int | None = None,
+        prompt_scale_to_meter: float | None = None,
+        return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> BatchFeature:
         """
         Preprocess an image or batch of images.
@@ -454,7 +472,7 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
     def post_process_depth_estimation(
         self,
         outputs: "DepthEstimatorOutput",
-        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None | None = None,
     ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.

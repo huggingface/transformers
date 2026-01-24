@@ -44,9 +44,9 @@ This model was contributed by [lhoestq](https://huggingface.co/lhoestq). The ori
 
 - DPR consists in three models:
 
-    * Question encoder: encode questions as vectors
-    * Context encoder: encode contexts as vectors
-    * Reader: extract the answer of the questions inside retrieved contexts, along with a relevance score (high if the inferred span actually answers the question).
+  * Question encoder: encode questions as vectors
+  * Context encoder: encode contexts as vectors
+  * Reader: extract the answer of the questions inside retrieved contexts, along with a relevance score (high if the inferred span actually answers the question).
 
 ## DPRConfig
 

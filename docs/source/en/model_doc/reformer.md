@@ -41,8 +41,8 @@ found [here](https://github.com/google/trax/tree/master/trax/models/reformer).
 ## Usage tips
 
 - Reformer does **not** work with *torch.nn.DataParallel* due to a bug in PyTorch, see [issue #36035](https://github.com/pytorch/pytorch/issues/36035).
-- Use Axial position encoding (see below for more details). It’s a mechanism to avoid having a huge positional encoding matrix (when the sequence length is very big) by factorizing it into smaller matrices.
-- Replace traditional attention by LSH (local-sensitive hashing) attention (see below for more details). It’s a technique to avoid computing the full product query-key in the attention layers.
+- Use Axial position encoding (see below for more details). It's a mechanism to avoid having a huge positional encoding matrix (when the sequence length is very big) by factorizing it into smaller matrices.
+- Replace traditional attention by LSH (local-sensitive hashing) attention (see below for more details). It's a technique to avoid computing the full product query-key in the attention layers.
 - Avoid storing the intermediate results of each layer by using reversible transformer layers to obtain them during the backward pass (subtracting the residuals from the input of the next layer gives them back) or recomputing them for results inside a given layer (less efficient than storing them but saves memory).
 - Compute the feedforward operations by chunks and not on the whole batch.
 
@@ -50,14 +50,14 @@ found [here](https://github.com/google/trax/tree/master/trax/models/reformer).
 
 Axial Positional Encodings were first implemented in Google's [trax library](https://github.com/google/trax/blob/4d99ad4965bab1deba227539758d59f0df0fef48/trax/layers/research/position_encodings.py#L29)
 and developed by the authors of this model's paper. In models that are treating very long input sequences, the
-conventional position id encodings store an embeddings vector of size \\(d\\) being the `config.hidden_size` for
-every position \\(i, \ldots, n_s\\), with \\(n_s\\) being `config.max_embedding_size`. This means that having
-a sequence length of \\(n_s = 2^{19} \approx 0.5M\\) and a `config.hidden_size` of \\(d = 2^{10} \approx 1000\\)
+conventional position id encodings store an embeddings vector of size $d$ being the `config.hidden_size` for
+every position $i, \ldots, n_s$, with $n_s$ being `config.max_embedding_size`. This means that having
+a sequence length of $n_s = 2^{19} \approx 0.5M$ and a `config.hidden_size` of $d = 2^{10} \approx 1000$
 would result in a position encoding matrix:
 
 $$X_{i,j}, \text{ with } i \in \left[1,\ldots, d\right] \text{ and } j \in \left[1,\ldots, n_s\right]$$
 
-which alone has over 500M parameters to store. Axial positional encodings factorize \\(X_{i,j}\\) into two matrices:
+which alone has over 500M parameters to store. Axial positional encodings factorize $X_{i,j}$ into two matrices:
 
 $$X^{1}_{i,j}, \text{ with } i \in \left[1,\ldots, d^1\right] \text{ and } j \in \left[1,\ldots, n_s^1\right]$$
 
@@ -76,19 +76,18 @@ X^{1}_{i, k}, & \text{if }\ i < d^1 \text{ with } k = j \mod n_s^1 \\
 X^{2}_{i - d^1, l}, & \text{if } i \ge d^1 \text{ with } l = \lfloor\frac{j}{n_s^1}\rfloor
 \end{cases}$$
 
-Intuitively, this means that a position embedding vector \\(x_j \in \mathbb{R}^{d}\\) is now the composition of two
-factorized embedding vectors: \\(x^1_{k, l} + x^2_{l, k}\\), where as the `config.max_embedding_size` dimension
-\\(j\\) is factorized into \\(k \text{ and } l\\). This design ensures that each position embedding vector
-\\(x_j\\) is unique.
+Intuitively, this means that a position embedding vector $x_j \in \mathbb{R}^{d}$ is now the composition of two
+factorized embedding vectors: $x^1_{k, l} + x^2_{l, k}$, where as the `config.max_embedding_size` dimension
+$j$ is factorized into $k \text{ and } l$. This design ensures that each position embedding vector
+$x_j$ is unique.
 
-Using the above example again, axial position encoding with \\(d^1 = 2^9, d^2 = 2^9, n_s^1 = 2^9, n_s^2 = 2^{10}\\)
-can drastically reduced the number of parameters from 500 000 000 to \\(2^{18} + 2^{19} \approx 780 000\\) parameters, this means 85% less memory usage.
+Using the above example again, axial position encoding with $d^1 = 2^9, d^2 = 2^9, n_s^1 = 2^9, n_s^2 = 2^{10}$
+can drastically reduced the number of parameters from 500 000 000 to $2^{18} + 2^{19} \approx 780 000$ parameters, this means 85% less memory usage.
 
-In practice, the parameter `config.axial_pos_embds_dim` is set to a tuple \\((d^1, d^2)\\) which sum has to be
-equal to `config.hidden_size` and `config.axial_pos_shape` is set to a tuple \\((n_s^1, n_s^2)\\) which
+In practice, the parameter `config.axial_pos_embds_dim` is set to a tuple $(d^1, d^2)$ which sum has to be
+equal to `config.hidden_size` and `config.axial_pos_shape` is set to a tuple $(n_s^1, n_s^2)$ which
 product has to be equal to `config.max_embedding_size`, which during training has to be equal to the *sequence
 length* of the `input_ids`.
-
 
 ### LSH Self Attention
 
@@ -108,10 +107,10 @@ neighboring chunks and `config.lsh_num_chunks_after` following neighboring chunk
 
 For more information, see the [original Paper](https://huggingface.co/papers/2001.04451) or this great [blog post](https://www.pragmatic.ml/reformer-deep-dive/).
 
-Note that `config.num_buckets` can also be factorized into a list \\((n_{\text{buckets}}^1,
-n_{\text{buckets}}^2)\\). This way instead of assigning the query key embedding vectors to one of \\((1,\ldots,
-n_{\text{buckets}})\\) they are assigned to one of \\((1-1,\ldots, n_{\text{buckets}}^1-1, \ldots,
-1-n_{\text{buckets}}^2, \ldots, n_{\text{buckets}}^1-n_{\text{buckets}}^2)\\). This is crucial for very long sequences to
+Note that `config.num_buckets` can also be factorized into a list $(n_{\text{buckets}}^1,
+n_{\text{buckets}}^2)$. This way instead of assigning the query key embedding vectors to one of $(1,\ldots,
+n_{\text{buckets}})$ they are assigned to one of $(1-1,\ldots, n_{\text{buckets}}^1-1, \ldots,
+1-n_{\text{buckets}}^2, \ldots, n_{\text{buckets}}^1-n_{\text{buckets}}^2)$. This is crucial for very long sequences to
 save memory.
 
 When training a model from scratch, it is recommended to leave `config.num_buckets=None`, so that depending on the
@@ -119,9 +118,8 @@ sequence length a good value for `num_buckets` is calculated on the fly. This va
 saved in the config and should be reused for inference.
 
 Using LSH self attention, the memory and time complexity of the query-key matmul operation can be reduced from
-\\(\mathcal{O}(n_s \times n_s)\\) to \\(\mathcal{O}(n_s \times \log(n_s))\\), which usually represents the memory
-and time bottleneck in a transformer model, with \\(n_s\\) being the sequence length.
-
+$\mathcal{O}(n_s \times n_s)$ to $\mathcal{O}(n_s \times \log(n_s))$, which usually represents the memory
+and time bottleneck in a transformer model, with $n_s$ being the sequence length.
 
 ### Local Self Attention
 
@@ -131,9 +129,8 @@ the key embedding vectors in its chunk and to the key embedding vectors of `conf
 previous neighboring chunks and `config.local_num_chunks_after` following neighboring chunks.
 
 Using Local self attention, the memory and time complexity of the query-key matmul operation can be reduced from
-\\(\mathcal{O}(n_s \times n_s)\\) to \\(\mathcal{O}(n_s \times \log(n_s))\\), which usually represents the memory
-and time bottleneck in a transformer model, with \\(n_s\\) being the sequence length.
-
+$\mathcal{O}(n_s \times n_s)$ to $\mathcal{O}(n_s \times \log(n_s))$, which usually represents the memory
+and time bottleneck in a transformer model, with $n_s$ being the sequence length.
 
 ### Training
 

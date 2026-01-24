@@ -35,7 +35,6 @@ We estimate that this data is at least 2x better token-for-token than the data w
 This new dataset was developed using the full suite of Databricks tools, including Apache Spark™ and Databricks notebooks for data processing, and Unity Catalog for data management and governance.
 We used curriculum learning for pretraining, changing the data mix during training in ways we found to substantially improve model quality.
 
-
 More detailed information about DBRX Instruct and DBRX Base can be found in our [technical blog post](https://www.databricks.com/blog/introducing-dbrx-new-state-art-open-llm).
 
 This model was contributed by [eitan-turok](https://huggingface.co/eitanturok) and [abhi-db](https://huggingface.co/abhi-db). The original code can be found [here](https://github.com/databricks/dbrx-instruct), though this may not be up to date.
@@ -65,6 +64,7 @@ print(tokenizer.decode(outputs[0]))
 ```
 
 If you have flash-attention installed (`pip install flash-attn`), it is possible to generate faster. (The HuggingFace documentation for flash-attention can be found [here](https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2).)
+
 ```python
 from transformers import DbrxForCausalLM, AutoTokenizer
 import torch
@@ -87,6 +87,7 @@ print(tokenizer.decode(outputs[0]))
 ```
 
 You can also generate faster using the PyTorch scaled dot product attention. (The HuggingFace documentation for scaled dot product attention can be found [here](https://huggingface.co/docs/transformers/perf_infer_gpu_one#pytorch-scaled-dot-product-attention).)
+
 ```python
 from transformers import DbrxForCausalLM, AutoTokenizer
 import torch
@@ -112,15 +113,12 @@ print(tokenizer.decode(outputs[0]))
 
 [[autodoc]] DbrxConfig
 
-
 ## DbrxModel
 
 [[autodoc]] DbrxModel
     - forward
 
-
 ## DbrxForCausalLM
 
 [[autodoc]] DbrxForCausalLM
     - forward
-

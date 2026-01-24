@@ -31,7 +31,6 @@ Even with less training data than RoBERTa, DeBERTa manages to outperform it on s
 
 You can find all the original DeBERTa checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=deberta) organization.
 
-
 > [!TIP]
 > Click on the DeBERTa models in the right sidebar for more examples of how to apply DeBERTa to different language tasks.
 
@@ -93,6 +92,7 @@ echo -e '{"text": "A soccer game with multiple people playing.", "text_pair": "S
 </hfoptions>
 
 ## Notes
+
 - DeBERTa uses **relative position embeddings**, so it does not require **right-padding** like BERT.
 - For best results, use DeBERTa on sentence-level or sentence-pair classification tasks like MNLI, RTE, or SST-2.
 - If you're using DeBERTa for token-level tasks like masked language modeling, make sure to load a checkpoint specifically pretrained or fine-tuned for token-level tasks.
@@ -104,16 +104,12 @@ echo -e '{"text": "A soccer game with multiple people playing.", "text_pair": "S
 ## DebertaTokenizer
 
 [[autodoc]] DebertaTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## DebertaTokenizerFast
 
 [[autodoc]] DebertaTokenizerFast
-    - build_inputs_with_special_tokens
-    - create_token_type_ids_from_sequences
 
 ## DebertaModel
 

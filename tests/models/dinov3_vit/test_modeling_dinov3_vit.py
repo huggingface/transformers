@@ -21,7 +21,7 @@ from transformers.testing_utils import require_torch, require_vision, slow, torc
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -29,7 +29,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import DINOv3ViTModel
+    from transformers import DINOv3ViTBackbone, DINOv3ViTModel
 
 
 if is_vision_available():
@@ -112,7 +112,52 @@ class DINOv3ViTModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             num_register_tokens=self.num_register_tokens,
+            stage_names=["embeddings"] + [f"stage{i}" for i in range(1, self.num_hidden_layers + 1)],
+            out_indices=[0, 1],
+            reshape_hidden_states=True,
         )
+
+    def create_and_check_backbone(self, config, pixel_values, labels):
+        config.out_features = ["stage1", "stage2"]
+        config.reshape_hidden_states = True
+
+        model = DINOv3ViTBackbone(config)
+        model.to(torch_device)
+        model.eval()
+
+        with torch.no_grad():
+            outputs = model(pixel_values)
+
+        self.parent.assertEqual(len(outputs.feature_maps), 2)
+        for fm in outputs.feature_maps:
+            b, c, h, w = fm.shape
+            self.parent.assertEqual(b, self.batch_size)
+            self.parent.assertEqual(c, self.hidden_size)
+            self.parent.assertGreater(h, 0)
+            self.parent.assertGreater(w, 0)
+
+    def test_output_hidden_states(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**inputs_dict, output_hidden_states=True)
+
+            self.assertIsNotNone(outputs.hidden_states)
+            expected_num_hidden_states = config.num_hidden_layers + 1
+            self.assertEqual(len(outputs.hidden_states), expected_num_hidden_states)
+
+            for hidden_state in outputs.hidden_states:
+                expected_shape = (
+                    self.model_tester.batch_size,
+                    self.model_tester.seq_length,
+                    self.model_tester.hidden_size,
+                )
+                self.assertEqual(hidden_state.shape, expected_shape)
 
     def create_and_check_model(self, config, pixel_values, labels):
         model = DINOv3ViTModel(config=config)
@@ -142,7 +187,7 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (DINOv3ViTModel,) if is_torch_available() else ()
+    all_model_classes = (DINOv3ViTModel, DINOv3ViTBackbone) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "image-feature-extraction": DINOv3ViTModel,
@@ -150,63 +195,24 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torch_exportable = True
+
+    test_attention_outputs = False
 
     def setUp(self):
         self.model_tester = DINOv3ViTModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DINOv3ViTConfig, has_text_modality=False, hidden_size=37)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad and "register_tokens" not in name:
-                    # See PR #38607 (to avoid flakiness)
-                    data = torch.flatten(param.data)
-                    n_elements = torch.numel(data)
-                    # skip 2.5% of elements on each side to avoid issues caused by `nn.init.trunc_normal_` described in
-                    # https://github.com/huggingface/transformers/pull/27906#issuecomment-1846951332
-                    n_elements_to_skip_on_each_side = int(n_elements * 0.025)
-                    data_to_check = torch.sort(data).values
-                    if n_elements_to_skip_on_each_side > 0:
-                        data_to_check = data_to_check[n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side]
-                    self.assertIn(
-                        ((data_to_check.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
+    def test_backbone(self):
+        config, pixel_values, labels = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_backbone(config, pixel_values, labels)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Dinov3 does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     def test_model_get_set_embeddings(self):

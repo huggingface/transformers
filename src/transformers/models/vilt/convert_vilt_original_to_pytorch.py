@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +15,10 @@
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -228,8 +228,10 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # Forward pass on example inputs (image + text)
     if nlvr_model:
-        image1 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg", stream=True).raw)
+        url = "https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg"
+        with httpx.stream("GET", url) as response:
+            image1 = Image.open(BytesIO(response.read()))
+            image2 = Image.open(BytesIO(response.read()))
         text = (
             "The left image contains twice the number of dogs as the right image, and at least two dogs in total are"
             " standing."
@@ -242,7 +244,9 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
             pixel_values_2=encoding_2.pixel_values,
         )
     else:
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        with httpx.stream("GET", url) as response:
+            image = Image.open(BytesIO(response.read()))
         if mlm_model:
             text = "a bunch of [MASK] laying on a [MASK]."
         else:

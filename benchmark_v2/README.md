@@ -27,10 +27,13 @@ You can automatically upload benchmark results to a HuggingFace Dataset for trac
 
 ```bash
 # Upload to a public dataset with auto-generated run ID
-python run_benchmarks.py --upload-to-hf username/benchmark-results
+python run_benchmarks.py --upload-to-hub username/benchmark-results
 
 # Upload with a custom run ID for easy identification
-python run_benchmarks.py --upload-to-hf username/benchmark-results --run-id experiment_v1
+python run_benchmarks.py --upload-to-hub username/benchmark-results --run-id experiment_v1
+
+# Upload with custom HuggingFace token (if not set in environment)
+python run_benchmarks.py --upload-to-hub username/benchmark-results --token hf_your_token_here
 ```
 
 **Dataset Directory Structure:**
@@ -50,6 +53,13 @@ dataset_name/
 └── 2025-01-16/
     └── ...
 ```
+
+**Authentication for Uploads:**
+
+For uploading results, you need a HuggingFace token with write permissions to the target dataset. You can provide the token in several ways (in order of precedence):
+
+1. Command line: `--token hf_your_token_here`
+3. Environment variable: `HF_TOKEN`
 
 ### Running Specific Benchmarks
 

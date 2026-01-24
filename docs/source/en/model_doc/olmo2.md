@@ -24,6 +24,7 @@ rendered properly in your Markdown viewer.
 </div>
 
 # OLMo2
+
 [OLMo2](https://huggingface.co/papers/2501.00656) improves on [OLMo](./olmo) by changing the architecture and training recipes of the original models. This includes excluding all biases to improve training stability, non-parametric layer norm, SwiGLU activation function, rotary positional embeddings, and a modified BPE-based tokenizer that masks personal identifiable information. It is pretrained on [Dolma](https://huggingface.co/datasets/allenai/dolma), a dataset of 3T tokens.
 
 You can find all the original OLMo2 checkpoints under the [OLMo2](https://huggingface.co/collections/allenai/olmo-2-674117b93ab84e98afc72edc) collection.
@@ -87,6 +88,7 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bits.
+
 ```py
 
 #pip install torchao
@@ -116,7 +118,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```
 
-
 ## Notes
 
 - OLMo2 uses RMSNorm instead of standard layer norm. The RMSNorm is applied to attention queries and keys, and it is applied after the attention and feedforward layers rather than before.
@@ -128,7 +129,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
     model = AutoModelForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B", revision="stage1-step140000-tokens294B")
     ```
-
 
 ## Olmo2Config
 

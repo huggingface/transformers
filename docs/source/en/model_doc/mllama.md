@@ -35,14 +35,11 @@ The [Llama 3.2-Vision](https://ai.meta.com/blog/llama-3-2-connect-2024-vision-ed
 - The text passed to the processor should have the `"<|image|>"` tokens where the images should be inserted.
 - The processor has its own `apply_chat_template` method to convert chat messages to text that can then be passed as text to the processor. If you're using `transformers>=4.49.0`, you can also get a vectorized output from `apply_chat_template`. See the **Usage Examples** below for more details on how to use it.
 
-
-
 <Tip warning={true}>
 
 Mllama has an extra token used as a placeholder for image positions in the text. It means that input ids and an input embedding layer will have an extra token. But since the weights for input and output embeddings are not tied, the `lm_head` layer has one less token and will fail if you want to calculate loss on image tokens or apply some logit processors. In case you are training, make sure to mask out special `"<|image|>"` tokens in the `labels` as the model should not be trained on predicting them.
 
 Otherwise if you see CUDA-side index errors when generating, use the below code to expand the `lm_head` by one more token.
-
 
 ```python
 old_embeddings = model.get_output_embeddings()
@@ -52,12 +49,13 @@ resized_embeddings = model._get_resized_lm_head(old_embeddings, new_num_tokens=n
 resized_embeddings.requires_grad_(old_embeddings.weight.requires_grad)
 model.set_output_embeddings(resized_embeddings)
 ```
-</Tip>
 
+</Tip>
 
 ## Usage Example
 
-#### Instruct model
+### Instruct model
+
 ```python
 import torch
 from transformers import MllamaForConditionalGeneration, AutoProcessor
@@ -69,7 +67,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 messages = [
     [
         {
-            "role": "user", 
+            "role": "user",
             "content": [
                 {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
                 {"type": "text", "text": "What does the image show?"}
@@ -82,7 +80,8 @@ output = model.generate(**inputs, max_new_tokens=25)
 print(processor.decode(output[0]))
 ```
 
-#### Base model
+### Base model
+
 ```python
 import requests
 import torch
@@ -102,7 +101,6 @@ output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
-
 ## MllamaConfig
 
 [[autodoc]] MllamaConfig
@@ -110,11 +108,15 @@ print(processor.decode(output[0], skip_special_tokens=True))
 ## MllamaProcessor
 
 [[autodoc]] MllamaProcessor
-
+    - __call__
 
 ## MllamaImageProcessor
 
 [[autodoc]] MllamaImageProcessor
+
+## MllamaImageProcessorFast
+
+[[autodoc]] MllamaImageProcessorFast
 
 ## MllamaForConditionalGeneration
 
@@ -134,11 +136,6 @@ print(processor.decode(output[0], skip_special_tokens=True))
 ## MllamaModel
 
 [[autodoc]] MllamaModel
-
-## MllamaForCausalLM
-
-[[autodoc]] MllamaForCausalLM
-    - forward
 
 ## MllamaVisionModel
 

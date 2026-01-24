@@ -28,7 +28,6 @@ rendered properly in your Markdown viewer.
 
 You can find all the original RoBERTa checkpoints under the [Facebook AI](https://huggingface.co/FacebookAI) organization.
 
-
 > [!TIP]
 > Click on the RoBERTa models in the right sidebar for more examples of how to apply RoBERTa to different language tasks.
 
@@ -100,15 +99,12 @@ echo -e "Plants create <mask> through a process known as photosynthesis." | tran
 ## RobertaTokenizer
 
 [[autodoc]] RobertaTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## RobertaTokenizerFast
 
 [[autodoc]] RobertaTokenizerFast
-    - build_inputs_with_special_tokens
 
 ## RobertaModel
 

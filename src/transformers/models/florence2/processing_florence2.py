@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_florence2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Microsoft and the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 
@@ -27,7 +26,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_available, logging
+from ...utils import auto_docstring, is_torch_available, logging
 
 
 if is_torch_available():
@@ -39,42 +38,27 @@ logger = logging.get_logger(__name__)
 class Florence2ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {"padding": False, "return_mm_token_type_ids": False},
-        "images_kwargs": {},
     }
 
 
+@auto_docstring
 class Florence2Processor(ProcessorMixin):
-    r"""
-    Constructs a Florence2 processor which wraps a Florence2 image processor and a Florence2 tokenizer into a single processor.
-
-    [`Florence2Processor`] offers all the functionalities of [`AutoImageProcessor`] and [`BartTokenizerFast`]. See the
-    [`~Florence2Processor.__call__`] and [`~Florence2Processor.decode`] for more information.
-
-    Args:
-        image_processor (`AutoImageProcessor`, *optional*):
-            The image processor is a required input.
-        tokenizer (`Union[BartTokenizer, BartTokenizerFast]`, *optional*):
-            The tokenizer is a required input.
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        num_additional_image_tokens: int = 0,
+        post_processor_config: dict | None = None,
+        **kwargs,
+    ):
+        r"""
         num_additional_image_tokens (`int`, *optional*, defaults to 0):
             Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
             extra tokens appended, no need to set this arg.
         post_processor_config (`dict`,  *optional*, defaults to 0):
             Task-specific parsing rules for [`Florence2PostProcessor`], e.g. regex patterns,
             thresholds, or banned tokens.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = ("BartTokenizer", "BartTokenizerFast")
-
-    def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-        num_additional_image_tokens: int = 0,
-        post_processor_config: Optional[dict] = None,
-        **kwargs,
-    ):
+        """
         self.tasks_answer_post_processing_type = {
             "<OCR>": "pure_text",
             "<OCR_WITH_REGION>": "ocr",
@@ -123,7 +107,7 @@ class Florence2Processor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, **kwargs)
 
-    def _construct_prompts(self, text: Union[str, list[str]]) -> list[str]:
+    def _construct_prompts(self, text: str | list[str]) -> list[str]:
         """
         Construct prompts by replacing task tokens with corresponding prompt strings.
         """
@@ -148,32 +132,14 @@ class Florence2Processor(ProcessorMixin):
             prompts.append(prompt)
         return prompts
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Florence2ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to BartTokenizerFast's [`~BartTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -493,7 +459,7 @@ class Florence2PostProcessor:
         return text, spans
 
     def parse_ocr_from_text_and_spans(
-        self, text: str, pattern: Optional[str], image_size: tuple[int, int], area_threshold: float = 0.0
+        self, text: str, pattern: str | None, image_size: tuple[int, int], area_threshold: float = 0.0
     ) -> list[dict[str, Any]]:
         """
         Parse OCR results with quadrilateral boxes.

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Meituan and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,18 +14,18 @@
 
 """LongCat Flash model configuration"""
 
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 
 
-class LongcatFlashConfig(PretrainedConfig):
+class LongcatFlashConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LongcatFlashModel`]. It is used to instantiate
     a LongCat Flash model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the LongCat Flash architecture.
     e.g. [meituan-longcat/LongCat-Flash-Chat](https://huggingface.co/meituan-longcat/LongCat-Flash-Chat)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -69,12 +68,11 @@ class LongcatFlashConfig(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie input and output embeddings.
-        rope_theta (`float`, *optional*, defaults to 10000000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
             strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
-            `{"type": strategy name, "factor": scaling factor}`.
+            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
+            `max_position_embeddings` to the expected new maximum.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -121,6 +119,7 @@ class LongcatFlashConfig(PretrainedConfig):
 
     model_type = "longcat_flash"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 10000000.0
     base_model_tp_plan = {
         "layers.*.self_attn.*.q_b_proj": "colwise",
         "layers.*.self_attn.*.kv_b_proj": "colwise",
@@ -128,9 +127,9 @@ class LongcatFlashConfig(PretrainedConfig):
         "layers.*.mlps.*.gate_proj": "colwise",
         "layers.*.mlps.*.up_proj": "colwise",
         "layers.*.mlps.*.down_proj": "rowwise",
-        "layers.*.mlp.experts.*.gate_proj": "colwise",
-        "layers.*.mlp.experts.*.up_proj": "colwise",
-        "layers.*.mlp.experts.*.down_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
     }
 
     base_model_pp_plan = {
@@ -141,38 +140,37 @@ class LongcatFlashConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=131072,
-        hidden_size=6144,
-        num_hidden_layers=56,
-        num_layers=28,
-        num_attention_heads=64,
-        num_key_value_heads=None,
-        hidden_act="silu",
-        max_position_embeddings=131072,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=False,
-        rope_theta=10000000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        ffn_hidden_size=12288,
-        q_lora_rank=1536,
-        kv_lora_rank=512,
-        qk_nope_head_dim=128,
-        qk_rope_head_dim=64,
-        head_dim=64,
-        v_head_dim=128,
-        qk_head_dim=None,
-        moe_topk=12,
-        n_routed_experts=512,
-        zero_expert_num=256,
-        expert_ffn_hidden_size=2048,
-        routed_scaling_factor=6.0,
+        vocab_size: int | None = 131072,
+        hidden_size: int | None = 6144,
+        num_hidden_layers: int | None = 56,
+        num_layers: int | None = 28,
+        num_attention_heads: int | None = 64,
+        num_key_value_heads: int | None = None,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 131072,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-5,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        ffn_hidden_size: int | None = 12288,
+        q_lora_rank: int | None = 1536,
+        kv_lora_rank: int | None = 512,
+        qk_nope_head_dim: int | None = 128,
+        qk_rope_head_dim: int | None = 64,
+        head_dim: int | None = 64,
+        v_head_dim: int | None = 128,
+        qk_head_dim: int | None = None,
+        moe_topk: int | None = 12,
+        n_routed_experts: int | None = 512,
+        zero_expert_num: int | None = 256,
+        expert_ffn_hidden_size: int | None = 2048,
+        routed_scaling_factor: float | None = 6.0,
         **kwargs,
     ):
         if num_key_value_heads is None:
@@ -192,8 +190,6 @@ class LongcatFlashConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
 
@@ -212,24 +208,29 @@ class LongcatFlashConfig(PretrainedConfig):
         self.zero_expert_num = zero_expert_num
         self.expert_ffn_hidden_size = expert_ffn_hidden_size
         self.routed_scaling_factor = routed_scaling_factor
+        self.rope_parameters = rope_parameters
 
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
-        if self.rope_scaling is not None:
-            for key in ["beta_fast", "beta_slow", "factor"]:
-                if key in self.rope_scaling:
-                    self.rope_scaling[key] = float(self.rope_scaling[key])
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or self.rope_parameters
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
 
-        rope_config_validation(self)
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
+        self.standardize_rope_params()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        # Convert to float because RoPE fn expect a float. Models on the hub were saved as int
+        for key in ["beta_fast", "beta_slow", "factor"]:
+            if key in self.rope_parameters:
+                self.rope_parameters[key] = float(self.rope_parameters[key])
+        return kwargs
 
 
 __all__ = ["LongcatFlashConfig"]

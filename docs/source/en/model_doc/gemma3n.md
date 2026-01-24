@@ -33,7 +33,7 @@ this model, including [Alternating Updates][altup] (AltUp), [Learned Augmented R
 [MatFormer][matformer], Per-Layer Embeddings (PLE), [Activation Sparsity with Statistical Top-k][spark-transformer], and KV cache sharing. The language model uses
 a similar attention pattern to [Gemma 3](./gemma3) with alternating 4 local sliding window self-attention layers for
 every global self-attention layer with a maximum context length of 32k tokens. Gemma 3n introduces
-[MobileNet v5][mobilenetv5] as the vision encoder, using a default resolution of 768x768 pixels, and adds a newly
+MobileNet v5 as the vision encoder, using a default resolution of 768x768 pixels, and adds a newly
 trained audio encoder based on the [Universal Speech Model][usm] (USM) architecture.
 
 The instruction-tuned variant was post-trained with knowledge distillation and reinforcement learning.
@@ -121,9 +121,9 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 
 ## Notes
 
--   Use [`Gemma3nForConditionalGeneration`] for image-audio-and-text, image-and-text, image-and-audio, audio-and-text,
+- Use [`Gemma3nForConditionalGeneration`] for image-audio-and-text, image-and-text, image-and-audio, audio-and-text,
     image-only and audio-only inputs.
--   Gemma 3n supports multiple images per input, but make sure the images are correctly batched before passing them to
+- Gemma 3n supports multiple images per input, but make sure the images are correctly batched before passing them to
     the processor. Each batch should be a list of one or more images.
 
     ```py
@@ -147,11 +147,12 @@ echo -e "Plants create energy through a process known as" | transformers run --t
         },
     ]
     ```
--   Text passed to the processor should have a `<image_soft_token>` token wherever an image should be inserted.
--   Gemma 3n accept at most one target audio clip per input, though multiple audio clips can be provided in few-shot
+
+- Text passed to the processor should have a `<image_soft_token>` token wherever an image should be inserted.
+- Gemma 3n accept at most one target audio clip per input, though multiple audio clips can be provided in few-shot
     prompts, for example.
--   Text passed to the processor should have a `<audio_soft_token>` token wherever an audio clip should be inserted.
--   The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.
+- Text passed to the processor should have a `<audio_soft_token>` token wherever an audio clip should be inserted.
+- The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.
 
 ## Gemma3nAudioFeatureExtractor
 
@@ -160,6 +161,7 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 ## Gemma3nProcessor
 
 [[autodoc]] Gemma3nProcessor
+    - __call__
 
 ## Gemma3nTextConfig
 
@@ -186,6 +188,8 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 
 [[autodoc]] Gemma3nModel
     - forward
+    - get_image_features
+    - get_audio_features
 
 ## Gemma3nForCausalLM
 
@@ -196,6 +200,7 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 
 [[autodoc]] Gemma3nForConditionalGeneration
     - forward
+    - get_image_features
 
 [altup]: https://proceedings.neurips.cc/paper_files/paper/2023/hash/f2059277ac6ce66e7e5543001afa8bb5-Abstract-Conference.html
 [attention-mask-viz]: https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139

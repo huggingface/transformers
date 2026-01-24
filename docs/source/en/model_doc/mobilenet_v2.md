@@ -30,9 +30,7 @@ You can all the original MobileNet checkpoints under the [Google](https://huggin
 > [!TIP]
 > Click on the MobileNet V2 models in the right sidebar for more examples of how to apply MobileNet to different vision tasks.
 
-
 The examples below demonstrate how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
-
 
 <hfoptions id="usage-img-class">
 <hfoption id="Pipeline">
@@ -82,34 +80,29 @@ print(f"The predicted class label is: {predicted_class_label}")
 </hfoption>
 </hfoptions>
 
-
 ## Notes
 
--   Classification checkpoint names follow the pattern `mobilenet_v2_{depth_multiplier}_{resolution}`, like `mobilenet_v2_1.4_224`. `1.4` is the depth multiplier and `224` is the image resolution. Segmentation checkpoint names follow the pattern `deeplabv3_mobilenet_v2_{depth_multiplier}_{resolution}`.
--   While trained on images of a specific sizes, the model architecture works with images of different sizes (minimum 32x32). The [`MobileNetV2ImageProcessor`] handles the necessary preprocessing.
--   MobileNet is pretrained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k), a dataset with 1000 classes. However, the model actually predicts 1001 classes. The additional class is an extra "background" class (index 0).
--   The segmentation models use a [DeepLabV3+](https://huggingface.co/papers/1802.02611) head which is often pretrained on datasets like [PASCAL VOC](https://huggingface.co/datasets/merve/pascal-voc).
--   The original TensorFlow checkpoints determines the padding amount at inference because it depends on the input image size. To use the native PyTorch padding behavior, set `tf_padding=False` in [`MobileNetV2Config`].
+- Classification checkpoint names follow the pattern `mobilenet_v2_{depth_multiplier}_{resolution}`, like `mobilenet_v2_1.4_224`. `1.4` is the depth multiplier and `224` is the image resolution. Segmentation checkpoint names follow the pattern `deeplabv3_mobilenet_v2_{depth_multiplier}_{resolution}`.
+- While trained on images of a specific sizes, the model architecture works with images of different sizes (minimum 32x32). The [`MobileNetV2ImageProcessor`] handles the necessary preprocessing.
+- MobileNet is pretrained on [ImageNet-1k](https://huggingface.co/datasets/ILSVRC/imagenet-1k), a dataset with 1000 classes. However, the model actually predicts 1001 classes. The additional class is an extra "background" class (index 0).
+- The segmentation models use a [DeepLabV3+](https://huggingface.co/papers/1802.02611) head which is often pretrained on datasets like [PASCAL VOC](https://huggingface.co/datasets/merve/pascal-voc).
+- The original TensorFlow checkpoints determines the padding amount at inference because it depends on the input image size. To use the native PyTorch padding behavior, set `tf_padding=False` in [`MobileNetV2Config`].
+
     ```python
     from transformers import MobileNetV2Config
 
     config = MobileNetV2Config.from_pretrained("google/mobilenet_v2_1.4_224", tf_padding=True)
     ```
--   The Transformers implementation does not support the following features.
-    -   Uses global average pooling instead of the optional 7x7 average pooling with stride 2. For larger inputs, this gives a pooled output that is larger than a 1x1 pixel.
-    -   `output_hidden_states=True` returns *all* intermediate hidden states. It is not possible to extract the output from specific layers for other downstream purposes.
-    - Does not include the quantized models from the original checkpoints because they include "FakeQuantization" operations to unquantize the weights.
-    -   For segmentation models, the final convolution layer of the backbone is computed even though the DeepLabV3+ head doesn't use it.
+
+- The Transformers implementation does not support the following features.
+  - Uses global average pooling instead of the optional 7x7 average pooling with stride 2. For larger inputs, this gives a pooled output that is larger than a 1x1 pixel.
+  - `output_hidden_states=True` returns *all* intermediate hidden states. It is not possible to extract the output from specific layers for other downstream purposes.
+  - Does not include the quantized models from the original checkpoints because they include "FakeQuantization" operations to unquantize the weights.
+  - For segmentation models, the final convolution layer of the backbone is computed even though the DeepLabV3+ head doesn't use it.
 
 ## MobileNetV2Config
 
 [[autodoc]] MobileNetV2Config
-
-## MobileNetV2FeatureExtractor
-
-[[autodoc]] MobileNetV2FeatureExtractor
-    - preprocess
-    - post_process_semantic_segmentation
 
 ## MobileNetV2ImageProcessor
 

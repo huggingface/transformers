@@ -45,8 +45,8 @@ achieve SOTA results on the WikiText103 (10.8 compared to SOTA perplexity of 15.
 accuracy of 63.2%) datasets. Our BERT model achieves SOTA results on the RACE dataset (90.9% compared to SOTA accuracy
 of 89.4%).*
 
-This model was contributed by [jdemouth](https://huggingface.co/jdemouth). The original code can be found [here](https://github.com/NVIDIA/Megatron-LM). 
-That repository contains a multi-GPU and multi-node implementation of the Megatron Language models. In particular, 
+This model was contributed by [jdemouth](https://huggingface.co/jdemouth). The original code can be found [here](https://github.com/NVIDIA/Megatron-LM).
+That repository contains a multi-GPU and multi-node implementation of the Megatron Language models. In particular,
 it contains a hybrid model parallel approach using "tensor parallel" and "pipeline parallel" techniques.
 
 ## Usage tips

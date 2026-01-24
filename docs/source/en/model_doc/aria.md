@@ -98,7 +98,7 @@ print(response)
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-	
+
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4 and the [rhymes-ai/Aria-sequential_mlp](https://huggingface.co/rhymes-ai/Aria-sequential_mlp) checkpoint. This checkpoint replaces grouped GEMM with `torch.nn.Linear` layers for easier quantization.
 
 ```py
@@ -142,7 +142,6 @@ response = processor.decode(output_ids, skip_special_tokens=True)
 print(response)
 ```
 
-
 ## AriaImageProcessor
 
 [[autodoc]] AriaImageProcessor
@@ -150,6 +149,7 @@ print(response)
 ## AriaProcessor
 
 [[autodoc]] AriaProcessor
+    - __call__
 
 ## AriaTextConfig
 
@@ -175,3 +175,4 @@ print(response)
 
 [[autodoc]] AriaForConditionalGeneration
     - forward
+    - get_image_features

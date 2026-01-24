@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -287,7 +286,7 @@ def convert_paligemma_checkpoint(
         dim=0,
     )
 
-    model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
+    model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB")
     processor.save_pretrained(pytorch_dump_folder_path)
 
 

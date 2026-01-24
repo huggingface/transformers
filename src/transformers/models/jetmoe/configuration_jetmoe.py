@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 JetMoe AI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,14 +13,15 @@
 # limitations under the License.
 """JetMoe model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class JetMoeConfig(PretrainedConfig):
+class JetMoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JetMoeModel`]. It is used to instantiate a
     JetMoe model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -29,8 +29,8 @@ class JetMoeConfig(PretrainedConfig):
 
     [jetmoe/jetmoe-8b](https://huggingface.co/jetmoe/jetmoe-8b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -70,8 +70,10 @@ class JetMoeConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.01):
@@ -98,26 +100,26 @@ class JetMoeConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=2048,
-        num_hidden_layers=12,
-        num_key_value_heads=16,
-        kv_channels=128,
-        intermediate_size=5632,
-        max_position_embeddings=4096,
-        activation_function="silu",
-        num_local_experts=8,
-        num_experts_per_tok=2,
-        output_router_logits=False,
-        aux_loss_coef=0.01,
-        use_cache=True,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=True,
-        rope_theta=10000.0,
-        rms_norm_eps=1e-6,
-        initializer_range=0.01,
-        attention_dropout=0.0,
+        vocab_size: int | None = 32000,
+        hidden_size: int | None = 2048,
+        num_hidden_layers: int | None = 12,
+        num_key_value_heads: int | None = 16,
+        kv_channels: int | None = 128,
+        intermediate_size: int | None = 5632,
+        max_position_embeddings: int | None = 4096,
+        activation_function: str | None = "silu",
+        num_local_experts: int | None = 8,
+        num_experts_per_tok: int | None = 2,
+        output_router_logits: bool | None = False,
+        aux_loss_coef: float | None = 0.01,
+        use_cache: bool | None = True,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        rms_norm_eps: int | None = 1e-6,
+        initializer_range: float | None = 0.01,
+        attention_dropout: float | None = 0.0,
         **kwargs,
     ):
         if num_experts_per_tok > num_local_experts:
@@ -141,13 +143,13 @@ class JetMoeConfig(PretrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-
-        self.rope_theta = rope_theta
         self.rms_norm_eps = rms_norm_eps
+        self.rope_parameters = rope_parameters
 
-        super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["JetMoeConfig"]

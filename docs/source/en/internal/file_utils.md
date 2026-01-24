@@ -20,7 +20,6 @@ This page lists all of Transformers general utility functions that are found in 
 
 Most of those are only useful if you are studying the general code in the library.
 
-
 ## Enums and namedtuples
 
 [[autodoc]] utils.ExplicitEnum
@@ -44,4 +43,3 @@ Most of those are only useful if you are studying the general code in the librar
 ## Other Utilities
 
 [[autodoc]] utils._LazyModule
-[[autodoc]] pytorch_utils.infer_device

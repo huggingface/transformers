@@ -47,26 +47,23 @@ The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/
 
 - Note the model has not been explicitly trained to process multiple images in the same prompt, although this is technically possible, you may experience inaccurate results.
 
-
 > [!NOTE]
-> LLaVA models after release v4.46 will raise warnings about adding `processor.patch_size = {{patch_size}}`, `processor.num_additional_image_tokens = {{num_additional_image_tokens}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. It is strongly recommended to add the attributes to the processor if you own the model checkpoint, or open a PR if it is not owned by you.
+> LLaVA models after release v4.46 will raise warnings about adding `processor.patch_size = {{patch_size}}`, `processor.num_additional_image_tokens = {{num_additional_image_tokens}}` and `processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. It is strongly recommended to add the attributes to the processor if you own the model checkpoint, or open a PR if it is not owned by you.
 Adding these attributes means that LLaVA will try to infer the number of image tokens required per image and expand the text with as many `<image>` placeholders as there will be tokens. Usually it is around 500 tokens per image, so make sure that the text is not truncated as otherwise there will be failure when merging the embeddings.
 The attributes can be obtained from model config, as `model.config.vision_config.patch_size` or `model.config.vision_feature_select_strategy`. The `num_additional_image_tokens` should be `1` if the vision backbone adds a CLS token or `0` if nothing extra is added to the vision patches.
 
-
 ### Formatting Prompts with Chat Templates  
 
-Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor’s `apply_chat_template` method.  
+Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor's `apply_chat_template` method.  
 
 **Important:**  
+
 - You must construct a conversation history — passing a plain string won't work.  
 - Each message should be a dictionary with `"role"` and `"content"` keys.  
 - The `"content"` should be a list of dictionaries for different modalities like `"text"` and `"image"`.  
 
-
-Here’s an example of how to structure your input. 
+Here's an example of how to structure your input.
 We will use [llava-hf/llava-1.5-7b-hf](https://huggingface.co/llava-hf/llava-1.5-7b-hf) and a conversation history of text and image. Each content field has to be a list of dicts, as follows:
-
 
 ```python
 from transformers import AutoProcessor
@@ -104,6 +101,7 @@ print(text_prompt)
 - If you want to construct a chat prompt yourself, below is a list of prompt formats accepted by each llava checkpoint:
 
 [llava-interleave models](https://huggingface.co/collections/llava-hf/llava-interleave-668e19a97da0036aad4a2f19) requires the following format:
+
 ```bash
 "<|im_start|>user <image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant"
 ```
@@ -115,6 +113,7 @@ For multiple turns conversation:
 ```
 
 [llava-1.5 models](https://huggingface.co/collections/llava-hf/llava-15-65f762d5b6941db5c2ba07e0) requires the following format:
+
 ```bash
 "USER: <image>\n<prompt> ASSISTANT:"
 ```
@@ -127,11 +126,9 @@ For multiple turns conversation:
 
 🚀 **Bonus:** If you're using `transformers>=4.49.0`, you can also get a vectorized output from `apply_chat_template`. See the **Usage Examples** below for more details on how to use it.
 
-
 ## Usage examples
 
 ### Single input inference
-
 
 ```python
 import torch
@@ -163,7 +160,6 @@ inputs = processor.apply_chat_template(
 generate_ids = model.generate(**inputs, max_new_tokens=30)
 processor.batch_decode(generate_ids, skip_special_tokens=True)
 ```
-
 
 ### Batched inference
 
@@ -214,7 +210,6 @@ generate_ids = model.generate(**inputs, max_new_tokens=30)
 processor.batch_decode(generate_ids, skip_special_tokens=True)
 ```
 
-
 ## Note regarding reproducing original implementation
 
 In order to match the logits of the [original implementation](https://github.com/haotian-liu/LLaVA/tree/main), one needs to additionally specify `do_pad=True` when instantiating `LlavaImageProcessor`:
@@ -238,7 +233,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - A [Google Colab demo](https://colab.research.google.com/drive/1qsl6cd2c8gGtEW1xV5io7S8NHh-Cp1TV?usp=sharing) on how to run Llava on a free-tier Google colab instance leveraging 4-bit inference.
 - A [similar notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LLaVa/Inference_with_LLaVa_for_multimodal_generation.ipynb) showcasing batched inference. 🌎
 
-
 ## LlavaConfig
 
 [[autodoc]] LlavaConfig
@@ -256,6 +250,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## LlavaProcessor
 
 [[autodoc]] LlavaProcessor
+    - __call__
 
 ## LlavaModel
 
@@ -265,3 +260,4 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] LlavaForConditionalGeneration
     - forward
+    - get_image_features

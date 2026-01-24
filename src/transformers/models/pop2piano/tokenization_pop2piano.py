@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Pop2Piano Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +15,11 @@
 
 import json
 import os
-from typing import Optional, Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...tokenization_utils import AddedToken, BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TruncationStrategy
+from ...tokenization_python import AddedToken, BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TruncationStrategy
 from ...utils import TensorType, is_pretty_midi_available, logging, requires_backends, to_numpy
 from ...utils.import_utils import requires
 
@@ -247,9 +245,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     # Taken from the original code
     # Please see https://github.com/sweetcocoa/pop2piano/blob/fac11e8dcfc73487513f4588e8d0c22a22f2fdc5/midi_tokenizer.py#L257
-    def relative_tokens_ids_to_notes(
-        self, tokens: np.ndarray, start_idx: float, cutoff_time_idx: Optional[float] = None
-    ):
+    def relative_tokens_ids_to_notes(self, tokens: np.ndarray, start_idx: float, cutoff_time_idx: float | None = None):
         """
         Converts relative tokens to notes which will then be used to create Pretty Midi objects.
 
@@ -265,7 +261,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
         current_idx = start_idx
         current_velocity = 0
-        note_onsets_ready = [None for i in range(sum([k.endswith("NOTE") for k in self.encoder]) + 1)]
+        note_onsets_ready = [None for i in range(sum(k.endswith("NOTE") for k in self.encoder) + 1)]
         notes = []
         for token_type, number in words:
             if token_type == "TOKEN_SPECIAL":
@@ -341,7 +337,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         new_pm.remove_invalid_notes()
         return new_pm
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         """
         Saves the tokenizer's vocabulary dictionary to the provided save_directory.
 
@@ -366,9 +362,9 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     def encode_plus(
         self,
-        notes: Union[np.ndarray, list[pretty_midi.Note]],
-        truncation_strategy: Optional[TruncationStrategy] = None,
-        max_length: Optional[int] = None,
+        notes: np.ndarray | list[pretty_midi.Note],
+        truncation_strategy: TruncationStrategy | None = None,
+        max_length: int | None = None,
         **kwargs,
     ) -> BatchEncoding:
         r"""
@@ -437,9 +433,9 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     def batch_encode_plus(
         self,
-        notes: Union[np.ndarray, list[pretty_midi.Note]],
-        truncation_strategy: Optional[TruncationStrategy] = None,
-        max_length: Optional[int] = None,
+        notes: np.ndarray | list[pretty_midi.Note],
+        truncation_strategy: TruncationStrategy | None = None,
+        max_length: int | None = None,
         **kwargs,
     ) -> BatchEncoding:
         r"""
@@ -476,17 +472,13 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     def __call__(
         self,
-        notes: Union[
-            np.ndarray,
-            list[pretty_midi.Note],
-            list[list[pretty_midi.Note]],
-        ],
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        notes: np.ndarray | list[pretty_midi.Note] | list[list[pretty_midi.Note]],
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy = None,
+        max_length: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        return_attention_mask: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         verbose: bool = True,
         **kwargs,
     ) -> BatchEncoding:

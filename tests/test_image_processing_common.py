@@ -11,24 +11,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import inspect
+import io
 import json
 import os
 import pathlib
+import subprocess
 import tempfile
 import time
 import unittest
 import warnings
 from copy import deepcopy
+from datetime import datetime
 
+import httpx
 import numpy as np
 import pytest
-import requests
 from packaging import version
 
 from transformers import AutoImageProcessor, BatchFeature
 from transformers.image_utils import AnnotationFormat, AnnotionFormat
+from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_torch,
@@ -182,7 +185,9 @@ class ImageProcessingTestMixin:
             self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
         dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+            io.BytesIO(
+                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
+            )
         )
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
@@ -336,9 +341,10 @@ class ImageProcessingTestMixin:
         }
         dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
         dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        # Fast processors filter None values from to_dict(), so differences should only be special keys
         self.assertTrue(
-            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+            all(key in ["default_to_square", "data_format"] for key in difference.keys()),
+            f"Fast processors should only differ in special keys, found: {list(difference.keys())}",
         )
         # check that the remaining keys are the same
         self.assertEqual(dict_fast_0, dict_fast_1)
@@ -386,9 +392,10 @@ class ImageProcessingTestMixin:
         }
         dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
         dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        # Fast processors filter None values from to_dict(), so differences should only be special keys
         self.assertTrue(
-            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+            all(key in ["default_to_square", "data_format"] for key in difference.keys()),
+            f"Fast processors should only differ in special keys, found: {list(difference.keys())}",
         )
         # check that the remaining keys are the same
         self.assertEqual(dict_fast_0, dict_fast_1)
@@ -514,8 +521,8 @@ class ImageProcessingTestMixin:
                 image_inputs[0],
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=[0.0, 0.0, 0.0, 0.0],
+                image_std=[1.0, 1.0, 1.0, 1.0],
             ).pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
@@ -525,8 +532,8 @@ class ImageProcessingTestMixin:
                 image_inputs,
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=[0.0, 0.0, 0.0, 0.0],
+                image_std=[1.0, 1.0, 1.0, 1.0],
             ).pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
@@ -627,6 +634,97 @@ class ImageProcessingTestMixin:
         self._assert_slow_fast_tensors_equivalence(
             output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4, rtol=1e-4, mean_atol=1e-5
         )
+
+    def test_new_models_require_fast_image_processor(self):
+        """
+        Test that new models have a fast image processor.
+        For more information on how to implement a fast image processor, see this issue: https://github.com/huggingface/transformers/issues/36978,
+        and ping @yonigozlan for help.
+        """
+        if self.fast_image_processing_class is not None:
+            return
+        if self.image_processing_class is None:
+            self.skipTest("No image processing class defined")
+
+        def _is_old_model_by_commit_date(model_type, date_cutoff=(2025, 9, 1)):
+            try:
+                # Convert model_type to directory name and construct file path
+                model_dir = model_type.replace("-", "_")
+                slow_processor_file = f"src/transformers/models/{model_dir}/image_processing_{model_dir}.py"
+                # Check if the file exists otherwise skip the test
+                if not os.path.exists(slow_processor_file):
+                    return None
+                # Get the first commit date of the slow processor file
+                result = subprocess.run(
+                    ["git", "log", "--reverse", "--pretty=format:%ad", "--date=iso", slow_processor_file],
+                    capture_output=True,
+                    text=True,
+                    cwd=os.getcwd(),
+                )
+                if result.returncode != 0 or not result.stdout.strip():
+                    return None
+                # Parse the first line (earliest commit)
+                first_line = result.stdout.strip().split("\n")[0]
+                date_part = first_line.split(" ")[0]  # Extract just the date part
+                commit_date = datetime.strptime(date_part, "%Y-%m-%d")
+                # Check if committed before the cutoff date
+                cutoff_date = datetime(*date_cutoff)
+                return commit_date <= cutoff_date
+
+            except Exception:
+                # If any error occurs, skip the test
+                return None
+
+        image_processor_name = self.image_processing_class.__name__
+        model_type = None
+        for mapping_model_type, (slow_class, _) in IMAGE_PROCESSOR_MAPPING_NAMES.items():
+            if slow_class == image_processor_name:
+                model_type = mapping_model_type
+                break
+
+        if model_type is None:
+            self.skipTest(f"Could not find model type for {image_processor_name} in IMAGE_PROCESSOR_MAPPING_NAMES")
+        # Check if this is a new model (added after 2024-01-01) based on git history
+        is_old_model = _is_old_model_by_commit_date(model_type)
+        if is_old_model is None:
+            self.skipTest(f"Could not determine if {model_type} is new based on git history")
+        # New models must have fast processors
+        self.assertTrue(
+            is_old_model,
+            f"Model '{model_type}' (processor: {image_processor_name}) was added after the cutoff date and must have "
+            f"a fast image processor implementation. Please implement the corresponding fast processor.",
+        )
+
+    def test_fast_image_processor_explicit_none_preserved(self):
+        """Test that explicitly setting an attribute to None is preserved through save/load."""
+        if self.fast_image_processing_class is None:
+            self.skipTest("Skipping test as fast image processor is not defined")
+
+        # Find an attribute with a non-None class default to test explicit None override
+        test_attr = None
+        for attr in ["do_resize", "do_rescale", "do_normalize"]:
+            if getattr(self.fast_image_processing_class, attr, None) is not None:
+                test_attr = attr
+                break
+
+        if test_attr is None:
+            self.skipTest("Could not find a suitable attribute to test")
+
+        # Create processor with explicit None (override the attribute)
+        kwargs = self.image_processor_dict.copy()
+        kwargs[test_attr] = None
+        image_processor = self.fast_image_processing_class(**kwargs)
+
+        # Verify it's in to_dict() as None (not filtered out)
+        self.assertIn(test_attr, image_processor.to_dict())
+        self.assertIsNone(image_processor.to_dict()[test_attr])
+
+        # Verify explicit None survives save/load cycle
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            image_processor.save_pretrained(tmpdirname)
+            reloaded = self.fast_image_processing_class.from_pretrained(tmpdirname)
+
+        self.assertIsNone(getattr(reloaded, test_attr), f"Explicit None for {test_attr} was lost after reload")
 
 
 class AnnotationFormatTestMixin:

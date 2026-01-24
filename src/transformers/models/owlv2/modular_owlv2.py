@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,40 +14,27 @@
 """Fast Image processor class for OWLv2."""
 
 import warnings
-from typing import Optional, Union
+from typing import Optional
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorKwargs,
 )
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
 )
 from ..owlvit.image_processing_owlvit_fast import OwlViTImageProcessorFast
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
-
-
-class Owlv2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs): ...
 
 
 @auto_docstring
@@ -62,18 +48,10 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_pad = True
-    valid_kwargs = Owlv2FastImageProcessorKwargs
     crop_size = None
     do_center_crop = None
 
-    def __init__(self, **kwargs: Unpack[Owlv2FastImageProcessorKwargs]):
-        BaseImageProcessorFast.__init__(self, **kwargs)
-
-    @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Owlv2FastImageProcessorKwargs]):
-        return BaseImageProcessorFast.preprocess(self, images, **kwargs)
-
-    def _pad_images(self, images: "torch.Tensor", constant_value: float = 0.5) -> "torch.Tensor":
+    def _pad_images(self, images: "torch.Tensor", constant_value: float = 0.0) -> "torch.Tensor":
         """
         Pad an image with zeros to the given size.
         """
@@ -83,14 +61,14 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
         pad_right = size - width
 
         padding = (0, 0, pad_right, pad_bottom)
-        padded_image = F.pad(images, padding, fill=constant_value)
+        padded_image = tvF.pad(images, padding, fill=constant_value)
         return padded_image
 
     def pad(
         self,
         images: list["torch.Tensor"],
-        disable_grouping: Optional[bool],
-        constant_value: float = 0.5,
+        disable_grouping: bool | None,
+        constant_value: float = 0.0,
         **kwargs,
     ) -> list["torch.Tensor"]:
         """
@@ -155,14 +133,14 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
             else:
                 kernel_sizes = 2 * torch.ceil(3 * anti_aliasing_sigma).int() + 1
 
-                filtered = F.gaussian_blur(
+                filtered = tvF.gaussian_blur(
                     image, (kernel_sizes[0], kernel_sizes[1]), sigma=anti_aliasing_sigma.tolist()
                 )
 
         else:
             filtered = image
 
-        out = F.resize(filtered, size=(size.height, size.width), antialias=False)
+        out = tvF.resize(filtered, size=(size.height, size.width), antialias=False)
 
         return out
 
@@ -171,15 +149,15 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_pad: bool,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -196,7 +174,7 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         if do_pad:
-            processed_images = self.pad(processed_images, constant_value=0.5, disable_grouping=disable_grouping)
+            processed_images = self.pad(processed_images, constant_value=0.0, disable_grouping=disable_grouping)
 
         grouped_images, grouped_images_index = group_images_by_shape(
             processed_images, disable_grouping=disable_grouping
@@ -225,8 +203,6 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

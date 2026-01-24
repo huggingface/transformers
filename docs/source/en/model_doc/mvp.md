@@ -25,7 +25,6 @@ rendered properly in your Markdown viewer.
 
 The MVP model was proposed in [MVP: Multi-task Supervised Pre-training for Natural Language Generation](https://huggingface.co/papers/2206.12131) by Tianyi Tang, Junyi Li, Wayne Xin Zhao and Ji-Rong Wen.
 
-
 According to the abstract,
 
 - MVP follows a standard Transformer encoder-decoder architecture.
@@ -67,6 +66,7 @@ For summarization, it is an example to use MVP and MVP with summarization-specif
 ```
 
 For data-to-text generation, it is an example to use MVP and multi-task pre-trained variants.
+
 ```python
 >>> from transformers import MvpTokenizerFast, MvpForConditionalGeneration
 

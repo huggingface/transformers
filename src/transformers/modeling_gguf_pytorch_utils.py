@@ -14,12 +14,13 @@
 # limitations under the License.
 
 import re
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 import numpy as np
 from tqdm.auto import tqdm
 
 from .integrations import (
+    GGUF_CONFIG_DEFAULTS_MAPPING,
     GGUF_CONFIG_MAPPING,
     GGUF_TOKENIZER_MAPPING,
     _gguf_parse_value,
@@ -62,6 +63,24 @@ class TensorProcessor:
     def __init__(self, config=None):
         self.config = config or {}
 
+    def preprocess_name(self, hf_name: str) -> str:
+        """
+        Preprocesses the tensor name to ease loading the GGUF tensors.
+        """
+        return hf_name
+
+    def perform_fallback_tensor_mapping(
+        self, gguf_to_hf_name_map: dict[str, str], suffix: str, qual_name: str, hf_name: str
+    ):
+        """
+        Called when get_gguf_hf_weights_map fails to map a HF parameter
+        (tensor) and corresponding GGUF one.
+
+        This is particularly useful to resolve one-to-many
+        HF-GGUF mappings sometimes appear in some MoE models.
+        """
+        pass
+
     def process(self, weights, name, **kwargs):
         return GGUFTensor(weights, name, {})
 
@@ -84,7 +103,7 @@ class LlamaTensorProcessor(TensorProcessor):
         return GGUFTensor(weights, name, {})
 
     def _reverse_permute_weights(
-        self, weights: np.ndarray, n_head: int, num_kv_heads: Optional[int] = None
+        self, weights: np.ndarray, n_head: int, num_kv_heads: int | None = None
     ) -> np.ndarray:
         # Original permutation implementation
         # https://github.com/ggerganov/llama.cpp/blob/a38b884c6c4b0c256583acfaaabdf556c62fabea/convert_hf_to_gguf.py#L1402-L1408
@@ -97,15 +116,31 @@ class LlamaTensorProcessor(TensorProcessor):
 
 
 class Qwen2MoeTensorProcessor(TensorProcessor):
+    HF_EXPERT_RENAME_PATTERN = re.compile(r"mlp.experts.\d+.")
+    HF_MOE_W13_PATTERN = re.compile(r"model\.layers\.(?P<bid>\d+)\.mlp\.experts\.gate_up_proj")
+    GGUF_MOE_WEIGHTS_PATTERN = re.compile(r"(?P<name>.*\.ffn_(?P<w>gate|down|up)_exps)\.weight$")
+
     def __init__(self, config=None):
         super().__init__(config=config)
 
-    def process(self, weights, name, **kwargs):
-        if "_exp" in name:
+    def preprocess_name(self, hf_name: str) -> str:
+        return re.sub(self.HF_EXPERT_RENAME_PATTERN, "mlp.experts.", hf_name)
+
+    def perform_fallback_tensor_mapping(
+        self, gguf_to_hf_name_map: dict[str, str], suffix: str, qual_name: str, hf_name: str
+    ):
+        # Map merged MoE weights (w1 (gate) and w3 (up)) separately.
+        if m := re.fullmatch(self.HF_MOE_W13_PATTERN, hf_name):
+            full_hf_name = qual_name + hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_gate_exps{suffix}"] = full_hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_up_exps{suffix}"] = full_hf_name
+
+    def process(self, weights, name: str, **kwargs):
+        if m := re.fullmatch(self.GGUF_MOE_WEIGHTS_PATTERN, name):
             tensor_key_mapping = kwargs.get("tensor_key_mapping")
             parsed_parameters = kwargs.get("parsed_parameters")
             if tensor_key_mapping:
-                self._split_moe_expert_tensor(weights, parsed_parameters, name, tensor_key_mapping)
+                self._set_moe_expert_tensor(weights, parsed_parameters, tensor_key_mapping[m["name"]], m["w"])
                 return GGUFTensor(weights, None, {})
         if "ffn_gate_inp_shexp" in name:
             # for compatibility tensor shared_expert_gate must be (1, 2048) dim,
@@ -113,17 +148,27 @@ class Qwen2MoeTensorProcessor(TensorProcessor):
             weights = np.expand_dims(weights, axis=0)
         return GGUFTensor(weights, name, {})
 
-    def _split_moe_expert_tensor(
-        self, weights: np.ndarray, parsed_parameters: dict[str, dict], name: str, tensor_key_mapping: dict
-    ):
-        # Original merge implementation
-        # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L1994-L2022
-        name = tensor_key_mapping[name]
-        w_counter = self.config.get("num_experts", 60)
-        for i in range(0, w_counter):
-            temp_name = name.replace("mlp.experts.", f"mlp.experts.{i}.")
-            exp_weight = weights[i]
-            parsed_parameters["tensors"][temp_name] = torch.from_numpy(np.copy(exp_weight))
+    def _set_moe_expert_tensor(self, weights: np.ndarray, parsed_parameters: dict[str, dict], hf_name: str, w: str):
+        torch_weights = torch.from_numpy(np.copy(weights))
+        if w == "down":
+            parsed_parameters["tensors"][hf_name] = torch_weights
+        else:
+            # Double the size of the second dimension to interleave w1 (gate) and w3 (up)
+            # weights per expert (which is the first dimension).
+            # w1 (gate) comes first and w3 (up) comes second.
+            # ref: https://github.com/vllm-project/vllm/blob/8f8fda261a620234fdeea338f44093d5d8072879/vllm/model_executor/layers/fused_moe/layer.py#L988-L1015
+            shape = list(weights.shape)
+            shard_dim = 1
+            shard_size = shape[shard_dim]
+            shape[shard_dim] = shard_size * 2
+            if hf_name not in parsed_parameters["tensors"]:
+                parsed_parameters["tensors"][hf_name] = torch.zeros(shape, dtype=torch_weights.dtype)
+            out: torch.Tensor = parsed_parameters["tensors"][hf_name]
+            if w == "gate":
+                out = out.narrow(shard_dim, 0, shard_size)
+            else:  # w == "up"
+                out = out.narrow(shard_dim, shard_size, shard_size)
+            out.copy_(torch_weights)
 
 
 class BloomTensorProcessor(TensorProcessor):
@@ -243,6 +288,17 @@ class Gemma2TensorProcessor(TensorProcessor):
         return GGUFTensor(weights, name, {})
 
 
+class Lfm2TensorProcessor(TensorProcessor):
+    def __init__(self, config=None):
+        super().__init__(config=config)
+
+    def process(self, weights, name, **kwargs):
+        if "shortconv.conv.weight" in name:
+            ## GGUF shape is [hidden_dim, L_cache], HF expects [hidden_dim, 1, L_cache]
+            weights = np.expand_dims(weights, axis=1)  ## equivalent to unsqueeze(1)
+        return GGUFTensor(weights, name, {})
+
+
 TENSOR_PROCESSORS = {
     "llama": LlamaTensorProcessor,
     "qwen2moe": Qwen2MoeTensorProcessor,
@@ -255,6 +311,7 @@ TENSOR_PROCESSORS = {
     "nemotron": NemotronTensorProcessor,
     "gemma2": Gemma2TensorProcessor,
     "gemma3": Gemma2TensorProcessor,
+    "lfm2": Lfm2TensorProcessor,
 }
 
 
@@ -268,8 +325,9 @@ def read_field(reader, field):
 # modified from https://github.com/vllm-project/vllm/blob/v0.6.4.post1/vllm/model_executor/model_loader/loader.py#L1115-L1147
 def get_gguf_hf_weights_map(
     hf_model,
-    model_type: Optional[str] = None,
-    num_layers: Optional[int] = None,
+    processor: TensorProcessor,
+    model_type: str | None = None,
+    num_layers: int | None = None,
     qual_name: str = "",
 ):
     """
@@ -321,9 +379,7 @@ def get_gguf_hf_weights_map(
     gguf_to_hf_name_map = {}
     state_dict = hf_model.state_dict()
     for hf_name in state_dict:
-        # An exception for qwen2moe/qwen3moe model, where the expert layers are packed
-        if model_type in ("qwen2moe", "qwen3moe") and "mlp.experts." in hf_name:
-            hf_name = re.sub(r"mlp.experts.\d+.", "mlp.experts.", hf_name)
+        hf_name = processor.preprocess_name(hf_name)
 
         name, suffix = hf_name, ""
         if hf_name.endswith(".weight") or hf_name.endswith(".bias"):
@@ -332,6 +388,7 @@ def get_gguf_hf_weights_map(
 
         gguf_name = name_map.get_name(name)
         if gguf_name is None:
+            processor.perform_fallback_tensor_mapping(gguf_to_hf_name_map, suffix, qual_name, hf_name)
             continue
 
         gguf_to_hf_name_map[gguf_name + suffix] = qual_name + hf_name
@@ -340,7 +397,9 @@ def get_gguf_hf_weights_map(
     # Therefore, we need to check submodule as well to get a correct mapping
     if named_children := hf_model.named_children():
         for name, child in named_children:
-            sub_map = get_gguf_hf_weights_map(child, model_type, num_layers, qual_name=f"{qual_name}{name}.")
+            sub_map = get_gguf_hf_weights_map(
+                child, processor, model_type, num_layers, qual_name=f"{qual_name}{name}."
+            )
             # Ignore the keys that are already in the main map to avoid overwriting
             sub_map = {k: v for k, v in sub_map.items() if k not in gguf_to_hf_name_map}
             gguf_to_hf_name_map.update(sub_map)
@@ -422,8 +481,15 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # tie_word_embeddings is true otherwise false
     exceptions = ["falcon", "bloom"]
     parsed_parameters["config"]["tie_word_embeddings"] = (
-        all("output.weight" != tensor.name for tensor in reader.tensors) or architecture in exceptions
+        all(tensor.name != "output.weight" for tensor in reader.tensors) or architecture in exceptions
     )
+
+    # Set GGUF-specific default values
+    config_defaults = GGUF_CONFIG_DEFAULTS_MAPPING.get(
+        updated_architecture, GGUF_CONFIG_DEFAULTS_MAPPING.get(architecture) or {}
+    )
+    for key, value in config_defaults.items():
+        parsed_parameters["config"].setdefault(key, value)
 
     # List all key-value pairs in a columnized format
     for gguf_key, field in reader.fields.items():
@@ -459,6 +525,19 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     if parsed_parameters["config"]["model_type"] == "gemma3":
         parsed_parameters["config"]["model_type"] = "gemma3_text"
 
+    if parsed_parameters["config"]["model_type"] == "lfm2":
+        gguf_num_key_value_heads = parsed_parameters["config"]["num_key_value_heads"]
+        # LFM2 GGUF checkpoint defines num_key_value_heads as a list of integers .e.g [0, 0, 8, 0, 0, 8, 0, 0, 8, 0, 8, 0, 8, 0, 8, 0] but we need to set it to the max value for HF
+        parsed_parameters["config"]["num_key_value_heads"] = max(gguf_num_key_value_heads)
+        ## we already read the correct intermediate_size from the GGUF checkpoint so we need to set block_auto_adjust_ff_dim to False
+        parsed_parameters["config"]["block_auto_adjust_ff_dim"] = False
+
+        ## llama.cpp defines the layers that are full-attention by looking at num_key_value_heads
+        ## we need to set the full_attn_idxs to the layers that are full-attention
+        parsed_parameters["config"]["full_attn_idxs"] = [
+            i for i, num_kv_heads in enumerate(gguf_num_key_value_heads) if num_kv_heads > 0
+        ]
+
     # retrieve config vocab_size from tokenizer
     # Please refer to https://github.com/huggingface/transformers/issues/32526 for more details
     if "vocab_size" not in parsed_parameters["config"]:
@@ -474,11 +553,12 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     if return_tensors:
         parsed_parameters["tensors"] = {}
 
-        tensor_key_mapping = get_gguf_hf_weights_map(model_to_load)
         config = parsed_parameters.get("config", {})
 
         ProcessorClass = TENSOR_PROCESSORS.get(architecture, TensorProcessor)
         processor = ProcessorClass(config=config)
+
+        tensor_key_mapping = get_gguf_hf_weights_map(model_to_load, processor)
 
         for tensor in tqdm(reader.tensors, desc="Converting and de-quantizing GGUF tensors..."):
             name = tensor.name

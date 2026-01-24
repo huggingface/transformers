@@ -17,9 +17,6 @@ File utilities: utilities related to download and cache models
 This module should not be update anymore and is only left for backward compatibility.
 """
 
-from huggingface_hub import get_full_repo_name  # for backward compatibility
-from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
-
 from . import __version__
 
 # Backward compatibility imports, to make sure all those objects can be found in file_utils
@@ -32,17 +29,11 @@ from .utils import (
     ENV_VARS_TRUE_VALUES,
     FEATURE_EXTRACTOR_NAME,
     HF_MODULES_CACHE,
-    HUGGINGFACE_CO_PREFIX,
-    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     MODEL_CARD_NAME,
     MULTIPLE_CHOICE_DUMMY_INPUTS,
-    PYTORCH_PRETRAINED_BERT_CACHE,
-    PYTORCH_TRANSFORMERS_CACHE,
     S3_BUCKET_PREFIX,
     SENTENCEPIECE_UNDERLINE,
     SPIECE_UNDERLINE,
-    TORCH_FX_REQUIRED_VERSION,
-    TRANSFORMERS_CACHE,
     TRANSFORMERS_DYNAMIC_MODULE_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
@@ -62,7 +53,6 @@ from .utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     copy_func,
-    default_cache_path,
     define_sagemaker_information,
     get_torch_version,
     has_file,
@@ -78,7 +68,6 @@ from .utils import (
     is_in_notebook,
     is_ipex_available,
     is_librosa_available,
-    is_offline_mode,
     is_onnx_available,
     is_pandas_available,
     is_phonemizer_available,
@@ -102,9 +91,7 @@ from .utils import (
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
-    is_torch_bf16_available,
     is_torch_cuda_available,
-    is_torch_fx_available,
     is_torch_fx_proxy,
     is_torch_mps_available,
     is_torch_tf32_available,

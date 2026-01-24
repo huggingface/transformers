@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch GLM-4.1V model."""
+"""Testing suite for the PyTorch GLM-4.5V model."""
 
 import copy
 import unittest
@@ -27,7 +27,7 @@ from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     run_first,
     slow,
     torch_device,
@@ -72,7 +72,7 @@ class Glm4vMoeVisionText2TextModelTester:
             "output_channels": 64,
             "hidden_act": "silu",
             "max_position_embeddings": 512,
-            "rope_scaling": {"type": "default", "mrope_section": [1, 1]},
+            "rope_parameters": {"type": "default", "mrope_section": [1, 1]},
             "rope_theta": 10000,
             "tie_word_embeddings": True,
             "bos_token_id": 0,
@@ -182,9 +182,7 @@ class Glm4vMoeVisionText2TextModelTester:
 @require_torch
 class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Glm4vMoeModel, Glm4vMoeForConditionalGeneration) if is_torch_available() else ()
-    test_pruning = False
-    test_head_masking = False
-    test_torchscript = False
+
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
     _is_composite = True
 
@@ -202,9 +200,6 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         # We don't want a few model inputs in our model input dictionary for generation tests
         input_keys_to_ignore = [
             # we don't want to mask attention heads
-            "head_mask",
-            "decoder_head_mask",
-            "cross_attn_head_mask",
             # we don't want encoder-decoder models to start from filled decoder ids
             "decoder_input_ids",
             "decoder_attention_mask",
@@ -299,7 +294,9 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 @require_torch
 @slow
 class Glm4vMoeIntegrationTest(unittest.TestCase):
-    model = None
+    @classmethod
+    def setUpClass(cls):
+        cls.model = None
 
     @classmethod
     def get_model(cls):
@@ -437,7 +434,7 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
 
     @run_first
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Glm4vMoeForConditionalGeneration.from_pretrained(
             "zai-org/GLM-4.5V",

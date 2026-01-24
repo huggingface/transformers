@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,11 +13,11 @@
 # limitations under the License.
 """openai model configuration"""
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...modeling_rope_utils import RopeParameters
 
 
-class GptOssConfig(PretrainedConfig):
+class GptOssConfig(PreTrainedConfig):
     r"""
     This will yield a configuration to that of the BERT
     [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased) architecture.
@@ -26,6 +25,7 @@ class GptOssConfig(PretrainedConfig):
     """
 
     model_type = "gpt_oss"
+    default_theta = 150000.0
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -47,22 +47,21 @@ class GptOssConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_hidden_layers: int = 36,
-        num_local_experts: int = 128,
-        vocab_size: int = 201088,
-        hidden_size: int = 2880,
-        intermediate_size: int = 2880,
-        head_dim: int = 64,
-        num_attention_heads: int = 64,
-        num_key_value_heads: int = 8,
-        sliding_window: int = 128,
-        rope_theta: float = 150000.0,
-        tie_word_embeddings=False,
-        hidden_act: str = "silu",
-        initializer_range: float = 0.02,
-        max_position_embeddings=131072,
-        rms_norm_eps: float = 1e-5,
-        rope_scaling={
+        num_hidden_layers: int | None = 36,
+        num_local_experts: int | None = 128,
+        vocab_size: int | None = 201088,
+        hidden_size: int | None = 2880,
+        intermediate_size: int | None = 2880,
+        head_dim: int | None = 64,
+        num_attention_heads: int | None = 64,
+        num_key_value_heads: int | None = 8,
+        sliding_window: int | None = 128,
+        tie_word_embeddings: bool | None = False,
+        hidden_act: str | None = "silu",
+        initializer_range: float | None = 0.02,
+        max_position_embeddings: int | None = 131072,
+        rms_norm_eps: float | None = 1e-5,
+        rope_parameters: RopeParameters | None = {
             "rope_type": "yarn",
             "factor": 32.0,
             "beta_fast": 32.0,
@@ -70,12 +69,15 @@ class GptOssConfig(PretrainedConfig):
             "truncate": False,
             "original_max_position_embeddings": 4096,
         },
-        attention_dropout: float = 0.0,
-        num_experts_per_tok=4,
-        router_aux_loss_coef: float = 0.9,
-        output_router_logits=False,
-        use_cache=True,
-        layer_types=None,
+        attention_dropout: float | None = 0.0,
+        num_experts_per_tok: int | None = 4,
+        router_aux_loss_coef: float | None = 0.9,
+        output_router_logits: bool | None = False,
+        use_cache: bool | None = True,
+        layer_types: list[str] | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -94,8 +96,6 @@ class GptOssConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.layer_types = layer_types
@@ -110,17 +110,30 @@ class GptOssConfig(PretrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.output_router_logits = output_router_logits
         self.use_cache = use_cache
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+    def __setattr__(self, key, value):
+        """
+        Overwritten to allow checking for the proper attention implementation to be used.
+
+        Due to `set_attn_implementation` which internally assigns `_attn_implementation_internal = "..."`, simply overwriting
+        the specific attention setter is not enough. Using a property/setter for `_attn_implementation_internal` would result in
+        a recursive dependency (as `_attn_implementation` acts as a wrapper around `_attn_implementation_internal`) - hence, this
+        workaround.
+        """
+        if key in ("_attn_implementation", "_attn_implementation_internal"):
+            if value and "flash" in value and value.removeprefix("paged|") != "kernels-community/vllm-flash-attn3":
+                raise ValueError(
+                    f"GPT-OSS model does not support the specified flash attention implementation: {value}. "
+                    "Only `kernels-community/vllm-flash-attn3` is supported."
+                )
+        super().__setattr__(key, value)
 
 
 __all__ = ["GptOssConfig"]

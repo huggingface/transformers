@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,27 +15,18 @@
 Processor class for Kosmos2_5.
 """
 
-from typing import Optional, Union
-
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
-from ...utils import is_torch_available
+from ...utils import auto_docstring, is_torch_available
 
 
 if is_torch_available():
     import torch
 
 
-class Kosmos2_5ImagesKwargs(ImagesKwargs, total=False):
-    max_patches: Optional[int]
-    num_image_tokens: Optional[int]
-
-
 class Kosmos2_5ProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: TextKwargs
-    images_kwargs: Kosmos2_5ImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding": True,
@@ -46,53 +36,31 @@ class Kosmos2_5ProcessorKwargs(ProcessingKwargs, total=False):
         },
         "images_kwargs": {
             "max_patches": 4096,
-            "num_image_tokens": 2048,
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
 
 
+@auto_docstring
 class Kosmos2_5Processor(ProcessorMixin):
-    r"""
-    Constructs a Kosmos2_5 processor which wraps a PreTrainedTokenizerFast and Kosmos2_5 image processor into a single
-    processor.
-
-    [`Kosmos2_5Processor`] offers all the functionalities of [`Kosmos2_5ImageProcessor`] and [`PreTrainedTokenizerFast`]. See
-    the docstring of [`~Kosmos2_5Processor.__call__`] and [`~Kosmos2_5Processor.decode`] for more information.
-
-    Args:
-        image_processor (`Kosmos2_5ImageProcessor`):
-            An instance of [`Kosmos2_5ImageProcessor`]. The image processor is a required input.
-        tokenizer (Union[`T5TokenizerFast`, `T5Tokenizer`]):
-            An instance of ['T5TokenizerFast`] or ['T5Tokenizer`]. The tokenizer is a required input.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "PreTrainedTokenizerFast"
-
-    def __init__(self, image_processor, tokenizer):
+    def __init__(self, image_processor, tokenizer, num_image_tokens: int = 2048):
+        r"""
+        num_image_tokens (`int`, *optional*, defaults to 2048):
+            Number of image tokens used as a placeholder.
+        """
         self.image_start_token = tokenizer.boi_token  # "<image>" : fixed token for the start of image
         self.image_end_token = tokenizer.eoi_token  # "</image>" : fixed token for the end of image
         self.image_token = tokenizer.image_token  # "<s>" : within a <image> ... </image> pair, these <s> tokens indicate they are positions reserved for an image
+        self.num_image_tokens = num_image_tokens
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, list[TextInput]] = None,
-        audio=None,
-        videos=None,
+        images: ImageInput | None = None,
+        text: TextInput | list[TextInput] = None,
         **kwargs: Unpack[Kosmos2_5ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        This method uses [`Kosmos2_5ImageProcessor.preprocess`] method to prepare image(s) for the model, and
-        [`PreTrainedTokenizerFast.__call__`] to prepare text for the model.
-
-        Please refer to the docstring of the above two methods for more information.
-
-        The rest of this documentation shows the arguments specific to `Kosmos2_5Processor`.
-        """
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 
@@ -104,8 +72,6 @@ class Kosmos2_5Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        num_image_tokens = output_kwargs["images_kwargs"].setdefault("num_image_tokens", None)
-
         encoding = BatchFeature()
 
         if images is not None:
@@ -114,7 +80,7 @@ class Kosmos2_5Processor(ProcessorMixin):
             image_encoding.pop("cols")
             encoding.update(image_encoding)
 
-        prompt = f"{self.tokenizer.bos_token}{self.image_start_token}{self.image_token * num_image_tokens}{self.image_end_token}"
+        prompt = f"{self.tokenizer.bos_token}{self.image_start_token}{self.image_token * self.num_image_tokens}{self.image_end_token}"
 
         if text is not None:
             if isinstance(text, str):
@@ -124,7 +90,7 @@ class Kosmos2_5Processor(ProcessorMixin):
             input = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
             batch_size, seq_len = input.input_ids.shape
-            image_embeds_position_mask = [0, -1] + [1] * num_image_tokens + [-1]
+            image_embeds_position_mask = [0, -1] + [1] * self.num_image_tokens + [-1]
             image_embeds_position_mask += [0] * (seq_len - len(image_embeds_position_mask))
             image_embeds_position_mask = (
                 torch.LongTensor(image_embeds_position_mask).unsqueeze(0).repeat(batch_size, 1)

@@ -33,8 +33,6 @@ You can find all the original SuperPoint checkpoints under the [Magic Leap Commu
 >
 > Click on the SuperPoint models in the right sidebar for more examples of how to apply SuperPoint to different computer vision tasks.
 
-
-
 The example below demonstrates how to detect interest points in an image with the [`AutoModel`] class.
 <hfoptions id="usage">
 <hfoption id="AutoModel">
@@ -101,6 +99,7 @@ processed_outputs = processor.post_process_keypoint_detection(outputs, [image_si
     ```
 
 - You can then print the keypoints on the image of your choice to visualize the result:
+
     ```py
     import matplotlib.pyplot as plt
     plt.axis("off")
@@ -130,16 +129,15 @@ processed_outputs = processor.post_process_keypoint_detection(outputs, [image_si
 ## SuperPointImageProcessor
 
 [[autodoc]] SuperPointImageProcessor
-
-- preprocess
+    - preprocess
 
 ## SuperPointImageProcessorFast
 
 [[autodoc]] SuperPointImageProcessorFast
-- preprocess
-- post_process_keypoint_detection
+    - preprocess
+    - post_process_keypoint_detection
 
 ## SuperPointForKeypointDetection
 
 [[autodoc]] SuperPointForKeypointDetection
-- forward
+    - forward

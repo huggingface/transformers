@@ -232,30 +232,12 @@ generation_output[:2]
     - batch_select_indices
 
 [[autodoc]] DynamicCache
-    - to_legacy_cache
-    - from_legacy_cache
 
 [[autodoc]] QuantizedCache
 
-[[autodoc]] QuantoQuantizedCache
-
-[[autodoc]] HQQQuantizedCache
-
-[[autodoc]] OffloadedCache
-
 [[autodoc]] StaticCache
 
-[[autodoc]] OffloadedStaticCache
-
-[[autodoc]] HybridCache
-
-[[autodoc]] HybridChunkedCache
-
-[[autodoc]] SlidingWindowCache
-
 [[autodoc]] EncoderDecoderCache
-    - to_legacy_cache
-    - from_legacy_cache
 
 ## 워터마크 유틸리티 (Watermark Utils) [[transformers.WatermarkDetector]]
 

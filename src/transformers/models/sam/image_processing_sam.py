@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,7 @@
 import math
 from copy import deepcopy
 from itertools import product
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import numpy as np
 
@@ -37,6 +36,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
@@ -55,6 +55,19 @@ if is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
 
 logger = logging.get_logger(__name__)
+
+
+class SamImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    mask_size (`dict[str, int]`, *optional*):
+        The size `{"longest_edge": int}` to resize the segmentation maps to.
+    mask_pad_size (`dict[str, int]`, *optional*):
+        The size `{"height": int, "width": int}` to pad the segmentation maps to. Must be larger than any segmentation
+        map size provided for preprocessing.
+    """
+
+    mask_size: dict[str, int]
+    mask_pad_size: dict[str, int]
 
 
 class SamImageProcessor(BaseImageProcessor):
@@ -107,21 +120,22 @@ class SamImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = SamImageProcessorKwargs
 
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
-        mask_size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
+        mask_size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         do_pad: bool = True,
-        pad_size: Optional[int] = None,
-        mask_pad_size: Optional[int] = None,
+        pad_size: int | None = None,
+        mask_pad_size: int | None = None,
         do_convert_rgb: bool = True,
         **kwargs,
     ) -> None:
@@ -160,8 +174,8 @@ class SamImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         pad_size: dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -209,8 +223,8 @@ class SamImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -259,14 +273,14 @@ class SamImageProcessor(BaseImageProcessor):
         do_resize: bool,
         do_rescale: bool,
         do_normalize: bool,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        rescale_factor: Optional[float] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_pad: Optional[bool] = None,
-        pad_size: Optional[dict[str, int]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        rescale_factor: float | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_pad: bool | None = None,
+        pad_size: dict[str, int] | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         if do_resize:
             image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
@@ -286,19 +300,19 @@ class SamImageProcessor(BaseImageProcessor):
     def _preprocess_image(
         self,
         image: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_pad: Optional[bool] = None,
-        pad_size: Optional[dict[str, int]] = None,
-        do_convert_rgb: Optional[bool] = None,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_pad: bool | None = None,
+        pad_size: dict[str, int] | None = None,
+        do_convert_rgb: bool | None = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> tuple[np.ndarray, tuple[int, int], tuple[int, int]]:
         # PIL RGBA images are converted to RGB
         if do_convert_rgb:
@@ -341,11 +355,11 @@ class SamImageProcessor(BaseImageProcessor):
     def _preprocess_mask(
         self,
         segmentation_map: ImageInput,
-        do_resize: Optional[bool] = None,
-        mask_size: Optional[dict[str, int]] = None,
-        do_pad: Optional[bool] = None,
-        mask_pad_size: Optional[dict[str, int]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_resize: bool | None = None,
+        mask_size: dict[str, int] | None = None,
+        do_pad: bool | None = None,
+        mask_pad_size: dict[str, int] | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         segmentation_map = to_numpy_array(segmentation_map)
 
@@ -389,23 +403,23 @@ class SamImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        mask_size: Optional[dict[str, int]] = None,
+        segmentation_maps: ImageInput | None = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        mask_size: dict[str, int] | None = None,
         resample: Optional["PILImageResampling"] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[Union[int, float]] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_pad: Optional[bool] = None,
-        pad_size: Optional[dict[str, int]] = None,
-        mask_pad_size: Optional[dict[str, int]] = None,
-        do_convert_rgb: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_rescale: bool | None = None,
+        rescale_factor: int | float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_pad: bool | None = None,
+        pad_size: dict[str, int] | None = None,
+        mask_pad_size: dict[str, int] | None = None,
+        do_convert_rgb: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Preprocess an image or batch of images.
@@ -681,17 +695,17 @@ class SamImageProcessor(BaseImageProcessor):
         target_size,
         crop_n_layers: int = 0,
         overlap_ratio: float = 512 / 1500,
-        points_per_crop: Optional[int] = 32,
-        crop_n_points_downscale_factor: Optional[list[int]] = 1,
+        points_per_crop: int | None = 32,
+        crop_n_points_downscale_factor: list[int] | None = 1,
         device: Optional["torch.device"] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
         return_tensors: str = "pt",
     ):
         """
         Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
 
         Args:
-            image (`np.array`):
+            image (`np.ndarray`):
                 Input original image
             target_size (`int`):
                 Target size of the resized image
@@ -758,7 +772,7 @@ class SamImageProcessor(BaseImageProcessor):
                 List of IoU scores.
             original_size (`tuple[int,int]`):
                 Size of the original image.
-            cropped_box_image (`np.array`):
+            cropped_box_image (`np.ndarray`):
                 The cropped image.
             pred_iou_thresh (`float`, *optional*, defaults to 0.88):
                 The threshold for the iou scores.
@@ -807,7 +821,7 @@ class SamImageProcessor(BaseImageProcessor):
                 List of IoU scores.
             original_size (`tuple[int,int]`):
                 Size of the original image.
-            cropped_box_image (`np.array`):
+            cropped_box_image (`np.ndarray`):
                 The cropped image.
             pred_iou_thresh (`float`, *optional*, defaults to 0.88):
                 The threshold for the iou scores.
@@ -918,9 +932,9 @@ def _generate_crop_boxes(
     target_size: int,  # Is it tuple here?
     crop_n_layers: int = 0,
     overlap_ratio: float = 512 / 1500,
-    points_per_crop: Optional[int] = 32,
-    crop_n_points_downscale_factor: Optional[list[int]] = 1,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    points_per_crop: int | None = 32,
+    crop_n_points_downscale_factor: list[int] | None = 1,
+    input_data_format: str | ChannelDimension | None = None,
 ) -> tuple[list[list[int]], list[int]]:
     """
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.

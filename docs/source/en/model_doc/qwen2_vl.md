@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The [Qwen2-VL](https://huggingface.co/papers/2409.12191) ([blog post](https://qwenlm.github.io/blog/qwen2-vl/)) model is a major update to [Qwen-VL](https://huggingface.co/papers/2308.12966) from the Qwen team at Alibaba Research. 
+The [Qwen2-VL](https://huggingface.co/papers/2409.12191) ([blog post](https://qwenlm.github.io/blog/qwen2-vl/)) model is a major update to [Qwen-VL](https://huggingface.co/papers/2308.12966) from the Qwen team at Alibaba Research.
 
 The abstract from the blog is the following:
 
@@ -203,8 +203,8 @@ min_pixels = 256*28*28
 max_pixels = 1024*28*28 
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
 ```
-This ensures each image gets encoded using a number between 256-1024 tokens. The 28 comes from the fact that the model uses a patch size of 14 and a temporal patch size of 2 (14 x 2 = 28).
 
+This ensures each image gets encoded using a number between 256-1024 tokens. The 28 comes from the fact that the model uses a patch size of 14 and a temporal patch size of 2 (14 x 2 = 28).
 
 #### Multiple Image Inputs
 
@@ -302,18 +302,23 @@ model = Qwen2VLForConditionalGeneration.from_pretrained(
 ## Qwen2VLProcessor
 
 [[autodoc]] Qwen2VLProcessor
+    - __call__
 
 ## Qwen2VLTextModel
 
 [[autodoc]] Qwen2VLTextModel
     - forward
-    
+
 ## Qwen2VLModel
 
 [[autodoc]] Qwen2VLModel
     - forward
+    - get_video_features
+    - get_image_features
 
 ## Qwen2VLForConditionalGeneration
 
 [[autodoc]] Qwen2VLForConditionalGeneration
     - forward
+    - get_video_features
+    - get_image_features

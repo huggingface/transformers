@@ -1,4 +1,4 @@
-from typing import Any, Union, overload
+from typing import Any, overload
 
 import numpy as np
 
@@ -163,7 +163,7 @@ class FillMaskPipeline(Pipeline):
             return result[0]
         return result
 
-    def get_target_ids(self, targets, top_k=None):
+    def get_target_ids(self, targets):
         if isinstance(targets, str):
             targets = [targets]
         try:
@@ -213,7 +213,7 @@ class FillMaskPipeline(Pipeline):
         postprocess_params = {}
 
         if targets is not None:
-            target_ids = self.get_target_ids(targets, top_k)
+            target_ids = self.get_target_ids(targets)
             postprocess_params["target_ids"] = target_ids
 
         if top_k is not None:
@@ -231,9 +231,7 @@ class FillMaskPipeline(Pipeline):
     @overload
     def __call__(self, inputs: list[str], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
 
-    def __call__(
-        self, inputs: Union[str, list[str]], **kwargs: Any
-    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
+    def __call__(self, inputs: str | list[str], **kwargs: Any) -> list[dict[str, Any]] | list[list[dict[str, Any]]]:
         """
         Fill the masked token in the text(s) given as inputs.
 

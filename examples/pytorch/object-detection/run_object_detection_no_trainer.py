@@ -33,7 +33,7 @@ import os
 from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 import albumentations as A
 import datasets
@@ -58,7 +58,7 @@ from transformers import (
 )
 from transformers.image_processing_utils import BatchFeature
 from transformers.image_transforms import center_to_corners_format
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
@@ -164,7 +164,7 @@ def augment_and_transform_batch(
 
 
 # Copied from examples/pytorch/object-detection/run_object_detection.collate_fn
-def collate_fn(batch: list[BatchFeature]) -> Mapping[str, Union[torch.Tensor, list[Any]]]:
+def collate_fn(batch: list[BatchFeature]) -> Mapping[str, torch.Tensor | list[Any]]:
     data = {}
     data["pixel_values"] = torch.stack([x["pixel_values"] for x in batch])
     data["labels"] = [x["labels"] for x in batch]
@@ -278,11 +278,6 @@ def parse_args():
         "--cache_dir",
         type=str,
         help="Path to a folder in which the model and dataset will be cached.",
-    )
-    parser.add_argument(
-        "--use_auth_token",
-        action="store_true",
-        help="Whether to use an authentication token to access the model repository.",
     )
     parser.add_argument(
         "--per_device_train_batch_size",
@@ -410,10 +405,6 @@ def parse_args():
 
 def main():
     args = parse_args()
-
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_object_detection_no_trainer", args)
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers

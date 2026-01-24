@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
+import httpx
 import numpy as np
-import requests
 
 from ..generation import GenerationConfig
-from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_python import PreTrainedTokenizer
 from ..utils import is_torch_available, is_torchaudio_available, is_torchcodec_available, logging
 from .audio_utils import ffmpeg_read
 from .base import ChunkPipeline
@@ -187,10 +187,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     def __init__(
         self,
         model: "PreTrainedModel",
-        feature_extractor: Optional[Union["SequenceFeatureExtractor", str]] = None,
-        tokenizer: Optional[PreTrainedTokenizer] = None,
-        decoder: Optional[Union["BeamSearchDecoderCTC", str]] = None,
-        device: Optional[Union[int, "torch.device"]] = None,
+        feature_extractor: Union["SequenceFeatureExtractor", str] | None = None,
+        tokenizer: PreTrainedTokenizer | None = None,
+        decoder: Union["BeamSearchDecoderCTC", str] | None = None,
+        device: Union[int, "torch.device"] | None = None,
         **kwargs,
     ):
         # set the model type so we can check we have the right pre- and post-processing parameters
@@ -198,11 +198,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             self.type = "seq2seq_whisper"
         elif model.__class__.__name__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES.values():
             self.type = "seq2seq"
-        elif (
-            feature_extractor._processor_class
-            and feature_extractor._processor_class.endswith("WithLM")
-            and decoder is not None
-        ):
+        elif decoder is not None:
             self.decoder = decoder
             self.type = "ctc_with_lm"
         else:
@@ -210,7 +206,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         super().__init__(model, tokenizer, feature_extractor, device=device, **kwargs)
 
-    def __call__(self, inputs: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> list[dict[str, Any]]:
+    def __call__(self, inputs: np.ndarray | bytes | str | dict, **kwargs: Any) -> list[dict[str, Any]]:
         """
         Transcribe the audio sequence(s) given as inputs to text. See the [`AutomaticSpeechRecognitionPipeline`]
         documentation for more information.
@@ -350,12 +346,26 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         return preprocess_params, forward_params, postprocess_params
 
+    @property
+    def _align_to(self):
+        """Sample stride per output."""
+        # XXX: Carefully, this variable will not exist in `seq2seq` setting.
+        # Currently chunking is not possible at this level for `seq2seq` so
+        # it's ok.
+        align_to = getattr(self.model.config, "inputs_to_logits_ratio", 1)
+        if self.model.config.model_type == "lasr_ctc":
+            # TODO: find a standard for that but not easy because input length -> mel length depends on the feature extractor
+            # specific way of doing it
+            # means the model take mel features as input, we align according to the hop length
+            align_to *= self.feature_extractor.hop_length
+        return align_to
+
     def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None):
         if isinstance(inputs, str):
             if inputs.startswith("http://") or inputs.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
                 # like http_huggingface_co.png
-                inputs = requests.get(inputs).content
+                inputs = httpx.get(inputs, follow_redirects=True).content
             else:
                 with open(inputs, "rb") as f:
                     inputs = f.read()
@@ -415,7 +425,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 inputs = F.resample(
                     torch.from_numpy(inputs) if isinstance(inputs, np.ndarray) else inputs,
                     in_sampling_rate,
-                    in_sampling_rate,
                     self.feature_extractor.sampling_rate,
                 ).numpy()
                 ratio = self.feature_extractor.sampling_rate / in_sampling_rate
@@ -445,10 +454,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if isinstance(stride_length_s, (int, float)):
                 stride_length_s = [stride_length_s, stride_length_s]
 
-            # XXX: Carefully, this variable will not exist in `seq2seq` setting.
-            # Currently chunking is not possible at this level for `seq2seq` so
-            # it's ok.
-            align_to = getattr(self.model.config, "inputs_to_logits_ratio", 1)
+            align_to = self._align_to
             chunk_len = int(round(chunk_length_s * self.feature_extractor.sampling_rate / align_to) * align_to)
             stride_left = int(round(stride_length_s[0] * self.feature_extractor.sampling_rate / align_to) * align_to)
             stride_right = int(round(stride_length_s[1] * self.feature_extractor.sampling_rate / align_to) * align_to)
@@ -568,7 +574,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 # Send stride to `postprocess`.
                 # it needs to be handled there where
                 # the pieces are to be concatenated.
-                ratio = 1 / self.model.config.inputs_to_logits_ratio
+                ratio = 1 / self._align_to
                 if isinstance(stride, tuple):
                     out["stride"] = rescale_stride([stride], ratio)[0]
                 else:
@@ -578,7 +584,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         return {"is_last": is_last, **out, **extra}
 
     def postprocess(
-        self, model_outputs, decoder_kwargs: Optional[dict] = None, return_timestamps=None, return_language=None
+        self, model_outputs, decoder_kwargs: dict | None = None, return_timestamps=None, return_language=None
     ):
         # Optional return types
         optional = {}
@@ -651,11 +657,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         if return_timestamps and self.type not in {"seq2seq", "seq2seq_whisper"}:
             chunks = []
+            align_to = self._align_to
             for item in offsets:
-                start = item["start_offset"] * self.model.config.inputs_to_logits_ratio
+                start = item["start_offset"] * align_to
                 start /= self.feature_extractor.sampling_rate
 
-                stop = item["end_offset"] * self.model.config.inputs_to_logits_ratio
+                stop = item["end_offset"] * align_to
                 stop /= self.feature_extractor.sampling_rate
 
                 chunks.append({"text": item[return_timestamps], "timestamp": (start, stop)})

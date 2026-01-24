@@ -16,7 +16,6 @@ rendered properly in your Markdown viewer.
 
 # Testing
 
-
 Let's take a look at how 🤗 Transformers models are tested and how you can write new tests and improve the existing ones.
 
 There are 2 test suites in the repository:
@@ -51,11 +50,7 @@ RUN_SLOW=1 pytest examples/
 
    The results can be observed [here](https://github.com/huggingface/transformers/actions).
 
-
-
 ## Running tests
-
-
 
 ### Choosing which tests to run
 
@@ -88,8 +83,6 @@ which tells pytest to:
 - ensure that all tests from the same file will be run by the same test process
 - do not capture output
 - run in verbose mode
-
-
 
 ### Getting the list of all tests
 
@@ -187,7 +180,6 @@ Sometimes you need to run `accelerate` tests on your models. For that you can ju
 RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py
 ```
 
-
 ### Run documentation tests
 
 In order to test whether the documentation examples are correct, you should check that the `doctests` are passing.
@@ -217,9 +209,11 @@ Example:
 ```
 
 Just run the following line to automatically test every docstring example in the desired file:
+
 ```bash
 pytest --doctest-modules <path_to_file_or_dir>
 ```
+
 If the file has a markdown extension, you should add the `--doctest-glob="*.md"` argument.
 
 ### Run only modified tests
@@ -266,11 +260,9 @@ or `pytest.ini`/``tox.ini`` files:
 looponfailroots = transformers tests
 ```
 
-This would lead to only looking for file changes in the respective directories, specified relatively to the ini-file’s
-directory.
+This would lead to only looking for file changes in the respective directories, specified relatively to the ini-file's directory.
 
 [pytest-watch](https://github.com/joeyespo/pytest-watch) is an alternative implementation of this functionality.
-
 
 ### Skip a test module
 
@@ -306,7 +298,6 @@ reducing that failing sequence to a minimum.
 It's good to repeat the tests several times, in sequence, randomly, or in sets, to detect any potential
 inter-dependency and state-related bugs (tear down). And the straightforward multiple repetition is just good to detect
 some problems that get uncovered by randomness of DL.
-
 
 #### Repeat tests
 
@@ -403,8 +394,6 @@ pytest -p no:sugar
 
 or uninstall it.
 
-
-
 #### Report each sub-test name and its progress
 
 For a single or a group of tests via `pytest` (after `pip install pytest-pspec`):
@@ -457,7 +446,6 @@ decorators are used to set the requirements of tests CPU/GPU/XPU/TPU-wise:
 
 Let's depict the GPU requirements in the following table:
 
-
 | n gpus | decorator                      |
 |--------|--------------------------------|
 | `>= 0` | `@require_torch`               |
@@ -465,7 +453,6 @@ Let's depict the GPU requirements in the following table:
 | `>= 2` | `@require_torch_multi_gpu`     |
 | `< 2`  | `@require_torch_non_multi_gpu` |
 | `< 3`  | `@require_torch_up_to_2_gpus`  |
-
 
 For example, here is a test that must be run only when there are 2 or more GPUs available and pytorch is installed:
 
@@ -520,6 +507,7 @@ Certain devices will require an additional import after importing `torch` for th
 ```bash
 TRANSFORMERS_TEST_BACKEND="torch_npu" pytest tests/utils/test_logging.py
 ```
+
 Alternative backends may also require the replacement of device-specific functions. For example `torch.cuda.manual_seed` may need to be replaced with a device-specific seed setter like `torch.npu.manual_seed` or `torch.xpu.manual_seed` to correctly set a random seed on the device. To specify a new backend with backend-specific device functions when running the test suite, create a Python device specification file `spec.py` in the format:
 
 ```python
@@ -536,6 +524,7 @@ MANUAL_SEED_FN = torch.npu.manual_seed
 EMPTY_CACHE_FN = torch.npu.empty_cache
 DEVICE_COUNT_FN = torch.npu.device_count
 ```
+
 This format also allows for specification of any additional imports required. To use this file to replace equivalent methods in the test suite, set the environment variable `TRANSFORMERS_TEST_DEVICE_SPEC` to the path of the spec file, e.g. `TRANSFORMERS_TEST_DEVICE_SPEC=spec.py`.
 
 Currently, only `MANUAL_SEED_FN`, `EMPTY_CACHE_FN` and `DEVICE_COUNT_FN` are supported for device-specific dispatch.
@@ -609,7 +598,6 @@ can be used.
 You can read [here](https://docs.pytest.org/en/stable/unittest.html) which features are supported, but the important
 thing to remember is that most `pytest` fixtures don't work. Neither parametrization, but we use the module
 `parameterized` that works in a similar way.
-
 
 ### Parametrization
 
@@ -718,8 +706,6 @@ pytest test_this2.py::test_floor[negative--1.5--2.0] test_this2.py::test_floor[i
 ```
 
 as in the previous example.
-
-
 
 ### Files and directories
 
@@ -843,7 +829,6 @@ otherwise.
 If you need to temporary override `sys.path` to import from another test for example, you can use the
 `ExtendSysPath` context manager. Example:
 
-
 ```python
 import os
 from transformers.testing_utils import ExtendSysPath
@@ -860,13 +845,13 @@ commit it to the main repository we need make sure it's skipped during `make tes
 
 Methods:
 
--  A **skip** means that you expect your test to pass only if some conditions are met, otherwise pytest should skip
+- A **skip** means that you expect your test to pass only if some conditions are met, otherwise pytest should skip
   running the test altogether. Common examples are skipping windows-only tests on non-windows platforms, or skipping
   tests that depend on an external resource which is not available at the moment (for example a database).
 
--  A **xfail** means that you expect a test to fail for some reason. A common example is a test for a feature not yet
+- A **xfail** means that you expect a test to fail for some reason. A common example is a test for a feature not yet
   implemented, or a bug not yet fixed. When a test passes despite being expected to fail (marked with
-  pytest.mark.xfail), it’s an xpass and will be reported in the test summary.
+  pytest.mark.xfail), it's an xpass and will be reported in the test summary.
 
 One of the important differences between the two is that `skip` doesn't run the test, and `xfail` does. So if the
 code that's buggy causes some bad state that will affect other tests, do not use `xfail`.
@@ -892,7 +877,6 @@ or the `xfail` way:
 @pytest.mark.xfail
 def test_feature_x():
 ```
-
 
 Here's how to skip a test based on internal checks within the test:
 
@@ -924,7 +908,7 @@ def test_feature_x():
 docutils = pytest.importorskip("docutils", minversion="0.3")
 ```
 
--  Skip a test based on a condition:
+- Skip a test based on a condition:
 
 ```python no-style
 @pytest.mark.skipif(sys.version_info < (3,6), reason="requires python3.6 or higher")
@@ -1017,7 +1001,6 @@ execution speed report in CI logs instead (the output of `pytest --durations=0 t
 That report is also useful to find slow outliers that aren't marked as such, or which need to be re-written to be fast.
 If you notice that the test suite starts getting slow on CI, the top listing of this report will show the slowest
 tests.
-
 
 ### Testing the stdout/stderr output
 
@@ -1141,7 +1124,6 @@ print(cs.err, cs.out)
 Also, to aid debugging test issues, by default these context managers automatically replay the captured streams on exit
 from the context.
 
-
 ### Capturing logger stream
 
 If you need to validate the output of a logger, you can use `CaptureLogger`:
@@ -1193,7 +1175,6 @@ called if anything.
 
 This helper method creates a copy of the `os.environ` object, so the original remains intact.
 
-
 ### Getting reproducible results
 
 In some situations you may want to remove randomness for your tests. To get identical reproducible results set, you
@@ -1240,9 +1221,6 @@ To trigger a self-push workflow CI job, you must:
 3. Create a PR from this branch.
 4. Then you can see the job appear [here](https://github.com/huggingface/transformers/actions/workflows/self-push.yml). It may not run right away if there
    is a backlog.
-
-
-
 
 ## Testing Experimental CI Features
 
@@ -1306,7 +1284,7 @@ You can vote for this feature and see where it is at these CI-specific threads:
 
 ## DeepSpeed integration
 
-For a PR that involves the DeepSpeed integration, keep in mind our CircleCI PR CI setup doesn't have GPUs. Tests requiring GPUs are run on a different CI nightly. This means if you get a passing CI report in your PR, it doesn’t mean the DeepSpeed tests pass.
+For a PR that involves the DeepSpeed integration, keep in mind our CircleCI PR CI setup doesn't have GPUs. Tests requiring GPUs are run on a different CI nightly. This means if you get a passing CI report in your PR, it doesn't mean the DeepSpeed tests pass.
 
 To run DeepSpeed tests:
 

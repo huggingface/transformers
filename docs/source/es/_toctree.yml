@@ -64,10 +64,6 @@
     title: Entrenador
   - local: sagemaker
     title: Ejecutar el entrenamiento en Amazon SageMaker
-  - local: serialization
-    title: Exportar a ONNX
-  - local: torchscript
-    title: Exportar a TorchScript
   - local: community
     title: Los recursos de la comunidad
   title: Guías para desarrolladores

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,7 +35,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
     """Load flax checkpoints in a PyTorch model"""
 
     try:
-        import torch  # noqa: F401
+        import torch
     except (ImportError, ModuleNotFoundError):
         logger.error(
             "Loading a Flax weights in PyTorch, requires both PyTorch and Flax to be installed. Please see"

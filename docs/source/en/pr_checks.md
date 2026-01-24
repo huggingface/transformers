@@ -21,6 +21,7 @@ rendered properly in your Markdown viewer.
 # Checks on a Pull Request
 
 When you open a pull request on 🤗 Transformers, a fair number of checks will be run to make sure the patch you are adding is not breaking anything existing. Those checks are of four types:
+
 - regular tests
 - documentation build
 - code and documentation style
@@ -37,7 +38,7 @@ pip install transformers[dev]
 or for an editable install:
 
 ```bash
-pip install -e .[dev]
+pip install -e ".[dev]"
 ```
 
 inside the Transformers repo. Since the number of optional dependencies of Transformers has grown a lot, it's possible you don't manage to get all of them. If the dev install fails, make sure to install PyTorch then do
@@ -49,9 +50,8 @@ pip install transformers[quality]
 or for an editable install:
 
 ```bash
-pip install -e .[quality]
+pip install -e ".[quality]"
 ```
-
 
 ## Tests
 
@@ -95,13 +95,7 @@ make style
 The CI checks those have been applied inside the `ci/circleci: check_code_quality` check. It also runs `ruff`, that will have a basic look at your code and will complain if it finds an undefined variable, or one that is not used. To run that check locally, use
 
 ```bash
-make quality
-```
-
-This can take a lot of time, so to run the same thing on only the files you modified in the current branch, run
-
-```bash
-make fixup
+make check-repo
 ```
 
 This last command will also run all the additional checks for the repository consistency. Let's have a look at them.
@@ -111,7 +105,7 @@ This last command will also run all the additional checks for the repository con
 This regroups all the tests to make sure your PR leaves the repository in a good state, and is performed by the `ci/circleci: check_repository_consistency` check. You can locally run that check by executing the following:
 
 ```bash
-make repo-consistency
+make check-repo
 ```
 
 This checks that:
@@ -129,7 +123,7 @@ This checks that:
 Should this check fail, the first two items require manual fixing, the last four can be fixed automatically for you by running the command
 
 ```bash
-make fix-copies
+make fix-repo
 ```
 
 Additional checks concern PRs that add new models, mainly that:
@@ -195,6 +189,7 @@ Another way when the patterns are just different casings of the same replacement
 ```
 
 In this case, the code is copied from `BertForSequenceClassification` by replacing:
+
 - `Bert` by `MobileBert` (for instance when using `MobileBertModel` in the init)
 - `bert` by `mobilebert` (for instance when defining `self.mobilebert`)
 - `BERT` by `MOBILEBERT` (in the constant `MOBILEBERT_INPUTS_DOCSTRING`)
