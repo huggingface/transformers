@@ -1756,6 +1756,13 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         [480, 640]
         ```
         """
+        if mask_labels is not None:
+            target_device = pixel_values.device
+            mask_labels = [mask.to(target_device) for mask in mask_labels]
+
+        if class_labels is not None:
+            target_device = pixel_values.device
+            class_labels = [label.to(target_device) for label in class_labels]
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

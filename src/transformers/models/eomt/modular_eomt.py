@@ -519,6 +519,14 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
             list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
         """
 
+        if mask_labels is not None:
+            target_device = pixel_values.device
+            mask_labels = [mask.to(target_device) for mask in mask_labels]
+
+        if class_labels is not None:
+            target_device = pixel_values.device
+            class_labels = [label.to(target_device) for label in class_labels]
+
         masks_queries_logits_per_layer, class_queries_logits_per_layer = (), ()
         attention_mask = None
 
