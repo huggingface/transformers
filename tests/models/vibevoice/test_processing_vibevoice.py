@@ -1,4 +1,4 @@
-# Copyright 2025 HuggingFace Inc.
+# Copyright 2026 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,14 +37,6 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.checkpoint = "bezzam/VibeVoice-1.5B"
         processor = VibeVoiceProcessor.from_pretrained(cls.checkpoint)
-        cls.audio_bos_token = processor.audio_bos_token
-        cls.audio_bos_token_id = processor.audio_bos_token_id
-        cls.audio_eos_token = processor.audio_eos_token
-        cls.audio_eos_token_id = processor.audio_eos_token_id
-        cls.audio_diffusion_token = processor.audio_diffusion_token
-        cls.audio_diffusion_token_id = processor.audio_diffusion_token_id
-        cls.pad_token_id = processor.tokenizer.pad_token_id
-        cls.bos_token_id = processor.tokenizer.bos_token_id
         cls.tmpdirname = tempfile.mkdtemp()
         processor.save_pretrained(cls.tmpdirname)
 
