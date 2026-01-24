@@ -20,6 +20,7 @@ from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
+    Glm4vMoeForConditionalGeneration,
     GlmImageConfig,
     GlmImageForConditionalGeneration,
     GlmImageModel,
@@ -420,7 +421,7 @@ class GlmImageIntegrationTest(unittest.TestCase):
     @classmethod
     def get_model(cls):
         if cls.model is None:
-            cls.model = GlmImageForConditionalGeneration.from_pretrained(
+            cls.model = Glm4vMoeForConditionalGeneration.from_pretrained(
                 "zai-org/GLM-4.5V", dtype="auto", device_map="auto"
             )
         return cls.model
@@ -520,7 +521,7 @@ class GlmImageIntegrationTest(unittest.TestCase):
     @require_flash_attn
     @require_torch_accelerator
     def test_small_model_integration_test_batch_flashatt2(self):
-        model = GlmImageForConditionalGeneration.from_pretrained(
+        model = Glm4vMoeForConditionalGeneration.from_pretrained(
             "zai-org/GLM-4.5V",
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
