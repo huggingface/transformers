@@ -324,11 +324,7 @@ class Llama4TextConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
-        self.head_dim = (
-            head_dim
-            if head_dim is not None
-            else self.hidden_size // self.num_attention_heads
-        )
+        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.use_qk_norm = use_qk_norm
         self.num_experts_per_tok = num_experts_per_tok
         self.num_local_experts = num_local_experts
@@ -342,13 +338,10 @@ class Llama4TextConfig(PreTrainedConfig):
             no_rope_layers = None
 
         default_no_rope_layers = [
-            int((layer_idx + 1) % no_rope_layer_interval != 0)
-            for layer_idx in range(self.num_hidden_layers)
+            int((layer_idx + 1) % no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
         ]
 
-        self.no_rope_layers = (
-            no_rope_layers if no_rope_layers else default_no_rope_layers
-        )
+        self.no_rope_layers = no_rope_layers if no_rope_layers else default_no_rope_layers
 
         self.interleave_moe_layer_step = interleave_moe_layer_step
         self.moe_layers = (
@@ -367,8 +360,7 @@ class Llama4TextConfig(PreTrainedConfig):
         self.layer_types = layer_types
         if layer_types is None:
             self.layer_types = [
-                "chunked_attention" if no_rope else "full_attention"
-                for no_rope in self.no_rope_layers
+                "chunked_attention" if no_rope else "full_attention" for no_rope in self.no_rope_layers
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
