@@ -29,7 +29,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters, dynamic_
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs
 from ...utils.generic import maybe_autocast
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
@@ -187,11 +187,23 @@ class NomicBertConfig(BertConfig):
         )
 
         self.rotary_emb_fraction = rotary_emb_fraction
-        self.rotary_emb_base = rotary_emb_base
+        if isinstance(rotary_emb_base, (int, float)):
+            self.rotary_emb_base = rotary_emb_base
+        else:
+            self.rotary_emb_base = 10_000
+
         self.rotary_emb_scale_base = rotary_emb_scale_base
         self.rotary_emb_interleaved = rotary_emb_interleaved
         self.pad_vocab_size_multiple = pad_vocab_size_multiple
         self.rope_parameters = rope_parameters
+
+        if rope_parameters is None:
+            self.rope_parameters = {
+                "rope_type": "default",
+                "rope_theta": self.rotary_emb_base,
+            }
+        else:
+            self.rope_parameters = rope_parameters
 
 
 class NomicBertEmbeddings(BertEmbeddings):
@@ -394,7 +406,6 @@ class NomicBertSelfAttention(BertSelfAttention):
             value_layer,
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
-            scaling=self.scaling,
             **kwargs,
         )
 
@@ -634,7 +645,7 @@ class NomicBertModel(BertModel):
     """
 
     def __init__(self, config, add_pooling_layer=True):
-        super().__init__(config)
+        super().__init__(config, add_pooling_layer=add_pooling_layer)
 
         self.encoder = NomicBertEncoder(config, layer_class=NomicBertLayer)
 
@@ -776,7 +787,6 @@ class NomicBertForPreTraining(BertForPreTraining):
     base_model_prefix = "nomic_bert"
 
 
-@auto_docstring
 class NomicBertLMHeadModel(BertLMHeadModel):
     pass
 

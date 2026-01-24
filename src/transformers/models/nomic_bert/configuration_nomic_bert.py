@@ -146,11 +146,23 @@ class NomicBertConfig(PreTrainedConfig):
         self.classifier_dropout = classifier_dropout
 
         self.rotary_emb_fraction = rotary_emb_fraction
-        self.rotary_emb_base = rotary_emb_base
+        if isinstance(rotary_emb_base, (int, float)):
+            self.rotary_emb_base = rotary_emb_base
+        else:
+            self.rotary_emb_base = 10_000
+
         self.rotary_emb_scale_base = rotary_emb_scale_base
         self.rotary_emb_interleaved = rotary_emb_interleaved
         self.pad_vocab_size_multiple = pad_vocab_size_multiple
         self.rope_parameters = rope_parameters
+
+        if rope_parameters is None:
+            self.rope_parameters = {
+                "rope_type": "default",
+                "rope_theta": self.rotary_emb_base,
+            }
+        else:
+            self.rope_parameters = rope_parameters
 
 
 __all__ = ["NomicBertConfig"]

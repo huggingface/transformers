@@ -329,7 +329,6 @@ class NomicBertSelfAttention(nn.Module):
             value_layer,
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
-            scaling=self.scaling,
             **kwargs,
         )
 
@@ -1101,7 +1100,11 @@ class NomicBertForPreTraining(NomicBertPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    NomicBert Model with a `language modeling` head on top for CLM fine-tuning.
+    """
+)
 class NomicBertLMHeadModel(NomicBertPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
         "cls.predictions.decoder.weight": "nomic_bert.embeddings.word_embeddings.weight",
