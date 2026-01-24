@@ -345,9 +345,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     sorted_state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in sorted_state_dict:
         # Rename the key according to all renaming pattern and optional weight converter patterns
-        renamed_key, source_pattern = rename_source_key(
-            original_key, renamings, converters, prefix, model_state_dict
-        )
+        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, prefix, model_state_dict)
 
         # Cache the rename result for use in the cleanup loop
         key_rename_cache[original_key] = renamed_key
