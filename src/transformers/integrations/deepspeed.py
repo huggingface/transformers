@@ -366,22 +366,29 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
 
     # Apply the conversions and build the new state dict
     new_state_dict = {}
-    for first_param_name, mapping in conversion_mapping.items():
+    # Track which renamed_keys came from WeightConverter (need to skip their originals)
+    converted_renamed_keys = set()
+    for renamed_key, mapping in conversion_mapping.items():
         try:
+            # Only WeightConverter needs convert(); WeightRenaming is just a simple rename
+            if not isinstance(mapping, WeightConverter):
+                continue
             realized_value, _ = mapping.convert(
-                first_param_name,
+                renamed_key,
                 model=model,
                 config=model.config,
             )
             for target_name, param in realized_value.items():
                 param = param[0] if isinstance(param, list) else param
                 new_state_dict[target_name] = param
-            # Free memory by clearing source tensors (only WeightConverter has this)
+            # Track that this key was converted (skip original in cleanup)
+            converted_renamed_keys.add(renamed_key)
+            # Free memory by clearing source tensors
             if hasattr(mapping, "source_tensors"):
                 mapping.source_tensors = {}
         except Exception as e:
             raise RuntimeError(
-                f"Failed to apply weight conversion for '{first_param_name}'. "
+                f"Failed to apply weight conversion for '{renamed_key}'. "
                 f"This likely means the checkpoint format is incompatible with the current model version. "
                 f"Error: {e}"
             ) from e
@@ -389,6 +396,9 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     # Add any keys that didn't need conversion (use cached rename results)
     for key, tensor in sorted_state_dict:
         renamed_key = key_rename_cache[key]
+        # Skip keys that were already converted - their tensors are now in new_state_dict
+        if renamed_key in converted_renamed_keys:
+            continue
         if renamed_key not in new_state_dict and renamed_key in model_state_dict:
             new_state_dict[renamed_key] = tensor
 
