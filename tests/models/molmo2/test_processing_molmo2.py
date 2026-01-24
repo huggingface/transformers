@@ -12,10 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 import unittest
-
-import numpy as np
 
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -27,7 +24,7 @@ if is_vision_available():
     from transformers import Molmo2Processor
 
 if is_torch_available():
-    import torch
+    pass
 
 
 @require_vision

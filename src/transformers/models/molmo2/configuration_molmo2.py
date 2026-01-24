@@ -2,11 +2,12 @@
 Molmo2 configuration
 """
 
-from typing import Optional, Any
+from typing import Any
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -58,10 +59,7 @@ class Molmo2VitConfig(PreTrainedConfig):
         **kwargs,
     ):
         self.attn_implementation = attn_implementation
-        super().__init__(
-            attn_implementation=attn_implementation,
-            **kwargs
-        )
+        super().__init__(attn_implementation=attn_implementation, **kwargs)
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
@@ -133,10 +131,7 @@ class Molmo2AdapterConfig(PreTrainedConfig):
         **kwargs,
     ):
         self.attn_implementation = attn_implementation
-        super().__init__(
-            attn_implementation=attn_implementation,
-            **kwargs
-        )
+        super().__init__(attn_implementation=attn_implementation, **kwargs)
         self.vit_layers = vit_layers
         self.pooling_attention_mask = pooling_attention_mask
         self.hidden_size = hidden_size
@@ -194,7 +189,7 @@ class Molmo2TextConfig(PreTrainedConfig):
         self,
         hidden_size: int = 3584,
         num_attention_heads: int = 28,
-        num_key_value_heads: Optional[int] = 4,
+        num_key_value_heads: int | None = 4,
         head_dim: int = 128,
         vocab_size: int = 152064,
         additional_vocab_size: int = 128,
@@ -207,8 +202,8 @@ class Molmo2TextConfig(PreTrainedConfig):
         residual_dropout: float = 0.0,
         max_position_embeddings: int = 4096,
         rope_theta: float = 1000000.0,
-        rope_scaling: dict[str, Any] = None,
-        rope_scaling_layers: Optional[list[int]] = None,
+        rope_scaling: dict[str, Any] | None = None,
+        rope_scaling_layers: list[int] | None = None,
         use_qk_norm: bool = False,
         qk_norm_type: str = "olmo",
         layer_norm_eps: int = 1e-6,
@@ -220,11 +215,7 @@ class Molmo2TextConfig(PreTrainedConfig):
         **kwargs,
     ):
         self.attn_implementation = attn_implementation
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            attn_implementation=attn_implementation,
-            **kwargs
-        )
+        super().__init__(tie_word_embeddings=tie_word_embeddings, attn_implementation=attn_implementation, **kwargs)
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         if num_key_value_heads is None:
@@ -305,17 +296,17 @@ class Molmo2Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vit_config: Optional[Molmo2VitConfig] = None,
-        adapter_config: Optional[Molmo2AdapterConfig] = None,
-        text_config: Optional[Molmo2TextConfig] = None,
-        image_start_token_id: Optional[int] = None,
-        low_res_image_start_token_id: Optional[int] = None,
-        image_end_token_id: Optional[int] = None,
-        image_low_res_id: Optional[int] = None,
-        image_patch_id: Optional[int] = None,
-        image_col_id: Optional[int] = None,
-        frame_start_token_id: Optional[int] = None,
-        frame_end_token_id: Optional[int] = None,
+        vit_config: Molmo2VitConfig | None = None,
+        adapter_config: Molmo2AdapterConfig | None = None,
+        text_config: Molmo2TextConfig | None = None,
+        image_start_token_id: int | None = None,
+        low_res_image_start_token_id: int | None = None,
+        image_end_token_id: int | None = None,
+        image_low_res_id: int | None = None,
+        image_patch_id: int | None = None,
+        image_col_id: int | None = None,
+        frame_start_token_id: int | None = None,
+        frame_end_token_id: int | None = None,
         use_frame_special_tokens: bool = True,
         initializer_range: float = 0.02,
         **kwargs,
@@ -355,11 +346,11 @@ class Molmo2Config(PreTrainedConfig):
     def image_num_patch(self):
         assert self.vit_config is not None
         return self.vit_config.image_num_patch
-    
+
     @property
     def num_attention_heads(self):
         return self.text_config.num_attention_heads
-    
+
     @property
     def num_key_value_heads(self):
         return self.text_config.num_key_value_heads
@@ -371,15 +362,15 @@ class Molmo2Config(PreTrainedConfig):
     @property
     def num_hidden_layers(self):
         return self.text_config.num_hidden_layers
-    
+
     @property
     def hidden_size(self):
         return self.text_config.hidden_size
-    
+
     @property
     def vocab_size(self):
         return self.text_config.vocab_size
-    
+
     @property
     def max_position_embeddings(self):
         return self.text_config.max_position_embeddings

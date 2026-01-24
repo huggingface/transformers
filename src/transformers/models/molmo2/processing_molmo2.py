@@ -1,39 +1,36 @@
 """
 Processor class for Molmo2.
 """
-from typing import Optional, Union
-import dataclasses
 
 import numpy as np
 
+from ... import AutoTokenizer
+from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...video_utils import VideoInput
 from ...processing_utils import (
-    Unpack,
     ProcessingKwargs,
     ProcessorMixin,
+    Unpack,
 )
-from ...feature_extraction_utils import BatchFeature
-from ...tokenization_utils_base import TextInput, PreTokenizedInput
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
-
-from ... import AutoTokenizer
-from .image_processing_molmo2 import Molmo2ImagesKwargs, Molmo2ImageProcessor
-from .video_processing_molmo2 import Molmo2VideoProcessorKwargs, Molmo2VideoProcessor
+from ...video_utils import VideoInput
+from .image_processing_molmo2 import Molmo2ImageProcessor, Molmo2ImagesKwargs
+from .video_processing_molmo2 import Molmo2VideoProcessor, Molmo2VideoProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
 
 
 # Special tokens, these should be present in any tokenizer we use since the preprocessor uses them
-IMAGE_PATCH_TOKEN = f"<im_patch>"  # Where to insert high-res tokens
-IMAGE_LOW_RES_TOKEN = f"<im_low>"  # Where to insert low-res tokens
-IM_START_TOKEN = f"<im_start>"
-LOW_RES_IMAGE_START_TOKEN = f"<low_res_im_start>"
-FRAME_START_TOKEN = f"<frame_start>"
-IM_END_TOKEN = f"<im_end>"
-FRAME_END_TOKEN= f"<frame_end>"
-IM_COL_TOKEN = f"<im_col>"
+IMAGE_PATCH_TOKEN = "<im_patch>"  # Where to insert high-res tokens
+IMAGE_LOW_RES_TOKEN = "<im_low>"  # Where to insert low-res tokens
+IM_START_TOKEN = "<im_start>"
+LOW_RES_IMAGE_START_TOKEN = "<low_res_im_start>"
+FRAME_START_TOKEN = "<frame_start>"
+IM_END_TOKEN = "<im_end>"
+FRAME_END_TOKEN = "<frame_end>"
+IM_COL_TOKEN = "<im_col>"
 IMAGE_PROMPT = "<|image|>"
 VIDEO_PROMPT = "<|video|>"
 
@@ -51,6 +48,7 @@ IMAGE_TOKENS = [
 
 class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
     """Molmo2 processor kwargs"""
+
     images_kwargs: Molmo2ImagesKwargs
     videos_kwargs: Molmo2VideoProcessorKwargs
     _defaults = {
@@ -82,13 +80,13 @@ class Molmo2Processor(ProcessorMixin):
         image_processor: Molmo2ImageProcessor = None,
         video_processor: Molmo2VideoProcessor = None,
         tokenizer: AutoTokenizer = None,
-        chat_template: Optional[str] = None,
-        image_use_col_tokens: Optional[bool] = True,
-        use_single_crop_col_tokens: Optional[bool] = None,
-        use_single_crop_start_token: Optional[bool] = True,
-        video_use_col_tokens: Optional[bool] = False,
-        use_frame_special_tokens: Optional[bool] = True,
-        **kwargs
+        chat_template: str | None = None,
+        image_use_col_tokens: bool | None = True,
+        use_single_crop_col_tokens: bool | None = None,
+        use_single_crop_start_token: bool | None = True,
+        video_use_col_tokens: bool | None = False,
+        use_frame_special_tokens: bool | None = True,
+        **kwargs,
     ) -> None:
         super().__init__(
             image_processor,
@@ -104,10 +102,7 @@ class Molmo2Processor(ProcessorMixin):
 
         self.image_placeholder_token = IMAGE_PROMPT
         self.video_placeholder_token = VIDEO_PROMPT
-        self.image_token_ids = [
-            tokenizer.convert_tokens_to_ids(token)
-            for token in IMAGE_TOKENS
-        ]
+        self.image_token_ids = [tokenizer.convert_tokens_to_ids(token) for token in IMAGE_TOKENS]
 
     def get_image_tokens(self, image_grid: np.ndarray):
         resized_h, resized_w, height, width = image_grid
@@ -121,15 +116,9 @@ class Molmo2Processor(ProcessorMixin):
         ]
         per_row = np.full(resized_w, IMAGE_PATCH_TOKEN)
         use_single_crop_col_tokens = (
-            self.image_use_col_tokens
-            if self.use_single_crop_col_tokens is None
-            else self.use_single_crop_col_tokens
+            self.image_use_col_tokens if self.use_single_crop_col_tokens is None else self.use_single_crop_col_tokens
         )
-        image_start_token = (
-            LOW_RES_IMAGE_START_TOKEN
-            if self.use_single_crop_start_token
-            else IM_START_TOKEN
-        )
+        image_start_token = LOW_RES_IMAGE_START_TOKEN if self.use_single_crop_start_token else IM_START_TOKEN
         if use_single_crop_col_tokens:
             per_row = np.concatenate([per_row, [IM_COL_TOKEN]], 0)
         joint = [
@@ -139,25 +128,25 @@ class Molmo2Processor(ProcessorMixin):
         ] + joint
 
         return np.concatenate(joint)
-    
+
     def get_video_string(
         self,
         video_grid: np.ndarray,
         timestamps: np.ndarray,
-    ):  
+    ):
         if self.use_frame_special_tokens:
             start_token_id = FRAME_START_TOKEN
             end_token_id = FRAME_END_TOKEN
         else:
             start_token_id = IM_START_TOKEN
             end_token_id = IM_END_TOKEN
-        
+
         num_frames, h, w = video_grid
         video_string: str = ""
         for frame_idx, frame_time in enumerate(timestamps):
             # `per-frame-compact` time mode
             prev_space = " " if frame_idx > 0 else ""
-            frame_prefix = prev_space + f"{frame_time:.1f} " # explicit whitespace before/after image tokens
+            frame_prefix = prev_space + f"{frame_time:.1f} "  # explicit whitespace before/after image tokens
 
             video_string += frame_prefix
             per_row = np.full(w, IMAGE_PATCH_TOKEN)
@@ -216,8 +205,8 @@ class Molmo2Processor(ProcessorMixin):
                 attention_mask = attention_mask[0]
             return input_ids, attention_mask
         else:
-            new_input_ids = np.full((B, S+1), pad_token_id, dtype=input_ids.dtype)
-            new_attention_mask = np.zeros((B, S+1), dtype=attention_mask.dtype)
+            new_input_ids = np.full((B, S + 1), pad_token_id, dtype=input_ids.dtype)
+            new_attention_mask = np.zeros((B, S + 1), dtype=attention_mask.dtype)
 
             src_idx = np.tile(np.arange(S), (B, 1))  # [B, S]
             valid_mask = src_idx >= first_valid_index[:, None]  # [B, S]
@@ -231,7 +220,7 @@ class Molmo2Processor(ProcessorMixin):
 
             new_input_ids[flat_batch, flat_tgt] = flat_vals
             new_attention_mask[flat_batch, flat_tgt] = 1
-            
+
             insert_pos = first_valid_index
             new_input_ids[np.arange(B), insert_pos] = bos_token_id
             new_attention_mask[np.arange(B), insert_pos] = 1
@@ -244,7 +233,7 @@ class Molmo2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         images: ImageInput = None,
         videos: VideoInput = None,
         **kwargs: Unpack[Molmo2ProcessorKwargs],
@@ -315,27 +304,27 @@ class Molmo2Processor(ProcessorMixin):
 
         if not isinstance(text, list):
             text = [text]
-        
-        text = text.copy() # below lines change text in-place
+
+        text = text.copy()  # below lines change text in-place
 
         if image_grids is not None:
             index = 0
             for i in range(len(text)):
                 num_images = text[i].count(self.image_placeholder_token)
-                image_grids_i = image_grids[index:index+num_images]
+                image_grids_i = image_grids[index : index + num_images]
                 for image_grid in image_grids_i:
                     image_tokens = self.get_image_tokens(image_grid)
                     image_string = "".join(image_tokens)
                     text[i] = text[i].replace(self.image_placeholder_token, image_string, 1)
                 index += num_images
-        
+
         if video_grids is not None:
             index = 0
             for i in range(len(text)):
                 num_videos = text[i].count(self.video_placeholder_token)
                 assert num_videos in {0, 1}, "At most one video is supported for now"
-                video_grids_i = video_grids[index:index+num_videos]
-                metadata_i = video_metadata[index:index+num_videos]
+                video_grids_i = video_grids[index : index + num_videos]
+                metadata_i = video_metadata[index : index + num_videos]
                 for video_grid, metadata in zip(video_grids_i, metadata_i):
                     video_string = self.get_video_string(
                         video_grid,
@@ -353,17 +342,15 @@ class Molmo2Processor(ProcessorMixin):
 
         input_ids = np.array(input_ids)
         attention_mask = np.array(attention_mask)
-        
+
         bos = self.tokenizer.bos_token_id or self.tokenizer.eos_token_id
-        input_ids, attention_mask = self.insert_bos(
-            input_ids, attention_mask, bos, self.tokenizer.pad_token_id
-        )
+        input_ids, attention_mask = self.insert_bos(input_ids, attention_mask, bos, self.tokenizer.pad_token_id)
 
         if return_mm_token_type_ids:
             image_tokens = np.array(self.image_token_ids).astype(input_ids.dtype)
             token_type_ids = np.any(input_ids[:, :, None] == image_tokens[None, None, :], axis=-1)
             text_inputs["token_type_ids"] = token_type_ids.tolist()
-        
+
         text_inputs["input_ids"] = input_ids.tolist()
         text_inputs["attention_mask"] = attention_mask.tolist()
 

@@ -247,7 +247,6 @@ if TYPE_CHECKING:
     from .mllama import *
     from .mluke import *
     from .mm_grounding_dino import *
-    from .molmo2 import *
     from .mobilebert import *
     from .mobilenet_v1 import *
     from .mobilenet_v2 import *
@@ -255,6 +254,7 @@ if TYPE_CHECKING:
     from .mobilevitv2 import *
     from .modernbert import *
     from .modernbert_decoder import *
+    from .molmo2 import *
     from .moonshine import *
     from .moshi import *
     from .mpnet import *

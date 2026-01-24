@@ -1,18 +1,20 @@
 """Video processor class for Molmo2"""
-from functools import partial
+
 import os
 import warnings
+from collections.abc import Callable
 from contextlib import redirect_stdout
+from functools import partial
 from io import BytesIO
 from urllib.parse import urlparse
-from typing import Optional, Union, Callable
 
+import einops
 import numpy as np
 import requests
-import einops
 import torch
 import torchvision.transforms
 
+from ...feature_extraction_utils import BatchFeature
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -21,25 +23,23 @@ from ...image_utils import (
     SizeDict,
     validate_kwargs,
 )
-from ...video_utils import (
-    VideoInput,
-    is_valid_video,
-    make_batched_videos,
-    make_batched_metadata,
-    VideoMetadata,
-)
 from ...processing_utils import Unpack, VideosKwargs
-from ...video_processing_utils import BaseVideoProcessor
-from ...utils import logging
-from ...feature_extraction_utils import BatchFeature
 from ...utils import (
+    TensorType,
     is_av_available,
     is_decord_available,
     is_torchcodec_available,
     is_yt_dlp_available,
-    TensorType,
     logging,
     to_numpy,
+)
+from ...video_processing_utils import BaseVideoProcessor
+from ...video_utils import (
+    VideoInput,
+    VideoMetadata,
+    is_valid_video,
+    make_batched_metadata,
+    make_batched_videos,
 )
 
 
@@ -80,7 +80,7 @@ def resize_image(
         )(image)
         resized = torch.clip(resized, 0.0, 1.0).to(dtype)
     else:
-        assert image.dtype == torch.uint8, "SigLIP expects float images or uint8 images, but got {}".format(image.dtype)
+        assert image.dtype == torch.uint8, f"SigLIP expects float images or uint8 images, but got {image.dtype}"
         in_min = 0.0
         in_max = 255.0
         resized = torchvision.transforms.Resize(
@@ -110,14 +110,16 @@ def build_resized_image(
     image_patch_size: int,
 ) -> tuple[np.ndarray, np.ndarray]:
     resized = resize_image(
-        image, base_image_input_size, resample,
+        image,
+        base_image_input_size,
+        resample,
     )
     resized = normalize_image(resized, image_mean, image_std)
     if len(resized.shape) == 3:
         resized = np.expand_dims(resized, 0)
     crop_patch_w = base_image_input_size[1] // image_patch_size
     crop_patch_h = base_image_input_size[0] // image_patch_size
-    resize_idx = np.arange(crop_patch_w*crop_patch_h).reshape([crop_patch_h, crop_patch_w])
+    resize_idx = np.arange(crop_patch_w * crop_patch_h).reshape([crop_patch_h, crop_patch_w])
     return resized, resize_idx
 
 
@@ -125,19 +127,19 @@ def batch_pixels_to_patches(array: np.ndarray, patch_size: int) -> np.ndarray:
     """Reshape images of [n_images, h, w, 3] -> [n_images, n_patches, pixels_per_patch]"""
     if len(array.shape) == 3:
         n_crops, h, w = array.shape
-        h_patches = h//patch_size
-        w_patches = w//patch_size
+        h_patches = h // patch_size
+        w_patches = w // patch_size
         array = np.reshape(array, [n_crops, h_patches, patch_size, w_patches, patch_size])
         array = np.transpose(array, [0, 1, 3, 2, 4])
-        array = np.reshape(array, [n_crops, h_patches*w_patches, patch_size*patch_size])
+        array = np.reshape(array, [n_crops, h_patches * w_patches, patch_size * patch_size])
         return array
     else:
         n_crops, h, w, c = array.shape
-        h_patches = h//patch_size
-        w_patches = w//patch_size
+        h_patches = h // patch_size
+        w_patches = w // patch_size
         array = np.reshape(array, [n_crops, h_patches, patch_size, w_patches, patch_size, c])
         array = np.transpose(array, [0, 1, 3, 2, 4, 5])
-        array = np.reshape(array, [n_crops, h_patches*w_patches, patch_size*patch_size*c])
+        array = np.reshape(array, [n_crops, h_patches * w_patches, patch_size * patch_size * c])
         return array
 
 
@@ -148,10 +150,10 @@ def arange_for_pooling(
 ) -> np.ndarray:
     h_pad = pool_h * ((idx_arr.shape[0] + pool_h - 1) // pool_h) - idx_arr.shape[0]
     w_pad = pool_w * ((idx_arr.shape[1] + pool_w - 1) // pool_w) - idx_arr.shape[1]
-    idx_arr = np.pad(idx_arr, [[h_pad//2, (h_pad+1)//2], [w_pad//2, (w_pad+1)//2]],
-                     mode='constant',constant_values=-1)
-    return einops.rearrange(
-        idx_arr, "(h dh) (w dw) -> h w (dh dw)", dh=pool_h, dw=pool_w)
+    idx_arr = np.pad(
+        idx_arr, [[h_pad // 2, (h_pad + 1) // 2], [w_pad // 2, (w_pad + 1) // 2]], mode="constant", constant_values=-1
+    )
+    return einops.rearrange(idx_arr, "(h dh) (w dw) -> h w (dh dw)", dh=pool_h, dw=pool_w)
 
 
 def image_to_patches_and_grids(
@@ -172,7 +174,7 @@ def image_to_patches_and_grids(
     """
     if isinstance(base_image_input_size, int):
         base_image_input_size = (base_image_input_size, base_image_input_size)
-    
+
     pooling_w = image_pooling_w
     pooling_h = image_pooling_h
 
@@ -186,7 +188,7 @@ def image_to_patches_and_grids(
     )
     pooling_idx = arange_for_pooling(resize_idx, pooling_h, pooling_w)
     h, w = pooling_idx.shape[:2]
-    pooling_idx = pooling_idx.reshape([-1, pooling_h*pooling_w])
+    pooling_idx = pooling_idx.reshape([-1, pooling_h * pooling_w])
     image_grid = [h, w]
     return (
         image_grid,
@@ -196,9 +198,9 @@ def image_to_patches_and_grids(
 
 
 def get_candidate_target_fps(
-    video_fps: Union[int, float],
-    sampling_fps: Union[int, float],
-    max_fps: Union[int, float] = MAX_VIDEO_FPS,
+    video_fps: int | float,
+    sampling_fps: int | float,
+    max_fps: int | float = MAX_VIDEO_FPS,
 ) -> list[float]:
     """
     Return the subset of `video_fps` factors that remain multiples of `sampling_fps`.
@@ -232,7 +234,7 @@ def get_candidate_target_fps(
             break
         if video_fps % candidate == 0:
             candidates.append(float(candidate))
-    
+
     return candidates
 
 
@@ -257,6 +259,7 @@ def read_video_decord(
     """
     # Lazy import from decord
     import importlib
+
     decord = importlib.import_module("decord")
 
     vr = decord.VideoReader(uri=video_path, ctx=decord.cpu(0))  # decord has problems with gpu
@@ -276,7 +279,7 @@ def read_video_decord(
     target_timestamps = np.array(target_timestamps)
     offset = time_stamps[0, 0]
 
-    ix = np.searchsorted(time_stamps[:, 1], target_timestamps + offset, side='right')
+    ix = np.searchsorted(time_stamps[:, 1], target_timestamps + offset, side="right")
     ix = np.minimum(ix, len(time_stamps) - 1)
 
     video = vr.get_batch(ix).asnumpy()
@@ -311,6 +314,7 @@ def read_video_torchcodec(
     """
     # Lazy import torchcodec
     import importlib
+
     torchcodec = importlib.import_module("torchcodec")
 
     decoder = torchcodec.decoders.VideoDecoder(
@@ -340,7 +344,7 @@ def read_video_torchcodec(
     # Floating point/rounding issues might cause `target_timestamps` to be very slightly
     # out-of-bounds, to handle this we sanity check then clip them
     assert all(x >= 0 for x in target_timestamps)
-    assert all(x < duration+1e-6 for x in target_timestamps)
+    assert all(x < duration + 1e-6 for x in target_timestamps)
     # 1e-6 padding since torchcodec can throw out-of-bounds errors even if you ask for the
     # exact boundary value, we should still get the first/last frame anyway
     max_timestamp = decoder.metadata.end_stream_seconds_from_content - 1e-6
@@ -377,6 +381,7 @@ def read_video_pyav(
     """
     # Lazy import torchcodec
     import importlib
+
     av = importlib.import_module("av")
 
     with av.open(video_path) as container:
@@ -393,7 +398,7 @@ def read_video_pyav(
         if container_end is None or container_end < frames[-1].pts:
             # Some problem with stream duration, so use the frame PTS directly
             # and guess the duration of the last frame
-            end = frames[-1].pts * stream.time_base + 1/fps
+            end = frames[-1].pts * stream.time_base + 1 / fps
         else:
             end = container_end
         duration = float(end - start)
@@ -412,7 +417,7 @@ def read_video_pyav(
 
         target_timestamps = np.array(target_timestamps)
         end_time_stamps = np.array([float(frame.pts * stream.time_base) for frame in frames[1:]] + [duration])
-        indices = np.searchsorted(end_time_stamps, target_timestamps + offset, side='right')
+        indices = np.searchsorted(end_time_stamps, target_timestamps + offset, side="right")
         indices = np.minimum(indices, len(end_time_stamps) - 1)
 
         video = np.stack(
@@ -435,7 +440,7 @@ VIDEO_DECODERS = {
 def load_video(
     video: VideoInput,
     backend: str = "decord",
-    sample_timestamps_fn: Optional[Callable] = None,
+    sample_timestamps_fn: Callable | None = None,
     **kwargs,
 ):
     """
@@ -460,6 +465,7 @@ def load_video(
             raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
         # Lazy import from yt_dlp
         import importlib
+
         yt_dlp = importlib.import_module("yt_dlp")
 
         buffer = BytesIO()
@@ -489,7 +495,7 @@ def load_video(
             f"You chose backend={backend} for loading the video but the required library is not found in your environment "
             f"Make sure to install {backend} before loading the video."
         )
-    
+
     video_decoder = VIDEO_DECODERS[backend]
     video, metadata = video_decoder(file_obj, sample_timestamps_fn, **kwargs)
     return video, metadata
@@ -531,12 +537,7 @@ def get_target_fps(
     return selected_target_fps
 
 
-def get_frame_times_and_chosen_fps(
-    selected_target_fps,
-    total_frames,
-    max_frames,
-    video_fps
-):
+def get_frame_times_and_chosen_fps(selected_target_fps, total_frames, max_frames, video_fps):
     if selected_target_fps is None:
         frame_indices = np.linspace(0, total_frames, max_frames, endpoint=False, dtype=int)
     else:
@@ -548,11 +549,11 @@ def get_frame_times_and_chosen_fps(
 
 
 class Molmo2VideoProcessorKwargs(VideosKwargs, total=False):
-    patch_size: Optional[int]
-    pooling_size: Optional[list[int]]
-    frame_sample_mode: Optional[str]
-    max_fps: Optional[int]
-    sampling_fps: Optional[int]
+    patch_size: int | None
+    pooling_size: list[int] | None
+    frame_sample_mode: str | None
+    max_fps: int | None
+    sampling_fps: int | None
 
 
 class Molmo2VideoProcessor(BaseVideoProcessor):
@@ -575,14 +576,12 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
 
     def __init__(self, **kwargs: Unpack[Molmo2VideoProcessorKwargs]):
         super().__init__(**kwargs)
-        if self.size is not None and (
-            self.size.get("height", None) is None or self.size.get("width", None) is None
-        ):
+        if self.size is not None and (self.size.get("height", None) is None or self.size.get("width", None) is None):
             raise ValueError("size must contain 'height' and 'width' keys.")
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
+        size: SizeDict | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -599,8 +598,8 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         metadata: VideoMetadata,
         frame_sample_mode: str,
         num_frames: int,
-        max_fps: Optional[int] = None,
-        sampling_fps: Optional[int] = None,
+        max_fps: int | None = None,
+        sampling_fps: int | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -636,19 +635,15 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
             return times
         elif frame_sample_mode == "uniform_last_frame":
             if max_fps is not None:
-                max_duration = (num_frames-1) / max_fps  # -1 to include the last frame
+                max_duration = (num_frames - 1) / max_fps  # -1 to include the last frame
                 if max_duration < duration:
-                    times = np.linspace(
-                        0, duration, num=num_frames, endpoint=True, dtype=np.float64
-                    )
+                    times = np.linspace(0, duration, num=num_frames, endpoint=True, dtype=np.float64)
                 else:
-                    times = np.arange(0.0, stop=duration, step=1/max_fps)
+                    times = np.arange(0.0, stop=duration, step=1 / max_fps)
                     times = np.concatenate([times, [duration]], axis=0)
                     assert len(times) <= num_frames
             else:
-                times = np.linspace(
-                    0, duration, num=num_frames, endpoint=True, dtype=np.float64
-                )
+                times = np.linspace(0, duration, num=num_frames, endpoint=True, dtype=np.float64)
             return times
         else:
             raise NotImplementedError(frame_sample_mode)
@@ -656,10 +651,10 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        frame_sample_mode: Optional[str] = None,
-        num_frames: Optional[int] = None,
-        max_fps: Optional[int] = None,
-        sampling_fps: Optional[int] = None,
+        frame_sample_mode: str | None = None,
+        num_frames: int | None = None,
+        max_fps: int | None = None,
+        sampling_fps: int | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -697,7 +692,9 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
                 return indices
             else:
                 float_indices = np.arange(
-                    0.0, stop=total_num_frames - 1, step=float(metadata.fps / max_fps),
+                    0.0,
+                    stop=total_num_frames - 1,
+                    step=float(metadata.fps / max_fps),
                 )
                 if np.round(float_indices[-1]) != total_num_frames - 1:
                     float_indices = np.concatenate([float_indices, [total_num_frames - 1]], axis=0)
@@ -707,7 +704,10 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
                 return indices
         elif frame_sample_mode == "uniform_last_frame":
             indices = np.linspace(
-                0, total_num_frames - 1, num=min(num_frames, total_num_frames), endpoint=True,
+                0,
+                total_num_frames - 1,
+                num=min(num_frames, total_num_frames),
+                endpoint=True,
             ).astype(int)
             return indices
         elif frame_sample_mode == "fps":
@@ -728,26 +728,16 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
             return indices
         else:
             raise NotImplementedError(frame_sample_mode)
-    
-    def fetch_videos(
-        self,
-        video_url_or_urls: Union[str, list[str], list[list[str]]],
-        sample_timestamps_fn=None
-    ):
+
+    def fetch_videos(self, video_url_or_urls: str | list[str] | list[list[str]], sample_timestamps_fn=None):
         """
         Convert a single or a list of urls into the corresponding `np.array` objects.
 
         If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
         returned.
         """
-        if (
-            (not is_decord_available())
-            and (not is_torchcodec_available())
-            and (not is_av_available())
-        ):
-            raise ImportError(
-                "Molmo2VideoProcessor requires `decord`, `torchcodec`, or `av` to be installed."
-            )
+        if (not is_decord_available()) and (not is_torchcodec_available()) and (not is_av_available()):
+            raise ImportError("Molmo2VideoProcessor requires `decord`, `torchcodec`, or `av` to be installed.")
 
         if is_decord_available():
             backend = "decord"
@@ -759,23 +749,24 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
             backend = "torchcodec"
         else:
             warnings.warn(
-                "`decord` is not installed and cannot be used to decode the video by default. "
-                "Falling back to `PyAV`."
+                "`decord` is not installed and cannot be used to decode the video by default. Falling back to `PyAV`."
             )
             backend = "pyav"
 
         if isinstance(video_url_or_urls, list):
-            return list(zip(*[self.fetch_videos(x, sample_timestamps_fn=sample_timestamps_fn) for x in video_url_or_urls]))
+            return list(
+                zip(*[self.fetch_videos(x, sample_timestamps_fn=sample_timestamps_fn) for x in video_url_or_urls])
+            )
         else:
             return load_video(video_url_or_urls, backend=backend, sample_timestamps_fn=sample_timestamps_fn)
 
     def _decode_and_sample_videos(
         self,
         videos: VideoInput,
-        video_metadata: Union[VideoMetadata, dict],
-        do_sample_frames: Optional[bool] = None,
-        sample_indices_fn: Optional[Callable] = None,
-        sample_timestamps_fn: Optional[Callable] = None,
+        video_metadata: VideoMetadata | dict,
+        do_sample_frames: bool | None = None,
+        sample_indices_fn: Callable | None = None,
+        sample_timestamps_fn: Callable | None = None,
     ):
         """
         Decode input videos and sample frames if needed.
@@ -803,14 +794,12 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
                     "Will decode the video and sample frames using Molmo2's default sampling mode"
                 )
             if isinstance(videos[0], list):
-                raise ValueError(
-                    "A list of images is not supported for video input!"
-                )
+                raise ValueError("A list of images is not supported for video input!")
             else:
                 videos, video_metadata = self.fetch_videos(videos, sample_timestamps_fn=sample_timestamps_fn)
-        
+
         return videos, video_metadata
-    
+
     def _prepare_input_videos(
         self,
         videos: VideoInput,
@@ -818,7 +807,7 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
     ) -> list[np.ndarray]:
         processed_videos = [to_numpy(video) for video in videos]
         return processed_videos
-    
+
     def preprocess(
         self,
         videos: VideoInput,
@@ -833,7 +822,7 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         # by the user, it gets its default value from the instance, or is set to None.
         for kwarg_name in self.valid_kwargs.__annotations__:
             kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
-        
+
         do_sample_frames = kwargs.pop("do_sample_frames")
         video_metadata = kwargs.pop("video_metadata")
 
@@ -855,18 +844,18 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         if return_metadata:
             preprocessed_videos["video_metadata"] = video_metadata
         return preprocessed_videos
-    
+
     def _preprocess(
         self,
         videos: list[np.ndarray],
-        size: Optional[SizeDict] = None,
-        resample: Optional[PILImageResampling] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_convert_rgb: Optional[bool] = None,
-        patch_size: Optional[int] = None,
-        pooling_size: Optional[list[int]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        size: SizeDict | None = None,
+        resample: PILImageResampling | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_convert_rgb: bool | None = None,
+        patch_size: int | None = None,
+        pooling_size: list[int] | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -906,7 +895,7 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         """
         if size.height is None or size.width is None:
             raise ValueError("size must contain 'height' and 'width' keys.")
-        
+
         base_image_input_size = [size.height, size.width]
 
         resample = resample or self.resample
@@ -950,16 +939,16 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
             batch_grids.append(video_grid)
             batch_crops.append(all_crops)
             batch_pooled_patches_idx.append(pooled_patches_idx)
-        
+
         video_grids = np.stack(batch_grids, 0)
         pixel_values_videos = np.concatenate(batch_crops, 0)
         video_token_pooling = np.concatenate(batch_pooled_patches_idx, 0)
-        
-        data =dict(
-            pixel_values_videos=pixel_values_videos,
-            video_token_pooling=video_token_pooling,
-            video_grids=video_grids,
-        )
+
+        data = {
+            "pixel_values_videos": pixel_values_videos,
+            "video_token_pooling": video_token_pooling,
+            "video_grids": video_grids,
+        }
 
         return BatchFeature(data, tensor_type=return_tensors)
 

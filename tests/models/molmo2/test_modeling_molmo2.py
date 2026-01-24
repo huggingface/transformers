@@ -15,7 +15,6 @@
 
 import copy
 import unittest
-from typing import List, Tuple
 
 from transformers import (
     Molmo2Config,
@@ -237,8 +236,6 @@ class Molmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             curr_input_dict = copy.deepcopy(input_dict)
 
             # remove one image but leave the image token in text
-            patch_size = config.vit_config.image_patch_size
-            num_patches = (self.model_tester.image_size // patch_size) ** 2
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][:1, ...]
             curr_input_dict["image_token_pooling"] = curr_input_dict["image_token_pooling"][:1, ...]
             curr_input_dict["image_grids"] = curr_input_dict["image_grids"][:1, ...]
@@ -266,7 +263,6 @@ class Molmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
                 )
                 self.assertIsNotNone(generated_ids)
                 self.assertEqual(generated_ids.shape[0], inputs_dict["input_ids"].shape[0])
-
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

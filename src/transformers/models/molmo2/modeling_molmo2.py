@@ -1,21 +1,21 @@
 import math
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional, Union, Callable
 
 import torch
 from torch import nn
 from torch.nn import functional as F
 
-
+from ... import initialization as init
 from ...activations import ACT2FN
-from ...configuration_utils import PreTrainedConfig
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import (
-    _flash_attention_forward,
     FlashAttentionKwargs,
+    _flash_attention_forward,
     flash_attn_supports_top_left_mask,
 )
 from ...modeling_layers import GradientCheckpointingLayer
@@ -31,8 +31,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-
-from .configuration_molmo2 import Molmo2Config, Molmo2VitConfig, Molmo2AdapterConfig, Molmo2TextConfig
+from .configuration_molmo2 import Molmo2AdapterConfig, Molmo2Config, Molmo2TextConfig, Molmo2VitConfig
 
 
 logger = logging.get_logger(__name__)
@@ -58,12 +57,12 @@ class Molmo2CausalLMOutputWithPast(ModelOutput):
             image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -76,20 +75,21 @@ class Molmo2ModelOutputWithPast(BaseModelOutputWithPast):
             A `torch.FloatTensor` of size `(batch_num_patches, hidden_size)`.
             image_hidden_states of the model produced by the vision backbone
     """
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
+
+    last_hidden_state: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 class ViTMLP(nn.Module):
-    def __init__(self, dim: int, hidden_dim: int, hidden_act: str, device: Union[str, torch.device] = None):
+    def __init__(self, dim: int, hidden_dim: int, hidden_act: str, device: str | torch.device = None):
         super().__init__()
         self.w1 = nn.Linear(dim, hidden_dim, bias=True, device=device)
         self.act = ACT2FN[hidden_act]
         self.w2 = nn.Linear(hidden_dim, dim, bias=True, device=device)
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.w2(self.act(self.w1(x)))
 
@@ -102,11 +102,11 @@ class ViTMultiHeadDotProductAttention(nn.Module):
         num_key_value_heads: int,
         head_dim: int,
         use_bias: bool = True,
-        input_dim: Optional[int] = None,
+        input_dim: int | None = None,
         float32_attention: bool = True,
         attention_dropout: float = 0.0,
         residual_dropout: float = 0.0,
-        device: Union[str, torch.device] = None,
+        device: str | torch.device = None,
         attn_implementation: str = "eager",
     ):
         super().__init__()
@@ -152,14 +152,13 @@ class ViTMultiHeadDotProductAttention(nn.Module):
 
     def _merge_heads(self, hidden_states) -> torch.Tensor:
         return hidden_states.reshape(hidden_states.shape[:2] + (self.hidden_size,))
-    
+
     def forward(
         self,
         inputs_q: torch.Tensor,
-        inputs_kv: Optional[torch.Tensor] = None,
-        attn_mask: Optional[torch.Tensor] = None,
+        inputs_kv: torch.Tensor | None = None,
+        attn_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-
         if inputs_kv is not None:
             inputs_k = inputs_kv
             inputs_v = inputs_kv
@@ -176,29 +175,25 @@ class ViTMultiHeadDotProductAttention(nn.Module):
         if self.num_heads != self.num_key_value_heads:
             xk = xk.repeat_interleave(self.num_key_value_groups, dim=2, output_size=self.num_heads)
             xv = xv.repeat_interleave(self.num_key_value_groups, dim=2, output_size=self.num_heads)
-        
+
         og_dtype = xq.dtype
 
         if self.float32_attention:
             xq = xq.to(torch.float)
             xk = xk.to(torch.float)
-        
+
         dropout_p = 0.0 if not self.training else self.attention_dropout
-        
+
         if self.attn_implementation == "eager":
             attn_weights = torch.einsum("...qhd,...khd->...hqk", xq / math.sqrt(xq.size(-1)), xk)
             attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(xq.dtype)
-            attn_weights = F.dropout(
-                attn_weights,
-                p=dropout_p,
-                training=self.training
-            )
+            attn_weights = F.dropout(attn_weights, p=dropout_p, training=self.training)
             attn_output = torch.einsum("...hqk,...khd->...qhd", attn_weights.to(xv.dtype), xv)
-        
+
         elif self.attn_implementation == "sdpa":
             if not torch.is_autocast_enabled():
                 xv = xv.to(torch.float)
-        
+
             attn_output = F.scaled_dot_product_attention(
                 xq.transpose(1, 2).contiguous(),
                 xk.transpose(1, 2).contiguous(),
@@ -207,7 +202,7 @@ class ViTMultiHeadDotProductAttention(nn.Module):
                 is_causal=False,
                 dropout_p=dropout_p,
             ).transpose(1, 2)
-        
+
         elif self.attn_implementation == "flash_attention_2":
             if xq.dtype == torch.float32:
                 if torch.is_autocast_enabled():
@@ -229,7 +224,7 @@ class ViTMultiHeadDotProductAttention(nn.Module):
             )
         else:
             raise ValueError(f"Attention implementation {self.attn_implementation} not supported")
-        
+
         attn_output = attn_output.to(og_dtype)
         attn_output = self._merge_heads(attn_output)
         attn_output = self.wo(attn_output)
@@ -239,8 +234,7 @@ class ViTMultiHeadDotProductAttention(nn.Module):
 
 
 class Molmo2VisionBlock(nn.Module):
-
-    def __init__(self, config: Molmo2VitConfig, device: Union[str, torch.device] = None):
+    def __init__(self, config: Molmo2VitConfig, device: str | torch.device = None):
         super().__init__()
         self.attention = ViTMultiHeadDotProductAttention(
             hidden_size=config.hidden_size,
@@ -256,7 +250,7 @@ class Molmo2VisionBlock(nn.Module):
         self.feed_forward = ViTMLP(config.hidden_size, config.intermediate_size, config.hidden_act, device=device)
         self.attention_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, device=device)
         self.ffn_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, device=device)
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x + self.attention(self.attention_norm(x))
         x = x + self.feed_forward(self.ffn_norm(x))
@@ -264,13 +258,10 @@ class Molmo2VisionBlock(nn.Module):
 
 
 class Molmo2VisionBlockCollection(nn.Module):
-    
-    def __init__(self, config: Molmo2VitConfig, device: Union[str, torch.device] = None):
+    def __init__(self, config: Molmo2VitConfig, device: str | torch.device = None):
         super().__init__()
         self.conifg = config
-        self.resblocks = nn.ModuleList([
-            Molmo2VisionBlock(config, device) for _ in range(config.num_hidden_layers)
-        ])
+        self.resblocks = nn.ModuleList([Molmo2VisionBlock(config, device) for _ in range(config.num_hidden_layers)])
 
     def forward(self, x: torch.Tensor) -> list[torch.Tensor]:
         hidden_states = []
@@ -281,14 +272,13 @@ class Molmo2VisionBlockCollection(nn.Module):
 
 
 class Molmo2VisionTransformer(nn.Module):
-
-    def __init__(self, config: Molmo2VitConfig, device: Union[str, torch.device] = None):
+    def __init__(self, config: Molmo2VitConfig, device: str | torch.device = None):
         super().__init__()
         self.config = config
 
         # positional embeddings
-        self.scale = config.hidden_size ** -0.5
-        self.num_prefix_tokens: int = 0 # no class embeddings
+        self.scale = config.hidden_size**-0.5
+        self.num_prefix_tokens: int = 0  # no class embeddings
         self.positional_embedding = nn.Parameter(
             torch.zeros(config.image_num_pos, config.hidden_size, device=device),
         )
@@ -317,7 +307,11 @@ class Molmo2VisionTransformer(nn.Module):
             # antialias: default True in jax.image.resize
             pos_emb = pos_emb.unsqueeze(0).permute(0, 3, 1, 2)
             pos_emb = F.interpolate(
-                pos_emb, size=(patch_num_0, patch_num_1), mode="bicubic", align_corners=False, antialias=True,
+                pos_emb,
+                size=(patch_num_0, patch_num_1),
+                mode="bicubic",
+                align_corners=False,
+                antialias=True,
             )
             pos_emb = pos_emb.permute(0, 2, 3, 1).squeeze(0)
 
@@ -325,7 +319,7 @@ class Molmo2VisionTransformer(nn.Module):
         x = x + pos_emb[None, :, :].to(x.dtype)
         return x
 
-    def forward(self, x: torch.Tensor, patch_num: int = None) -> list[torch.Tensor]:
+    def forward(self, x: torch.Tensor, patch_num: int | None = None) -> list[torch.Tensor]:
         """
         : param x: (batch_size, num_patch, n_pixels)
         """
@@ -344,21 +338,20 @@ class Molmo2VisionTransformer(nn.Module):
 
 
 class ImageProjectorMLP(nn.Module):
-
     def __init__(
         self,
         input_dim: int,
         hidden_dim: int,
         output_dim: int,
         hidden_act: str,
-        device: Union[str, torch.device] = None,
+        device: str | torch.device = None,
     ):
         super().__init__()
         self.w1 = nn.Linear(input_dim, hidden_dim, bias=False, device=device)
         self.w2 = nn.Linear(hidden_dim, output_dim, bias=False, device=device)
         self.w3 = nn.Linear(input_dim, hidden_dim, bias=False, device=device)
         self.act = ACT2FN[hidden_act]
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.w2(self.act(self.w1(x)) * self.w3(x))
 
@@ -375,7 +368,7 @@ class Molmo2VisionBackbone(nn.Module):
                 self.vit_layers.append(layer)
             else:
                 self.vit_layers.append(layer + vit_config.num_hidden_layers)
-        
+
         last_layer_needed = max(self.vit_layers) + 1
         if last_layer_needed < vit_config.num_hidden_layers:
             new_vit_config = deepcopy(vit_config)
@@ -405,7 +398,7 @@ class Molmo2VisionBackbone(nn.Module):
             adapter_config.hidden_act,
         )
         self.image_feature_dropout = nn.Dropout(adapter_config.image_feature_dropout)
-    
+
     def encode_image(self, images: torch.Tensor) -> torch.Tensor:
         """
         : param images: (batch_size, num_crops, num_patch, n_pixels)
@@ -431,13 +424,12 @@ class Molmo2VisionBackbone(nn.Module):
     @property
     def device(self) -> torch.device:
         return self.image_vit.patch_embedding.weight.device
-    
+
     def forward(
         self,
         images: torch.Tensor,
         pooled_patches_idx: torch.Tensor,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         # image_features: (batch_size, num_crops(=num_image), num_patch, nximage_emb_dim)
         batch_size, num_image = images.shape[:2]
         images = images.to(device=self.device, dtype=self.dtype)
@@ -450,7 +442,9 @@ class Molmo2VisionBackbone(nn.Module):
 
         # Use `pooled_patches_idx` to arange the features for image pooling
         batch_idx = torch.arange(pooled_patches_idx.shape[0], dtype=torch.long, device=pooled_patches_idx.device)
-        batch_idx = torch.tile(batch_idx.view(batch_size, 1, 1), [1, pooled_patches_idx.shape[1], pooled_patches_idx.shape[2]])
+        batch_idx = torch.tile(
+            batch_idx.view(batch_size, 1, 1), [1, pooled_patches_idx.shape[1], pooled_patches_idx.shape[2]]
+        )
 
         # Now [batch, num_high_res_features, pool_dim, dim]
         to_pool = image_features.reshape(batch_size, -1, dim)[batch_idx, torch.clip(pooled_patches_idx, 0)]
@@ -514,8 +508,8 @@ class Molmo2RotaryEmbedding(nn.Module):
     def __init__(
         self,
         config: Molmo2TextConfig,
-        device: Union[str, torch.device] = None,
-        rope_type: Optional[str] = None,
+        device: str | torch.device = None,
+        rope_type: str | None = None,
     ):
         super().__init__()
         if rope_type is not None:
@@ -534,7 +528,7 @@ class Molmo2RotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
-    
+
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -552,17 +546,16 @@ class Molmo2RotaryEmbedding(nn.Module):
 
 
 class Molmo2RMSNorm(nn.Module):
-
     def __init__(
         self,
         size: int,
         eps: float = 1e-6,
-        device: Union[str, torch.device] = None,
+        device: str | torch.device = None,
     ):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(size, device=device))
         self.eps = eps
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         with torch.autocast(enabled=False, device_type=x.device.type):
             og_dtype = x.dtype
@@ -570,7 +563,7 @@ class Molmo2RMSNorm(nn.Module):
             variance = x.pow(2).mean(-1, keepdim=True)
             x = x * torch.rsqrt(variance + self.eps)
             x = x.to(og_dtype)
-        
+
         return self.weight * x
 
     def extra_repr(self):
@@ -595,11 +588,11 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
-) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+) -> tuple[torch.Tensor, torch.Tensor | None]:
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
 
@@ -642,26 +635,22 @@ class Molmo2Attention(nn.Module):
         )
 
         # Layer norms.
-        self.k_norm: Optional[Molmo2RMSNorm] = None
-        self.q_norm: Optional[Molmo2RMSNorm] = None
-        self.qk_norm_type: Optional[str] = None
+        self.k_norm: Molmo2RMSNorm | None = None
+        self.q_norm: Molmo2RMSNorm | None = None
+        self.qk_norm_type: str | None = None
         if config.use_qk_norm:
             k_norm_size = (
-                config.head_dim
-                if config.qk_norm_type == "qwen3" else
-                config.num_key_value_heads * config.head_dim
+                config.head_dim if config.qk_norm_type == "qwen3" else config.num_key_value_heads * config.head_dim
             )
             self.k_norm = Molmo2RMSNorm(k_norm_size, eps=config.layer_norm_eps)
             q_norm_size = (
-                config.head_dim
-                if config.qk_norm_type == "qwen3" else
-                config.num_attention_heads * config.head_dim
+                config.head_dim if config.qk_norm_type == "qwen3" else config.num_attention_heads * config.head_dim
             )
             self.q_norm = Molmo2RMSNorm(q_norm_size, eps=config.layer_norm_eps)
             self.qk_norm_type = config.qk_norm_type
 
         self.attention_dropout = config.attention_dropout
-        
+
         self.attn_out = nn.Linear(
             config.head_dim * config.num_attention_heads,
             config.hidden_size,
@@ -672,11 +661,11 @@ class Molmo2Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -701,14 +690,14 @@ class Molmo2Attention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None: 
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -720,26 +709,25 @@ class Molmo2Attention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
-    
+
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.attn_out(attn_output)
         return attn_output, attn_weights
 
 
 class LanguageModelMLP(nn.Module):
-
     def __init__(
         self,
         input_dim: int,
         intermediate_size: int,
         hidden_act: str,
-        device: Union[str, torch.device] = None,
+        device: str | torch.device = None,
     ):
         super().__init__()
         self.ff_proj = nn.Linear(input_dim, intermediate_size * 2, bias=False, device=device)
         self.ff_out = nn.Linear(intermediate_size, input_dim, bias=False, device=device)
         self.act = ACT2FN[hidden_act]
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.ff_proj(x)
         x, gate = x.chunk(2, dim=-1)
@@ -749,38 +737,28 @@ class LanguageModelMLP(nn.Module):
 
 
 class Molmo2DecoderLayer(GradientCheckpointingLayer):
-
-    def __init__(
-        self,
-        config: Molmo2TextConfig,
-        layer_idx: Optional[int] = None,
-        device: Union[str, torch.device] = None
-    ):
+    def __init__(self, config: Molmo2TextConfig, layer_idx: int | None = None, device: str | torch.device = None):
         super().__init__()
         self.config = config
 
         self.self_attn = Molmo2Attention(config, layer_idx)
-        self.attn_norm = Molmo2RMSNorm(
-            config.hidden_size, eps=config.layer_norm_eps, device=device)
+        self.attn_norm = Molmo2RMSNorm(config.hidden_size, eps=config.layer_norm_eps, device=device)
         self.dropout = nn.Dropout(config.residual_dropout)
-        self.mlp = LanguageModelMLP(
-            config.hidden_size, config.intermediate_size, config.hidden_act, device=device)
-        self.ff_norm = Molmo2RMSNorm(
-            config.hidden_size, eps=config.layer_norm_eps, device=device)
-    
+        self.mlp = LanguageModelMLP(config.hidden_size, config.intermediate_size, config.hidden_act, device=device)
+        self.ff_norm = Molmo2RMSNorm(config.hidden_size, eps=config.layer_norm_eps, device=device)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
         hidden_states = self.attn_norm(hidden_states)
 
@@ -819,15 +797,14 @@ class Molmo2PostNormDecoderLayer(Molmo2DecoderLayer):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
 
         # Self Attention
@@ -866,7 +843,7 @@ class Molmo2Embedding(nn.Module):
         num_embeddings: int,
         num_new_embeddings: int,
         features: int,
-        device: Union[str, torch.device] = None,
+        device: str | torch.device = None,
     ):
         super().__init__()
         self.embedding = nn.Parameter(
@@ -904,22 +881,22 @@ class Molmo2PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear,)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, Molmo2Embedding):
-            module.embedding.data.normal_(mean=0.0, std=std)
-            module.new_embedding.data.normal_(mean=0.0, std=std)
+            init.normal_(module.embedding, mean=0.0, std=std)
+            init.normal_(module.new_embedding, mean=0.0, std=std)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, Molmo2RMSNorm):
-            module.weight.data.fill_(1.0)
+            init.ones_(module.weight)
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
+            init.ones_(module.weight)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
 
 
 class Molmo2TextModel(Molmo2PreTrainedModel):
@@ -965,15 +942,15 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -990,7 +967,7 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
             )
             use_cache = False
-        
+
         if inputs_embeds is None:
             input_ids = input_ids * (input_ids != -1).to(input_ids.dtype)
             inputs_embeds = self.wte(input_ids)
@@ -1043,7 +1020,7 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
         for layer_idx, decoder_block in enumerate(self.blocks[: self.config.num_hidden_layers]):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            
+
             if self.config.rope_scaling_layers is not None:
                 position_embeddings_i = (
                     position_embeddings_mapping["scaling"]
@@ -1083,10 +1060,11 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
             attentions=all_self_attns,
         )
 
+
 # Adapted from ...models.gemma3.modeling_gemma3
 def token_type_ids_mask_function(
-    token_type_ids: Optional[torch.Tensor] = None,
-) -> Optional[Callable]:
+    token_type_ids: torch.Tensor | None = None,
+) -> Callable | None:
     """
     This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
     not start and end indices.
@@ -1094,7 +1072,7 @@ def token_type_ids_mask_function(
     # Do not return an additional mask in this case
     if token_type_ids is None:
         return None
-    
+
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
         # If it's 1 for both query and key/value, we are in an image block
         # NOTE: static cache shape goes beyond input seq length, while token_type_ids.shape[1] == input seq length
@@ -1107,7 +1085,7 @@ def token_type_ids_mask_function(
 
         # This is bidirectional attention whenever we are dealing with image tokens
         return is_image_block & is_image_block
-    
+
     return inner_mask
 
 
@@ -1118,14 +1096,13 @@ class Molmo2Model(Molmo2PreTrainedModel):
     accepts_loss_kwargs = False
     config: Molmo2Config
 
-
     def __init__(self, config: Molmo2Config):
         super().__init__(config)
         self.transformer: Molmo2TextModel = Molmo2TextModel(config.text_config)
-        self.vision_backbone: Optional[Molmo2VisionBackbone] = None
+        self.vision_backbone: Molmo2VisionBackbone | None = None
         if config.vit_config is not None and config.adapter_config is not None:
             self.vision_backbone = Molmo2VisionBackbone(config.vit_config, config.adapter_config)
-        
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1134,17 +1111,17 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
     def set_input_embeddings(self, value: torch.nn.Module) -> None:
         self.transformer.wte = value
-    
+
     def set_decoder(self, decoder):
         self.transformer = decoder
-    
+
     def get_decoder(self):
         return self.transformer
 
     @property
     def device(self) -> torch.device:
         return self.transformer.ln_f.weight.device
-    
+
     def build_batched_images(
         self,
         input_ids: torch.LongTensor,
@@ -1165,29 +1142,27 @@ class Molmo2Model(Molmo2PreTrainedModel):
         num_images = int(counts.sum().item())
 
         # Sanity check
-        assert image_grids.size(0) == num_images, \
-            f"Expected {num_images} image grids, but got {image_grids.size(0)}"
-        assert image_num_crops.size(0) == num_images, \
+        assert image_grids.size(0) == num_images, f"Expected {num_images} image grids, but got {image_grids.size(0)}"
+        assert image_num_crops.size(0) == num_images, (
             f"Expected {num_images} image num crops, but got {image_num_crops.size(0)}"
+        )
 
         # 1-1) Compute per-image pooled patch count from image grids
         with torch.no_grad():
-            first_prod = image_grids[:, :2].prod(dim=1)    # [num_images]
-            second_prod = image_grids[:, 2:].prod(dim=1)   # [num_images]
+            first_prod = image_grids[:, :2].prod(dim=1)  # [num_images]
+            second_prod = image_grids[:, 2:].prod(dim=1)  # [num_images]
             num_pooled_patches_per_image = (first_prod + second_prod).to(image_num_crops.dtype)  # [num_images]
-        
+
         # pixel_values: [n_crops, n_patches, pixels_per_patch]
         n_crops, n_patches, pixels_per_patch = pixel_values.shape
-        
+
         # 2) Map each image index → example index
         # Example: if counts = [2, 1, 3], then this becomes [0,0,1,2,2,2]
         example_ids_for_image = torch.arange(N, device=device).repeat_interleave(counts)  # [num_images]
         assert example_ids_for_image.numel() == num_images
 
         # 2-1) Compute crops_per_example by summing per-image crop counts
-        crops_per_example = torch.zeros(
-            N, dtype=image_num_crops.dtype, device=image_num_crops.device
-        )
+        crops_per_example = torch.zeros(N, dtype=image_num_crops.dtype, device=image_num_crops.device)
         crops_per_example.index_add_(0, example_ids_for_image, image_num_crops)  # [N]
 
         # 2-2) Per-image number of patches = (crops per image) * n_patches
@@ -1198,28 +1173,26 @@ class Molmo2Model(Molmo2PreTrainedModel):
         index_offset_per_example_list = []
         offset_img = 0
         for c in counts_list:
-            per_img_patches = patches_per_image[offset_img:offset_img + c]  # [c]
+            per_img_patches = patches_per_image[offset_img : offset_img + c]  # [c]
             # Offsets: [0, img0_total_patches, img0+img1_total_patches, ...]
             index_offset = [0] + per_img_patches.cumsum(0).tolist()[:-1]
             index_offset_per_example_list.append(index_offset)
             offset_img += c
-        
+
         # 2-4) Compute num_pooled_patches_per_example
         num_pooled_patches_per_example = torch.zeros(
             N, dtype=num_pooled_patches_per_image.dtype, device=num_pooled_patches_per_image.device
         )
-        num_pooled_patches_per_example.index_add_(
-            0, example_ids_for_image, num_pooled_patches_per_image
-        )
+        num_pooled_patches_per_example.index_add_(0, example_ids_for_image, num_pooled_patches_per_image)
 
         # Sanity checks
         total_crops = int(crops_per_example.sum().item())
-        assert total_crops == n_crops, \
-            f"Expected {total_crops} crops, but got {n_crops}"
+        assert total_crops == n_crops, f"Expected {total_crops} crops, but got {n_crops}"
 
         total_num_pooled_patches = int(num_pooled_patches_per_example.sum().item())
-        assert total_num_pooled_patches == image_token_pooling.size(0), \
+        assert total_num_pooled_patches == image_token_pooling.size(0), (
             f"Expected {total_num_pooled_patches} pooled patches, but got {image_token_pooling.size(0)}"
+        )
 
         # 3) Build images tensor filled with -1
         M = int(crops_per_example.max().item())
@@ -1234,7 +1207,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
         offset_crop = 0
         for i in range(N):
             num = int(crops_per_example[i].item())
-            cur = pixel_values[offset_crop:offset_crop + num]  # [num, n_patches, pixels_per_patch]
+            cur = pixel_values[offset_crop : offset_crop + num]  # [num, n_patches, pixels_per_patch]
             images[i, :num] = cur
             offset_crop += num
 
@@ -1259,10 +1232,10 @@ class Molmo2Model(Molmo2PreTrainedModel):
             num_patches = int(num_pooled_patches_per_example[i].item())
 
             # Subsequence of pooled tokens belonging to this example
-            cur = image_token_pooling[patch_offset:patch_offset + num_patches].clone()  # [num_patches, dim]
+            cur = image_token_pooling[patch_offset : patch_offset + num_patches].clone()  # [num_patches, dim]
 
             index_offset_per_example = index_offset_per_example_list[i]  # length = c
-            per_img_pooled = num_pooled_patches_per_image[img_offset:img_offset + c]   # [c]
+            per_img_pooled = num_pooled_patches_per_image[img_offset : img_offset + c]  # [c]
 
             assert len(index_offset_per_example) == per_img_pooled.numel()
 
@@ -1271,10 +1244,10 @@ class Molmo2Model(Molmo2PreTrainedModel):
             for j in range(c):
                 index_offset = int(index_offset_per_example[j])
                 n = int(per_img_pooled[j].item())
-                cur_slice = cur[offset:offset + n]
+                cur_slice = cur[offset : offset + n]
 
                 # Apply offset across all columns
-                cur[offset:offset + n] = torch.where(
+                cur[offset : offset + n] = torch.where(
                     cur_slice >= 0,
                     cur_slice + index_offset,
                     cur_slice,
@@ -1291,7 +1264,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
         assert img_offset == num_images
 
         return images, new_token_pooling
-    
+
     def build_batched_videos(
         self,
         input_ids: torch.LongTensor,
@@ -1299,7 +1272,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
         video_token_pooling: torch.Tensor,
         video_grids: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-
         # 1) Count the number of videos in each example
         if self.config.use_frame_special_tokens:
             end_token_id = self.config.frame_end_token_id
@@ -1313,9 +1285,8 @@ class Molmo2Model(Molmo2PreTrainedModel):
         num_videos = int(counts.sum().item())
 
         # Sanity check
-        assert video_grids.size(0) == num_videos, \
-            f"Expected {num_videos} videos, but got {video_grids.size(0)}"
-        
+        assert video_grids.size(0) == num_videos, f"Expected {num_videos} videos, but got {video_grids.size(0)}"
+
         video_num_frames = video_grids[:, 0]  # [num_videos]
         num_pooled_patches_per_video = video_grids.prod(dim=1)  # [num_videos]
 
@@ -1329,27 +1300,33 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
         # 2-1) Compute frames_per_example by summing per-video frame counts
         frames_per_example = torch.zeros(
-            N, dtype=video_num_frames.dtype, device=device,
+            N,
+            dtype=video_num_frames.dtype,
+            device=device,
         )
         frames_per_example.index_add_(0, example_ids_for_video, video_num_frames)  # [N]
 
         # 2-2) Compute num_pooled_patches_per_example
         num_pooled_patches_per_example = torch.zeros(
-            N, dtype=num_pooled_patches_per_video.dtype, device=num_pooled_patches_per_video.device,
+            N,
+            dtype=num_pooled_patches_per_video.dtype,
+            device=num_pooled_patches_per_video.device,
         )
         num_pooled_patches_per_example.index_add_(
-            0, example_ids_for_video, num_pooled_patches_per_video,
+            0,
+            example_ids_for_video,
+            num_pooled_patches_per_video,
         )
 
         # Sanity checks
         total_frames = int(frames_per_example.sum().item())
-        assert total_frames == n_frames, \
-            f"Expected {total_frames} frames, but got {n_frames}"
-        
+        assert total_frames == n_frames, f"Expected {total_frames} frames, but got {n_frames}"
+
         total_num_pooled_patches = int(num_pooled_patches_per_example.sum().item())
-        assert total_num_pooled_patches == video_token_pooling.size(0), \
+        assert total_num_pooled_patches == video_token_pooling.size(0), (
             f"Expected {total_num_pooled_patches} pooled patches, but got {video_token_pooling.size(0)}"
-        
+        )
+
         # 3) Build videos tensor filled with -1
         M = int(frames_per_example.max().item())
         videos = torch.full(
@@ -1363,10 +1340,10 @@ class Molmo2Model(Molmo2PreTrainedModel):
         offset_frame = 0
         for i in range(N):
             num = int(frames_per_example[i].item())
-            cur = pixel_values_videos[offset_frame:offset_frame + num]  # [num, n_patches, pixels_per_patch]
+            cur = pixel_values_videos[offset_frame : offset_frame + num]  # [num, n_patches, pixels_per_patch]
             videos[i, :num] = cur
             offset_frame += num
-        
+
         # Sanity check
         assert offset_frame == n_frames
 
@@ -1384,7 +1361,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
         patch_offset = 0
         for i in range(N):
             num_patches = int(num_pooled_patches_per_example[i].item())
-            cur = video_token_pooling[patch_offset:patch_offset + num_patches]  # [num_patches, dim]
+            cur = video_token_pooling[patch_offset : patch_offset + num_patches]  # [num_patches, dim]
             new_token_pooling[i, :num_patches] = cur
             patch_offset += num_patches
 
@@ -1392,18 +1369,18 @@ class Molmo2Model(Molmo2PreTrainedModel):
         assert patch_offset == total_num_pooled_patches
 
         return videos, new_token_pooling
-    
+
     def merge_visual_inputs(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.Tensor] = None,
-        image_token_pooling: Optional[torch.Tensor] = None,
-        image_grids: Optional[torch.Tensor] = None,
-        image_num_crops: Optional[torch.Tensor] = None,
-        pixel_values_videos: Optional[torch.Tensor] = None,
-        video_token_pooling: Optional[torch.Tensor] = None,
-        video_grids: Optional[torch.Tensor] = None,
-    ) -> tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_token_pooling: torch.Tensor | None = None,
+        image_grids: torch.Tensor | None = None,
+        image_num_crops: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        video_token_pooling: torch.Tensor | None = None,
+        video_grids: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
         if pixel_values is not None and pixel_values_videos is not None:
             raise ValueError("pixel_values and pixel_values_videos are provided at the same time")
         elif pixel_values is not None:
@@ -1430,16 +1407,15 @@ class Molmo2Model(Molmo2PreTrainedModel):
     def build_input_embeddings(
         self,
         input_ids: torch.LongTensor,
-        images: Optional[torch.FloatTensor] = None,  # image inputs
-        token_pooling: Optional[torch.LongTensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-
+        images: torch.FloatTensor | None = None,  # image inputs
+        token_pooling: torch.LongTensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         # Get embeddings of input.
         # shape: (batch_size, seq_len, d_model)
         input_ids = input_ids * (input_ids != -1).to(input_ids.dtype)
         x = self.transformer.wte(input_ids)
 
-        image_features: Optional[torch.FloatTensor] = None    
+        image_features: torch.FloatTensor | None = None
         if images is not None:
             image_features = self.vision_backbone(images, token_pooling).to(x.device)
             is_image_patch = input_ids.view(-1) == self.config.image_patch_id
@@ -1454,26 +1430,25 @@ class Molmo2Model(Molmo2PreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        image_token_pooling: Optional[torch.Tensor] = None,
-        image_grids: Optional[torch.Tensor] = None,
-        image_num_crops: Optional[torch.Tensor] = None,
-        pixel_values_videos: Optional[torch.Tensor] = None,
-        video_token_pooling: Optional[torch.Tensor] = None,
-        video_grids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        image_token_pooling: torch.Tensor | None = None,
+        image_grids: torch.Tensor | None = None,
+        image_num_crops: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        video_token_pooling: torch.Tensor | None = None,
+        video_grids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Molmo2ModelOutputWithPast]:
-        
+    ) -> tuple | Molmo2ModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1482,7 +1457,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-        
+
         images, token_pooling = self.merge_visual_inputs(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1495,15 +1470,15 @@ class Molmo2Model(Molmo2PreTrainedModel):
         )
 
         if images is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both images and inputs_embeds at the same time."
-            )
+            raise ValueError("You cannot specify both images and inputs_embeds at the same time.")
 
         if inputs_embeds is None:
             inputs_embeds, image_features = self.build_input_embeddings(
-                input_ids, images, token_pooling,
+                input_ids,
+                images,
+                token_pooling,
             )
-        
+
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
@@ -1529,20 +1504,17 @@ class Molmo2Model(Molmo2PreTrainedModel):
             # (e.g. compiled prefill) AND `images` are not provided. Determining prefill in that case requires
             # checking data values, which is not compile-compatible.
             is_prefill = (
-                not use_cache
-                or past_key_values is None
-                or not past_key_values.is_initialized
-                or images is not None
+                not use_cache or past_key_values is None or not past_key_values.is_initialized or images is not None
             )
             if token_type_ids is not None and is_prefill:
                 # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
                 mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
                     token_type_ids.to(cache_position.device)
                 )
-            
+
             # Create the mask
             causal_mask_mapping = create_causal_mask(**mask_kwargs)
-        
+
         outputs = self.transformer(
             attention_mask=causal_mask_mapping,
             position_ids=position_ids,
@@ -1577,7 +1549,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         self.model = Molmo2Model(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.vocab_size = config.vocab_size
-        
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1586,13 +1558,13 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value: torch.nn.Module) -> None:
         self.model.transformer.wte = value
-    
+
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)
-    
+
     def get_decoder(self):
         return self.model.get_decoder()
-    
+
     # Make modules available throught conditional class for BC
     @property
     def language_model(self) -> torch.nn.Module:
@@ -1606,26 +1578,26 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        pixel_values: Optional[torch.Tensor] = None,
-        image_token_pooling: Optional[torch.Tensor] = None,
-        image_grids: Optional[torch.Tensor] = None,
-        image_num_crops: Optional[torch.Tensor] = None,
-        pixel_values_videos: Optional[torch.Tensor] = None,
-        video_token_pooling: Optional[torch.Tensor] = None,
-        video_grids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        pixel_values: torch.Tensor | None = None,
+        image_token_pooling: torch.Tensor | None = None,
+        image_grids: torch.Tensor | None = None,
+        image_num_crops: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        video_token_pooling: torch.Tensor | None = None,
+        video_grids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Molmo2CausalLMOutputWithPast]:
+    ) -> tuple | Molmo2CausalLMOutputWithPast:
         r"""
         ```python
         >>> from PIL import Image
@@ -1691,22 +1663,21 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        image_token_pooling: Optional[torch.Tensor] = None,
-        image_grids: Optional[torch.Tensor] = None,
-        image_num_crops: Optional[torch.Tensor] = None,
-        pixel_values_videos: Optional[torch.Tensor] = None,
-        video_token_pooling: Optional[torch.Tensor] = None,
-        video_grids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Optional[Union[int, torch.Tensor]] = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        image_token_pooling: torch.Tensor | None = None,
+        image_grids: torch.Tensor | None = None,
+        image_num_crops: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        video_token_pooling: torch.Tensor | None = None,
+        video_grids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor | None = None,
         **kwargs,
     ):
-
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1728,17 +1699,17 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             model_inputs["video_grids"] = video_grids
 
         return model_inputs
-    
+
     # Adapted from ...models.gemma3.modeling_gemma3
     @staticmethod
     def create_masks_for_generate(
         config: PreTrainedConfig,
         input_embeds: torch.Tensor,
-        attention_mask: Optional[torch.Tensor],
+        attention_mask: torch.Tensor | None,
         cache_position: torch.Tensor,
-        past_key_values: Optional[Cache],
-        position_ids: Optional[torch.Tensor],
-        token_type_ids: Optional[torch.Tensor] = None,
+        past_key_values: Cache | None,
+        position_ids: torch.Tensor | None,
+        token_type_ids: torch.Tensor | None = None,
         **kwargs,
     ) -> dict:
         # Prepare mask arguments
@@ -1753,10 +1724,8 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         # Add the token type ids mask for generate as well
         if token_type_ids is not None and input_embeds.shape[1] != 1:
             # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
-            mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
-                token_type_ids.to(cache_position.device)
-            )
-        
+            mask_kwargs["or_mask_function"] = token_type_ids_mask_function(token_type_ids.to(cache_position.device))
+
         return create_masks_for_generate(**mask_kwargs)
 
 
