@@ -32,11 +32,11 @@ from ...utils.backbone_utils import (
 )
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..rt_detr.modeling_rt_detr import (
+    RTDetrAIFILayer,
     RTDetrConvNormLayer,
     RTDetrDecoder,
     RTDetrDecoderLayer,
     RTDetrDecoderOutput,
-    RTDetrEncoder,
     RTDetrEncoderLayer,
     RTDetrForObjectDetection,
     RTDetrFrozenBatchNorm2d,
@@ -45,7 +45,6 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrModel,
     RTDetrPreTrainedModel,
     RTDetrRepVggBlock,
-    RTDetrSinePositionEmbedding,
     inverse_sigmoid,
 )
 from ..rt_detr_v2.modeling_rt_detr_v2 import multi_scale_deformable_attention_v2
@@ -729,11 +728,7 @@ class DFineEncoderLayer(RTDetrEncoderLayer):
         )
 
 
-class DFineEncoder(RTDetrEncoder):
-    pass
-
-
-class DFinePositionEmbedding(RTDetrSinePositionEmbedding):
+class DFineAIFILayer(RTDetrAIFILayer):
     pass
 
 
@@ -935,13 +930,10 @@ class DFineHybridEncoder(RTDetrHybridEncoder):
         self.eval_size = config.eval_size
         self.out_channels = [self.encoder_hidden_dim for _ in self.in_channels]
         self.out_strides = self.feat_strides
-        # position embedding
-        self.position_embedding = DFinePositionEmbedding(
-            embed_dim=self.encoder_hidden_dim,
-            temperature=self.positional_encoding_temperature,
-        )
-        # encoder transformer
-        self.encoder = nn.ModuleList([DFineEncoder(config) for _ in range(len(self.encode_proj_layers))])
+
+        # AIFI (Attention-based Intra-scale Feature Interaction) layers
+        self.aifi = nn.ModuleList([DFineAIFILayer(config) for _ in range(len(self.encode_proj_layers))])
+
         # top-down fpn
         self.lateral_convs = nn.ModuleList()
         self.fpn_blocks = nn.ModuleList()

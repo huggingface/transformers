@@ -826,31 +826,6 @@ class RTDetrDecoderLayer(nn.Module):
         return hidden_states
 
 
-class RTDetrEncoder(nn.Module):
-    def __init__(self, config: RTDetrConfig):
-        super().__init__()
-        self.config = config
-        self.layers = nn.ModuleList([RTDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
-
-    @check_model_inputs()
-    def forward(
-        self,
-        src,
-        src_mask=None,
-        spatial_position_embeddings=None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        hidden_states = src
-        for layer in self.layers:
-            hidden_states = layer(
-                hidden_states,
-                attention_mask=src_mask,
-                spatial_position_embeddings=spatial_position_embeddings,
-                **kwargs,
-            )
-        return hidden_states
-
-
 class RTDetrSinePositionEmbedding(nn.Module):
     """
     2D sinusoidal position embedding used in RT-DETR hybrid encoder.
@@ -888,6 +863,63 @@ class RTDetrSinePositionEmbedding(nn.Module):
         out_h = grid_h.flatten()[..., None] @ omega[None]
 
         return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
+
+
+class RTDetrAIFILayer(nn.Module):
+    """
+    AIFI (Attention-based Intra-scale Feature Interaction) layer used in RT-DETR hybrid encoder.
+    """
+
+    def __init__(self, config: RTDetrConfig):
+        super().__init__()
+        self.config = config
+        self.encoder_hidden_dim = config.encoder_hidden_dim
+        self.eval_size = config.eval_size
+
+        self.position_embedding = RTDetrSinePositionEmbedding(
+            embed_dim=self.encoder_hidden_dim,
+            temperature=config.positional_encoding_temperature,
+        )
+        self.layers = nn.ModuleList([RTDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`):
+                Feature map to process.
+        """
+        batch_size = hidden_states.shape[0]
+        height, width = hidden_states.shape[2:]
+
+        hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
+
+        if self.training or self.eval_size is None:
+            pos_embed = self.position_embedding(
+                width=width,
+                height=height,
+                device=hidden_states.device,
+                dtype=hidden_states.dtype,
+            )
+        else:
+            pos_embed = None
+
+        for layer in self.layers:
+            hidden_states = layer(
+                hidden_states,
+                attention_mask=None,
+                spatial_position_embeddings=pos_embed,
+                **kwargs,
+            )
+
+        hidden_states = (
+            hidden_states.permute(0, 2, 1).reshape(batch_size, self.encoder_hidden_dim, height, width).contiguous()
+        )
+
+        return hidden_states
 
 
 class RTDetrMLPPredictionHead(nn.Module):
@@ -987,14 +1019,18 @@ class RTDetrPreTrainedModel(PreTrainedModel):
 
 class RTDetrHybridEncoder(RTDetrPreTrainedModel):
     """
-    Decoder consisting of a projection layer, a set of `RTDetrEncoder`, a top-down Feature Pyramid Network
-    (FPN) and a bottom-up Path Aggregation Network (PAN). More details on the paper: https://huggingface.co/papers/2304.08069
+    Hybrid encoder consisting of AIFI (Attention-based Intra-scale Feature Interaction) layers,
+    a top-down Feature Pyramid Network (FPN) and a bottom-up Path Aggregation Network (PAN).
+    More details on the paper: https://huggingface.co/papers/2304.08069
 
     Args:
         config: RTDetrConfig
     """
 
-    _can_record_outputs = {"attentions": RTDetrSelfAttention}
+    _can_record_outputs = {
+        "hidden_states": RTDetrAIFILayer,
+        "attentions": RTDetrSelfAttention,
+    }
 
     def __init__(self, config: RTDetrConfig):
         super().__init__(config)
@@ -1009,16 +1045,9 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
         self.out_strides = self.feat_strides
         self.num_fpn_stages = len(self.in_channels) - 1
         self.num_pan_stages = len(self.in_channels) - 1
-        activation = config.activation_function
 
-        # position embedding
-        self.position_embedding = RTDetrSinePositionEmbedding(
-            embed_dim=self.encoder_hidden_dim,
-            temperature=self.positional_encoding_temperature,
-        )
-
-        # encoder transformer
-        self.encoder = nn.ModuleList([RTDetrEncoder(config) for _ in range(len(self.encode_proj_layers))])
+        # AIFI (Attention-based Intra-scale Feature Interaction) layers
+        self.aifi = nn.ModuleList([RTDetrAIFILayer(config) for _ in range(len(self.encode_proj_layers))])
 
         # top-down FPN
         self.lateral_convs = nn.ModuleList()
@@ -1030,7 +1059,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
                 out_channels=self.encoder_hidden_dim,
                 kernel_size=1,
                 stride=1,
-                activation=activation,
+                activation=config.activation_function,
             )
             fpn_block = RTDetrCSPRepLayer(config)
             self.lateral_convs.append(lateral_conv)
@@ -1046,7 +1075,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
                 out_channels=self.encoder_hidden_dim,
                 kernel_size=3,
                 stride=2,
-                activation=activation,
+                activation=config.activation_function,
             )
             pan_block = RTDetrCSPRepLayer(config)
             self.downsample_convs.append(downsample_conv)
@@ -1065,45 +1094,17 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
         """
-        output_hidden_states = kwargs.get("output_hidden_states", self.config.output_hidden_states)
+        feature_maps = inputs_embeds
 
-        hidden_states = inputs_embeds
-
-        encoder_states = () if output_hidden_states else None
-
-        # encoder
+        # AIFI: Apply transformer encoder to specified feature levels
         if self.config.encoder_layers > 0:
             for i, enc_ind in enumerate(self.encode_proj_layers):
-                if output_hidden_states:
-                    encoder_states = encoder_states + (hidden_states[enc_ind],)
-                height, width = hidden_states[enc_ind].shape[2:]
-                # flatten [batch, channel, height, width] to [batch, height*width, channel]
-                src_flatten = hidden_states[enc_ind].flatten(2).permute(0, 2, 1)
-                if self.training or self.eval_size is None:
-                    pos_embed = self.position_embedding(
-                        width=width,
-                        height=height,
-                        device=src_flatten.device,
-                        dtype=src_flatten.dtype,
-                    )
-                else:
-                    pos_embed = None
-
-                layer_outputs = self.encoder[i](
-                    src_flatten,
-                    spatial_position_embeddings=pos_embed,
-                    **kwargs,
-                )
-                hidden_states[enc_ind] = (
-                    layer_outputs.permute(0, 2, 1).reshape(-1, self.encoder_hidden_dim, height, width).contiguous()
-                )
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states[enc_ind],)
+                feature_maps[enc_ind] = self.aifi[i](feature_maps[enc_ind], **kwargs)
 
         # top-down FPN
-        fpn_feature_maps = [hidden_states[-1]]
+        fpn_feature_maps = [feature_maps[-1]]
         for idx, (lateral_conv, fpn_block) in enumerate(zip(self.lateral_convs, self.fpn_blocks)):
-            backbone_feature_map = hidden_states[self.num_fpn_stages - idx - 1]
+            backbone_feature_map = feature_maps[self.num_fpn_stages - idx - 1]
             top_fpn_feature_map = fpn_feature_maps[-1]
             # apply lateral block
             top_fpn_feature_map = lateral_conv(top_fpn_feature_map)
@@ -1126,7 +1127,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
             new_pan_feature_map = pan_block(fused_feature_map)
             pan_feature_maps.append(new_pan_feature_map)
 
-        return BaseModelOutput(last_hidden_state=pan_feature_maps, hidden_states=encoder_states)
+        return BaseModelOutput(last_hidden_state=pan_feature_maps)
 
 
 def inverse_sigmoid(x, eps=1e-5):

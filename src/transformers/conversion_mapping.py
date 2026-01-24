@@ -206,6 +206,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("out_proj", "o_proj"),
             WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
+            WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
         ],
         "conditional_detr": [
             WeightRenaming("backbone.conv_encoder", "backbone"),
@@ -239,6 +240,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("out_proj", "o_proj"),
             WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.layers.0"),
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.layers.1"),
+            WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
         ],
         "jamba": [
             WeightConverter(
