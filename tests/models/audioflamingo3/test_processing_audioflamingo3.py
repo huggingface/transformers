@@ -189,3 +189,96 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self._test_apply_chat_template(
             "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
         )
+
+
+class AudioFlamingo3MusicProcessingTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = AudioFlamingo3Processor
+
+    @classmethod
+    @require_torch
+    @require_torchaudio
+    def setUpClass(cls):
+        cls.checkpoint = "nvidia/music-flamingo-2601-hf"
+        cls.tmpdirname = tempfile.mkdtemp()
+
+        processor = AudioFlamingo3Processor.from_pretrained(cls.checkpoint)
+        processor.save_pretrained(cls.tmpdirname)
+
+    @require_torch
+    @require_torchaudio
+    def get_tokenizer(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
+
+    @require_torch
+    @require_torchaudio
+    def get_audio_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).audio_processor
+
+    @require_torch
+    @require_torchaudio
+    def get_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+
+    @require_torch
+    @require_torchaudio
+    def test_music_chat_template_and_boundaries(self):
+        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        expected_system_prompt = (
+            "<|im_start|>system\nYou are Music Flamingo, a multimodal assistant for language and music. "
+            "On each turn you receive an audio clip which contains music and optional text, "
+            "you will receive at least one or both; use your world knowledge and reasoning "
+            "to help the user with any task. Interpret the entirety of the content any input music"
+            "--regardlenss of whether the user calls it audio, music, or sound.<|im_end|>\n"
+        )
+
+        # Verify that the music-specific system prompt is preserved
+        self.assertIn(expected_system_prompt, processor.tokenizer.chat_template)
+
+        # Basic integration test with dummy audio
+        conversations = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Analyze this track."},
+                    {
+                        "type": "audio",
+                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
+                    },
+                ],
+            }
+        ]
+
+        inputs = processor.apply_chat_template(
+            conversations, tokenize=True, return_dict=True, add_generation_prompt=True
+        )
+
+        decoded = processor.decode(inputs["input_ids"][0])
+
+        if processor.audio_bos_token is not None:
+            self.assertIn(processor.audio_bos_token, decoded)
+        if processor.audio_eos_token is not None:
+            self.assertIn(processor.audio_eos_token, decoded)
+
+        self.assertIn("<|im_start|>user", decoded)
+        self.assertIn("Analyze this track", decoded)
+        self.assertIn("<|im_start|>assistant", decoded)
+
+    @require_librosa
+    @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
+    def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):
+        if return_tensors == "np":
+            self.skipTest("AudioFlamingo3 only supports PyTorch tensors")
+        self._test_apply_chat_template(
+            "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
+        )
+
+    def prepare_processor_dict(self):
+        return {
+            "audio_bos_token": "<|sound_bos|>",
+            "audio_eos_token": "<|sound_eos|>",
+            "max_audio_len": 1200,
+        }

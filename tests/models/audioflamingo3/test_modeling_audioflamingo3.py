@@ -352,3 +352,158 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(gen_ids.cpu(), exp_ids)
         txt = self.processor.batch_decode(gen_ids, skip_special_tokens=True)
         self.assertListEqual(txt, exp_txt)
+
+
+class AudioFlamingo3MusicModelTester(AudioFlamingo3ModelTester):
+    def __init__(
+        self,
+        parent,
+        audio_token_id=0,
+        seq_length=25,
+        feat_seq_length=60,
+        text_config=None,
+        audio_config=None,
+        is_training=True,
+    ):
+        if audio_config is None:
+            audio_config = {
+                "model_type": "audioflamingo3_encoder",
+                "hidden_size": 16,
+                "num_attention_heads": 4,
+                "intermediate_size": 16,
+                "num_hidden_layers": 2,
+                "num_mel_bins": 80,
+                "max_source_positions": 30,
+                "initializer_range": 0.02,
+                "use_rotary_embedding": True,
+            }
+        super().__init__(parent, audio_token_id, seq_length, feat_seq_length, text_config, audio_config, is_training)
+
+
+@require_torch
+class AudioFlamingo3MusicForConditionalGenerationModelTest(AudioFlamingo3ForConditionalGenerationModelTest):
+    """
+    Model tester for `AudioFlamingo3ForConditionalGeneration` configured as Music Flamingo (with rotary embeddings).
+    """
+
+    def setUp(self):
+        self.model_tester = AudioFlamingo3MusicModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=AudioFlamingo3Config, has_text_modality=False)
+
+
+@require_torch
+class AudioFlamingo3MusicForConditionalGenerationIntegrationTest(unittest.TestCase):
+    """
+    Slow tests against the public checkpoint to validate processor-model alignment and in-place fusion
+    for the Music Flamingo configuration.
+    """
+
+    @classmethod
+    def setUp(cls):
+        cleanup(torch_device, gc_collect=True)
+        cls.checkpoint = "nvidia/music-flamingo-2601-hf"
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    @slow
+    def test_fixture_single_matches(self):
+        """
+        reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/c979f0f1a2b9223fa137faf1c02022d4#file-reproducer-py
+        """
+        path = Path(__file__).parent.parent.parent / "fixtures/audioflamingo3/expected_music_results_single.json"
+        with open(path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        exp_ids = torch.tensor(raw["token_ids"])
+        exp_txt = raw["transcriptions"]
+
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Describe this track in full detail - tell me the genre, tempo, and key, then dive into the instruments, production style, and overall mood it creates.",
+                    },
+                    {
+                        "type": "audio",
+                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_1.mp3",
+                    },
+                ],
+            }
+        ]
+
+        model = AudioFlamingo3ForConditionalGeneration.from_pretrained(
+            self.checkpoint, device_map=torch_device, dtype=torch.bfloat16
+        ).eval()
+
+        batch = self.processor.apply_chat_template(
+            conversation, tokenize=True, add_generation_prompt=True, return_dict=True
+        ).to(model.device, dtype=model.dtype)
+        seq = model.generate(**batch)
+        inp_len = batch["input_ids"].shape[1]
+        gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
+
+        torch.testing.assert_close(gen_ids.cpu(), exp_ids)
+        txt = self.processor.batch_decode(gen_ids, skip_special_tokens=True)
+        self.assertListEqual(txt, exp_txt)
+
+    @slow
+    def test_fixture_batched_matches(self):
+        """
+        reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/c979f0f1a2b9223fa137faf1c02022d4#file-reproducer-py
+        """
+        path = Path(__file__).parent.parent.parent / "fixtures/audioflamingo3/expected_music_results_batched.json"
+        with open(path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        exp_ids = torch.tensor(raw["token_ids"])
+        exp_txt = raw["transcriptions"]
+
+        conversations = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Describe this track in full detail - tell me the genre, tempo, and key, then dive into the instruments, production style, and overall mood it creates.",
+                        },
+                        {
+                            "type": "audio",
+                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_1.mp3",
+                        },
+                    ],
+                }
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Generate a structured lyric sheet from the input music.",
+                        },
+                        {
+                            "type": "audio",
+                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_2.mp3",
+                        },
+                    ],
+                }
+            ],
+        ]
+
+        model = AudioFlamingo3ForConditionalGeneration.from_pretrained(
+            self.checkpoint, device_map=torch_device, dtype=torch.bfloat16
+        ).eval()
+
+        batch = self.processor.apply_chat_template(
+            conversations, tokenize=True, add_generation_prompt=True, return_dict=True
+        ).to(model.device, dtype=model.dtype)
+        seq = model.generate(**batch)
+        inp_len = batch["input_ids"].shape[1]
+        gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
+
+        torch.testing.assert_close(gen_ids.cpu(), exp_ids)
+        txt = self.processor.batch_decode(gen_ids, skip_special_tokens=True)
+        self.assertListEqual(txt, exp_txt)
