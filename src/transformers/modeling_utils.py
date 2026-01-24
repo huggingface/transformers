@@ -4113,7 +4113,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
-        if model.can_generate() and hasattr(model, "adjust_generation_fn"):
+        if model.can_generate() and hasattr(model, "adjust_generation_fn") and not gguf_file:
             model.adjust_generation_fn(
                 generation_config,
                 from_auto_class,
