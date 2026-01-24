@@ -168,6 +168,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         output_hidden_states: bool | list[int] | None = None,
         return_dict: bool | None = None,
         do_pooling: bool | None = None,
+        use_cache: bool | None = None,
         **kwargs,
     ) -> TimmWrapperModelOutput | tuple[Tensor, ...]:
         r"""
