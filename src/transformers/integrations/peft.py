@@ -527,7 +527,7 @@ class PeftAdapterMixin:
         if adapter_state_dict is None:
             adapter_filenames = ["adapter_model.safetensors", "adapter_model.bin"]
             if load_config.use_safetensors is False:
-                adapter_filenames = adapter_filenames.reverse()
+                adapter_filenames.reverse()
 
             checkpoint_files = sharded_metadata = None
             last_error = None
