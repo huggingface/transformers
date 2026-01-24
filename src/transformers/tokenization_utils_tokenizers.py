@@ -772,6 +772,21 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         **kwargs,
     ) -> BatchEncoding:
         # Input validation (from _call_one)
+        def _replace_invalid_surrogates(s: str) -> str:
+            # Replace unpaired UTF-16 surrogate code points with U+FFFD.
+            if any(0xD800 <= ord(ch) <= 0xDFFF for ch in s):
+                return "".join("\uFFFD" if 0xD800 <= ord(ch) <= 0xDFFF else ch for ch in s)
+            return s
+
+        def _sanitize_text_input(t):
+            if isinstance(t, str):
+                return _replace_invalid_surrogates(t)
+            if isinstance(t, tuple):
+                return tuple(_sanitize_text_input(x) for x in t)
+            if isinstance(t, list):
+                return [_sanitize_text_input(x) for x in t]
+            return t
+
         def _is_valid_text_input(t):
             if isinstance(t, str):
                 return True
@@ -799,10 +814,15 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             )
 
         if text_pair is not None and not _is_valid_text_input(text_pair):
+
             raise ValueError(
                 "text input must be of type `str` (single example), `list[str]` (batch or single pretokenized example) "
                 "or `list[list[str]]` (batch of pretokenized examples) or `list[tuple[list[str], list[str]]]` (batch of pretokenized sequence pairs)."
             )
+
+        # Sanitize invalid surrogates before passing to the rust tokenizer.
+        text = _sanitize_text_input(text)
+        text_pair = _sanitize_text_input(text_pair)
 
         # Batch detection (from _call_one)
         if is_split_into_words:
