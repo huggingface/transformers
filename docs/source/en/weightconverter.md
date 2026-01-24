@@ -117,3 +117,28 @@ This worst case only occurs when all other parameters have loaded before the dem
 For example, a MoE model using [`MergeModulelist`] for experts on each layer, the theoretical worst-case memory peak is model size plus experts on one layer.
 
 These worst-case scenarios are uncommon. The actual memory peak tends to stay close to the model size.
+
+## Reusing the dynamic loading building blocks
+
+Dynamic weight loading is not limited to full model checkpoints. The same building blocks let you load *any* set of
+weights as long as you can describe how checkpoint keys map to parameters and ensure the target modules exist.
+
+At a high level, the contract looks like this:
+
+1. **Prepare the model namespace.** Make sure the modules/parameters you want to load are present and named the way your
+   mapping will target them. For adapters, that means calling `inject_adapter_in_model(...)` so adapter modules exist
+   before loading. For custom heads or extra modules, instantiate them on the model first.
+2. **Describe how to map weights.** Build a conversion/renaming list (for example, in a helper like
+   `_build_peft_weight_mapping(...)`) using [`WeightConverter`] or [`WeightRenaming`]. This is where you express how
+   checkpoint keys should be converted, split, merged, or renamed to match your model namespace.
+   You can do mostly 3 things:
+    - add operations to the list of converters: these will be applied on all weights except for the ones collected in any of the `WeightConverter`. These in general should be `WeightRenaming` operations
+    - add operations to the list of operations of each converter: this is what happens for `Quantization`, where we just add a quantization operation after the list of operations of any `WeightConverter`.
+    - replace / map operations to your custom operations: this is what happens with `peft`. We replace the `Concatenate` operation of say `mixtral`, to be `PeftConcatenate`. This way, when the adapter checkpoint is read, the weights to be concatenated are collected, and are properly formated for `peft`
+3. **Load + finalize + report.** Use the core loader to perform the conversion and populate tensors, then finalize and
+   log results. Concretely, this flow is:
+   - `LoadStateDictConfig(...)` + `_load_pretrained_model(...)` to load and convert.
+   - `_finalize_load_state_dict(...)` to move any missing/mismatched tensors off `meta`, initialize them, and tie weights.
+   - `log_state_dict_report(...)` to report missing/unexpected/mismatched keys (and conversion errors).
+
+These APIs are expose to allow you to handle custom code, custom weight format, but also make sure you benefit from the highest and most efficient weight loading, sharding and good quality of life of `transformers` API!

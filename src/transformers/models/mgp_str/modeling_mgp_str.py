@@ -398,12 +398,14 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         ...     MgpstrProcessor,
         ...     MgpstrForSceneTextRecognition,
         ... )
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> # load image from the IIIT-5k dataset
         >>> url = "https://i.postimg.cc/ZKwLg2Gw/367-14.png"
-        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
 
         >>> processor = MgpstrProcessor.from_pretrained("alibaba-damo/mgp-str-base")
         >>> pixel_values = processor(images=image, return_tensors="pt").pixel_values

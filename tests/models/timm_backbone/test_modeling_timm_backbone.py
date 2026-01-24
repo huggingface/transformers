@@ -85,8 +85,8 @@ class TimmBackboneModelTester:
 class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TimmBackbone,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": TimmBackbone} if is_torch_available() else {}
-    test_resize_embeddings = False
 
+    test_resize_embeddings = False
     has_attentions = False
 
     def setUp(self):

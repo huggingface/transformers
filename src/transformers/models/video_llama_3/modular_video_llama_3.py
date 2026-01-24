@@ -37,7 +37,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -169,6 +169,8 @@ class VideoLlama3Config(PreTrainedConfig):
             The image token index to encode the image prompt.
         video_token_id (`int`, *optional*, defaults to 151656):
             The video token index to encode the image prompt.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
     """
 
     model_type = "video_llama_3"
@@ -181,6 +183,7 @@ class VideoLlama3Config(PreTrainedConfig):
         vision_config=None,
         image_token_id=151655,
         video_token_id=151656,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -205,6 +208,7 @@ class VideoLlama3Config(PreTrainedConfig):
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 
@@ -590,54 +594,62 @@ class VideoLlama3Model(Qwen2VLModel):
     def get_rope_index(self):
         raise AttributeError("Not needed for VideoLLaMA3")
 
+    @can_return_tuple
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
         video_merge_sizes: torch.LongTensor,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
+            The spatial downsampling ratio of each video feature.
         """
-        Encodes videos into continuous embeddings that can be forwarded to the language model.
+        return self.get_image_features(
+            pixel_values=pixel_values_videos,
+            image_grid_thw=video_grid_thw,
+            image_merge_sizes=video_merge_sizes,
+            **kwargs,
+        )
 
-        Args:
-            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input videos.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-            video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
-                The spatial downsampling ratio of each video feature.
-        """
-        return self.get_image_features(pixel_values_videos, video_grid_thw, video_merge_sizes)
-
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
         image_merge_sizes: torch.LongTensor,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
+            The spatial downsampling ratio of each image feature.
         """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-            image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
-                The spatial downsampling ratio of each image feature.
-        """
-        image_embeds = self.vision_model(
+        vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
             merge_sizes=image_merge_sizes,
             return_dict=True,
-        ).last_hidden_state
-        image_embeds = self.projector(image_embeds)
+            **kwargs,
+        )
+        last_hidden_state = vision_outputs.last_hidden_state
+        image_embeds = self.projector(last_hidden_state)
 
         split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
         image_embeds = torch.split(image_embeds, split_sizes.tolist())
+        vision_outputs.pooler_output = image_embeds
 
-        return image_embeds
+        return vision_outputs
 
     @can_return_tuple
     def forward(
@@ -676,7 +688,9 @@ class VideoLlama3Model(Qwen2VLModel):
 
         image_embeds = None
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, image_merge_sizes)
+            image_embeds = self.get_image_features(
+                pixel_values, image_grid_thw, image_merge_sizes, return_dict=True
+            ).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -685,7 +699,9 @@ class VideoLlama3Model(Qwen2VLModel):
 
         video_embeds = None
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, video_merge_sizes)
+            video_embeds = self.get_video_features(
+                pixel_values_videos, video_grid_thw, video_merge_sizes, return_dict=True
+            ).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             if video_compression_mask is not None:
                 video_embeds = video_embeds[video_compression_mask.to(video_embeds.device)]

@@ -1067,7 +1067,8 @@ class MllamaVisionModel(MllamaPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MllamaVisionModel
 
         >>> checkpoint = "meta-llama/Llama-3.2-11B-Vision"
@@ -1075,7 +1076,8 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained(checkpoint)
 
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = processor(images=image, return_tensors="pt")
 
         >>> output = model(**inputs)
@@ -1454,7 +1456,6 @@ class MllamaModel(MllamaPreTrainedModel):
         self.hidden_size = config.text_config.hidden_size
         self.max_num_tiles = config.vision_config.max_num_tiles
         self.vision_output_dim = config.vision_config.vision_output_dim
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
 
         self.vision_model = MllamaVisionModel._from_config(config.vision_config)
         self.language_model = MllamaTextModel._from_config(config.text_config)
@@ -1657,7 +1658,8 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MllamaForConditionalGeneration
 
         >>> checkpoint = "meta-llama/Llama-3.2-11B-Vision"
@@ -1666,7 +1668,8 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
 
         >>> prompt = "<|image|>If I had to write a haiku for this one"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
 

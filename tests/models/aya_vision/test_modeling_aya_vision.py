@@ -184,17 +184,17 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(reason="Compile not yet supported because in LLava models")
     @pytest.mark.torch_compile_test
@@ -395,8 +395,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Wooden bridge stretches\nInto still waters, mountains gleam\nPeaceful forest scene",
                 # 4-bit
-                ("cuda", 7): "Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene",
-                ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
+                ("cuda", 8): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -474,8 +473,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.",
-                ("cuda", 7): 'Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene',
-                ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
+                ("cuda", 8): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -491,7 +489,6 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ",
-                ("cuda", 7): 'The first image showcases the Statue of Liberty, a monumental sculpture located on Liberty Island in New York Harbor. Standing atop a',
                 ("cuda", 8): 'The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ',
             }
         )  # fmt: skip

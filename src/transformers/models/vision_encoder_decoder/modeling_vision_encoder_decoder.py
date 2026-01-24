@@ -87,7 +87,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             if not isinstance(config, self.config_class):
                 raise ValueError(f"Config: {config} has to be of type {self.config_class}")
 
-        if config.decoder.cross_attention_hidden_size is not None:
+        if getattr(config.decoder, "cross_attention_hidden_size", None) is not None:
             if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
                 raise ValueError(
                     "If `cross_attention_hidden_size` is specified in the decoder's configuration, it has to be equal"
@@ -132,7 +132,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         # encoder outputs might need to be projected to different dimension for decoder
         if (
             self.encoder.config.hidden_size != self.decoder.config.hidden_size
-            and self.decoder.config.cross_attention_hidden_size is None
+            and getattr(self.decoder.config, "cross_attention_hidden_size", None) is None
         ):
             self.enc_to_dec_proj = nn.Linear(self.encoder.config.hidden_size, self.decoder.config.hidden_size)
 
@@ -242,7 +242,9 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                     encoder_pretrained_model_name_or_path, **kwargs_encoder, return_unused_kwargs=True
                 )
 
-                if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
+                if getattr(encoder_config, "is_decoder", False) or getattr(
+                    encoder_config, "add_cross_attention", False
+                ):
                     logger.info(
                         f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model "
                         "from a decoder model. Cross-attention and causal mask are disabled."
@@ -343,7 +345,8 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
         ```python
         >>> from transformers import AutoProcessor, VisionEncoderDecoderModel
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
 
@@ -352,7 +355,8 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
         >>> # load image from the IAM dataset
         >>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
 
         >>> # training
         >>> model.config.decoder_start_token_id = processor.tokenizer.eos_token_id
@@ -396,7 +400,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         # optionally project encoder_hidden_states
         if (
             self.encoder.config.hidden_size != self.decoder.config.hidden_size
-            and self.decoder.config.cross_attention_hidden_size is None
+            and getattr(self.decoder.config, "cross_attention_hidden_size", None) is None
         ):
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 

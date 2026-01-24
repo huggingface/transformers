@@ -238,13 +238,11 @@ class ChameleonConfig(PreTrainedConfig):
         self.vocabulary_map = vocabulary_map
         self.image_token_id = vocabulary_map.get("<image>") if vocabulary_map is not None else None
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["ChameleonConfig", "ChameleonVQVAEConfig"]

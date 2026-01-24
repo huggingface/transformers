@@ -415,7 +415,7 @@ class SamHQPositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.scale = config.scale
-        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
+        self.positional_embedding = nn.Parameter(self.scale * torch.randn((2, config.num_pos_feats)))
 
     def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
@@ -1233,7 +1233,9 @@ class SamHQPromptEncoder(nn.Module):
 class SamHQModel(SamHQPreTrainedModel):
     input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamHQTwoWayAttentionBlock, index=2)}
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
+    _tied_weights_keys = {
+        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -1393,16 +1395,18 @@ class SamHQModel(SamHQPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("sushmanth/sam_hq_vit_b")
         >>> processor = AutoProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
 
-        >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> input_points = [[[400, 650]]]  # 2D location of a window on the car
-        >>> inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt")
+        >>> inputs = processor(images=image, input_points=input_points, return_tensors="pt")
 
         >>> # Get high-quality segmentation mask
         >>> outputs = model(**inputs)

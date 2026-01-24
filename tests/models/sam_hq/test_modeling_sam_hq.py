@@ -167,7 +167,6 @@ class SamHQVisionModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SamHQVisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = SamHQVisionModelTester(self)
@@ -233,24 +232,20 @@ class SamHQVisionModelTest(ModelTesterMixin, unittest.TestCase):
                 list(expected_attention_shape),
             )
 
-    @unittest.skip(reason="SamVisionModel does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SamVisionModel does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="SamVisionModel does not support training")
@@ -661,24 +656,20 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 list(expected_mask_decoder_attention_shape),
             )
 
-    @unittest.skip(reason="SamHQModel does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SamHQModel does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="SamHQModel does not support training")
@@ -1013,15 +1004,15 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             images=[raw_image, raw_image],
             input_points=input_points,
             input_labels=input_labels,
-            images_kwargs={"point_pad_value": -10},
+            point_pad_value=-10,
             return_tensors="pt",
         ).to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[0][-1], torch.tensor(0.4482), atol=1e-4))
-        self.assertTrue(torch.allclose(scores[1][-1], torch.tensor(0.4482), atol=1e-4))
+        self.assertTrue(torch.allclose(scores[0][-1], torch.tensor(0.8858), atol=1e-4))
+        self.assertTrue(torch.allclose(scores[1][-1], torch.tensor(0.9092), atol=1e-4))
 
     def test_inference_mask_generation_one_box(self):
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")

@@ -25,7 +25,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -144,29 +144,33 @@ class Idefics3VisionEmbeddings(nn.Module):
             size=(batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0, device=pixel_values.device
         )
 
-        for batch_idx, p_attn_mask in enumerate(patch_attention_mask):
-            nb_patches_h = p_attn_mask[:, 0].sum()
-            nb_patches_w = p_attn_mask[0].sum()
+        nb_patches_h = patch_attention_mask[:, :, 0].sum(dim=1)  # (batch_size,)
+        nb_patches_w = patch_attention_mask[:, 0, :].sum(dim=1)  # (batch_size,)
 
-            step_h = 1.0 / nb_patches_h
-            step_w = 1.0 / nb_patches_w
+        step_h = 1.0 / nb_patches_h  # (batch_size,)
+        step_w = 1.0 / nb_patches_w  # (batch_size,)
 
-            h_indices = torch.arange(nb_patches_h, device=position_ids.device, dtype=torch.float32)
-            w_indices = torch.arange(nb_patches_w, device=position_ids.device, dtype=torch.float32)
-            fractional_coords_h = h_indices * step_h
-            fractional_coords_w = w_indices * step_w
+        max_patches_h = patch_attention_mask.size(1)
+        max_patches_w = patch_attention_mask.size(2)
+        h_indices = torch.arange(max_patches_h, device=position_ids.device, dtype=torch.float32)
+        w_indices = torch.arange(max_patches_w, device=position_ids.device, dtype=torch.float32)
 
-            fractional_coords_h = torch.clamp(fractional_coords_h, max=(1.0 - 1e-6))
-            fractional_coords_w = torch.clamp(fractional_coords_w, max=(1.0 - 1e-6))
+        fractional_coords_h = h_indices[None, :] * step_h[:, None]
+        fractional_coords_w = w_indices[None, :] * step_w[:, None]
 
-            fractional_coords_h = fractional_coords_h.to(pixel_values.dtype)
-            fractional_coords_w = fractional_coords_w.to(pixel_values.dtype)
+        fractional_coords_h = torch.clamp(fractional_coords_h, max=(1.0 - 1e-6))
+        fractional_coords_w = torch.clamp(fractional_coords_w, max=(1.0 - 1e-6))
 
-            bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
-            bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
+        fractional_coords_h = fractional_coords_h.to(pixel_values.dtype)
+        fractional_coords_w = fractional_coords_w.to(pixel_values.dtype)
 
-            pos_ids = (bucket_coords_h[:, None] * self.num_patches_per_side + bucket_coords_w).flatten()
-            position_ids[batch_idx][p_attn_mask.view(-1)] = pos_ids
+        bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
+        bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
+
+        pos_ids = bucket_coords_h[:, :, None] * self.num_patches_per_side + bucket_coords_w[:, None, :]
+        pos_ids = pos_ids.reshape(batch_size, -1)
+
+        position_ids[patch_attention_mask.view(batch_size, -1)] = pos_ids[patch_attention_mask.view(batch_size, -1)]
 
         embeddings = embeddings + self.position_embedding(position_ids)
         return embeddings
@@ -566,17 +570,19 @@ class Idefics3Model(Idefics3PreTrainedModel):
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
         return inputs_embeds
 
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, pixel_attention_mask: torch.LongTensor | None = None
-    ):
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            pixel_attention_mask (`torch.LongTensor`, *optional*):
-                The attention mask indicating padded regions in the image.
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_attention_mask: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        pixel_attention_mask (`torch.LongTensor`, *optional*):
+            The attention mask indicating padded regions in the image.
         """
         batch_size, num_images, num_channels, height, width = pixel_values.shape
         pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
@@ -605,12 +611,16 @@ class Idefics3Model(Idefics3PreTrainedModel):
         patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
 
         # Get sequence from the vision encoder
-        image_hidden_states = self.vision_model(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
-        image_hidden_states.last_hidden_state
+        image_outputs = self.vision_model(
+            pixel_values=pixel_values, patch_attention_mask=patch_attention_mask, return_dict=True, **kwargs
+        )
+        image_hidden_states = image_outputs.last_hidden_state
 
         # Modality projection & resampling
-        image_hidden_states = self.connector(image_hidden_states.last_hidden_state)
-        return image_hidden_states
+        image_features = self.connector(image_hidden_states)
+        image_outputs.pooler_output = image_features
+
+        return image_outputs
 
     @can_return_tuple
     @auto_docstring(
@@ -678,7 +688,9 @@ class Idefics3Model(Idefics3PreTrainedModel):
         if pixel_values is not None and image_hidden_states is not None:
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
-            image_hidden_states = self.get_image_features(pixel_values, pixel_attention_mask)
+            image_hidden_states = self.get_image_features(
+                pixel_values, pixel_attention_mask, return_dict=True
+            ).pooler_output
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
 
@@ -741,10 +753,22 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
     def set_input_embeddings(self, value):
         self.model.text_model.set_input_embeddings(value)
 
+    @auto_docstring
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, pixel_attention_mask: torch.LongTensor | None = None
-    ):
-        return self.model.get_image_features(pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask)
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_attention_mask: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        pixel_attention_mask (`torch.LongTensor`, *optional*):
+            The attention mask indicating padded regions in the image.
+        """
+        return self.model.get_image_features(
+            pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask, **kwargs
+        )
 
     @can_return_tuple
     @auto_docstring
@@ -781,7 +805,6 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         Example:
 
         ```python
-        >>> import requests
         >>> import torch
         >>> from PIL import Image
         >>> from io import BytesIO

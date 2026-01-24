@@ -24,6 +24,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, can_return_tuple, logging
+from ...utils.generic import OutputRecorder
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
     Qwen3MoeExperts,
@@ -39,6 +40,8 @@ from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLModel,
     Qwen3VLTextAttention,
     Qwen3VLTextModel,
+    Qwen3VLVisionAttention,
+    Qwen3VLVisionBlock,
     Qwen3VLVisionModel,
     Qwen3VLVisionRotaryEmbedding,
 )
@@ -87,8 +90,6 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -158,7 +159,6 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         initializer_range: float | None = 0.02,
         rms_norm_eps: float | None = 1e-6,
         use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
         decoder_sparse_step: int | None = 1,
@@ -199,7 +199,6 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
         super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
             ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
             **kwargs,
         )
@@ -234,7 +233,7 @@ class Qwen3VLMoeConfig(Qwen3VLConfig):
         vision_end_token_id (`int`, *optional*, defaults to 151653):
             The end token index to encode the image prompt.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie the word embeddings.
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Qwen3VLMoeForConditionalGeneration, Qwen3VLMoeConfig
@@ -318,8 +317,20 @@ class Qwen3VLMoeVisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
     pass
 
 
-class Qwen3VLMoeVisionModel(Qwen3VLVisionModel):
+class Qwen3VLMoeVisionAttention(Qwen3VLVisionAttention):
     pass
+
+
+class Qwen3VLMoeVisionBlock(Qwen3VLVisionBlock):
+    pass
+
+
+class Qwen3VLMoeVisionModel(Qwen3VLVisionModel):
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name="mlp.gate", index=0),
+        "hidden_states": Qwen3VLMoeVisionBlock,
+        "attentions": Qwen3VLMoeVisionAttention,
+    }
 
 
 class Qwen3VLMoeTextModel(Qwen3VLTextModel):
@@ -365,7 +376,8 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
         Example:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Qwen3VLMoeForConditionalGeneration
 
         >>> model = Qwen3VLMoeForConditionalGeneration.from_pretrained("Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto")

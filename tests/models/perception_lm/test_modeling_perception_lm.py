@@ -281,13 +281,13 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
         self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
         super().test_training_gradient_checkpointing()
 
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
-        super().test_training_gradient_checkpointing_use_reentrant()
-
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
         super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(
         reason="PE/TIMM's attention implementation is self configured and won't raise ValueError on global attention implementation."
@@ -365,6 +365,15 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     @unittest.skip("Cannot set `output_attentions` for timm models.")
     def test_generate_compilation_all_outputs(self):
         pass
+
+    @unittest.skip("Cannot set output_attentions on timm models.")
+    def test_get_image_features_attentions(self):
+        pass
+
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
+        # For models that rely on timm for their vision backend, it's hard to infer how many layers the model has
+        # from the timm config alone. So, we're just hardcoding the expected number of hidden states here.
+        return 2
 
 
 TEST_MODEL_PATH = "facebook/Perception-LM-1B"

@@ -95,6 +95,10 @@ class MoonshineConfig(PreTrainedConfig):
             Denotes beginning of sequences token id.
         eos_token_id (`int`, *optional*, defaults to 2):
             Denotes end of sequences token id.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -143,6 +147,8 @@ class MoonshineConfig(PreTrainedConfig):
         attention_dropout: float | None = 0.0,
         bos_token_id: int | None = 1,
         eos_token_id: int | None = 2,
+        pad_token_id: int | None = None,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -172,16 +178,15 @@ class MoonshineConfig(PreTrainedConfig):
         self.is_encoder_decoder = is_encoder_decoder
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.rope_parameters = rope_parameters
         kwargs.setdefault("partial_rotary_factor", 0.9)  # assign default for BC
 
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["MoonshineConfig"]
