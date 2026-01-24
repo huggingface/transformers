@@ -803,7 +803,7 @@ class TrainingArguments:
         default="no",
         metadata={"help": "The evaluation strategy to use."},
     )
-    multi_dataset_strategy: Union[MultiDatasetStrategy, str] = field(
+    multi_dataset_strategy: MultiDatasetStrategy | str = field(
         default="sampling",
         metadata={
             "help": (
@@ -813,7 +813,7 @@ class TrainingArguments:
             )
         },
     )
-    dataset_sampling_strategy: Union[SamplingStrategy, str] = field(
+    dataset_sampling_strategy: SamplingStrategy | str = field(
         default="proportional",
         metadata={
             "help": (
