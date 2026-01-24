@@ -22,14 +22,14 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPast,
     BaseModelOutputWithPoolingAndCrossAttentions,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import TransformersKwargs
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import maybe_autocast
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
@@ -408,7 +408,7 @@ class NomicBertSelfOutput(BertSelfOutput):
 
 class NomicBertAttention(BertAttention):
     def __init__(
-        self, config, position_embedding_type=None, layer_idx=None, is_cross_attention=False
+        self, config, position_embedding_type=None, layer_idx=None, is_causal = False, is_cross_attention=False
     ):
         super().__init__(config, position_embedding_type=position_embedding_type)
 
@@ -531,7 +531,7 @@ class NomicBertLayer(BertLayer):
         position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        self_attention_output, _ = self.attention(
+        self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
             past_key_values=past_key_values,
@@ -540,13 +540,14 @@ class NomicBertLayer(BertLayer):
             position_ids=position_ids
             **kwargs,
         )
-        attention_output = self_attention_output
+        attention_output = self_attention_outputs[0]
+        outputs = self_attention_outputs[1:]
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
 
-        return layer_output
+        return (layer_output,) + outputs
 
 
 class NomicBertEncoder(BertEncoder):
@@ -568,8 +569,6 @@ class NomicBertEncoder(BertEncoder):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         cache_position: torch.Tensor | None = None,
@@ -579,7 +578,7 @@ class NomicBertEncoder(BertEncoder):
     ):
 
         for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(
+            layer_outputs = layer_module(
                 hidden_states,
                 attention_mask,
                 past_key_values=past_key_values,
@@ -589,8 +588,9 @@ class NomicBertEncoder(BertEncoder):
                 **kwargs,
             )
 
-        # TODO: remove the cross attention / decoder (causal) logic
-        return BaseModelOutputWithPastAndCrossAttentions(
+            hidden_states = layer_outputs[0]
+
+        return BaseModelOutputWithPast(
             last_hidden_state = hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
@@ -637,6 +637,8 @@ class NomicBertModel(BertModel):
         super().__init__(config)
 
         self.encoder = NomicBertEncoder(config, layer_class=NomicBertLayer)
+
+        self.rotary_emb = NomicBertRotaryEmbedding(config)
 
         self.post_init()
 
@@ -710,13 +712,20 @@ class NomicBertModel(BertModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if input_ids is not None:
+            batch_size, seq_length = input_ids.shape
             device = input_ids.device
-            seq_length = input_ids.shape[1]
         else:
+            batch_size, seq_length = inputs_embeds.shape[:-1]
             device = inputs_embeds.device
-            seq_length = inputs_embeds.shape[1]
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+
+        if position_ids is None:
+            position_ids = torch.arange(
+                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+            )
+            position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
+
         if cache_position is None:
             cache_position = torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
 
@@ -728,6 +737,8 @@ class NomicBertModel(BertModel):
             past_key_values_length=past_key_values_length,
         )
 
+        position_embeddings = self.rotary_emb(embedding_output, position_ids)
+
         attention_mask, encoder_attention_mask = self._create_attention_masks(
             attention_mask=attention_mask,
             encoder_attention_mask=encoder_attention_mask,
@@ -737,47 +748,26 @@ class NomicBertModel(BertModel):
             past_key_values=past_key_values,
         )
 
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        batch_size, seq_length = input_shape
-
-        if position_ids is None:
-            if inputs_embeds is not None:
-                position_ids = torch.arange(
-                    past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
-                )
-                position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
-            else:
-                position_ids = self.embeddings.create_position_ids_from_input_ids(
-                    input_ids, padding_idx=self.config.pad_token_id, past_key_values_length=past_key_values_length
-                )
-
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
             position_ids=position_ids,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         sequence_output = encoder_outputs.last_hidden_state
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        # TODO: remove the cross attention / decoder (causal) logic
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             past_key_values=encoder_outputs.past_key_values,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+            cross_attentions=None,
         )
 
 
@@ -786,6 +776,7 @@ class NomicBertForPreTraining(BertForPreTraining):
     base_model_prefix = "nomic_bert"
 
 
+@auto_docstring
 class NomicBertLMHeadModel(BertLMHeadModel):
     pass
 
