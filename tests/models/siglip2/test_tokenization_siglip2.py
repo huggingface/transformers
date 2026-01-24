@@ -22,9 +22,9 @@ from transformers.testing_utils import require_tokenizers
 @require_tokenizers
 class Siglip2TokenizerTest(unittest.TestCase):
     """
-    Integration test for Siglip2Tokenizer: 
-    - verify hub loading, 
-    - default lowercasing behavior, 
+    Integration test for Siglip2Tokenizer:
+    - verify hub loading,
+    - default lowercasing behavior,
     - save/load roundtrip.
     """
 
