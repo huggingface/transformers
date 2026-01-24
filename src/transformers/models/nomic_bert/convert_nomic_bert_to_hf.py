@@ -25,7 +25,7 @@ from transformers import (
 
 
 EPILOG_TXT = """Example:
-    python transformers/src/transformers/models/nomic_bert/convert_nomic_bert_to_hf.py --original_model_id nomic-ai/nomic-bert-2048 --output_hub_path org/nomic_bert
+    python transformers/src/transformers/models/nomic_bert/convert_nomic_bert_to_hf.py --original_model_id nomic-ai/nomic-embed-text-v1.5 --output_hub_path org/nomic_bert
 """
 
 
@@ -122,7 +122,7 @@ def convert_state_dict_to_hf(state_dict, config):
 
 def get_config(checkpoint):
     base_config = AutoConfig.from_pretrained(checkpoint)
-    if checkpoint == "nomic-ai/nomic-bert-2048":
+    if checkpoint == "nomic-ai/nomic-embed-text-v1.5":
         return NomicBertConfig(
             rotary_emb_fraction=base_config.rotary_emb_fraction,
             rotary_emb_base=base_config.rotary_emb_base,
@@ -191,7 +191,7 @@ def main():
     )
     parser.add_argument(
         "--original_model_id",
-        default="nomic-ai/nomic-bert-2048",
+        default="nomic-ai/nomic-embed-text-v1.5",
         help="Hub location of the model",
     )
     parser.add_argument(

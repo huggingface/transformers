@@ -12,20 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from collections.abc import Callable
 from typing import Optional
 
 import torch
 import torch.nn as nn
 
-from ...cache_utils import Cache, DynamicCache
+from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters, dynamic_rope_update
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
+from ...pytorch_utils import apply_chunking_to_forward
+from ...utils import TransformersKwargs
 from ...utils.generic import maybe_autocast
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
@@ -289,6 +293,37 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 @use_kernelized_func(apply_rotary_pos_emb)
 class NomicBertSelfAttention(BertSelfAttention):
     """
@@ -309,17 +344,15 @@ class NomicBertSelfAttention(BertSelfAttention):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         past_key_values=None,
-        output_attentions=False,
         position_ids=None,
         position_embeddings=None,
         cache_position = None,
         **kwargs,
     ):
-        batch_size, seq_len, hidden_size = hidden_states.size()
+
+        input_shape = hidden_states.shape[:-1]
+
         # Let BERT do QKV projection
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -350,39 +383,24 @@ class NomicBertSelfAttention(BertSelfAttention):
                     key_layer, value_layer, self.layer_idx, cache_kwargs
                 )
 
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # Calculate Attention Scores
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        # Scale scores by sqrt(d_model) to stabilize gradients
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout.p,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        # Apply mask if present
-        if attention_mask is not None:
-            attention_scores = attention_scores + attention_mask
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
 
-        # Normalize to Probabilities
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-        attention_probs = self.dropout(attention_probs)
-
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        # Calculate Weighted Sum (Context)
-        context_layer = torch.matmul(attention_probs, value_layer)
-        # Re-assemble Heads (Standard BERT Logic)
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-
-        # Flatten 'Heads' and 'HeadDim' back into a single 'Hidden' dimension
-        new_context_layer_shape = context_layer.size()[:-2] + (hidden_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        if self.is_decoder or past_key_values is not None:
-            outputs = outputs + (past_key_values,)
-
-        return outputs
-
+        return attn_output, attn_weights
 
 class NomicBertSelfOutput(BertSelfOutput):
     pass
@@ -409,6 +427,7 @@ class NomicBertAttention(BertAttention):
         encoder_attention_mask=None,
         past_key_values=None,
         output_attentions=False,
+        position_embeddings=None,
         position_ids=None,
     ):
         """
@@ -451,6 +470,7 @@ class NomicBertAttention(BertAttention):
             encoder_attention_mask,
             past_key_values,
             output_attentions,
+            position_embeddings=position_embeddings,
             position_ids=position_ids,
         )
 
@@ -465,7 +485,7 @@ class NomicBertAttention(BertAttention):
 class NomicBertIntermediate(BertIntermediate):
     """
     NomicBERT Intermediate layer.
-    Replaces standard BERT GELU with SwiGLU (Swish-Gated Linear Unit).
+    Replaces standard BERT GELU with SiLU (Swish).
 
     Standard BERT: Activation(Linear(x))
     NomicBERT:     SiLU(Gate(x)) * Value(x)
@@ -474,26 +494,20 @@ class NomicBertIntermediate(BertIntermediate):
     def __init__(self, config):
         super().__init__(config)
         # Add the Gate Layer
-        # SwiGLU needs a second parallel layer for the gate.
-        self.dense_gate = nn.Linear(config.hidden_size, config.intermediate_size)
-
-        # Force Activation to SiLU (Swish)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = nn.SiLU()
-        else:
-            self.intermediate_act_fn = config.hidden_act
+        # SiLU needs a second parallel layer for the gate.
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # Compute the Gate (Project + Swish Activation)
-        gate_output = self.intermediate_act_fn(self.dense_gate(hidden_states))
+        gate_output = self.act_fn(self.gate_proj(hidden_states))
+        up_output = self.up_proj(hidden_states)
+        down_proj = self.down_proj(gate_output * up_output)
 
-        # Compute the Value (Project Linear)
-        value_output = self.dense(hidden_states)
-
-        # Element-wise Multiplication (Gating)
-        intermediate_output = gate_output * value_output
-
-        return intermediate_output
+        return down_proj
 
 
 class NomicBertOutput(BertOutput):
@@ -509,30 +523,30 @@ class NomicBertLayer(BertLayer):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_values=None,
-        output_attentions=False,
-        position_ids=None,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.FloatTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.Tensor | None = None,
+        position_embeddings: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        self_attention_outputs = self.attention(
+        self_attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
-            head_mask,
-            output_attentions=output_attentions,
             past_key_values=past_key_values,
-            position_ids=position_ids,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+            position_ids=position_ids
+            **kwargs,
         )
-        attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]
+        attention_output = self_attention_output
 
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        outputs = (layer_output,) + outputs
-        return outputs
+        layer_output = apply_chunking_to_forward(
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+        )
+
+        return layer_output
 
 
 class NomicBertEncoder(BertEncoder):
@@ -552,119 +566,34 @@ class NomicBertEncoder(BertEncoder):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-        position_ids=None,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
+        position_embeddings: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
-        # DynamicCache is updated in place by attention layers
-        if self.gradient_checkpointing and self.training:
-            use_cache = False
-
-        next_decoder_cache = past_key_values if use_cache else None
-
-        for i, layer in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            past_key_value = None
-
-            if past_key_values is not None:
-                if not isinstance(past_key_values, Cache):
-                    raise ValueError("NomicBert only supports Cache-based past_key_values")
-                past_key_value = past_key_values
-
-            if self.gradient_checkpointing and self.training:
-                if not hidden_states.requires_grad:
-                    hidden_states.requires_grad_(True)
-
-                def custom_forward(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    output_attentions,
-                    position_ids,
-                ):
-                    # We manually reconstruct the call to layer() ensuring arguments match layer.forward signature
-                    return layer(
-                        hidden_states,
-                        attention_mask,
-                        layer_head_mask,
-                        encoder_hidden_states,
-                        encoder_attention_mask,
-                        None,  # past_key_value is always None during checkpointing
-                        output_attentions,
-                        position_ids,
-                    )
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    custom_forward,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    output_attentions,
-                    position_ids,
-                    use_reentrant=False,  # Optional: Recommended for modern PyTorch
-                )
-
-            else:
-                layer_outputs = layer(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                    position_ids=position_ids,
-                )
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    next_decoder_cache,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
+        for i, layer_module in enumerate(self.layer):
+            hidden_states = layer_module(
+                hidden_states,
+                attention_mask,
+                past_key_values=past_key_values,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                **kwargs,
             )
 
+        # TODO: remove the cross attention / decoder (causal) logic
         return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states,
-            past_key_values=next_decoder_cache,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
+            last_hidden_state = hidden_states,
+            past_key_values=past_key_values if use_cache else None,
         )
-
 
 class NomicBertPooler(BertPooler):
     pass
@@ -707,56 +636,9 @@ class NomicBertModel(BertModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
 
-        self.embeddings = NomicBertEmbeddings(config)
         self.encoder = NomicBertEncoder(config, layer_class=NomicBertLayer)
-        self.pooler = NomicBertPooler(config) if add_pooling_layer else None
 
         self.post_init()
-
-    def _check_past_key_values_for_generate(self, past_key_values):
-        if isinstance(past_key_values, Cache):
-            return
-        if past_key_values is None:
-            return
-        raise ValueError("NomicBert only supports Cache-based past_key_values during generation.")
-
-    def get_head_mask(
-        self, head_mask: torch.Tensor | None, num_hidden_layers: int, is_attention_chunked: bool = False
-    ) -> torch.Tensor:
-        """
-        Prepare the head mask if needed.
-        """
-        if head_mask is not None:
-            head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
-            if is_attention_chunked is True:
-                head_mask = head_mask.unsqueeze(-1)
-        else:
-            head_mask = [None] * num_hidden_layers
-        return head_mask
-
-    def _convert_head_mask_to_5d(self, head_mask, num_hidden_layers):
-        """-> [num_hidden_layers x batch x num_heads x seq_length x seq_length]"""
-        if head_mask.dim() == 1:
-            head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-            head_mask = head_mask.expand(num_hidden_layers, -1, -1, -1, -1)
-        elif head_mask.dim() == 2:
-            head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
-        assert head_mask.dim() == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
-        head_mask = head_mask.to(dtype=self.dtype)  # switch to float if need + fp16 compatibility
-        return head_mask
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        # HF may pass legacy tuple caches here
-        if past_key_values is None:
-            return None
-
-        # Convert legacy tuple -> Cache if needed
-        if not isinstance(past_key_values, Cache):
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-
-        # Reorder in-place and return Cache
-        past_key_values.reorder_cache(beam_idx)
-        return past_key_values
 
     def forward(
         self,
@@ -764,15 +646,12 @@ class NomicBertModel(BertModel):
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
-        head_mask=None,
         inputs_embeds=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
         use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        cache_position=None,
         **kwargs,
     ):
         """
@@ -786,8 +665,6 @@ class NomicBertModel(BertModel):
             position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Indices of positions of each input sequence token in the position embeddings. Selected in the range `[0,
                 config.max_position_embeddings - 1]`.
-            head_mask (`torch.FloatTensor` of shape `(num_attention_heads,)` or `(num_hidden_layers, num_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `input_ids` indices into associated vectors
@@ -803,10 +680,8 @@ class NomicBertModel(BertModel):
                 blocks) that can be used to speed up sequential decoding.
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers.
+            cache_position (`torch.Tensor, *optional*):
+                Position for the cache
 
         Returns:
             [`~modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions`] or `tuple(torch.FloatTensor)`:
@@ -819,21 +694,48 @@ class NomicBertModel(BertModel):
             - **cross_attentions** (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`) -- Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
             - **past_key_values** (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`) -- Tuple of `torch.FloatTensor` of length `config.n_layers`, with each tuple containing the cached key and value states of the self-attention blocks.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        if self.training:
-            use_cache = False
-
-        if not self.config.is_decoder:
+        if self.config.is_decoder:
+            use_cache = use_cache if use_cache is not None else self.config.use_cache
+        else:
             use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = (
+                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+                if encoder_hidden_states is not None or self.config.is_encoder_decoder
+                else DynamicCache(config=self.config)
+            )
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if input_ids is not None:
+            device = input_ids.device
+            seq_length = input_ids.shape[1]
+        else:
+            device = inputs_embeds.device
+            seq_length = inputs_embeds.shape[1]
+
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        if cache_position is None:
+            cache_position = torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
+
+        embedding_output = self.embeddings(
+            input_ids=input_ids,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            past_key_values_length=past_key_values_length,
+        )
+
+        attention_mask, encoder_attention_mask = self._create_attention_masks(
+            attention_mask=attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
+            embedding_output=embedding_output,
+            encoder_hidden_states=encoder_hidden_states,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+        )
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -845,15 +747,6 @@ class NomicBertModel(BertModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         batch_size, seq_length = input_shape
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        # Generate position_ids
-        past_key_values_length = 0
-        if past_key_values is not None:
-            if not isinstance(past_key_values, Cache):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-
-            past_key_values_length = past_key_values.get_seq_length()
 
         if position_ids is None:
             if inputs_embeds is not None:
@@ -866,58 +759,25 @@ class NomicBertModel(BertModel):
                     input_ids, padding_idx=self.config.pad_token_id, past_key_values_length=past_key_values_length
                 )
 
-        if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
-
-        if token_type_ids is None:
-            if hasattr(self.embeddings, "token_type_ids"):
-                if self.embeddings.token_type_ids.shape[1] < seq_length:
-                    token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-                else:
-                    buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-                    token_type_ids = buffered_token_type_ids.expand(batch_size, seq_length)
-            else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-
-        embedding_output = self.embeddings(
-            input_ids=input_ids,
-            position_ids=position_ids,
-            token_type_ids=token_type_ids,
-            inputs_embeds=inputs_embeds,
-            past_key_values_length=0,
-        )
-
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask[:, -seq_length:], input_shape)
-        encoder_extended_attention_mask = None
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
-            head_mask=head_mask,
+            attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_extended_attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            cache_position=cache_position,
             position_ids=position_ids,
+            **kwargs,
         )
-
-        sequence_output = encoder_outputs[0]
+        sequence_output = encoder_outputs.last_hidden_state
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
-
+        # TODO: remove the cross attention / decoder (causal) logic
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             past_key_values=encoder_outputs.past_key_values,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
         )
 
 
