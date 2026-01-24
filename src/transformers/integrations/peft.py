@@ -19,7 +19,7 @@ import re
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
-from ..conversion_mapping import get_model_conversion_mapping
+from ..conversion_mapping import get_model_conversion_mapping, get_checkpoint_conversion_mapping, _MODEL_TO_CONVERSION_PATTERN
 from ..core_model_loading import (
     Concatenate,
     ConversionOps,
@@ -291,8 +291,31 @@ def _build_peft_weight_mapping(
 
     return new_weight_conversions
 
+# The main reason we have to explicit this is because the conversion mapping
+# has the full layer name, while the config do not. We coould regex match but
+# this is more explicit and less error prone.
+_MOE_TARGET_MODULE_MAPPING: dict[str, dict[str, str]] = {
+    "mixtral": {
+        "gate": "gate.weight",
+        "w1": "gate_up_proj",
+        "w3": "gate_up_proj",
+        "w2": "down_proj",
+    },
+    "qwen2_moe": {
+        "gate": "gate.weight",
+        "gate_proj": "gate_up_proj",
+        "up_proj": "gate_up_proj",
+        "down_proj": "down_proj",
+    },
+}
 
-def patch_mixtral_moe_parameter_targeting(model, peft_config):
+_MOE_FUSED_TARGETS: dict[str, dict[str, set[str]]] = {
+    "mixtral": {"gate_up_proj": {"w1", "w3"}},
+    "qwen2_moe": {"gate_up_proj": {"gate_proj", "up_proj"}},
+}
+
+
+def patch_moe_parameter_targeting(model, peft_config):
     """PEFT currently assumes that expert layers are of shape
         (expert, in, out)
     but with Mixtral in transformers v5 this is not true anymore.
@@ -303,7 +326,8 @@ def patch_mixtral_moe_parameter_targeting(model, peft_config):
 
     import peft
 
-    if model.config.model_type == "mixtral":
+    model_type = getattr(model.config, "model_type", None)
+    if get_checkpoint_conversion_mapping(model_type) is not None:
         get_in_out_features = peft.tuners.lora.layer.ParamWrapper._get_in_out_features
 
         @wraps(get_in_out_features)
@@ -484,7 +508,7 @@ class PeftAdapterMixin:
 
         peft_weight_conversions = _build_peft_weight_mapping(weight_conversions, adapter_name, peft_config=peft_config)
 
-        patch_mixtral_moe_parameter_targeting(model=self, peft_config=peft_config)
+        patch_moe_parameter_targeting(model=self, peft_config=peft_config)
 
         if not hotswap:
             # Create and add fresh new adapters into the model, unless the weights are hotswapped
@@ -519,7 +543,7 @@ class PeftAdapterMixin:
                     last_error = error
 
             if checkpoint_files is None:
-                raise last_error or OSError("Could not resolve any adapter checkpoint files.")
+                raise last_error or OSError("Could not download either a .bin or a .safetensors adapter file.")
         else:
             checkpoint_files, sharded_metadata = [], {}
 
@@ -937,71 +961,60 @@ def maybe_load_adapters(
 # version.
 
 
-def _convert_peft_config_mixtral(peft_config):
-    peft_config.target_parameters = peft_config.target_parameters or set()
+def _convert_peft_config_moe(peft_config, model_type: str):
+    base_model_type = _MODEL_TO_CONVERSION_PATTERN.get(model_type, None)
+    if base_model_type is None:
+        return peft_config
 
-    # add gate.weight to target_parameters
+    target_module_mapping = _MOE_TARGET_MODULE_MAPPING[base_model_type]
+    fused_targets = _MOE_FUSED_TARGETS.get(base_model_type, {})
+
+    peft_config.target_parameters = set(peft_config.target_parameters or [])
+    peft_config.target_modules = set(peft_config.target_modules or [])
+    if not hasattr(peft_config, "rank_pattern") or peft_config.rank_pattern is None:
+        peft_config.rank_pattern = {}
+
+    new_target_parameters = peft_config.target_parameters.copy()
+    remaining_target_modules = set()
+    matched_targets: dict[str, set[str]] = {new_name: set() for new_name in fused_targets}
+
     for target in peft_config.target_modules:
-        if (target == "gate") or target.endswith(".gate"):
-            # FIXME: what if only specific layers are targeted, e.g. '0.gate'
-            peft_config.target_parameters.add(f"{target}.weight")
-    # remove gate from target_modules
-    peft_config.target_modules = {
-        key for key in peft_config.target_modules if not ((key == "gate") or (key.endswith(".gate")))
-    }
+        mapped_new_name = None
+        mapped_old_name = None
+        for old_name, new_name in target_module_mapping.items():
+            if (target == old_name) or target.endswith(f".{old_name}"):
+                mapped_new_name = new_name
+                mapped_old_name = old_name
+                break
 
-    # add expert layers: w1 & w3 => gate_up_proj, ModuleList of layers is now a stacked parameter.
-    for target in peft_config.target_modules:
-        msg_no_conversion_fused = (
-            f"Cannot convert {target} because these weights are now fused and "
-            "converting a single adapter into a fused weight is not supported "
-            "right now."
-        )
+        if mapped_new_name is None:
+            remaining_target_modules.add(target)
+            continue
 
-        # if only w1 or only w3 are targeted, conversion is not possible
-        if (target == "w1") or target.endswith(".w1"):
-            if target.replace("w1", "w3") not in peft_config.target_modules:
-                raise ValueError(msg_no_conversion_fused)
-        if (target == "w3") or target.endswith(".w3"):
-            if target.replace("w3", "w1") not in peft_config.target_modules:
-                raise ValueError(msg_no_conversion_fused)
+        new_target_parameters.add(mapped_new_name)
+        if mapped_new_name in fused_targets and mapped_old_name is not None:
+            matched_targets.setdefault(mapped_new_name, set()).add(mapped_old_name)
 
-        if (target == "w1") or target.endswith(".w1"):
-            # FIXME: what if only specific layers are targeted, e.g. '0.w1'
-            peft_config.target_parameters.add("gate_up_proj")
-    # remove w1 and w3
-    peft_config.target_modules = {
-        key for key in peft_config.target_modules if not ((key == "w1") or (key.endswith(".w1")))
-    }
-    peft_config.target_modules = {
-        key for key in peft_config.target_modules if not ((key == "w3") or (key.endswith(".w3")))
-    }
+    for new_name, required_old_targets in fused_targets.items():
+        present_targets = matched_targets.get(new_name, set())
+        if 0 < len(present_targets) < len(required_old_targets):
+            missing = ", ".join(sorted(required_old_targets - present_targets))
+            present = ", ".join(sorted(present_targets))
+            raise ValueError(
+                f"Cannot convert PEFT target(s) {present} without also targeting {missing} because they are fused into {new_name}."
+            )
 
-    # add expert layers: w2 => down_proj, ModuleList of layers is now a stacked parameter.
-    for target in peft_config.target_modules:
-        if (target == "w2") or target.endswith(".w2"):
-            # FIXME: what if only specific layers are targeted, e.g. '0.w2'
-            peft_config.target_parameters.add("down_proj")
-    # remove w1 and w3
-    peft_config.target_modules = {
-        key for key in peft_config.target_modules if not ((key == "w2") or (key.endswith(".w2")))
-    }
+        if len(present_targets) == len(required_old_targets) and len(required_old_targets) > 1:
+            peft_config.rank_pattern[rf".*\.{re.escape(new_name)}"] = peft_config.r * len(required_old_targets)
 
-    if "gate_up_proj" in peft_config.target_parameters:
-        # this weight is a fusion of two adapters so the internal representation is r*2
-        peft_config.rank_pattern[r".*\.experts\.gate_up_proj"] = peft_config.r * 2
+    peft_config.target_parameters = new_target_parameters
+    peft_config.target_modules = remaining_target_modules
 
     return peft_config
 
 
 def convert_peft_config_for_transformers(peft_config, model: torch.nn.Module, conversions: list[Any] | None):
     # FIXME document this properly
-    # Deal with weight conversion from transformers
-
-    ##############################
-    # check if conversion needed #
-    ##############################
-
     # If, for any reason, we cannot apply conversion, we just return the PEFT config as is.
     from peft import PeftType  # avoid circular import
 
@@ -1015,16 +1028,9 @@ def convert_peft_config_for_transformers(peft_config, model: torch.nn.Module, co
         # not a transformer model
         return peft_config
 
-    # TODO: deal with general renamings
-
-    ##########################
-    # model specific changes #
-    ##########################
-
     peft_config = copy.deepcopy(peft_config)  # don't mutate the original config
-
-    # TODO So far, only dealing with Mixtral
-    if model.config.model_type == "mixtral":
-        peft_config = _convert_peft_config_mixtral(peft_config)
+    model_type = getattr(model.config, "model_type", None)
+    if get_checkpoint_conversion_mapping(model_type) is not None:
+        peft_config = _convert_peft_config_moe(peft_config, model_type)
 
     return peft_config
