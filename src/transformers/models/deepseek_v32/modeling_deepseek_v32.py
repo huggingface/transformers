@@ -271,7 +271,7 @@ class DeepseekV32Indexer(nn.Module):
         self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.head_dim, bias=False)
         self.k_layernorm = nn.LayerNorm(self.head_dim)
-        self.weight_proj = nn.Linear(self.hidden_size, self.num_heads, dtype=torch.get_default_dtype(), bias=False)
+        self.weights_proj = nn.Linear(self.hidden_size, self.num_heads, dtype=torch.get_default_dtype(), bias=False)
         self.softmax_scale = self.head_dim**-0.5
 
     @torch.no_grad()
@@ -316,7 +316,7 @@ class DeepseekV32Indexer(nn.Module):
         k_cache = past_key_values_index.update(k_1h, self.layer_idx, cache_kwargs={"cache_position": cache_position})
 
         # Weights per head
-        head_weights = self.weight_proj(hidden_states) * (self.num_heads**-0.5)  # [B, S, H]
+        head_weights = self.weights_proj(hidden_states) * (self.num_heads**-0.5)  # [B, S, H]
         head_weights = head_weights.unsqueeze(-1) * self.softmax_scale  # [B, S, H, *]
         logits = torch.matmul(k_cache.unsqueeze(1), q_states.transpose(-1, -2))  # [B, M, N, H]
 
