@@ -1041,6 +1041,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
+        return_dict: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1048,11 +1049,23 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
+        return_dict (`bool`, *optional*):
+            Whether to return a BaseModelOutputWithPooling or a tuple. If None, uses model config.
+
+        Returns:
+            BaseModelOutputWithPooling or tuple: If return_dict=True, returns BaseModelOutputWithPooling.
+            If return_dict=False, returns tuple of tensors (pooler_output), one per image.
         """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        # Always get dict from inner call to access pooler_output
+        image_features = self.model.get_image_features(pixel_values, image_grid_thw, return_dict=True, **kwargs)
+        if return_dict:
+            return image_features
+        return image_features.pooler_output
 
     def get_image_tokens(self, hidden_states: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
         return self.model.get_image_tokens(hidden_states, image_grid_thw)
+
 
     def forward(
         self,
@@ -1456,6 +1469,13 @@ class GlmImageProcessor(ProcessorMixin):
         else:
             image_inputs = {}
             image_grid_thw = None
+
+        # Handle text=None case (image-only processing)
+        if text is None:
+            if images is None:
+                raise ValueError("You must provide at least one of `text` or `images`.")
+            return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
+            return BatchFeature(data=image_inputs, tensor_type=return_tensors)
 
         if not isinstance(text, list):
             text = [text]

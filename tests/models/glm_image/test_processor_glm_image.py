@@ -72,6 +72,14 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_name: str,
         input_data: list[str],
     ):
+        # Skip image modality tests for GLM-Image because the processor expands image tokens
+        # based on image size, making the tokenized output differ from direct tokenizer call
+        if modality == "image":
+            self.skipTest(
+                "GLM-Image processor expands image tokens based on image size, "
+                "making tokenized output differ from direct tokenizer call"
+            )
+
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")

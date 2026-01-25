@@ -131,6 +131,13 @@ class GlmImageProcessor(ProcessorMixin):
             image_inputs = {}
             image_grid_thw = None
 
+        # Handle text=None case (image-only processing)
+        if text is None:
+            if images is None:
+                raise ValueError("You must provide at least one of `text` or `images`.")
+            return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
+            return BatchFeature(data=image_inputs, tensor_type=return_tensors)
+
         if not isinstance(text, list):
             text = [text]
 
