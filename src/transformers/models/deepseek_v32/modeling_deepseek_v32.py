@@ -260,12 +260,12 @@ class DeepseekV32Indexer(nn.Module):
         self.config = config
         self.layer_idx = index_layer_idx
 
-        self.hidden_size: int = config.dim
+        self.hidden_size: int = config.hidden_size
         self.num_heads: int = config.index_n_heads
         self.num_local_heads: int = config.index_n_heads  # world_size handling can be added as needed
         self.head_dim: int = config.index_head_dim
         self.qk_rope_head_dim: int = config.qk_rope_head_dim
-        self.index_topk: int = config.index_topk
+        self.index_topk: int = config.index_top_k
         self.q_lora_rank: int = config.q_lora_rank
 
         self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.head_dim, bias=False)
@@ -383,9 +383,10 @@ class DeepseekV32Attention(nn.Module):
 
         self.scaling = self.qk_head_dim ** (-0.5)
         self.softmax_scale = self.qk_head_dim**-0.5
-        if config.max_seq_len > config.original_seq_len:
-            mscale = 0.1 * config.mscale * math.log(config.rope_factor) + 1.0
-            self.softmax_scale = self.softmax_scale * mscale * mscale
+        # if config.max_seq_len > config.original_seq_len:
+
+        #     mscale = 0.1 * config.mscale * math.log(config.rope_factor) + 1.0
+        #     self.softmax_scale = self.softmax_scale * mscale * mscale
 
         self.indexer = DeepseekV32Indexer(config, layer_idx)
 

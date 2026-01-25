@@ -223,6 +223,7 @@ class DeepseekV32Config(PreTrainedConfig):
         self.index_n_heads = index_n_heads
         self.index_head_dim = index_head_dim
         self.index_top_k = index_topk
+        self.max_seq_len = 16384
 
 
 __all__ = ["DeepseekV32Config"]

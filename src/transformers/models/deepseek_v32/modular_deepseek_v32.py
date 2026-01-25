@@ -39,6 +39,7 @@ class DeepseekV32Config(DeepseekV2Config):
         self.index_n_heads = index_n_heads
         self.index_head_dim = index_head_dim
         self.index_top_k = index_topk
+        self.max_seq_len = 16384
 
 
 class DeepseekV32MoEGate(DeepseekV2Experts):
@@ -67,7 +68,7 @@ class DeepseekV32Indexer(nn.Module):
         self.config = config
         self.layer_idx = index_layer_idx
 
-        self.hidden_size: int = config.dim
+        self.hidden_size: int = config.hidden_size
         self.num_heads: int = config.index_n_heads
         self.num_local_heads: int = config.index_n_heads  # world_size handling can be added as needed
         self.head_dim: int = config.index_head_dim
