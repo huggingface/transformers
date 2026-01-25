@@ -51,6 +51,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
+from ...pytorch_utils import BatchLinear
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_grouped_mm_available
 from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
 from .configuration_qwen2_moe import Qwen2MoeConfig
@@ -296,40 +297,48 @@ class Qwen2MoeAttention(nn.Module):
 
 @use_experts_implementation
 class Qwen2MoeExperts(nn.Module):
-    """Collection of expert weights stored as 3D tensors."""
+    """Collection of expert weights stored as BatchLinear layers for efficiency and PEFT support."""
 
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.num_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+
+        # Standardized modules instead of raw nn.Parameter or ModuleList
+        # This allows PEFT/LoRA to easily target these weights
+        self.gate_up_proj = BatchLinear(self.num_experts, self.hidden_dim, 2 * self.intermediate_dim, bias=False)
+        self.down_proj = BatchLinear(self.num_experts, self.intermediate_dim, self.hidden_dim, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
+        selected_experts: torch.Tensor,
+        routing_weights: torch.Tensor,
     ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-            expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        # hidden_states: [total_tokens, hidden_size]
+        # selected_experts: [total_tokens, top_k]
+        # routing_weights: [total_tokens, top_k]
 
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+        final_hidden_states = torch.zeros_like(hidden_states)
+        top_k = selected_experts.shape[1]
+
+        # We loop over top_k (usually 2 or 4) which is highly efficient
+        for i in range(top_k):
+            expert_indices = selected_experts[:, i]
+            weights = routing_weights[:, i].unsqueeze(-1)
+
+            # 1. Vectorized Gate & Up projections (SwiGLU)
+            gate_up_output = self.gate_up_proj(hidden_states, expert_indices)
+            gate, up = gate_up_output.chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+            # 2. Vectorized Down projection
+            current_hidden_states = self.down_proj(current_hidden_states, expert_indices)
+
+            # 3. Add to final output weighted by the router
+            final_hidden_states += weights * current_hidden_states
 
         return final_hidden_states
 

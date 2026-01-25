@@ -457,7 +457,7 @@ else:
         "get_wsd_schedule",
         "get_reduce_on_plateau_schedule",
     ]
-    _import_structure["pytorch_utils"] = ["Conv1D", "apply_chunking_to_forward"]
+    _import_structure["pytorch_utils"] = ["Conv1D", "BatchLinear", "apply_chunking_to_forward"]
     _import_structure["time_series_utils"] = []
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
@@ -677,6 +677,7 @@ if TYPE_CHECKING:
     from .pipelines import ZeroShotObjectDetectionPipeline as ZeroShotObjectDetectionPipeline
     from .pipelines import pipeline as pipeline
     from .processing_utils import ProcessorMixin as ProcessorMixin
+    from .pytorch_utils import BatchLinear as BatchLinear
     from .pytorch_utils import Conv1D as Conv1D
     from .pytorch_utils import apply_chunking_to_forward as apply_chunking_to_forward
 

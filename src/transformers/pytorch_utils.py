@@ -282,3 +282,83 @@ def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
         return wrapper
 
     return decorator
+
+
+class BatchLinear(nn.Module):
+    """
+    Standardized Linear layer for Mixture-of-Experts (MoE) architectures.
+
+    This module stores expert weights in a single 3D tensor [num_experts, out_features, in_features],
+    enabling efficient grouped forward passes and better integration with PEFT (LoRA) and quantization.
+
+    Args:
+        num_experts (`int`):
+            Number of experts.
+        in_features (`int`):
+            Size of each input sample.
+        out_features (`int`):
+            Size of each output sample.
+        bias (`bool`, *optional*, defaults to `True`):
+            Whether the layer uses a bias vector.
+    """
+
+    def __init__(
+        self,
+        num_experts: int,
+        in_features: int,
+        out_features: int,
+        bias: bool = True,
+        device=None,
+        dtype=None,
+    ):
+        factory_kwargs = {"device": device, "dtype": dtype}
+        super().__init__()
+        self.num_experts = num_experts
+        self.in_features = in_features
+        self.out_features = out_features
+
+        self.weight = nn.Parameter(torch.empty((num_experts, out_features, in_features), **factory_kwargs))
+        if bias:
+            self.bias = nn.Parameter(torch.empty((num_experts, out_features), **factory_kwargs))
+        else:
+            self.register_parameter("bias", None)
+
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        # Standard Kaiming initialization applied per expert
+        for i in range(self.num_experts):
+            nn.init.kaiming_uniform_(self.weight[i], a=5**0.5)
+            if self.bias is not None:
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight[i])
+                bound = 1 / (fan_in**0.5) if fan_in > 0 else 0
+                nn.init.uniform_(self.bias[i], -bound, bound)
+
+    def forward(self, hidden_states: torch.Tensor, expert_indices: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.Tensor`):
+                Input tensor of shape [total_tokens, in_features] or [batch, seq, in_features].
+            expert_indices (`torch.Tensor`):
+                Long tensor of shape [total_tokens] or [batch, seq] mapping each token to an expert ID.
+        """
+        orig_shape = hidden_states.shape
+        # Flatten to [total_tokens, in_features]
+        hidden_states = hidden_states.reshape(-1, self.in_features)
+        expert_indices = expert_indices.reshape(-1)
+
+        # 1. Gather expert weights: [num_experts, O, I] -> [total_tokens, O, I]
+        gathered_weights = self.weight[expert_indices]
+
+        # 2. Batch Matrix Multiplication: [T, 1, I] @ [T, I, O] -> [T, 1, O]
+        # transpose(1, 2) converts weights from [O, I] to [I, O] for the mm
+        output = torch.bmm(hidden_states.unsqueeze(1), gathered_weights.transpose(1, 2)).squeeze(1)
+
+        if self.bias is not None:
+            output += self.bias[expert_indices]
+
+        # Restore original shape with updated out_features
+        return output.reshape(*orig_shape[:-1], self.out_features)
+
+    def extra_repr(self) -> str:
+        return f"num_experts={self.num_experts}, in_features={self.in_features}, out_features={self.out_features}, bias={self.bias is not None}"
