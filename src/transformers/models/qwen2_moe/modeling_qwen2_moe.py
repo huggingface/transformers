@@ -30,7 +30,6 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -49,7 +48,7 @@ from ...modeling_layers import (
 )
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel  # Ensure BatchLinear is here
 from ...processing_utils import Unpack
 from ...pytorch_utils import BatchLinear
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_grouped_mm_available
@@ -297,16 +296,12 @@ class Qwen2MoeAttention(nn.Module):
 
 @use_experts_implementation
 class Qwen2MoeExperts(nn.Module):
-    """Collection of expert weights stored as BatchLinear layers for efficiency and PEFT support."""
-
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.num_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
 
-        # Standardized modules instead of raw nn.Parameter or ModuleList
-        # This allows PEFT/LoRA to easily target these weights
         self.gate_up_proj = BatchLinear(self.num_experts, self.hidden_dim, 2 * self.intermediate_dim, bias=False)
         self.down_proj = BatchLinear(self.num_experts, self.intermediate_dim, self.hidden_dim, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
@@ -314,30 +309,20 @@ class Qwen2MoeExperts(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        selected_experts: torch.Tensor,
-        routing_weights: torch.Tensor,
+        top_k_index: torch.Tensor,  # Must be named this for modularity
+        top_k_weights: torch.Tensor,  # Must be named this for modularity
     ) -> torch.Tensor:
-        # hidden_states: [total_tokens, hidden_size]
-        # selected_experts: [total_tokens, top_k]
-        # routing_weights: [total_tokens, top_k]
-
         final_hidden_states = torch.zeros_like(hidden_states)
-        top_k = selected_experts.shape[1]
+        top_k = top_k_index.shape[1]
 
-        # We loop over top_k (usually 2 or 4) which is highly efficient
         for i in range(top_k):
-            expert_indices = selected_experts[:, i]
-            weights = routing_weights[:, i].unsqueeze(-1)
+            expert_indices = top_k_index[:, i]
+            weights = top_k_weights[:, i].unsqueeze(-1)
 
-            # 1. Vectorized Gate & Up projections (SwiGLU)
             gate_up_output = self.gate_up_proj(hidden_states, expert_indices)
             gate, up = gate_up_output.chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
-
-            # 2. Vectorized Down projection
             current_hidden_states = self.down_proj(current_hidden_states, expert_indices)
-
-            # 3. Add to final output weighted by the router
             final_hidden_states += weights * current_hidden_states
 
         return final_hidden_states
@@ -456,13 +441,16 @@ class Qwen2MoePreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
         std = self.config.initializer_range
-        if isinstance(module, Qwen2MoeExperts):
-            init.normal_(module.gate_up_proj, mean=0.0, std=std)
-            init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, Qwen2MoeTopKRouter):
-            init.normal_(module.weight, mean=0.0, std=std)
+        # Add BatchLinear here to fix the AssertionError
+        if isinstance(module, (nn.Linear, BatchLinear)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 @auto_docstring
