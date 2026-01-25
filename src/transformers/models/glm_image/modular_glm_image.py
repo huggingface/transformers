@@ -1055,6 +1055,9 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         Returns:
             BaseModelOutputWithPooling or tuple: If return_dict=True, returns BaseModelOutputWithPooling.
             If return_dict=False, returns tuple of tensors (pooler_output), one per image.
+
+        Note:
+            External callers (e.g., diffusers) should use `return_dict=False` to get a tuple of tensors.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         # Always get dict from inner call to access pooler_output
@@ -1065,7 +1068,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
     def get_image_tokens(self, hidden_states: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
         return self.model.get_image_tokens(hidden_states, image_grid_thw)
-
 
     def forward(
         self,
