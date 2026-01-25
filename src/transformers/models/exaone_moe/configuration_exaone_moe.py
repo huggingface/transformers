@@ -37,13 +37,13 @@ class ExaoneMoeConfig(PreTrainedConfig):
             `inputs_ids` passed when calling [`ExaoneMoeModel`].
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to `hidden_size * 4`):
+        intermediate_size (`int`, *optional*, defaults to 16384):
             Dimensionality of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
+        num_key_value_heads (`int`, *optional*, defaults to 32):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -75,21 +75,42 @@ class ExaoneMoeConfig(PreTrainedConfig):
             with longer `max_position_embeddings`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        sliding_window (`int`, *optional*):
+        sliding_window (`int`, *optional*, defaults to 4096):
             The size of the sliding window for the sliding window attention.
-        sliding_window_pattern (`str`, *optional*):
+        sliding_window_pattern (`str`, *optional*, defaults to 4):
             The pattern to use for sliding window attention. Can be one of:
                 - `None`: No sliding window attention is used
                 - `int`: Every `sliding_window` layers, use global attention, else use local attention.
                 - `str`: A sequence of "L" (local attention) and "G" (global attention) characters that defines the
-                  attention pattern. The pattern starts from layer 0 and repeats every `sliding_window` layers. The
-                  final layer always uses global attention regardless of the pattern.
+                    attention pattern. The pattern starts from layer 0 and repeats every `sliding_window` layers. The
+                    final layer always uses global attention regardless of the pattern.
             For instance, sliding_window_pattern="LLLG" same as sliding_window=4, which means:
                 - Layer 0, 1, 2: local attention,
                 - Layer 3: global attention,
                 ...(repeated)
         layer_types (`list`, *optional*):
             Attention pattern for each layer. Prioritized over `sliding_window_pattern`.
+        mlp_layer_types (`list`, *optional*):
+            MLP pattern for each layer. Prioritized over `first_k_dense_replace`.
+        first_k_dense_replace (`int`, *optional*, defaults to 1):
+            Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
+                                                        \--k dense layers--/
+        moe_intermediate_size (`int`, *optional*, defaults to 1024):
+            Dimension of the MoE representations.
+        num_experts (`int`, *optional*, defaults to 64):
+            Number of routed experts.
+        num_experts_per_tok (`int`, *optional*, defaults to None):
+            Number of selected experts, None means dense model.
+        num_shared_experts (`int`, *optional*, defaults to 1):
+            Number of shared experts.
+        norm_topk_prob (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the weights of the routed experts.
+        routed_scaling_factor (`float`, *optional*, defaults to 2.5):
+            Scaling factor or routed experts.
+        n_group (`int`, *optional*, defaults to 1):
+            Number of groups for routed experts.
+        topk_group (`int`, *optional*, defaults to 1):
+            Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
 
     Example:
 
