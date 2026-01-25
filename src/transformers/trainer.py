@@ -1881,8 +1881,7 @@ class Trainer:
         output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
         self.save_model(output_dir, _internal_call=True)
         if self.args.should_save:
-            # Update the `TrainerControl` state to where we are currently
-            self.state.stateful_callbacks["TrainerControl"] = self.control.state()
+            self._update_stateful_callbacks()
             self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
@@ -3149,16 +3148,7 @@ class Trainer:
 
         # Save the Trainer state
         if self.args.should_save:
-            # Update `ExportableState` callbacks and `TrainerControl` state to where we are currently
-            for cb in [
-                cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
-            ]:
-                cb_name = cb.__class__.__name__
-                cb_state = cb.state()
-                if isinstance(self.state.stateful_callbacks[cb_name], list):
-                    self.state.stateful_callbacks[cb_name].append(cb_state)
-                else:
-                    self.state.stateful_callbacks[cb_name] = cb_state
+            self._update_stateful_callbacks()
             self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
 
         if self.args.push_to_hub:
@@ -3168,6 +3158,21 @@ class Trainer:
         if self.args.should_save:
             # we use mtime as default, filesystems without mtime support will be detected in `_sorted_checkpoints`
             self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
+
+    def _update_stateful_callbacks(self):
+        new_stateful_callbacks = {}
+        # Update `ExportableState` callbacks and `TrainerControl` state to where we are currently
+        for cb in [cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)]:
+            cb_name = cb.__class__.__name__
+            cb_state = cb.state()
+            if isinstance(self.state.stateful_callbacks[cb_name], list):
+                if cb_name not in new_stateful_callbacks:
+                    new_stateful_callbacks[cb_name] = []
+                new_stateful_callbacks[cb_name].append(cb_state)
+            else:
+                new_stateful_callbacks[cb_name] = cb_state
+
+        self.state.stateful_callbacks = new_stateful_callbacks
 
     def _save_rng_state(self, output_dir):
         # Save RNG state in non-distributed training
