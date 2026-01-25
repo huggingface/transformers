@@ -192,13 +192,13 @@ text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)
 ```
 ### Text-only usage: Siglip2Tokenizer
 
-If you are encoding text without a processor (for example, via [AutoTokenizer]), use [Siglip2Tokenizer].
-Siglip2Tokenizer is a thin wrapper around the underlying fast tokenizer that:
+If you are encoding text without a processor (for example, via [`AutoTokenizer`]), use [`Siglip2Tokenizer`].
+`Siglip2Tokenizer` applies **lowercasing** at the tokenizer backend level (matching SigLIP2 training-time normalization),
+while keeping the same vocabulary/tokenization as the original tokenizer.
 
-- Applies lowercasing at the tokenizer backend level (via a normalizer)
-- Preserves the original vocabulary and tokenization
+- Lowercasing is handled via tokenizer normalizer
+- Padding/truncation defaults are handled by processor kwargs (`Siglip2ProcessorKwargs`)
 
-> This is equivalent to the text preprocessing applied automatically when using [`AutoProcessor`] with SigLIP2 checkpoints.
 
 ```py
 from transformers import Siglip2Tokenizer
@@ -206,8 +206,13 @@ from transformers import Siglip2Tokenizer
 model_id = "google/siglip2-so400m-patch14-384"
 tokenizer = Siglip2Tokenizer.from_pretrained(model_id)
 
-# lowercasing + padding/truncation to 64 applied by default
-inputs = tokenizer(["HELLO WORLD"], return_tensors="pt")
+inputs = tokenizer(
+    ["HELLO WORLD"],
+    padding="max_length",
+    truncation=True,
+    max_length=64,
+    return_tensors="pt",
+)
 ```
 ## Notes
 
