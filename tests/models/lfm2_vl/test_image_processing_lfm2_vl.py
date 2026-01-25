@@ -839,124 +839,70 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         patches from image 0 don't end up in image 1's output and vice versa.
         This was a bug caused by incorrect permute/reshape operations in crop_image_to_patches.
         """
-        image_processing = self.fast_image_processing_class(
-            do_image_splitting=True,
-            use_thumbnail=False,  # Disable thumbnail for simpler verification
-            min_tiles=2,
-            max_tiles=4,
-            tile_size=512,
-        )
+        for use_thumbnail in [False, True]:
+            with self.subTest(use_thumbnail=use_thumbnail):
+                image_processing = self.fast_image_processing_class(
+                    do_image_splitting=True,
+                    use_thumbnail=use_thumbnail,
+                    min_tiles=2,
+                    max_tiles=4,
+                    tile_size=512,
+                )
 
-        # Create two large images with completely different solid colors
-        # Red image: RGB = (255, 0, 0)
-        # Blue image: RGB = (0, 0, 255)
-        red_image = Image.new("RGB", (1024, 1024), color=(255, 0, 0))
-        blue_image = Image.new("RGB", (1024, 1024), color=(0, 0, 255))
+                # Create two large images with completely different solid colors
+                # Red image: RGB = (255, 0, 0)
+                # Blue image: RGB = (0, 0, 255)
+                red_image = Image.new("RGB", (1024, 1024), color=(255, 0, 0))
+                blue_image = Image.new("RGB", (1024, 1024), color=(0, 0, 255))
 
-        result = image_processing(
-            [[red_image], [blue_image]],
-            return_tensors="pt",
-            return_row_col_info=True,
-            do_rescale=False,  # Keep original pixel values for easier verification
-            do_normalize=False,
-        )
+                result = image_processing(
+                    [[red_image], [blue_image]],
+                    return_tensors="pt",
+                    return_row_col_info=True,
+                    do_rescale=False,  # Keep original pixel values for easier verification
+                    do_normalize=False,
+                )
 
-        # Each 1024x1024 image should be split into 2x2 = 4 tiles
-        red_tiles = result.image_rows[0].item() * result.image_cols[0].item()
-        blue_tiles = result.image_rows[1].item() * result.image_cols[1].item()
-        self.assertEqual(red_tiles, 4)
-        self.assertEqual(blue_tiles, 4)
+                # Each 1024x1024 image should be split into 2x2 = 4 tiles
+                red_tiles = result.image_rows[0].item() * result.image_cols[0].item()
+                blue_tiles = result.image_rows[1].item() * result.image_cols[1].item()
+                self.assertEqual(red_tiles, 4)
+                self.assertEqual(blue_tiles, 4)
 
-        # Total should be 8 patches (4 from red + 4 from blue)
-        self.assertEqual(result.pixel_values.shape[0], 8)
+                # Calculate expected total patches
+                # Without thumbnail: 4 + 4 = 8
+                # With thumbnail: (4 + 1) + (4 + 1) = 10
+                thumb_count = 1 if use_thumbnail else 0
+                expected_total = (red_tiles + thumb_count) + (blue_tiles + thumb_count)
+                self.assertEqual(result.pixel_values.shape[0], expected_total)
 
-        # pixel_values shape: (num_images, max_num_patches, patch_dim)
-        # where patch_dim = 3 * encoder_patch_size^2
-        pixel_values = result.pixel_values
-        patch_size = image_processing.encoder_patch_size
-        num_patches_per_image = red_tiles
+                pixel_values = result.pixel_values
+                patch_size = image_processing.encoder_patch_size
+                patches_per_image = red_tiles + thumb_count
 
-        # Check red image patches (first 4 in the batch)
-        # All patches should have high red, zero green, zero blue
-        for i in range(num_patches_per_image):
-            # pixel_values[i] shape: (max_num_patches, patch_dim) where patch_dim = 3 * patch_size^2
-            # Get first patch and reshape to (3, patch_size, patch_size)
-            first_patch = pixel_values[i][0].view(3, patch_size, patch_size)
-            red_mean = first_patch[0].float().mean().item()
-            blue_mean = first_patch[2].float().mean().item()
-            self.assertGreater(
-                red_mean, blue_mean, f"Red image patch {i} has more blue than red - patches may be interleaved"
-            )
+                # Check red image patches (and thumbnail if enabled)
+                # All should have high red, zero blue
+                for i in range(patches_per_image):
+                    first_patch = pixel_values[i][0].view(3, patch_size, patch_size)
+                    red_mean = first_patch[0].float().mean().item()
+                    blue_mean = first_patch[2].float().mean().item()
+                    patch_type = "thumbnail" if use_thumbnail and i == red_tiles else f"patch {i}"
+                    self.assertGreater(
+                        red_mean,
+                        blue_mean,
+                        f"Red image {patch_type} has more blue than red - patches may be interleaved",
+                    )
 
-        # Check blue image patches (last 4 in the batch)
-        # All patches should have zero red, zero green, high blue
-        for i in range(num_patches_per_image, 2 * num_patches_per_image):
-            first_patch = pixel_values[i][0].view(3, patch_size, patch_size)
-            red_mean = first_patch[0].float().mean().item()
-            blue_mean = first_patch[2].float().mean().item()
-            self.assertGreater(
-                blue_mean, red_mean, f"Blue image patch {i} has more red than blue - patches may be interleaved"
-            )
-
-    def test_batch_tiling_with_thumbnail(self):
-        """Test that patches and thumbnails from different images don't get mixed when batch processing.
-
-        Same as test_batch_tiling_no_patch_interleaving but with thumbnails enabled.
-        Thumbnails should also maintain correct color association with their source images.
-        """
-        image_processing = self.fast_image_processing_class(
-            do_image_splitting=True,
-            use_thumbnail=True,  # Enable thumbnail
-            min_tiles=2,
-            max_tiles=4,
-            tile_size=512,
-        )
-
-        # Create two large images with completely different solid colors
-        red_image = Image.new("RGB", (1024, 1024), color=(255, 0, 0))
-        blue_image = Image.new("RGB", (1024, 1024), color=(0, 0, 255))
-
-        result = image_processing(
-            [[red_image], [blue_image]],
-            return_tensors="pt",
-            return_row_col_info=True,
-            do_rescale=False,
-            do_normalize=False,
-        )
-
-        # Each 1024x1024 image should be split into 2x2 = 4 tiles
-        red_tiles = result.image_rows[0].item() * result.image_cols[0].item()
-        blue_tiles = result.image_rows[1].item() * result.image_cols[1].item()
-        self.assertEqual(red_tiles, 4)
-        self.assertEqual(blue_tiles, 4)
-
-        # With thumbnail: 4 tiles + 1 thumbnail per image = 5 per image, 10 total
-        # Order should be: [red_patch0, red_patch1, red_patch2, red_patch3, red_thumbnail,
-        #                   blue_patch0, blue_patch1, blue_patch2, blue_patch3, blue_thumbnail]
-        expected_total = (red_tiles + 1) + (blue_tiles + 1)  # tiles + thumbnail for each
-        self.assertEqual(result.pixel_values.shape[0], expected_total)
-
-        pixel_values = result.pixel_values
-        patch_size = image_processing.encoder_patch_size
-        patches_per_image_with_thumb = red_tiles + 1  # 4 patches + 1 thumbnail
-
-        # Check red image patches and thumbnail (first 5 in the batch)
-        for i in range(patches_per_image_with_thumb):
-            first_patch = pixel_values[i][0].view(3, patch_size, patch_size)
-            red_mean = first_patch[0].float().mean().item()
-            blue_mean = first_patch[2].float().mean().item()
-            patch_type = "thumbnail" if i == red_tiles else f"patch {i}"
-            self.assertGreater(
-                red_mean, blue_mean, f"Red image {patch_type} has more blue than red - patches may be interleaved"
-            )
-
-        # Check blue image patches and thumbnail (last 5 in the batch)
-        for i in range(patches_per_image_with_thumb, 2 * patches_per_image_with_thumb):
-            first_patch = pixel_values[i][0].view(3, patch_size, patch_size)
-            red_mean = first_patch[0].float().mean().item()
-            blue_mean = first_patch[2].float().mean().item()
-            local_idx = i - patches_per_image_with_thumb
-            patch_type = "thumbnail" if local_idx == blue_tiles else f"patch {local_idx}"
-            self.assertGreater(
-                blue_mean, red_mean, f"Blue image {patch_type} has more red than blue - patches may be interleaved"
-            )
+                # Check blue image patches (and thumbnail if enabled)
+                # All should have high blue, zero red
+                for i in range(patches_per_image, 2 * patches_per_image):
+                    first_patch = pixel_values[i][0].view(3, patch_size, patch_size)
+                    red_mean = first_patch[0].float().mean().item()
+                    blue_mean = first_patch[2].float().mean().item()
+                    local_idx = i - patches_per_image
+                    patch_type = "thumbnail" if use_thumbnail and local_idx == blue_tiles else f"patch {local_idx}"
+                    self.assertGreater(
+                        blue_mean,
+                        red_mean,
+                        f"Blue image {patch_type} has more red than blue - patches may be interleaved",
+                    )
