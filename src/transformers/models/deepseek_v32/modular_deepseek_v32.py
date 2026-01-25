@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import tuple
 
 import torch
 from torch import nn
@@ -22,11 +21,11 @@ from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2Attention,
     DeepseekV2DecoderLayer,
+    DeepseekV2Experts,
     DeepseekV2ForCausalLM,
     DeepseekV2ForSequenceClassification,
     DeepseekV2MLP,
     DeepseekV2Model,
-    DeepseekV2Experts,
     DeepseekV2PreTrainedModel,
     DeepseekV2RMSNorm,
     DeepseekV2RotaryEmbedding,

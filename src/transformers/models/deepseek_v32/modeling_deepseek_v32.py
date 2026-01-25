@@ -19,7 +19,7 @@
 # limitations under the License.
 import math
 from collections.abc import Callable
-from typing import Optional, tuple
+from typing import Optional
 
 import torch
 from torch import nn
