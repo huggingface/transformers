@@ -19,6 +19,7 @@ from threading import Thread
 from unittest.mock import Mock, patch
 
 import httpx
+import pytest
 from huggingface_hub import ChatCompletionStreamOutput, InferenceClient, hf_hub_download
 from parameterized import parameterized
 
@@ -43,6 +44,24 @@ if is_openai_available():
         ResponseTextDeltaEvent,
         ResponseTextDoneEvent,
     )
+
+
+def test_missing_dependencies_error_message():
+    with (
+        patch("transformers.cli.serve.serve_dependencies_available", False),
+        patch("transformers.cli.serve.is_pydantic_available", return_value=False),
+        patch("transformers.cli.serve.is_fastapi_available", return_value=False),
+        patch("transformers.cli.serve.is_uvicorn_available", return_value=False),
+        patch("transformers.cli.serve.is_openai_available", return_value=False),
+    ):
+        with pytest.raises(ImportError) as exc_info:
+            Serve()
+
+    msg = str(exc_info.value)
+    assert "Missing dependencies for the serving CLI" in msg
+    assert "Missing: pydantic, fastapi, uvicorn, openai" in msg
+    assert "pip install transformers[serving]" in msg
+    assert "pip install pydantic fastapi uvicorn openai" in msg
 
 
 @require_openai

@@ -419,8 +419,25 @@ class Serve:
         ] = False,
     ) -> None:
         if not serve_dependencies_available:
+            missing_deps = []
+            if not is_pydantic_available():
+                missing_deps.append("pydantic")
+            if not is_fastapi_available():
+                missing_deps.append("fastapi")
+            if not is_uvicorn_available():
+                missing_deps.append("uvicorn")
+            if not is_openai_available():
+                missing_deps.append("openai")
+
+            missing_deps_str = ", ".join(missing_deps) if missing_deps else "unknown"
+            individual_install = (
+                f"`pip install {' '.join(missing_deps)}`" if missing_deps else "`pip install transformers[serving]`"
+            )
             raise ImportError(
-                "Missing dependencies for the serving CLI. Please install with `pip install transformers[serving]`"
+                "Missing dependencies for the serving CLI. "
+                f"Missing: {missing_deps_str}. "
+                "Install with `pip install transformers[serving]` "
+                f"or install individually with {individual_install}."
             )
 
         # Save input arguments
