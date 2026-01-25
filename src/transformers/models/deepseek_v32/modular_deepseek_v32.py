@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import Optional, tuple
+from typing import tuple
 
 import torch
 from torch import nn
 
-from ...cache_utils import Cache, DynamicLayer
+from ...cache_utils import Cache
 from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2Attention,
@@ -27,13 +26,12 @@ from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2ForSequenceClassification,
     DeepseekV2MLP,
     DeepseekV2Model,
-    DeepseekV2MoE,
-    DeepseekV2MoEGate,
+    DeepseekV2Experts,
     DeepseekV2PreTrainedModel,
     DeepseekV2RMSNorm,
     DeepseekV2RotaryEmbedding,
-    apply_rotary_emb,
 )
+from ..llama.modeling_llama import apply_rotary_pos_emb
 
 
 class DeepseekV32Config(DeepseekV2Config):
@@ -44,11 +42,11 @@ class DeepseekV32Config(DeepseekV2Config):
         self.index_top_k = index_topk
 
 
-class DeepseekV32MoEGate(DeepseekV2MoEGate):
+class DeepseekV32MoEGate(DeepseekV2Experts):
     pass
 
 
-class DeepseekV32MoE(DeepseekV2MoE):
+class DeepseekV32Experts(DeepseekV2Experts):
     pass
 
 
@@ -90,9 +88,9 @@ class DeepseekV32Indexer(nn.Module):
         hidden_states: torch.Tensor,  # [B, S, hidden]
         q_resid: torch.Tensor,  # [B, S, q_lora_rank]
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
+        attention_mask: torch.Tensor | None,
         past_key_values_index: "Cache",
-        cache_position: Optional[torch.LongTensor],
+        cache_position: torch.LongTensor | None,
     ) -> torch.LongTensor:
         B, S, _ = hidden_states.shape
         cos, sin = position_embeddings
@@ -156,11 +154,11 @@ class DeepseekV32Attention(DeepseekV2Attention):
         self,
         hidden_states: torch.Tensor,  # [B, S, hidden]
         position_embeddings: tuple[torch.Tensor, torch.Tensor],  # (cos, sin)
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,  # must be Cache with MlaLayer at `layer_idx`
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,  # must be Cache with MlaLayer at `layer_idx`
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         B, S, _ = hidden_states.shape
         cos, sin = position_embeddings
 
