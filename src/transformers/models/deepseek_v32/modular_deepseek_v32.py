@@ -142,6 +142,7 @@ class DeepseekV32Indexer(nn.Module):
 
 class DeepseekV32Attention(DeepseekV2Attention):
     def __init__(self, config, layer_idx):
+        super().__init__(config, layer_idx)
         self.softmax_scale = self.qk_head_dim**-0.5
         if config.max_seq_len > config.original_seq_len:
             mscale = 0.1 * config.mscale * math.log(config.rope_factor) + 1.0

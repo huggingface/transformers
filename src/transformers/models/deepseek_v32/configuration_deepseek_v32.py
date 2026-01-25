@@ -17,11 +17,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PreTrainedConfig, RotaryEmbeddingConfigMixin
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 
 
-class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class DeepseekV32Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeepseekV32Model`]. It is used to instantiate a DeepSeek
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
