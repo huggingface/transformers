@@ -25,11 +25,13 @@ from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_utils import ImageInput
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TransformersKwargs, is_torch_available, logging
-from ..chameleon.modeling_chameleon import ChameleonVQVAE, ChameleonVQVAEVectorQuantizer
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
+from ...utils.generic import check_model_inputs
+from ..chameleon.modeling_chameleon import ChameleonVQVAE, ChameleonVQVAEModelOutput, ChameleonVQVAEVectorQuantizer
 from ..glm4v.configuration_glm4v import Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vCausalLMOutputWithPast,
@@ -497,19 +499,29 @@ class GlmImageVQVAEVectorQuantizer(ChameleonVQVAEVectorQuantizer):
         return hidden_state_quant, loss, min_encoding_indices
 
 
+class GlmImageVQVAEModelOutput(ChameleonVQVAEModelOutput):
+    pass
+
+
 class GlmImageVQVAE(ChameleonVQVAE):
     _no_split_modules = [
         "GlmImageVQVAEVectorQuantizer",
     ]
+    _can_record_outputs = {}
 
     def __init__(self, config: GlmImageVQVAEConfig):
         super().__init__(config)
         del self.encoder
 
     def encode(self, hidden_states):
-        hidden_states = self.quant_conv(hidden_states)
-        quant, emb_loss, indices = self.quantize(hidden_states)
-        return quant, emb_loss, indices
+        conv_hidden_states = self.quant_conv(hidden_states)
+        quantized_last_hidden_state, emb_loss, indices = self.quantize(conv_hidden_states)
+        return GlmImageVQVAEModelOutput(
+            last_hidden_state=hidden_states,
+            quantized_last_hidden_state=quantized_last_hidden_state,
+            image_tokens=indices,
+            embedding_loss=emb_loss,
+        )
 
 
 class GlmImageVisionModel(Glm4vVisionModel):
@@ -555,13 +567,16 @@ class GlmImageVisionModel(Glm4vVisionModel):
         pos_ids = torch.cat(pos_ids, dim=0)
         return pos_ids
 
-    def forward(self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
-        """
-        Args:
-            pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size * patch_size)`):
-                Packed pixel values.
-            grid_thw (`torch.Tensor` of shape `(num_images, 3)`):
-                The temporal, height and width of feature shape of each image.
+    @check_model_inputs
+    @auto_docstring
+    def forward(
+        self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size * patch_size)`):
+            Packed pixel values.
+        grid_thw (`torch.Tensor` of shape `(num_images, 3)`):
+            The temporal, height and width of feature shape of each image.
 
         Returns:
             `torch.Tensor` of shape `(total_patches, hidden_size)`: Hidden states.
@@ -590,7 +605,8 @@ class GlmImageVisionModel(Glm4vVisionModel):
                 hidden_states,
                 cu_seqlens=cu_seqlens,
             )
-        return hidden_states
+
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
 class GlmImageTextModel(Glm4vTextModel):
@@ -814,12 +830,34 @@ class GlmImageModel(Glm4vModel):
             grid_t, grid_h, grid_w = image_grid_thw[i].tolist()
             hs = hs.view(grid_t, grid_h, grid_w, hidden_size)
             hs = hs.permute(0, 3, 1, 2).contiguous()
-            _, _, image_toks = self.vqmodel.encode(hs)
-            all_image_toks.append(image_toks)
+            vqmodel_outputs: GlmImageVQVAEModelOutput = self.vqmodel.encode(hs)
+            all_image_toks.append(vqmodel_outputs.image_tokens)
         return torch.cat(all_image_toks, dim=0)
 
     def get_video_features(self):
         raise AttributeError("Not needed for GlmImage")
+
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        """
+        pixel_values = pixel_values.type(self.visual.dtype)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        image_embeds = torch.split(vision_outputs.last_hidden_state, split_sizes)
+        vision_outputs.pooler_output = image_embeds
+
+        return vision_outputs
 
     def get_placeholder_mask(
         self,
@@ -988,8 +1026,20 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
-        return self.model.get_image_features(pixel_values, image_grid_thw)
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        """
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     def get_image_tokens(self, hidden_states: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
         return self.model.get_image_tokens(hidden_states, image_grid_thw)
@@ -1024,7 +1074,8 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, GlmImageForConditionalGeneration
 
         >>> model = GlmImageForConditionalGeneration.from_pretrained("zai-org/GLM-Image")
@@ -1040,7 +1091,8 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             },
         ]
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         >>> inputs = processor(text=[text], images=[image], vision_infos=[vision_infos])

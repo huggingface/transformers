@@ -929,14 +929,16 @@ class GitVisionModel(GitPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, GitVisionModel
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/git-base")
         >>> model = GitVisionModel.from_pretrained("microsoft/git-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -1020,14 +1022,16 @@ class GitModel(GitPreTrainedModel):
 
         ```python
         >>> from transformers import AutoProcessor, AutoModel
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/git-base")
         >>> model = AutoModel.from_pretrained("microsoft/git-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> text = "this is an image of two cats"
 
@@ -1213,14 +1217,16 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
 
         ```python
         >>> from transformers import AutoProcessor, AutoModelForCausalLM
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/git-base-coco")
         >>> model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-coco")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> pixel_values = processor(images=image, return_tensors="pt").pixel_values
 

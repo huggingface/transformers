@@ -547,7 +547,7 @@ class SamPositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.scale = config.scale
-        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
+        self.positional_embedding = nn.Parameter(self.scale * torch.randn((2, config.num_pos_feats)))
 
     def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
@@ -1056,7 +1056,7 @@ class SamVisionEncoder(SamPreTrainedModel):
     @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
-    ) -> SamVisionEncoderOutput:
+    ) -> tuple | SamVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -1106,6 +1106,9 @@ class SamVisionModel(SamPreTrainedModel):
 class SamModel(SamPreTrainedModel):
     input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamTwoWayAttentionBlock, index=2)}
+    _tied_weights_keys = {
+        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
+    }
 
     def __init__(self, config: SamConfig):
         super().__init__(config)
@@ -1256,14 +1259,16 @@ class SamModel(SamPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("facebook/sam-vit-base")
         >>> processor = AutoProcessor.from_pretrained("facebook/sam-vit-base")
 
-        >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
+        >>> with httpx.stream("GET", url) as response:
+        ...     raw_image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> input_points = [[[400, 650]]]  # 2D location of a window on the car
         >>> inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt")
 
