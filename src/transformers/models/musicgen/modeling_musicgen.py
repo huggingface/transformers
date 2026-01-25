@@ -1287,6 +1287,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
     """
 )
 class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin):
+    config_class = MusicgenConfig
     config: MusicgenConfig
     output_modalities = ("audio",)
     base_model_prefix = "encoder_decoder"
