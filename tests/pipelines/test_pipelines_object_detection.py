@@ -19,7 +19,7 @@ from huggingface_hub import ObjectDetectionOutputElement
 
 from transformers import (
     MODEL_FOR_OBJECT_DETECTION_MAPPING,
-    AutoFeatureExtractor,
+    AutoImageProcessor,
     AutoModelForObjectDetection,
     ObjectDetectionPipeline,
     is_vision_available,
@@ -132,8 +132,8 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
         model_id = "hf-internal-testing/tiny-detr-mobilenetsv3"
 
         model = AutoModelForObjectDetection.from_pretrained(model_id)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-        object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=image_processor)
 
         outputs = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=0.0)
 
@@ -173,8 +173,8 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
         model_id = "facebook/detr-resnet-50"
 
         model = AutoModelForObjectDetection.from_pretrained(model_id)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-        object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=image_processor)
 
         outputs = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg")
         self.assertEqual(

@@ -32,7 +32,7 @@ rendered properly in your Markdown viewer.
 
 사전 학습된 모델을 미세 튜닝하기 위해서 데이터셋을 다운로드하고 훈련할 수 있도록 준비하세요. 이전 튜토리얼에서 훈련을 위해 데이터를 처리하는 방법을 보여드렸는데, 지금이 배울 걸 되짚을 기회입니다!
 
-먼저 [Yelp 리뷰](https://huggingface.co/datasets/yelp_review_full) 데이터 세트를 로드합니다:
+먼저 [Yelp 리뷰](https://huggingface.co/datasets/Yelp/yelp_review_full) 데이터 세트를 로드합니다:
 
 ```py
 >>> from datasets import load_dataset
@@ -77,7 +77,7 @@ rendered properly in your Markdown viewer.
 
 🤗 Transformers는 🤗 Transformers 모델 훈련에 최적화된 [`Trainer`] 클래스를 제공하여 훈련 루프를 직접 작성하지 않고도 쉽게 훈련을 시작할 수 있습니다. [`Trainer`] API는 로깅(logging), 경사 누적(gradient accumulation), 혼합 정밀도(mixed precision) 등 다양한 훈련 옵션과 기능을 지원합니다.
 
-먼저 모델을 가져오고 예상되는 레이블 수를 지정합니다. Yelp 리뷰 [데이터셋 카드](https://huggingface.co/datasets/yelp_review_full#data-fields)에서 5개의 레이블이 있음을 알 수 있습니다:
+먼저 모델을 가져오고 예상되는 레이블 수를 지정합니다. Yelp 리뷰 [데이터셋 카드](https://huggingface.co/datasets/Yelp/yelp_review_full#data-fields)에서 5개의 레이블이 있음을 알 수 있습니다:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification

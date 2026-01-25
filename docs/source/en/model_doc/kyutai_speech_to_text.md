@@ -16,6 +16,7 @@ rendered properly in your Markdown viewer.
 *This model was released on 2025-06-17 and added to Hugging Face Transformers on 2025-06-25.*
 
 # Kyutai Speech-To-Text
+
 ## Overview
 
 [Kyutai STT](https://kyutai.org/next/stt) is a speech-to-text model architecture based on the [Mimi codec](https://huggingface.co/docs/transformers/en/model_doc/mimi), which encodes audio into discrete tokens in a streaming fashion, and a [Moshi-like](https://huggingface.co/docs/transformers/en/model_doc/moshi) autoregressive decoder. Kyutai's lab has released two model checkpoints:
@@ -34,10 +35,11 @@ rendered properly in your Markdown viewer.
 ```python
 import torch
 from datasets import load_dataset, Audio
-from transformers import infer_device, KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
+from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
+from accelerate import Accelerator
 
 # 1. load the model and the processor
-torch_device = infer_device()
+torch_device = Accelerator().device
 model_id = "kyutai/stt-2.6b-en-trfs"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
@@ -67,10 +69,11 @@ print(processor.batch_decode(output_tokens, skip_special_tokens=True))
 ```python
 import torch
 from datasets import load_dataset, Audio
-from transformers import infer_device, KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
+from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
+from accelerate import Accelerator
 
 # 1. load the model and the processor
-torch_device = infer_device()
+torch_device = Accelerator().device
 model_id = "kyutai/stt-2.6b-en-trfs"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)

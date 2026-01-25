@@ -34,9 +34,10 @@ Tips:
 Sample inference:
 
 ```python
-from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration, infer_device
+from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 model_path = "ibm-granite/granite-vision-3.1-2b-preview"
 processor = LlavaNextProcessor.from_pretrained(model_path)
@@ -84,6 +85,7 @@ This model was contributed by [Alexander Brooks](https://huggingface.co/abrooks9
 ## LlavaNextProcessor
 
 [[autodoc]] LlavaNextProcessor
+    - __call__
 
 ## LlavaNextForConditionalGeneration
 

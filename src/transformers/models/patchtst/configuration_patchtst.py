@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,23 +13,21 @@
 # limitations under the License.
 """PatchTST model configuration"""
 
-from typing import Optional, Union
-
-from transformers.configuration_utils import PretrainedConfig
+from transformers.configuration_utils import PreTrainedConfig
 from transformers.utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PatchTSTConfig(PretrainedConfig):
+class PatchTSTConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`PatchTSTModel`]. It is used to instantiate an
     PatchTST model according to the specified arguments, defining the model architecture.
     [ibm/patchtst](https://huggingface.co/ibm/patchtst) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_input_channels (`int`, *optional*, defaults to 1):
@@ -175,21 +172,21 @@ class PatchTSTConfig(PretrainedConfig):
         use_cls_token: bool = False,
         init_std: float = 0.02,
         share_projection: bool = True,
-        scaling: Optional[Union[str, bool]] = "std",
+        scaling: str | bool | None = "std",
         # mask pretraining
-        do_mask_input: Optional[bool] = None,
+        do_mask_input: bool | None = None,
         mask_type: str = "random",
         random_mask_ratio: float = 0.5,
-        num_forecast_mask_patches: Optional[Union[list[int], int]] = [2],
-        channel_consistent_masking: Optional[bool] = False,
-        unmasked_channel_indices: Optional[list[int]] = None,
+        num_forecast_mask_patches: list[int] | int | None = [2],
+        channel_consistent_masking: bool | None = False,
+        unmasked_channel_indices: list[int] | None = None,
         mask_value: int = 0,
         # head
         pooling_type: str = "mean",
         head_dropout: float = 0.0,
         prediction_length: int = 24,
         num_targets: int = 1,
-        output_range: Optional[list] = None,
+        output_range: list | None = None,
         # distribution head
         num_parallel_samples: int = 100,
         **kwargs,

@@ -1,10 +1,10 @@
 import types
 import warnings
-from typing import Any, Optional, Union, overload
+from typing import Any, overload
 
 import numpy as np
 
-from ..models.bert.tokenization_bert import BasicTokenizer
+from ..models.bert.tokenization_bert_legacy import BasicTokenizer
 from ..utils import (
     ExplicitEnum,
     add_end_docstrings,
@@ -24,7 +24,7 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
     Handles arguments for token classification.
     """
 
-    def __call__(self, inputs: Union[str, list[str]], **kwargs):
+    def __call__(self, inputs: str | list[str], **kwargs):
         is_split_into_words = kwargs.get("is_split_into_words", False)
         delimiter = kwargs.get("delimiter")
 
@@ -147,13 +147,11 @@ class TokenClassificationPipeline(ChunkPipeline):
     def _sanitize_parameters(
         self,
         ignore_labels=None,
-        grouped_entities: Optional[bool] = None,
-        ignore_subwords: Optional[bool] = None,
-        aggregation_strategy: Optional[AggregationStrategy] = None,
-        offset_mapping: Optional[list[tuple[int, int]]] = None,
+        aggregation_strategy: AggregationStrategy | None = None,
+        offset_mapping: list[tuple[int, int]] | None = None,
         is_split_into_words: bool = False,
-        stride: Optional[int] = None,
-        delimiter: Optional[str] = None,
+        stride: int | None = None,
+        delimiter: str | None = None,
     ):
         preprocess_params = {}
         preprocess_params["is_split_into_words"] = is_split_into_words
@@ -165,25 +163,6 @@ class TokenClassificationPipeline(ChunkPipeline):
             preprocess_params["offset_mapping"] = offset_mapping
 
         postprocess_params = {}
-        if grouped_entities is not None or ignore_subwords is not None:
-            if grouped_entities and ignore_subwords:
-                aggregation_strategy = AggregationStrategy.FIRST
-            elif grouped_entities and not ignore_subwords:
-                aggregation_strategy = AggregationStrategy.SIMPLE
-            else:
-                aggregation_strategy = AggregationStrategy.NONE
-
-            if grouped_entities is not None:
-                warnings.warn(
-                    "`grouped_entities` is deprecated and will be removed in version v5.0.0, defaulted to"
-                    f' `aggregation_strategy="{aggregation_strategy}"` instead.'
-                )
-            if ignore_subwords is not None:
-                warnings.warn(
-                    "`ignore_subwords` is deprecated and will be removed in version v5.0.0, defaulted to"
-                    f' `aggregation_strategy="{aggregation_strategy}"` instead.'
-                )
-
         if aggregation_strategy is not None:
             if isinstance(aggregation_strategy, str):
                 aggregation_strategy = AggregationStrategy[aggregation_strategy.upper()]
@@ -230,9 +209,7 @@ class TokenClassificationPipeline(ChunkPipeline):
     @overload
     def __call__(self, inputs: list[str], **kwargs: Any) -> list[list[dict[str, str]]]: ...
 
-    def __call__(
-        self, inputs: Union[str, list[str]], **kwargs: Any
-    ) -> Union[list[dict[str, str]], list[list[dict[str, str]]]]:
+    def __call__(self, inputs: str | list[str], **kwargs: Any) -> list[dict[str, str]] | list[list[dict[str, str]]]:
         """
         Classify each token of the text(s) given as inputs.
 
@@ -281,7 +258,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                 raise ValueError("When `is_split_into_words=True`, `sentence` must be a list of tokens.")
             words = sentence
             sentence = delimiter.join(words)  # Recreate the sentence string for later display and slicing
-            # This map will allows to convert back word => char indices
+            # This map will allow to convert back word => char indices
             word_to_chars_map = []
             delimiter_len = len(delimiter)
             char_offset = 0
@@ -425,11 +402,11 @@ class TokenClassificationPipeline(ChunkPipeline):
         sentence: str,
         input_ids: np.ndarray,
         scores: np.ndarray,
-        offset_mapping: Optional[list[tuple[int, int]]],
+        offset_mapping: list[tuple[int, int]] | None,
         special_tokens_mask: np.ndarray,
         aggregation_strategy: AggregationStrategy,
-        word_ids: Optional[list[Optional[int]]] = None,
-        word_to_chars_map: Optional[list[tuple[int, int]]] = None,
+        word_ids: list[int | None] | None = None,
+        word_to_chars_map: list[tuple[int, int]] | None = None,
     ) -> list[dict]:
         """Fuse various numpy arrays into dicts with all the information needed for aggregation"""
         pre_entities = []

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,14 +19,14 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, GenerationConfig, is_torch_available
+from transformers import AutoTokenizer, BitsAndBytesConfig, GenerationConfig, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -39,9 +38,6 @@ if is_torch_available():
     from transformers import (
         AutoModelForCausalLM,
         MinistralForCausalLM,
-        MinistralForQuestionAnswering,
-        MinistralForSequenceClassification,
-        MinistralForTokenClassification,
         MinistralModel,
     )
 
@@ -57,17 +53,6 @@ class MinistralModelTester(CausalLMModelTester):
 @require_torch
 class MinistralModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = MinistralModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": MinistralModel,
-            "text-classification": MinistralForSequenceClassification,
-            "token-classification": MinistralForTokenClassification,
-            "text-generation": MinistralForCausalLM,
-            "question-answering": MinistralForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
@@ -83,7 +68,7 @@ class MinistralModelTest(CausalLMModelTest, unittest.TestCase):
         return True
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
@@ -189,7 +174,7 @@ class MinistralIntegrationTest(unittest.TestCase):
             ),
         )
 
-        # Export + HybridCache
+        # Export
         model.eval()
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
         exported_program = exportable_module.export(
@@ -222,6 +207,7 @@ class MinistralIntegrationTest(unittest.TestCase):
 
         self.assertEqual(export_generated_text, eager_generated_text)
 
+    @pytest.mark.flash_attn_test
     @require_flash_attn
     @slow
     def test_past_sliding_window_generation(self):
@@ -233,7 +219,7 @@ class MinistralIntegrationTest(unittest.TestCase):
         model = MinistralForCausalLM.from_pretrained(
             "mistralai/Ministral-8B-Instruct-2410",
             device_map="auto",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Ministral-8B-Instruct-2410", legacy=False)
 

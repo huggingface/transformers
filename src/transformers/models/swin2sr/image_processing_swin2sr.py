@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +13,6 @@
 # limitations under the License.
 """Image processor class for Swin2SR."""
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
@@ -30,11 +27,15 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
-from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
+
+
+class Swin2SRImageProcessorKwargs(ImagesKwargs, total=False):
+    size_divisor: int
 
 
 class Swin2SRImageProcessor(BaseImageProcessor):
@@ -51,11 +52,12 @@ class Swin2SRImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = Swin2SRImageProcessorKwargs
 
     def __init__(
         self,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_pad: bool = True,
         size_divisor: int = 8,
         **kwargs,
@@ -68,26 +70,12 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         pad_size = kwargs.get("pad_size")
         self.size_divisor = size_divisor if size_divisor is not None else pad_size
 
-    @property
-    def pad_size(self):
-        logger.warning(
-            "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
-        )
-        return self.size_divisor
-
-    @pad_size.setter
-    def pad_size(self, value):
-        logger.warning(
-            "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
-        )
-        self.size_divisor = value
-
     def pad(
         self,
         image: np.ndarray,
         size: int,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Pad an image to make the height and width divisible by `size`.
@@ -124,17 +112,16 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         )
 
     @filter_out_non_signature_kwargs()
-    @deprecate_kwarg("pad_size", version="v5", new_name="size_divisor")
     def preprocess(
         self,
         images: ImageInput,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_pad: Optional[bool] = None,
-        size_divisor: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_pad: bool | None = None,
+        size_divisor: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: str | ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Preprocess an image or batch of images.

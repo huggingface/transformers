@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022, Google and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,22 @@
 # limitations under the License.
 """PEGASUS-X model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PegasusXConfig(PretrainedConfig):
+class PegasusXConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PegasusXModel`]. It is used to instantiate a
     PEGASUS-X model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the PEGASUS-X
     [google/pegasus-x-large](https://huggingface.co/google/pegasus-x-large) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -130,6 +129,7 @@ class PegasusXConfig(PretrainedConfig):
         num_global_tokens=32,
         block_size=512,
         stagger_local_blocks=True,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -155,23 +155,16 @@ class PegasusXConfig(PretrainedConfig):
         self.num_global_tokens = num_global_tokens
         self.block_size = block_size
         self.stagger_local_blocks = stagger_local_blocks
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
             forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
 
 
 __all__ = ["PegasusXConfig"]

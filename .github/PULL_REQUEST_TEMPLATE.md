@@ -51,19 +51,19 @@ Library:
 - continuous batching: @remi-or @ArthurZucker @McPatate
 - pipelines: @Rocketknight1
 - tokenizers: @ArthurZucker and @itazap
-- trainer: @zach-huggingface @SunMarc
+- trainer: @SunMarc
 - attention: @vasqu @ArthurZucker @CyrilVallez
 - model loading (from pretrained, etc): @CyrilVallez
-- distributed: @3outeille @ArthurZucker @S1ro1
+- distributed: @3outeille @ArthurZucker
 - CIs: @ydshieh
 
 Integrations:
 
-- deepspeed: HF Trainer/Accelerate: @SunMarc @zach-huggingface
 - ray/raytune: @richardliaw, @amogkam
 - Big Model Inference: @SunMarc
-- quantization (bitsandbytes, autogpt): @SunMarc @MekkCyber
+- quantization: @SunMarc @MekkCyber
 - kernels: @MekkCyber @drbh
+- peft: @BenjaminBossan @githubnemo
 
 Devices/Backends:
 

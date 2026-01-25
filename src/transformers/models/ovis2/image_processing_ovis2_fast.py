@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -35,39 +34,8 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
 )
-from .image_processing_ovis2 import get_min_tile_covering_grid, get_optimal_tiled_canvas
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
-
-
-class Ovis2ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-        crop_to_patches (`bool`, *optional*, defaults to `False`):
-            Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
-            `preprocess` method.
-        min_patches (`int`, *optional*, defaults to 1):
-            The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-            set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
-        max_patches (`int`, *optional*, defaults to 12):
-            The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-            set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
-        use_covering_area_grid (`bool`, *optional*, defaults to `True`):
-            Whether to use the covering area grid to determine the number of patches. Only has an effect if
-            `crop_to_patches` is set to `True`. Can be overridden by the `use_covering_area_grid` parameter in the
-            `preprocess` method.
-    """
-
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
-    use_covering_area_grid: Optional[bool]
+from .image_processing_ovis2 import Ovis2ImageProcessorKwargs, get_min_tile_covering_grid, get_optimal_tiled_canvas
 
 
 @auto_docstring
@@ -98,8 +66,8 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
         max_patches: int,
         use_covering_area_grid: bool = True,
         covering_threshold: float = 0.9,
-        patch_size: Optional[Union[tuple, int, dict]] = None,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        patch_size: tuple | int | dict | None = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
     ):
         """
         Crop the images to patches and return a list of cropped images.
@@ -188,16 +156,16 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
         min_patches: int,
         max_patches: int,
         use_covering_area_grid: bool,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         if crop_to_patches and max_patches > 1:
@@ -244,7 +212,6 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(data={"pixel_values": processed_images, "grids": grids}, tensor_type=return_tensors)
 
 

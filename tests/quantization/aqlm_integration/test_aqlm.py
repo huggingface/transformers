@@ -31,14 +31,11 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_aqlm_available, is_torch_available
+from transformers.utils import is_aqlm_available, is_torch_available
 
 
 if is_torch_available():
     import torch
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 
 @require_torch_accelerator
@@ -112,7 +109,7 @@ class AqlmTest(unittest.TestCase):
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
         quantization_config = AqlmConfig()
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
 
         nb_linears = 0
@@ -129,7 +126,7 @@ class AqlmTest(unittest.TestCase):
         self.assertEqual(nb_linears, nb_aqlm_linear)
 
         # Try with `linear_weights_not_to_quantize`
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
 
         model, _ = replace_with_aqlm_linear(

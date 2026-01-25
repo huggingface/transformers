@@ -82,6 +82,7 @@ class TestByteRewriter(unittest.TestCase):
 @slow
 class MyT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MyT5Tokenizer
+    from_pretrained_id = "Tomlim/myt5-base"
     test_rust_tokenizer = False
 
     def get_tokenizer(cls, **kwargs) -> MyT5Tokenizer:

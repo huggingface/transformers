@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,19 +30,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--num-blocks", "-n", type=int, default=None)
     parser.add_argument("--max-batch-tokens", "-b", type=int, default=None)
-    parser.add_argument(
-        "--attn", type=str, default="paged_attention|kernels-community/flash-attn", help="Attention implementation"
-    )
+    parser.add_argument("--attn", type=str, default="kernels-community/flash-attn2", help="Attention implementation")
     parser.add_argument("--samples", type=int, default=500)
+    parser.add_argument("--max-new-tokens", type=int, default=32)
+
     args = parser.parse_args()
 
     # Prepare model
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_ID,
         attn_implementation=args.attn,
+        device_map="cuda",
         dtype=torch.bfloat16,
     )
-    model = model.cuda().eval()
+    model = model.eval()
 
     # Prepare tokenizer and dataset
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, padding_side="left")
@@ -54,7 +54,7 @@ if __name__ == "__main__":
 
     # Prepare generation config
     generation_config = GenerationConfig(
-        max_new_tokens=512,
+        max_new_tokens=args.max_new_tokens,
         use_cuda_graph=False,  # Not supported for simple version
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
@@ -67,7 +67,6 @@ if __name__ == "__main__":
     _ = model.generate_batch(
         inputs=simple_batch_inputs[: min(5, args.samples)],
         generation_config=generation_config,
-        slice_inputs=True,
     )
 
     # Actual batch generation
@@ -76,7 +75,6 @@ if __name__ == "__main__":
     batch_outputs = model.generate_batch(
         inputs=simple_batch_inputs,
         generation_config=generation_config,
-        slice_inputs=True,
     )
     end_time = time.time()
     print("Done with batch generation.")

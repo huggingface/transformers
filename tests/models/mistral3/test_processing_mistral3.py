@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
@@ -34,9 +32,10 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     """This tests Pixtral processor with the new `spatial_merge_size` argument in Mistral3."""
 
     processor_class = PixtralProcessor
+    model_id = "hf-internal-testing/Mistral-Small-3.1-24B-Instruct-2503-only-processor"
 
     @classmethod
-    def setUpClass(cls):
+    def _setup_test_attributes(cls, processor):
         cls.url_0 = url_to_local_path(
             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
         )
@@ -44,24 +43,13 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
         cls.image_1 = np.random.randint(255, size=(3, 480, 640), dtype=np.uint8)
         cls.image_2 = np.random.randint(255, size=(3, 1024, 1024), dtype=np.uint8)
-
-        cls.tmpdirname = tempfile.mkdtemp()
-        cls.addClassCleanup(lambda tempdir=cls.tmpdirname: shutil.rmtree(tempdir))
-
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = PixtralProcessor.from_pretrained(
-            "hf-internal-testing/Mistral-Small-3.1-24B-Instruct-2503-only-processor", **processor_kwargs
-        )
-        processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.image_token
-
-    def get_processor(self):
-        return self.processor_class.from_pretrained(self.tmpdirname)
 
     @staticmethod
     def prepare_processor_dict():
         return {
             "chat_template": "{%- set today = strftime_now(\"%Y-%m-%d\") %}\n{%- set default_system_message = \"You are Mistral Small 3, a Large Language Model (LLM) created by Mistral AI, a French startup headquartered in Paris.\\nYour knowledge base was last updated on 2023-10-01. The current date is \" + today + \".\\n\\nWhen you're not sure about some information, you say that you don't have the information and don't make up anything.\\nIf the user's question is not clear, ambiguous, or does not provide enough context for you to accurately answer the question, you do not try to answer it right away and you rather ask the user to clarify their request (e.g. \\\"What are some good restaurants around me?\\\" => \\\"Where are you?\\\" or \\\"When is the next flight to Tokyo\\\" => \\\"Where do you travel from?\\\")\" %}\n\n{{- bos_token }}\n\n{%- if messages[0]['role'] == 'system' %}\n    {%- if messages[0] is string %}\n        {%- set system_message = messages[0]['content'] %}\n        {%- set loop_messages = messages[1:] %}\n    {%- else %} \n        {%- set system_message = messages[0]['content'][0]['text'] %}\n        {%- set loop_messages = messages[1:] %}\n    {%- endif %}\n{%- else %}\n    {%- set system_message = default_system_message %}\n    {%- set loop_messages = messages %}\n{%- endif %}\n{{- '[SYSTEM_PROMPT]' + system_message + '[/SYSTEM_PROMPT]' }}\n\n{%- for message in loop_messages %}\n    {%- if message['role'] == 'user' %}\n            {%- if message['content'] is string %}\n            {{- '[INST]' + message['content'] + '[/INST]' }}\n            {%- else %}\n                    {{- '[INST]' }}\n                    {%- for block in message['content'] %}\n                            {%- if block['type'] == 'text' %}\n                                    {{- block['text'] }}\n                            {%- elif block['type'] == 'image' or block['type'] == 'image_url' %}\n                                    {{- '[IMG]' }}\n                                {%- else %}\n                                    {{- raise_exception('Only text and image blocks are supported in message content!') }}\n                                {%- endif %}\n                        {%- endfor %}\n                    {{- '[/INST]' }}\n                {%- endif %}\n    {%- elif message['role'] == 'system' %}\n        {{- '[SYSTEM_PROMPT]' + message['content'] + '[/SYSTEM_PROMPT]' }}\n    {%- elif message['role'] == 'assistant' %}\n        {%- if message['content'] is string %}\n            {{- message['content'] + eos_token }}\n        {%- else %}\n            {{- message['content'][0]['text'] + eos_token }}\n        {%- endif %}\n    {%- else %}\n        {{- raise_exception('Only user, system and assistant roles are supported!') }}\n    {%- endif %}\n{%- endfor %}",
+            "spatial_merge_size":2,
             "patch_size": 128,
         }  # fmt: skip
 

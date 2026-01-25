@@ -14,14 +14,15 @@
 """PyTorch xLSTM Model."""
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_xlstm_available
 from .configuration_xlstm import xLSTMConfig
@@ -29,13 +30,17 @@ from .configuration_xlstm import xLSTMConfig
 
 if is_xlstm_available():
     from xlstm.xlstm_large.model import RMSNorm as xLSTMRMSNorm
-    from xlstm.xlstm_large.model import mLSTMBlock as xLSTMBlock
-    from xlstm.xlstm_large.model import mLSTMStateType, soft_cap
+    from xlstm.xlstm_large.model import mLSTMBlock, mLSTMStateType, soft_cap
 
     external_xlstm = True
+
+    class xLSTMBlock(GradientCheckpointingLayer, mLSTMBlock):
+        pass
+
 else:
+    from collections.abc import Callable
     from functools import partial
-    from typing import Callable, Literal
+    from typing import Literal
 
     from .configuration_xlstm import round_up_to_next_multiple_of
 
@@ -44,7 +49,7 @@ else:
 
     external_xlstm = False
 
-    def soft_cap(values: torch.Tensor, cap_value: Optional[Union[float, torch.Tensor]] = None) -> torch.Tensor:
+    def soft_cap(values: torch.Tensor, cap_value: float | torch.Tensor | None = None) -> torch.Tensor:
         """
         Soft caps a tensor to a value.
 
@@ -68,13 +73,13 @@ else:
         matV: torch.Tensor,
         vecB: torch.Tensor,
         vecI: torch.Tensor,
-        matC_states: Optional[torch.Tensor] = None,
-        vecN_states: Optional[torch.Tensor] = None,
-        scaMinter_states: Optional[torch.Tensor] = None,
-        matC_initial: Optional[torch.Tensor] = None,
-        vecN_initial: Optional[torch.Tensor] = None,
-        scaMinter_initial: Optional[torch.Tensor] = None,
-        qk_scale: Optional[float] = None,
+        matC_states: torch.Tensor | None = None,
+        vecN_states: torch.Tensor | None = None,
+        scaMinter_states: torch.Tensor | None = None,
+        matC_initial: torch.Tensor | None = None,
+        vecN_initial: torch.Tensor | None = None,
+        scaMinter_initial: torch.Tensor | None = None,
+        qk_scale: float | None = None,
         chunk_size: int = 64,
         num_chunks: int = 1,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -236,10 +241,10 @@ else:
         value: torch.Tensor,
         igate: torch.Tensor,
         fgate: torch.Tensor,
-        cstate: Optional[torch.Tensor] = None,
-        nstate: Optional[torch.Tensor] = None,
-        mstate: Optional[torch.Tensor] = None,
-        qk_scale: Optional[float] = None,
+        cstate: torch.Tensor | None = None,
+        nstate: torch.Tensor | None = None,
+        mstate: torch.Tensor | None = None,
+        qk_scale: float | None = None,
         return_last_states: bool = False,
         return_all_states: bool = False,
         chunk_size: int = 64,
@@ -248,8 +253,8 @@ else:
         torch.Tensor,
         torch.Tensor,
         torch.Tensor,
-        Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
-        Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None,
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None,
     ]:
         batch_size, nh, sequence_length, dhqk = query.shape
         if sequence_length % chunk_size != 0:
@@ -317,14 +322,14 @@ else:
         value: torch.Tensor,
         igate: torch.Tensor,
         fgate: torch.Tensor,
-        c_initial: Optional[torch.Tensor] = None,
-        n_initial: Optional[torch.Tensor] = None,
-        m_initial: Optional[torch.Tensor] = None,
+        c_initial: torch.Tensor | None = None,
+        n_initial: torch.Tensor | None = None,
+        m_initial: torch.Tensor | None = None,
         return_last_states: bool = False,
         eps: float = 1e-6,
         chunk_size: int = 64,
         **kwargs,
-    ) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
+    ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         batch_size, nh, sequence_length, dhqk = query.shape
         if sequence_length % chunk_size != 0:
             raise ValueError(f"Sequence length {sequence_length} is not divisible by chunk size {chunk_size}.")
@@ -445,9 +450,9 @@ else:
         value: torch.Tensor,
         igate: torch.Tensor,
         fgate: torch.Tensor,
-        c_initial: Optional[torch.Tensor] = None,
-        n_initial: Optional[torch.Tensor] = None,
-        m_initial: Optional[torch.Tensor] = None,
+        c_initial: torch.Tensor | None = None,
+        n_initial: torch.Tensor | None = None,
+        m_initial: torch.Tensor | None = None,
         return_last_states: bool = False,
         eps: float = 1e-6,
         dtype_state: torch.dtype = torch.float32,
@@ -456,8 +461,8 @@ else:
         torch.Tensor,
         torch.Tensor,
         torch.Tensor,
-        Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
-        Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None,
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None,
     ]:
         batch_size, nh, sequence_length, dhqk = query.shape
         dhv = value.shape[-1]
@@ -519,15 +524,15 @@ else:
         value: torch.Tensor,
         fgate: torch.Tensor,
         igate: torch.Tensor,
-        c_initial: Optional[torch.Tensor] = None,
-        n_initial: Optional[torch.Tensor] = None,
-        m_initial: Optional[torch.Tensor] = None,
+        c_initial: torch.Tensor | None = None,
+        n_initial: torch.Tensor | None = None,
+        m_initial: torch.Tensor | None = None,
         return_last_states: bool = False,
         eps: float = 1e-6,
         autocast_kernel_dtype: torch.dtype = torch.bfloat16,
         chunk_size: int = 64,
         **kwargs,
-    ) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
+    ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         if return_last_states:
             raise ValueError(
                 "We are padding zeros, so we cannot return last states,",
@@ -583,15 +588,15 @@ else:
         value: torch.Tensor,
         fgate: torch.Tensor,
         igate: torch.Tensor,
-        c_initial: Optional[torch.Tensor] = None,
-        n_initial: Optional[torch.Tensor] = None,
-        m_initial: Optional[torch.Tensor] = None,
+        c_initial: torch.Tensor | None = None,
+        n_initial: torch.Tensor | None = None,
+        m_initial: torch.Tensor | None = None,
         return_last_states: bool = True,
         eps: float = 1e-6,
         autocast_kernel_dtype: torch.dtype = torch.bfloat16,
         chunk_size: int = 64,
         enable_logging: bool = False,
-    ) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
+    ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """This function computes the last hidden state and matH outputs of the mLSTM, independently of the sequence length.
 
         For this it uses three kernels:
@@ -772,12 +777,12 @@ else:
             value: torch.Tensor,
             igate: torch.Tensor,
             fgate: torch.Tensor,
-            c_initial: Optional[torch.Tensor] = None,
-            n_initial: Optional[torch.Tensor] = None,
-            m_initial: Optional[torch.Tensor] = None,
+            c_initial: torch.Tensor | None = None,
+            n_initial: torch.Tensor | None = None,
+            m_initial: torch.Tensor | None = None,
             return_last_states: bool = False,
-            mode: Optional[Literal["train", "inference"]] = None,
-        ) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
+            mode: Literal["train", "inference"] | None = None,
+        ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
             """Forward pass of the mLSTM backend.
 
             Depending on the configured mode, this method will call the appropriate kernel function.
@@ -972,7 +977,7 @@ else:
             batch_size, sequence_length, nh, DH = x.shape
             if nh != self.num_heads:
                 raise ValueError(f"Expected {self.num_heads} heads, got {nh}, input shape: {x.shape}")
-            if DH != self.head_dim:
+            if self.head_dim != DH:
                 raise ValueError(f"Expected {self.head_dim} head dimension, got {DH}, input shape: {x.shape}")
 
             x = self._layer_normalize(x)
@@ -1097,8 +1102,8 @@ else:
             )
 
         def forward(
-            self, x: torch.Tensor, state: Optional[mLSTMLayerStateType] = None
-        ) -> tuple[torch.Tensor, Optional[mLSTMLayerStateType]]:
+            self, x: torch.Tensor, state: mLSTMLayerStateType | None = None
+        ) -> tuple[torch.Tensor, mLSTMLayerStateType | None]:
             if x.ndim != 3:
                 raise ValueError(f"Input must have shape [batch_size, sequence_length, HD], got {x.shape}")
             batch_size, sequence_length, _ = x.shape
@@ -1163,7 +1168,7 @@ else:
             y = self.out_proj(h_out)
             return y, state
 
-    class xLSTMBlock(nn.Module):
+    class xLSTMBlock(GradientCheckpointingLayer):
         def __init__(self, config: xLSTMConfig):
             super().__init__()
             self.config = config
@@ -1184,9 +1189,7 @@ else:
             )
             self.ffn = xLSTMFeedForward(config)
 
-        def forward(
-            self, x: torch.Tensor, state: Optional[mLSTMStateType] = None
-        ) -> tuple[torch.Tensor, mLSTMStateType]:
+        def forward(self, x: torch.Tensor, state: mLSTMStateType | None = None) -> tuple[torch.Tensor, mLSTMStateType]:
             x_mlstm = self.norm_mlstm(x)
             x_mlstm, state = self.mlstm_layer(x_mlstm, state)
             x = x + x_mlstm
@@ -1206,7 +1209,7 @@ def small_init_method(dim):
     std = (2 / (5 * dim)) ** (1 / 2)
 
     def init_(tensor):
-        return torch.nn.init.normal_(tensor, mean=0.0, std=std)
+        return init.normal_(tensor, mean=0.0, std=std)
 
     return init_
 
@@ -1218,7 +1221,7 @@ def wang_init_method(n_layers, dim):
     std = 2 / n_layers / dim ** (1 / 2)
 
     def init_(tensor):
-        return torch.nn.init.normal_(tensor, mean=0.0, std=std)
+        return init.normal_(tensor, mean=0.0, std=std)
 
     return init_
 
@@ -1240,42 +1243,52 @@ class xLSTMPreTrainedModel(PreTrainedModel):
                 return name
         return ""
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Embedding):
             small_init_method(self.config.hidden_size)(self.embeddings.weight)
         elif isinstance(module, nn.Linear):
             if module.bias is not None:
-                torch.nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
             if self.config.weight_mode == "single" and "gate" in self._module_name_map(module):
-                torch.nn.init.zeros_(module.weight)
-                with torch.no_grad():
-                    if "igate" in self._module_name_map(module):
-                        module.bias.copy_(-10.0 * torch.ones_like(module.bias))
-                    elif "fgate" in self._module_name_map(module):
-                        module.bias.copy_(
-                            torch.linspace(
-                                3.0,
-                                6.0,
-                                module.bias.shape[-1],
-                            ).to(
-                                device=module.bias.device,
-                                dtype=module.bias.dtype,
-                            )
-                        )
+                init.zeros_(module.weight)
+
+                if "igate" in self._module_name_map(module):
+                    init.copy_(module.bias, -10.0 * torch.ones_like(module.bias))
+                elif "fgate" in self._module_name_map(module):
+                    init.copy_(
+                        module.bias,
+                        torch.linspace(
+                            3.0,
+                            6.0,
+                            module.bias.shape[-1],
+                        ).to(
+                            device=module.bias.device,
+                            dtype=module.bias.dtype,
+                        ),
+                    )
             elif self.config.weight_mode == "fused" and "gate" in self._module_name_map(module):
-                torch.nn.init.zeros_(module.weight)
-                with torch.no_grad():
-                    module.bias[: self.config.num_heads] += -module.bias[
-                        : self.config.num_heads
-                    ] - 10.0 * torch.ones_like(module.bias)
-                    module.bias[: self.config.num_heads] += -module.bias[self.config.num_heads :] + torch.linspace(
+                init.zeros_(module.weight)
+
+                init.copy_(
+                    module.bias[: self.config.num_heads],
+                    module.bias[: self.config.num_heads]
+                    - module.bias[: self.config.num_heads]
+                    - 10.0 * torch.ones_like(module.bias),
+                )
+                init.copy_(
+                    module.bias[: self.config.num_heads],
+                    module.bias[: self.config.num_heads]
+                    - module.bias[self.config.num_heads :]
+                    + torch.linspace(
                         3.0,
                         6.0,
                         module.bias.shape[-1],
                     ).to(
                         device=module.bias.device,
                         dtype=module.bias.dtype,
-                    )
+                    ),
+                )
             elif "proj_down" in self._module_name_map(module):
                 wang_init_method(dim=module.weight.shape[1], n_layers=self.config.num_hidden_layers)(module.weight)
             elif "out_proj" in self._module_name_map(module):
@@ -1283,9 +1296,9 @@ class xLSTMPreTrainedModel(PreTrainedModel):
             elif module.weight is not None:
                 small_init_method(self.config.hidden_size)(module.weight)
         elif isinstance(module, xLSTMRMSNorm) or hasattr(module, "_layer_normalize"):
-            torch.nn.init.ones_(module.weight)
+            init.ones_(module.weight)
             if hasattr(module, "bias") and module.bias is not None:
-                torch.nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
 
 
 class xLSTMCache:
@@ -1293,7 +1306,7 @@ class xLSTMCache:
     Cache for xLSTM model which does not have attention mechanism and key value states.
 
     Arguments:
-        config (`PretrainedConfig):
+        config (`PreTrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The batch size with which the model will be used.
@@ -1328,7 +1341,7 @@ class xLSTMCache:
         config: xLSTMConfig,
         max_batch_size: int,
         dtype: torch.dtype = torch.bfloat16,
-        device: Optional[str] = None,
+        device: str | None = None,
         **kwargs,
     ):
         self.seqlen_offset = 0
@@ -1367,9 +1380,9 @@ class xLSTMOutput(ModelOutput):
         avoid providing the old `input_ids`.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor]
-    cache_params: Optional[xLSTMCache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor | None
+    cache_params: xLSTMCache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring
@@ -1394,13 +1407,13 @@ class xLSTMModel(xLSTMPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.LongTensor] = None,
-        cache_params: Optional[xLSTMCache] = None,
-        use_cache: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.LongTensor | None = None,
+        cache_params: xLSTMCache | None = None,
+        use_cache: bool | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, xLSTMOutput]:
+    ) -> tuple | xLSTMOutput:
         r"""
         cache_params (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.
@@ -1456,17 +1469,11 @@ class xLSTMModel(xLSTMPreTrainedModel):
         else:
             all_hidden_states = () if output_hidden_states else None
             for layer_idx, xlstm_block in enumerate(self.blocks):
-                if self.gradient_checkpointing and self.training:
-                    hidden_states, rnn_state = self._gradient_checkpointing_func(
-                        xlstm_block.__call__,
-                        hidden_states,
-                        cache_params.rnn_state[layer_idx] if cache_params is not None else None,
-                    )
-                else:
-                    hidden_states, rnn_state = xlstm_block(
-                        hidden_states,
-                        state=cache_params.rnn_state[layer_idx] if cache_params is not None else None,
-                    )
+                hidden_states, rnn_state = xlstm_block(
+                    hidden_states,
+                    cache_params.rnn_state[layer_idx] if cache_params is not None else None,
+                )
+
                 if cache_params:
                     for state_idx in range(len(cache_params.rnn_state[layer_idx])):
                         local_rnn_state = rnn_state[state_idx]
@@ -1504,10 +1511,10 @@ class xLSTMCausalLMOutput(ModelOutput):
         avoid providing the old `input_ids`.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    cache_params: Optional[xLSTMCache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    cache_params: xLSTMCache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring
@@ -1537,7 +1544,7 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
         attention_mask=None,  # not used but needed, otherwise generate complains when passing tokenizer inputs
         inputs_embeds=None,
         use_cache=None,
-        cache_params: Optional[xLSTMCache] = None,
+        cache_params: xLSTMCache | None = None,
         **kwargs,
     ):
         if use_cache and cache_params is not None:
@@ -1567,14 +1574,14 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        cache_params: Optional[xLSTMCache] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        cache_params: xLSTMCache | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, xLSTMCausalLMOutput]:
+    ) -> tuple | xLSTMCausalLMOutput:
         r"""
         cache_params (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.

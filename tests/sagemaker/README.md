@@ -9,7 +9,7 @@ This document explains the testing strategy for releasing the new Hugging Face D
 
 ### Run Tests:
 
-Before we can run the tests we need to adjust the `requirements.txt` for PyTorch under `/tests/sagemaker/scripts/pytorch` and for TensorFlow under `/tests/sagemaker/scripts/pytorch`. We adjust the branch to the new RC-tag.
+Before we can run the tests we need to adjust the `requirements.txt` for PyTorch. We adjust the branch to the new RC-tag.
 
 ```
 git+https://github.com/huggingface/transformers.git@v4.5.0.rc0 # install main or adjust it with vX.X.X for installing version specific-transforms
@@ -28,7 +28,7 @@ After we have released the Release Candidate we need to create a PR at the [Deep
 
 **Creating the update PR:**
 
-1. Update the two latest `buildspec.yaml` config for [PyTorch](https://github.com/aws/deep-learning-containers/tree/master/huggingface/pytorch) and [TensorFlow](https://github.com/aws/deep-learning-containers/tree/master/huggingface/tensorflow). The two latest `buildspec.yaml` are the `buildspec.yaml` without a version tag and the one with the highest framework version, e.g. `buildspec-1-7-1.yml` and not `buildspec-1-6.yml`.  
+1. Update the latest `buildspec.yaml` config for [PyTorch](https://github.com/aws/deep-learning-containers/tree/master/huggingface/pytorch). The two latest `buildspec.yaml` are the `buildspec.yaml` without a version tag and the one with the highest framework version, e.g. `buildspec-1-7-1.yml` and not `buildspec-1-6.yml`.
 
 To update the `buildspec.yaml` we need to adjust either the `transformers_version` or the `datasets_version` or both. Example for upgrading to `transformers 4.5.0` and `datasets 1.6.0`.
 ```yaml
@@ -73,15 +73,14 @@ images:
 ## Execute Tests
 
 ### Requirements:
-AWS is going to release new DLCs for PyTorch and/or TensorFlow. The Tests should run on the new framework versions with current `transformers` release to validate the new framework release is compatible with the `transformers` version. To run these tests you need credentials for the HF SageMaker AWS Account. You can ask @philschmid or @n1t0 to get access. AWS will notify us with a new issue in the repository pointing to their framework upgrade PR.
+AWS is going to release new DLCs for PyTorch. The Tests should run on the new framework versions with current `transformers` release to validate the new framework release is compatible with the `transformers` version. To run these tests you need credentials for the HF SageMaker AWS Account. You can ask @philschmid or @n1t0 to get access. AWS will notify us with a new issue in the repository pointing to their framework upgrade PR.
 
 ### Run Tests:
 
-Before we can run the tests we need to adjust the `requirements.txt` for Pytorch under `/tests/sagemaker/scripts/pytorch` and for Tensorflow under `/tests/sagemaker/scripts/pytorch`. We add the new framework version to it.
+Before we can run the tests we need to adjust the `requirements.txt` for Pytorch under `/tests/sagemaker/scripts/pytorch`. We add the new framework version to it.
 
 ```bash
 torch==1.8.1 # for pytorch
-tensorflow-gpu==2.5.0 # for tensorflow
 ```
 
 After we adjusted the `requirements.txt` we can run Amazon SageMaker tests with. 
@@ -97,7 +96,7 @@ After we have successfully run tests for the new framework version we need to cr
 
 **Creating the update PR:**
 
-1. Create a new `buildspec.yaml` config for [PyTorch](https://github.com/aws/deep-learning-containers/tree/master/huggingface/pytorch) and [TensorFlow](https://github.com/aws/deep-learning-containers/tree/master/huggingface/tensorflow) and rename the old `buildspec.yaml` to `buildespec-x.x.x`, where `x.x.x` is the base framework version, e.g. if pytorch 1.6.0 is the latest version in `buildspec.yaml` the file should be renamed to `buildspec-yaml-1-6.yaml`. 
+1. Create a new `buildspec.yaml` config for [PyTorch](https://github.com/aws/deep-learning-containers/tree/master/huggingface/pytorch) and rename the old `buildspec.yaml` to `buildespec-x.x.x`, where `x.x.x` is the base framework version, e.g. if pytorch 1.6.0 is the latest version in `buildspec.yaml` the file should be renamed to `buildspec-yaml-1-6.yaml`.
 
 To create the new `buildspec.yaml` we need to adjust  the `version` and the `short_version`. Example for upgrading to `pytorch 1.7.1`. 
 
@@ -144,5 +143,3 @@ images:
 | pytorch-transformers-test-2-ddp     | test bert finetuning using BERT from transformer lib+ PT DPP      | SageMaker createTrainingJob | 16    | train_runtime, eval_accuracy & eval_loss |
 | pytorch-transformers-test-2-smd     | test bert finetuning using BERT from transformer lib+ PT SM DDP   | SageMaker createTrainingJob | 16    | train_runtime, eval_accuracy & eval_loss |
 | pytorch-transformers-test-1-smp     | test roberta finetuning using BERT from transformer lib+ PT SM MP | SageMaker createTrainingJob | 8     | train_runtime, eval_accuracy & eval_loss |
-| tensorflow-transformers-test-single | Test bert finetuning using BERT from transformer lib+TF           | SageMaker createTrainingJob | 1     | train_runtime, eval_accuracy & eval_loss |
-| tensorflow-transformers-test-2-smd  | test bert finetuning using BERT from transformer lib+ TF SM DDP   | SageMaker createTrainingJob | 16    | train_runtime, eval_accuracy & eval_loss |

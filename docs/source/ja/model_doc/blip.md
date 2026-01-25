@@ -42,7 +42,6 @@ BLIP は、次のようなさまざまなマルチモーダル タスクを実�
 ## BlipConfig
 
 [[autodoc]] BlipConfig
-    - from_text_vision_configs
 
 ## BlipTextConfig
 

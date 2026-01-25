@@ -79,10 +79,10 @@ pip install transformers bitsandbytes>=0.39.0 -q
 首先，您需要加载模型。
 
 ```py
->>> from transformers import AutoModelForCausalLM
+>>> from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 >>> model = AutoModelForCausalLM.from_pretrained(
-...     "mistralai/Mistral-7B-v0.1", device_map="auto", load_in_4bit=True
+...     "mistralai/Mistral-7B-v0.1", device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
 ... )
 ```
 
@@ -133,12 +133,12 @@ pip install transformers bitsandbytes>=0.39.0 -q
 有许多[生成策略](generation_strategies)，有时默认值可能不适合您的用例。如果您的输出与您期望的结果不匹配，我们已经创建了一个最常见的陷阱列表以及如何避免它们。
 
 ```py
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
 >>> tokenizer.pad_token = tokenizer.eos_token  # Most LLMs don't have a pad token by default
 >>> model = AutoModelForCausalLM.from_pretrained(
-...     "mistralai/Mistral-7B-v0.1", device_map="auto", load_in_4bit=True
+...     "mistralai/Mistral-7B-v0.1", device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
 ... )
 ```
 
@@ -214,7 +214,7 @@ LLMs是[仅解码器](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)�
 ```python
 >>> tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-alpha")
 >>> model = AutoModelForCausalLM.from_pretrained(
-...     "HuggingFaceH4/zephyr-7b-alpha", device_map="auto", load_in_4bit=True
+...     "HuggingFaceH4/zephyr-7b-alpha", device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
 ... )
 >>> set_seed(0)
 >>> prompt = """How many helicopters can a human eat in one sitting? Reply as a thug."""
@@ -261,7 +261,7 @@ LLMs是[仅解码器](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)�
 ### 延迟、吞吐量和内存利用率
 
 1. [指南](llm_tutorial_optimization),如何优化LLMs以提高速度和内存利用；
-2. [指南](main_classes/quantization), 关于`quantization`，如bitsandbytes和autogptq的指南，教您如何大幅降低内存需求。
+2. [指南](main_classes/quantization), 关于`quantization`，如bitsandbytes和GPT-QModel的指南，教您如何大幅降低内存需求。
 
 ### 相关库
 

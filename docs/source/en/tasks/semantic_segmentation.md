@@ -219,7 +219,7 @@ Start by loading a smaller subset of the SceneParse150 dataset from the 🤗 Dat
 ```py
 >>> from datasets import load_dataset
 
->>> ds = load_dataset("scene_parse_150", split="train[:50]")
+>>> ds = load_dataset("merve/scene_parse_150", split="train[:50]")
 ```
 
 Split the dataset's `train` split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
@@ -308,7 +308,7 @@ You could also create and use your own dataset if you prefer to train with the [
      # simple example
      id2label = {0: 'cat', 1: 'dog'}
      with open('id2label.json', 'w') as fp:
-     json.dump(id2label, fp)
+         json.dump(id2label, fp)
      ```
 
 As an example, take a look at this [example dataset](https://huggingface.co/datasets/nielsr/ade20k-demo) which was created with the steps shown above.
@@ -481,8 +481,8 @@ Reload the dataset and load an image for inference.
 We will now see how to infer without a pipeline. Process the image with an image processor and place the `pixel_values` on a GPU:
 
 ```py
->>> from transformers import infer_device
->>> device = infer_device()
+>>> from accelerate import Accelerator
+>>> device = Accelerator().device
 >>> encoding = image_processor(image, return_tensors="pt")
 >>> pixel_values = encoding.pixel_values.to(device)
 ```

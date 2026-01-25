@@ -335,29 +335,36 @@ In case of a conversational set-up, then each table-question pair must be provid
 - [Masked language modeling task guide](../tasks/masked_language_modeling)
 
 ## TAPAS specific outputs
+
 [[autodoc]] models.tapas.modeling_tapas.TableQuestionAnsweringOutput
 
 ## TapasConfig
+
 [[autodoc]] TapasConfig
 
 ## TapasTokenizer
+
 [[autodoc]] TapasTokenizer
     - __call__
     - convert_logits_to_predictions
     - save_vocabulary
 
 ## TapasModel
+
 [[autodoc]] TapasModel
     - forward
 
 ## TapasForMaskedLM
+
 [[autodoc]] TapasForMaskedLM
     - forward
 
 ## TapasForSequenceClassification
+
 [[autodoc]] TapasForSequenceClassification
     - forward
 
 ## TapasForQuestionAnswering
+
 [[autodoc]] TapasForQuestionAnswering
     - forward

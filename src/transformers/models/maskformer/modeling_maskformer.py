@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms, Inc.s and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,12 +16,12 @@
 import math
 from dataclasses import dataclass
 from numbers import Number
-from typing import Optional, Union
 
 import numpy as np
 import torch
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -73,7 +72,7 @@ class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
         layernorm.
     """
 
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -103,10 +102,10 @@ class MaskFormerPixelLevelModuleOutput(ModelOutput):
         the output of each stage.
     """
 
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    decoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+    decoder_last_hidden_state: torch.FloatTensor | None = None
+    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -122,9 +121,9 @@ class MaskFormerPixelDecoderOutput(ModelOutput):
         Last hidden states (final feature map) of the last stage of the model.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -158,14 +157,14 @@ class MaskFormerModelOutput(ModelOutput):
         `decoder_hidden_states`
     """
 
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    pixel_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    transformer_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    pixel_decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    transformer_decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+    pixel_decoder_last_hidden_state: torch.FloatTensor | None = None
+    transformer_decoder_last_hidden_state: torch.FloatTensor | None = None
+    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    pixel_decoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    transformer_decoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -173,7 +172,7 @@ class MaskFormerModelOutput(ModelOutput):
     custom_intro="""
     Class for outputs of [`MaskFormerForInstanceSegmentation`].
 
-    This output can be directly passed to [`~MaskFormerImageProcessor.post_process_semantic_segmentation`] or or
+    This output can be directly passed to [`~MaskFormerImageProcessor.post_process_semantic_segmentation`] or
     [`~MaskFormerImageProcessor.post_process_instance_segmentation`] or
     [`~MaskFormerImageProcessor.post_process_panoptic_segmentation`] depending on the task. Please, see
     [`~MaskFormerImageProcessor] for details regarding usage.
@@ -214,18 +213,18 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
         `decoder_hidden_states`.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    class_queries_logits: Optional[torch.FloatTensor] = None
-    masks_queries_logits: Optional[torch.FloatTensor] = None
-    auxiliary_logits: Optional[torch.FloatTensor] = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    pixel_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    transformer_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    pixel_decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    transformer_decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    class_queries_logits: torch.FloatTensor | None = None
+    masks_queries_logits: torch.FloatTensor | None = None
+    auxiliary_logits: torch.FloatTensor | None = None
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+    pixel_decoder_last_hidden_state: torch.FloatTensor | None = None
+    transformer_decoder_last_hidden_state: torch.FloatTensor | None = None
+    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    pixel_decoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    transformer_decoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 def upsample_like(pixel_values: Tensor, like: Tensor, mode: str = "bilinear") -> Tensor:
@@ -421,18 +420,18 @@ class DetrAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
         return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[Tensor]):
+    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Tensor | None):
         return tensor if object_queries is None else tensor + object_queries
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        object_queries: Optional[torch.Tensor] = None,
-        key_value_states: Optional[torch.Tensor] = None,
-        spatial_position_embeddings: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        object_queries: torch.Tensor | None = None,
+        key_value_states: torch.Tensor | None = None,
+        spatial_position_embeddings: torch.Tensor | None = None,
         output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
@@ -549,12 +548,12 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        object_queries: Optional[torch.Tensor] = None,
-        query_position_embeddings: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.Tensor | None = None,
+        object_queries: torch.Tensor | None = None,
+        query_position_embeddings: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
     ):
         """
         Args:
@@ -1036,7 +1035,7 @@ class MaskFormerLoss(nn.Module):
         class_queries_logits: Tensor,
         mask_labels: list[Tensor],
         class_labels: list[Tensor],
-        auxiliary_predictions: Optional[dict[str, Tensor]] = None,
+        auxiliary_predictions: dict[str, Tensor] | None = None,
     ) -> dict[str, Tensor]:
         """
         This performs the loss computation.
@@ -1088,7 +1087,7 @@ class MaskFormerLoss(nn.Module):
         """
         Computes the average number of target masks across the batch, for normalization purposes.
         """
-        num_masks = sum([len(classes) for classes in class_labels])
+        num_masks = sum(len(classes) for classes in class_labels)
         num_masks = torch.as_tensor(num_masks, dtype=torch.float, device=device)
         world_size = 1
         if is_accelerate_available():
@@ -1233,7 +1232,7 @@ class MaskFormerSinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: Optional[float] = None
+        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
     ):
         super().__init__()
         if scale is not None and normalize is False:
@@ -1247,9 +1246,9 @@ class MaskFormerSinePositionEmbedding(nn.Module):
     def forward(
         self,
         shape: torch.Size,
-        device: Union[torch.device, str],
+        device: torch.device | str,
         dtype: torch.dtype,
-        mask: Optional[Tensor] = None,
+        mask: Tensor | None = None,
     ) -> Tensor:
         if mask is None:
             mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
@@ -1396,7 +1395,7 @@ class MaskFormerTransformerModule(nn.Module):
         image_features: Tensor,
         output_hidden_states: bool = False,
         output_attentions: bool = False,
-        return_dict: Optional[bool] = None,
+        return_dict: bool | None = None,
     ) -> DetrDecoderOutput:
         if self.input_projection is not None:
             image_features = self.input_projection(image_features)
@@ -1434,43 +1433,54 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
     config: MaskFormerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         xavier_std = self.config.init_xavier_std
         std = self.config.init_std
         if isinstance(module, MaskFormerTransformerModule):
             if module.input_projection is not None:
-                nn.init.xavier_uniform_(module.input_projection.weight, gain=xavier_std)
-                nn.init.constant_(module.input_projection.bias, 0)
+                init.xavier_uniform_(module.input_projection.weight, gain=xavier_std)
+                init.constant_(module.input_projection.bias, 0)
         # FPN
         elif isinstance(module, MaskFormerFPNModel):
-            nn.init.xavier_uniform_(module.stem.get_submodule("0").weight, gain=xavier_std)
+            init.xavier_uniform_(module.stem.get_submodule("0").weight, gain=xavier_std)
 
         elif isinstance(module, MaskFormerFPNLayer):
-            nn.init.xavier_uniform_(module.proj[0].weight, gain=xavier_std)
+            init.xavier_uniform_(module.proj[0].weight, gain=xavier_std)
 
         elif isinstance(module, MaskFormerFPNConvLayer):
-            nn.init.xavier_uniform_(module.get_submodule("0").weight, gain=xavier_std)
+            init.xavier_uniform_(module.get_submodule("0").weight, gain=xavier_std)
         # The MLP head
         elif isinstance(module, MaskformerMLPPredictionHead):
             # I was not able to find the correct initializer in the original implementation
             # we'll use xavier
             for submodule in module.modules():
                 if isinstance(submodule, nn.Linear):
-                    nn.init.xavier_uniform_(submodule.weight, gain=xavier_std)
-                    nn.init.constant_(submodule.bias, 0)
+                    init.xavier_uniform_(submodule.weight, gain=xavier_std)
+                    init.constant_(submodule.bias, 0)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         # copied from DETR
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, MaskFormerLoss):
+            empty_weight = torch.ones(module.num_labels + 1)
+            empty_weight[-1] = module.eos_coef
+            init.copy_(module.empty_weight, empty_weight)
 
 
 @auto_docstring
@@ -1488,10 +1498,11 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
     def forward(
         self,
         pixel_values: Tensor,
-        pixel_mask: Optional[Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_mask: Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
     ) -> MaskFormerModelOutput:
         r"""
         Examples:
@@ -1499,14 +1510,16 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/maskformer-swin-base-ade")
         >>> model = MaskFormerModel.from_pretrained("facebook/maskformer-swin-base-ade")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = image_processor(image, return_tensors="pt")
 
@@ -1656,13 +1669,14 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
     def forward(
         self,
         pixel_values: Tensor,
-        mask_labels: Optional[list[Tensor]] = None,
-        class_labels: Optional[list[Tensor]] = None,
-        pixel_mask: Optional[Tensor] = None,
-        output_auxiliary_logits: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        mask_labels: list[Tensor] | None = None,
+        class_labels: list[Tensor] | None = None,
+        pixel_mask: Tensor | None = None,
+        output_auxiliary_logits: bool | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
     ) -> MaskFormerForInstanceSegmentationOutput:
         r"""
         mask_labels (`list[torch.Tensor]`, *optional*):
@@ -1680,7 +1694,8 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/maskformer-swin-base-ade")
@@ -1689,7 +1704,8 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         >>> url = (
         ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
         ... )
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> outputs = model(**inputs)
@@ -1713,14 +1729,16 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on COCO panoptic segmentation
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/maskformer-swin-base-coco")
         >>> model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-coco")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> outputs = model(**inputs)

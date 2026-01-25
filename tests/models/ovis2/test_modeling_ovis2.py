@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,6 +38,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -160,7 +160,7 @@ class Ovis2VisionText2TextModelTester:
 
 
 @require_torch
-class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Model tester for `Ovis2ForConditionalGeneration`.
     """
@@ -173,10 +173,14 @@ class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = {"image-text-to-text": Ovis2ForConditionalGeneration} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"image-text-to-text": Ovis2ForConditionalGeneration, "any-to-any": Ovis2ForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
+    # Ovis2 post-processes the last_hidden_state to hidden_size * hidden_stride**2
+    skip_test_image_features_output_shape = True
     _is_composite = True
-    test_pruning = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Ovis2VisionText2TextModelTester(self)

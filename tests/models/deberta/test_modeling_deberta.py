@@ -237,9 +237,6 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         else {}
     )
 
-    fx_compatible = True
-    test_torchscript = False
-    test_pruning = False
     is_encoder_decoder = False
 
     def setUp(self):
@@ -274,14 +271,6 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         model_name = "microsoft/deberta-base"
         model = DebertaModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    @unittest.skip("This test was broken by the refactor in #22105, TODO @ArthurZucker")
-    def test_torch_fx_output_loss(self):
-        pass
-
-    @unittest.skip("This test was broken by the refactor in #22105, TODO @ArthurZucker")
-    def test_torch_fx(self):
-        pass
 
 
 @require_torch

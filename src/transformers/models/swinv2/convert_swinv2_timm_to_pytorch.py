@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +15,9 @@
 
 import argparse
 import json
-from pathlib import Path
+from io import BytesIO
 
-import requests
+import httpx
 import timm
 import torch
 from huggingface_hub import hf_hub_download
@@ -181,7 +180,8 @@ def convert_swinv2_checkpoint(swinv2_name, pytorch_dump_folder_path):
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
     image_processor = AutoImageProcessor.from_pretrained("microsoft/{}".format(swinv2_name.replace("_", "-")))
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     inputs = image_processor(images=image, return_tensors="pt")
 
     timm_outs = timm_model(inputs["pixel_values"])
@@ -195,11 +195,7 @@ def convert_swinv2_checkpoint(swinv2_name, pytorch_dump_folder_path):
     print(f"Saving image processor to {pytorch_dump_folder_path}")
     image_processor.save_pretrained(pytorch_dump_folder_path)
 
-    model.push_to_hub(
-        repo_path_or_name=Path(pytorch_dump_folder_path, swinv2_name),
-        organization="nandwalritik",
-        commit_message="Add model",
-    )
+    model.push_to_hub(repo_id=f"nandwalritik/{swinv2_name}", commit_message="Add model")
 
 
 if __name__ == "__main__":

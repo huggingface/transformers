@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +14,11 @@
 
 import os
 import warnings
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import redirect_stdout
 from dataclasses import dataclass, fields
 from io import BytesIO
-from typing import Callable, NewType, Optional, Union
+from typing import NewType, Union
 from urllib.parse import urlparse
 
 import httpx
@@ -45,7 +44,6 @@ from .utils import (
 
 if is_vision_available():
     import PIL.Image
-    import PIL.ImageOps
 
     if is_torchvision_available():
         from torchvision import io as torchvision_io
@@ -80,12 +78,12 @@ VideoInput = Union[
 @dataclass
 class VideoMetadata(Mapping):
     total_num_frames: int
-    fps: Optional[float] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
-    duration: Optional[float] = None
-    video_backend: Optional[str] = None
-    frames_indices: Optional[list[int]] = None
+    fps: float | None = None
+    width: int | None = None
+    height: int | None = None
+    duration: float | None = None
+    video_backend: str | None = None
+    frames_indices: list[int] | None = None
 
     def __iter__(self):
         return (f.name for f in fields(self))
@@ -106,10 +104,20 @@ class VideoMetadata(Mapping):
             raise ValueError("Cannot infer video `timestamps` when `fps` or `frames_indices` is None.")
         return [frame_idx / self.fps for frame_idx in self.frames_indices]
 
+    @property
+    def sampled_fps(self) -> float:
+        "FPS of the sampled video."
+        if self.frames_indices is None or self.total_num_frames is None or self.fps is None:
+            return self.fps or 24
+        return len(self.frames_indices) / self.total_num_frames * self.fps
+
     def update(self, dictionary):
         for key, value in dictionary.items():
             if hasattr(self, key):
                 setattr(self, key, value)
+
+
+VideoMetadataType = VideoMetadata | dict | list[dict | VideoMetadata] | list[list[dict | VideoMetadata]]
 
 
 def is_valid_video_frame(frame):
@@ -196,7 +204,9 @@ def make_batched_videos(videos) -> list[Union[np.ndarray, "torch.Tensor", "URL",
         return convert_pil_frames_to_video([videos])
     # only one frame passed, thus we unsqueeze time dim
     elif is_valid_image(videos):
-        return [np.array(videos)[None, ...]]
+        if isinstance(videos, PIL.Image.Image):
+            videos = np.array(videos)
+        return [videos[None, ...]]
     elif not isinstance(videos, list):
         raise ValueError(
             f"Invalid video input. Expected either a list of video frames or an input of 4 or 5 dimensions, but got"
@@ -215,7 +225,7 @@ def make_batched_videos(videos) -> list[Union[np.ndarray, "torch.Tensor", "URL",
     return flat_videos_list
 
 
-def make_batched_metadata(videos: VideoInput, video_metadata: Union[VideoMetadata, dict]):
+def make_batched_metadata(videos: VideoInput, video_metadata: VideoMetadataType) -> list[VideoMetadata]:
     if video_metadata is None:
         # Create default metadata and fill attributes we can infer from given video
         video_metadata = [
@@ -245,7 +255,7 @@ def make_batched_metadata(videos: VideoInput, video_metadata: Union[VideoMetadat
     return video_metadata
 
 
-def get_video_size(video: np.ndarray, channel_dim: Optional[ChannelDimension] = None) -> tuple[int, int]:
+def get_video_size(video: np.ndarray, channel_dim: ChannelDimension | None = None) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the video.
 
@@ -269,7 +279,7 @@ def get_video_size(video: np.ndarray, channel_dim: Optional[ChannelDimension] = 
         raise ValueError(f"Unsupported data format: {channel_dim}")
 
 
-def get_uniform_frame_indices(total_num_frames: int, num_frames: Optional[int] = None):
+def get_uniform_frame_indices(total_num_frames: int, num_frames: int | None = None):
     """
     Creates a numpy array for uniform sampling of `num_frame` frames from `total_num_frames`
     when loading a video.
@@ -365,8 +375,8 @@ def read_video_opencv(
         height=int(video.get(cv2.CAP_PROP_FRAME_HEIGHT)),
         width=int(video.get(cv2.CAP_PROP_FRAME_WIDTH)),
     )
-    indices = sample_indices_fn(metadata=metadata, **kwargs)
 
+    indices = sample_indices_fn(metadata=metadata, **kwargs)
     index = 0
     frames = []
     while video.isOpened():
@@ -479,8 +489,8 @@ def read_video_pyav(
         height=container.streams.video[0].height,
         width=container.streams.video[0].width,
     )
-    indices = sample_indices_fn(metadata=metadata, **kwargs)
 
+    indices = sample_indices_fn(metadata=metadata, **kwargs)
     frames = []
     container.seek(0)
     end_index = indices[-1]
@@ -541,7 +551,6 @@ def read_video_torchvision(
     )
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
-
     video = video[indices].contiguous()
     metadata.update(
         {
@@ -581,24 +590,28 @@ def read_video_torchcodec(
     requires_backends(read_video_torchcodec, ["torchcodec"])
     from torchcodec.decoders import VideoDecoder
 
+    # VideoDecoder expects a string for device, default to "cpu" if None
+
     decoder = VideoDecoder(
         video_path,
         # Interestingly `exact` mode takes less than approximate when we load the whole video
         seek_mode="exact",
         # Allow FFmpeg decide on the number of threads for efficiency
         num_ffmpeg_threads=0,
-        device=kwargs.get("device"),
+        device=kwargs.get("device", "cpu"),
     )
+    total_num_frames = decoder.metadata.num_frames
+    video_fps = decoder.metadata.average_fps
     metadata = VideoMetadata(
-        total_num_frames=decoder.metadata.num_frames,
-        fps=decoder.metadata.average_fps,
+        total_num_frames=total_num_frames,
+        fps=video_fps,
         duration=decoder.metadata.duration_seconds,
         video_backend="torchcodec",
         height=decoder.metadata.height,
         width=decoder.metadata.width,
     )
-    indices = sample_indices_fn(metadata=metadata, **kwargs)
 
+    indices = sample_indices_fn(metadata=metadata, **kwargs)
     video = decoder.get_frames_at(indices=indices).data.contiguous()
     metadata.frames_indices = indices
     return video, metadata
@@ -615,10 +628,10 @@ VIDEO_DECODERS = {
 
 def load_video(
     video: VideoInput,
-    num_frames: Optional[int] = None,
-    fps: Optional[Union[int, float]] = None,
+    num_frames: int | None = None,
+    fps: int | float | None = None,
     backend: str = "pyav",
-    sample_indices_fn: Optional[Callable] = None,
+    sample_indices_fn: Callable | None = None,
     **kwargs,
 ) -> np.ndarray:
     """
@@ -692,7 +705,7 @@ def load_video(
     # can also load with decord, but not cv2/torchvision
     # both will fail in case of url links
     video_is_url = video.startswith("http://") or video.startswith("https://")
-    if video_is_url and backend in ["opencv"]:
+    if video_is_url and backend == "opencv":
         raise ValueError("If you are trying to load a video from URL, you cannot use 'opencv' as backend")
 
     if (
@@ -714,7 +727,7 @@ def load_video(
 
 def convert_to_rgb(
     video: np.ndarray,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: str | ChannelDimension | None = None,
 ) -> np.ndarray:
     """
     Convert video to RGB by blending the transparency layer if it's in RGBA format, otherwise simply returns it.
@@ -753,11 +766,11 @@ def convert_to_rgb(
 
 def pad(
     video: np.ndarray,
-    padding: Union[int, tuple[int, int], Iterable[tuple[int, int]]],
+    padding: int | tuple[int, int] | Iterable[tuple[int, int]],
     mode: PaddingMode = PaddingMode.CONSTANT,
-    constant_values: Union[float, Iterable[float]] = 0.0,
-    data_format: Optional[Union[str, ChannelDimension]] = None,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    constant_values: float | Iterable[float] = 0.0,
+    data_format: str | ChannelDimension | None = None,
+    input_data_format: str | ChannelDimension | None = None,
 ) -> np.ndarray:
     """
     Pads the `video` with the specified (height, width) `padding` and `mode`.

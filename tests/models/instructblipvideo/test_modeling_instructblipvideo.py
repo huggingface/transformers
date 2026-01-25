@@ -18,10 +18,12 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 from huggingface_hub import hf_hub_download
 
 from transformers import (
     CONFIG_MAPPING,
+    BitsAndBytesConfig,
     InstructBlipVideoConfig,
     InstructBlipVideoProcessor,
     InstructBlipVideoQFormerConfig,
@@ -152,8 +154,7 @@ class InstructBlipVideoVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (InstructBlipVideoVisionModel,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -199,28 +200,20 @@ class InstructBlipVideoVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(
-        reason="InstructBlipVideoVisionModel is an internal building block, doesn't support standalone training"
-    )
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(
-        reason="InstructBlipVideoVisionModel is an internal building block, doesn't support standalone training"
-    )
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @slow
@@ -439,7 +432,7 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester:
         return config, input_ids, attention_mask, qformer_input_ids, qformer_attention_mask, pixel_values
 
     def get_config(self):
-        return InstructBlipVideoConfig.from_vision_qformer_text_configs(
+        return InstructBlipVideoConfig(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
             text_config=self.text_model_tester.get_config(),
@@ -489,11 +482,11 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
         (InstructBlipVideoForConditionalGeneration, InstructBlipVideoModel) if is_torch_available() else ()
     )
     additional_model_inputs = ["qformer_input_ids", "input_ids"]
-    fx_compatible = False
-    test_pruning = False
+    # InstructBlipVideo merges batch_size and num_frames in the first output dimension
+    skip_test_video_features_output_shape = True
+
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):
@@ -534,6 +527,15 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
 
     @unittest.skip(reason="InstructBlipVideoModel does not have input/output embeddings")
     def test_model_common_attributes(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(reason="InstructBlipVideo does not support generation from no inputs")
+    def test_generate_without_input_ids(self):
+        pass
+
+    @unittest.skip(reason="InstructBLIP has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
     def test_forward_signature(self):
@@ -623,6 +625,18 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
                     ):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
+    def _video_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only video-related inputs from the full set of inputs, for testing `get_video_features`.
+
+        InstructBlip's `get_video_features` uses `qformer_input_ids` and `qformer_attention_mask` along with `pixel_values`,
+        so we override this method to keep those, and only discard `input_ids` and `attention_mask`.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        del inputs_dict["input_ids"]
+        del inputs_dict["attention_mask"]
+        return config, inputs_dict
+
 
 # We will verify our results on an image of cute cats
 def prepare_video():
@@ -643,7 +657,7 @@ class InstructBlipVideoModelIntegrationTest(unittest.TestCase):
         processor = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipVideoForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-vicuna-7b",
-            load_in_8bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
 
         clip = prepare_video()

@@ -153,7 +153,7 @@ You are not required to read the following guidelines before opening an issue. H
     cd examples/seq2seq
     torchrun --nproc_per_node=2 ./finetune_trainer.py \
     --model_name_or_path sshleifer/distill-mbart-en-ro-12-4 --data_dir wmt_en_ro \
-    --output_dir output_dir --overwrite_output_dir \
+    --output_dir output_dir \
     --do_train --n_train 500 --num_train_epochs 1 \
     --per_device_train_batch_size 1  --freeze_embeds \
     --src_lang en_XX --tgt_lang ro_RO --task translation \

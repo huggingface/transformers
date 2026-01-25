@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import tempfile
 import unittest
 
 import numpy as np
@@ -58,7 +59,7 @@ class Qwen2VLVideoProcessingTester:
         max_pixels=100 * 100,
         merge_size=2,
     ):
-        size = size if size is not None else {"shortest_edge": 20}
+        size = size if size is not None else {"shortest_edge": 400, "longest_edge": 10000}
         self.parent = parent
         self.batch_size = batch_size
         self.num_frames = num_frames
@@ -147,18 +148,22 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(video_processing, "image_std"))
         self.assertTrue(hasattr(video_processing, "do_convert_rgb"))
 
-    # OVERRIDDEN BECAUSE QWEN2_VL HAS SPECIAL OUTPUT SHAPES
     def test_video_processor_from_dict_with_kwargs(self):
+        video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)
+        self.assertEqual(video_processor.size, {"shortest_edge": 400, "longest_edge": 10000})
+
+        video_processor = self.fast_video_processing_class.from_dict(
+            self.video_processor_dict, size={"shortest_edge": 100, "longest_edge": 200}
+        )
+        self.assertEqual(video_processor.size, {"shortest_edge": 100, "longest_edge": 200})
+
+    def test_video_processor_to_json_string(self):
         for video_processing_class in self.video_processor_list:
             video_processor = video_processing_class(**self.video_processor_dict)
-            self.assertEqual(video_processor.min_pixels, self.video_processor_tester.min_pixels)
-            self.assertEqual(video_processor.max_pixels, self.video_processor_tester.max_pixels)
-
-            video_processor = video_processing_class.from_dict(
-                self.video_processor_dict, min_pixels=256 * 256, max_pixels=640 * 640
-            )
-            self.assertEqual(video_processor.min_pixels, 256 * 256)
-            self.assertEqual(video_processor.max_pixels, 640 * 640)
+            obj = json.loads(video_processor.to_json_string())
+            for key, value in self.video_processor_dict.items():
+                if key not in ["min_pixels", "max_pixels"]:
+                    self.assertEqual(obj[key], value)
 
     def test_call_pil(self):
         for video_processing_class in self.video_processor_list:
@@ -265,8 +270,8 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
                 video_inputs[0],
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=(0.0, 0.0, 0.0, 0.0),
+                image_std=(1.0, 1.0, 1.0, 1.0),
             )[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
@@ -276,8 +281,8 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
                 video_inputs,
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=(0.0, 0.0, 0.0, 0.0),
+                image_std=(1.0, 1.0, 1.0, 1.0),
             )[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
@@ -343,3 +348,39 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
             # Assign back the actual num frames in tester
             self.video_processor_tester.num_frames = prev_num_frames
+
+    def test_num_frames_equal_temporal_patch_size_plus_two(self):
+        for video_processing_class in self.video_processor_list:
+            video_processor_dict = self.video_processor_dict.copy()
+            video_processor_dict["size"] = {"longest_edge": 5 * 28 * 28, "shortest_edge": 28 * 28}
+            video_processor_dict["do_sample_frames"] = False
+            temporal_patch_size = 3
+            video_processor_dict["temporal_patch_size"] = temporal_patch_size
+            video_processing = video_processing_class(**video_processor_dict)
+
+            n, w, h = 5, 28, 28
+            video_inputs = [(np.random.randint(0, 256, (h, w, 3), dtype=np.uint8)) for _ in range(n)]
+
+            video_processed = video_processing(video_inputs, return_tensors="pt")
+            encoded_videos = video_processed[self.input_name]
+            self.assertEqual(list(encoded_videos.shape), [8, temporal_patch_size * 3 * 14 * 14])
+
+            video_grid_thw = video_processed["video_grid_thw"]
+            self.assertEqual(video_grid_thw.tolist(), [[2, 2, 2]])
+
+    def test_bc_min_max_pixels(self):
+        for video_processing_class in self.video_processor_list:
+            video_processing = video_processing_class(**self.video_processor_dict)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                video_processing.save_pretrained(tmpdirname)
+                video_processing_loaded = video_processing_class.from_pretrained(
+                    tmpdirname, max_pixels=56 * 56, min_pixels=28 * 28
+                )
+
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=True,
+                return_tensors="torch",
+            )
+            processed = video_processing_loaded(video_inputs, return_tensors="pt")
+            expected_output_video_shape = [320, 1176]
+            self.assertListEqual(list(processed.pixel_values_videos.shape), expected_output_video_shape)

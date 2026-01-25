@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Kyutai and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,12 +13,12 @@
 # limitations under the License.
 
 import types
-from typing import Optional, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationConfig, GenerationMixin
@@ -62,8 +61,8 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
 
     def __init__(
         self,
-        audio_delay_seconds: Optional[float] = 0.0,
-        audio_silence_prefix_seconds: Optional[float] = 0.0,
+        audio_delay_seconds: float | None = 0.0,
+        audio_silence_prefix_seconds: float | None = 0.0,
         **super_kwargs,
     ):
         super().__init__(**super_kwargs)
@@ -72,12 +71,12 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
 
     def __call__(
         self,
-        raw_audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        padding: Optional[Union[bool, str, PaddingStrategy]] = None,
-        truncation: Optional[bool] = False,
-        max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        sampling_rate: Optional[int] = None,
+        raw_audio: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        padding: bool | str | PaddingStrategy | None = None,
+        truncation: bool | None = False,
+        max_length: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        sampling_rate: int | None = None,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
@@ -213,7 +212,13 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
 
 
 class KyutaiSpeechToTextPreTrainedModel(MoshiPreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, KyutaiSpeechToTextEmbeddings):
+            audio_tokens_offsets = torch.arange(module.config.num_codebooks) * module.config.codebook_vocab_size
+            audio_tokens_offsets += module.config.vocab_size
+            audio_tokens_offsets = nn.functional.pad(audio_tokens_offsets, (1, 0))
+            init.copy_(module.audio_tokens_offsets, audio_tokens_offsets)
 
 
 class KyutaiSpeechToTextConv1dPaddingCache(MimiConv1dPaddingCache):
@@ -223,6 +228,7 @@ class KyutaiSpeechToTextConv1dPaddingCache(MimiConv1dPaddingCache):
 class KyutaiSpeechToTextEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.embed_tokens = nn.Embedding(
             config.vocab_size + (config.num_codebooks * config.codebook_vocab_size) + 1,
             config.hidden_size,
@@ -251,7 +257,9 @@ class KyutaiSpeechToTextModel(MoshiModel):
 
 
 class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.embed_tokens.weight"}
     _keep_in_fp32_modules_strict = ["codec_model"]
+    output_modalities = ("audio", "text")
 
     def __init__(self, config):
         super().__init__(config)
@@ -307,10 +315,10 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
     def _prepare_model_inputs(
         self,
-        inputs: Optional[torch.Tensor] = None,
-        bos_token_id: Optional[torch.Tensor] = None,
-        model_kwargs: Optional[dict[str, torch.Tensor]] = None,
-    ) -> tuple[torch.Tensor, Optional[str], dict[str, torch.Tensor]]:
+        inputs: torch.Tensor | None = None,
+        bos_token_id: torch.Tensor | None = None,
+        model_kwargs: dict[str, torch.Tensor] | None = None,
+    ) -> tuple[torch.Tensor, str | None, dict[str, torch.Tensor]]:
         inputs, input_name, model_kwargs = GenerationMixin._prepare_model_inputs(
             self,
             inputs=inputs,
@@ -388,13 +396,13 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
     def prepare_inputs_for_generation(
         self,
         *args,
-        audio_tokens: Optional[torch.LongTensor] = None,
-        input_values: Optional[torch.FloatTensor] = None,
-        padding_mask: Optional[torch.Tensor] = None,
-        audio_window_size: Optional[int] = None,
-        current_window: Optional[tuple[int, int]] = None,
-        encoder_past_key_values: Optional[Cache] = None,
-        padding_cache: Optional[KyutaiSpeechToTextConv1dPaddingCache] = None,
+        audio_tokens: torch.LongTensor | None = None,
+        input_values: torch.FloatTensor | None = None,
+        padding_mask: torch.Tensor | None = None,
+        audio_window_size: int | None = None,
+        current_window: tuple[int, int] | None = None,
+        encoder_past_key_values: Cache | None = None,
+        padding_cache: KyutaiSpeechToTextConv1dPaddingCache | None = None,
         **kwargs,
     ):
         model_inputs = GenerationMixin.prepare_inputs_for_generation(self, *args, **kwargs)

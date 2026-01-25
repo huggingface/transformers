@@ -48,7 +48,7 @@ You will then be able to use the auto classes like you would usually do!
 
 <Tip warning={true}>
 
-If your `NewModelConfig` is a subclass of [`~transformers.PretrainedConfig`], make sure its
+If your `NewModelConfig` is a subclass of [`~transformers.PreTrainedConfig`], make sure its
 `model_type` attribute is set to the same key you use when registering the config (here `"new-model"`).
 
 Likewise, if your `NewModel` is a subclass of [`PreTrainedModel`], make sure its
@@ -241,6 +241,10 @@ The following auto classes are available for the following audio tasks.
 
 The following auto classes are available for the following multimodal tasks.
 
+### AutoModelForMultimodalLM
+
+[[autodoc]] AutoModelForMultimodalLM
+
 ### AutoModelForTableQuestionAnswering
 
 [[autodoc]] AutoModelForTableQuestionAnswering
@@ -252,10 +256,6 @@ The following auto classes are available for the following multimodal tasks.
 ### AutoModelForVisualQuestionAnswering
 
 [[autodoc]] AutoModelForVisualQuestionAnswering
-
-### AutoModelForVision2Seq
-
-[[autodoc]] AutoModelForVision2Seq
 
 ### AutoModelForImageTextToText
 

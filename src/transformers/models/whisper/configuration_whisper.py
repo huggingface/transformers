@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,18 +13,9 @@
 # limitations under the License.
 """Whisper model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Union
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig, OnnxSeq2SeqConfigWithPast
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
-
-if TYPE_CHECKING:
-    from ...feature_extraction_utils import FeatureExtractionMixin
-    from ...tokenization_utils_base import PreTrainedTokenizerBase
 
 logger = logging.get_logger(__name__)
 
@@ -56,15 +46,15 @@ NON_SPEECH_TOKENS_MULTI = [
 # fmt: on
 
 
-class WhisperConfig(PretrainedConfig):
+class WhisperConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`WhisperModel`]. It is used to instantiate a
     Whisper model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Whisper
     [openai/whisper-tiny](https://huggingface.co/openai/whisper-tiny) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -234,6 +224,7 @@ class WhisperConfig(PretrainedConfig):
         mask_feature_length=10,
         mask_feature_min_masks=0,
         median_filter_width=7,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -272,77 +263,18 @@ class WhisperConfig(PretrainedConfig):
         self.mask_feature_min_masks = mask_feature_min_masks
 
         self.median_filter_width = median_filter_width
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
             suppress_tokens=suppress_tokens,
             begin_suppress_tokens=begin_suppress_tokens,
             **kwargs,
         )
 
 
-class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = OrderedDict(
-            [
-                ("input_features", {0: "batch", 1: "feature_size", 2: "encoder_sequence"}),
-            ]
-        )
-        if self.use_past:
-            common_inputs["decoder_input_ids"] = {0: "batch"}
-        else:
-            common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
-
-        if self.use_past:
-            self.fill_with_past_key_values_(common_inputs, direction="inputs")
-
-        return common_inputs
-
-    def generate_dummy_inputs(
-        self,
-        preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin"],
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-        sampling_rate: int = 22050,
-        time_duration: float = 5.0,
-        frequency: int = 220,
-    ) -> Mapping[str, Any]:
-        dummy_inputs = OrderedDict()
-        encoder_inputs = OnnxConfig.generate_dummy_inputs(
-            self,
-            preprocessor=preprocessor.feature_extractor,
-            batch_size=batch_size,
-            sampling_rate=sampling_rate,
-            time_duration=time_duration,
-            frequency=frequency,
-        )
-        encoder_sequence_length = encoder_inputs["input_features"].shape[2]
-        seq_length = encoder_sequence_length // 2 if self.use_past else seq_length
-
-        decoder_inputs = super().generate_dummy_inputs(
-            preprocessor.tokenizer,
-            batch_size,
-            seq_length,
-            is_pair,
-        )
-
-        dummy_inputs["input_features"] = encoder_inputs.pop("input_features")
-        dummy_inputs["decoder_input_ids"] = decoder_inputs.pop("decoder_input_ids")
-
-        if "past_key_values" in decoder_inputs:
-            dummy_inputs["past_key_values"] = decoder_inputs.pop("past_key_values")
-
-        return dummy_inputs
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-3
-
-
-__all__ = ["WhisperConfig", "WhisperOnnxConfig"]
+__all__ = ["WhisperConfig"]

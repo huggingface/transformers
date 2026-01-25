@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,19 +13,19 @@
 # limitations under the License.
 """Config class for Granite Speech."""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class GraniteSpeechEncoderConfig(PretrainedConfig):
+class GraniteSpeechEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GraniteSpeechCTCEncoder`]. It is used to instantiate
     a Granite Speech audio encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the dfefaults will yield a similar configuration to that of the audio encoder of the Granite Speech
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         input_dim (`int`, *optional*, defaults to 160):
@@ -104,13 +103,13 @@ class GraniteSpeechEncoderConfig(PretrainedConfig):
         self.max_pos_emb = max_pos_emb
 
 
-class GraniteSpeechConfig(PretrainedConfig):
+class GraniteSpeechConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GraniteSpeechForConditionalGeneration`]. It is used to instantiate an
     Granite Speech model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `GraniteConfig`):

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team and the Swiss AI Initiative. All rights reserved.
 #
 # This code is based on HuggingFace's LLaMA implementation in this library.
@@ -22,7 +21,6 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -34,7 +32,6 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     from transformers import (
         ApertusForCausalLM,
-        ApertusForTokenClassification,
         ApertusModel,
     )
 
@@ -46,15 +43,6 @@ class ApertusModelTester(CausalLMModelTester):
 
 @require_torch
 class ApertusModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": ApertusModel,
-            "text-generation": ApertusForCausalLM,
-            "token-classification": ApertusForTokenClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
     model_tester_class = ApertusModelTester
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
@@ -66,7 +54,6 @@ class ApertusModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-@require_read_token
 @slow
 class ApertusIntegrationTest(unittest.TestCase):
     pass

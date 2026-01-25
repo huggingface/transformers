@@ -505,7 +505,6 @@ accelerate launch \
     --learning_rate 5e-5 \
     --num_train_epochs 3 \
     --output_dir /tmp/$TASK_NAME/ \
-    --overwrite_output_dir
 ```
 
 `config_file.yaml` 파일의 매개변수를 직접 지정할 수도 있습니다:
@@ -528,7 +527,6 @@ accelerate launch --num_processes=2 \
     --learning_rate 5e-5 \
     --num_train_epochs 3 \
     --output_dir /tmp/$TASK_NAME/ \
-    --overwrite_output_dir
 ```
 
 `accelerate_launch`와 사용자 정의 구성에 대해 더 알아보려면 [Accelerate 스크립트 실행](https://huggingface.co/docs/accelerate/basic_tutorials/launch) 튜토리얼을 확인하세요.

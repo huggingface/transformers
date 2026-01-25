@@ -23,11 +23,11 @@ that the metric applies specifically to classical language models (sometimes cal
 models) and is not well defined for masked language models like BERT (see [summary of the models](model_summary)).
 
 Perplexity is defined as the exponentiated average negative log-likelihood of a sequence. If we have a tokenized
-sequence \\(X = (x_0, x_1, \dots, x_t)\\), then the perplexity of \\(X\\) is,
+sequence $X = (x_0, x_1, \dots, x_t)$, then the perplexity of $X$ is,
 
-$$\text{PPL}(X) = \exp \left\{ {-\frac{1}{t}\sum_i^t \log p_\theta (x_i|x_{<i}) } \right\}$$
+$$ \text{PPL}(X) = \exp\left\{ -\frac{1}{t}\sum_i^t \log p_\theta (x_i|x_{<i})  \right\} $$
 
-where \\(\log p_\theta (x_i|x_{<i})\\) is the log-likelihood of the ith token conditioned on the preceding tokens \\(x_{<i}\\) according to our model. Intuitively, it can be thought of as an evaluation of the model's ability to predict uniformly among the set of specified tokens in a corpus. Importantly, this means that the tokenization procedure has a direct impact on a model's perplexity which should always be taken into consideration when comparing different models.
+where $\log p_\theta (x_i|x_{<i})$ is the log-likelihood of the ith token conditioned on the preceding tokens $x_{<i}$ according to our model. Intuitively, it can be thought of as an evaluation of the model's ability to predict uniformly among the set of specified tokens in a corpus. Importantly, this means that the tokenization procedure has a direct impact on a model's perplexity which should always be taken into consideration when comparing different models.
 
 This is also equivalent to the exponentiation of the cross-entropy between the data and model predictions. For more
 intuition about perplexity and its relationship to Bits Per Character (BPC) and data compression, check out this
@@ -42,11 +42,11 @@ factorizing a sequence and conditioning on the entire preceding subsequence at e
 
 When working with approximate models, however, we typically have a constraint on the number of tokens the model can
 process. The largest version of [GPT-2](model_doc/gpt2), for example, has a fixed length of 1024 tokens, so we
-cannot calculate \\(p_\theta(x_t|x_{<t})\\) directly when \\(t\\) is greater than 1024.
+cannot calculate $p_\theta(x_t|x_{<t})$ directly when $t$ is greater than 1024.
 
 Instead, the sequence is typically broken into subsequences equal to the model's maximum input size. If a model's max
-input size is \\(k\\), we then approximate the likelihood of a token \\(x_t\\) by conditioning only on the
-\\(k-1\\) tokens that precede it rather than the entire context. When evaluating the model's perplexity of a
+input size is $k$, we then approximate the likelihood of a token $x_t$ by conditioning only on the
+$k-1$ tokens that precede it rather than the entire context. When evaluating the model's perplexity of a
 sequence, a tempting but suboptimal approach is to break the sequence into disjoint chunks and add up the decomposed
 log-likelihoods of each segment independently.
 
@@ -72,9 +72,10 @@ predictions at each step.
 Let's demonstrate this process with GPT-2.
 
 ```python
-from transformers import GPT2LMHeadModel, GPT2TokenizerFast, infer_device
+from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 model_id = "openai-community/gpt2-large"
 model = GPT2LMHeadModel.from_pretrained(model_id).to(device)
 tokenizer = GPT2TokenizerFast.from_pretrained(model_id)

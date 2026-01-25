@@ -13,8 +13,6 @@
 # limitations under the License.
 """Tests for the SpeechT5 processors."""
 
-import json
-import os
 import shutil
 import tempfile
 import unittest
@@ -22,7 +20,6 @@ import unittest
 from transformers import is_speech_available, is_torch_available
 from transformers.models.speecht5 import SpeechT5Tokenizer
 from transformers.testing_utils import get_tests_dir, require_speech, require_torch
-from transformers.utils import FEATURE_EXTRACTOR_NAME
 
 
 if is_speech_available() and is_torch_available():
@@ -60,9 +57,10 @@ class SpeechT5ProcessorTest(unittest.TestCase):
             "return_attention_mask": True,
         }
 
-        cls.feature_extraction_file = os.path.join(cls.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(cls.feature_extraction_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(feature_extractor_map) + "\n")
+        feature_extractor = SpeechT5FeatureExtractor(**feature_extractor_map)
+        tokenizer = SpeechT5Tokenizer.from_pretrained(cls.tmpdirname)
+        processor = SpeechT5Processor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return SpeechT5Tokenizer.from_pretrained(self.tmpdirname, **kwargs)

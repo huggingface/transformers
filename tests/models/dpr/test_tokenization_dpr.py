@@ -48,6 +48,7 @@ class DPRReaderTokenizationTest(test_tokenization_bert.BertTokenizationTest):
     tokenizer_class = DPRReaderTokenizer
     rust_tokenizer_class = DPRReaderTokenizerFast
     test_rust_tokenizer = True
+    test_seq2seq = False
     from_pretrained_id = "facebook/dpr-ctx_encoder-single-nq-base"
 
     @slow

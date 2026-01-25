@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from .configuration_albert import *
     from .modeling_albert import *
     from .tokenization_albert import *
-    from .tokenization_albert_fast import *
 else:
     import sys
 

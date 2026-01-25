@@ -18,9 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -28,15 +26,15 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class DeepseekVLHybridConfig(PretrainedConfig):
+class DeepseekVLHybridConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeepseekVLHybridModel`]. It is used to instantiate a
     DeepseekVLHybrid model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the DeepseekVLHybrid
     [deepseek-community/deepseek-vl-7b-chat](https://huggingface.co/deepseek-community/deepseek-vl-7b-chat) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
@@ -68,14 +66,21 @@ class DeepseekVLHybridConfig(PretrainedConfig):
 
     def __init__(
         self,
-        text_config: Optional[AutoConfig] = None,
-        vision_config: Optional[AutoConfig] = None,
-        high_res_vision_config: Optional[AutoConfig] = None,
+        text_config: AutoConfig | None = None,
+        vision_config: AutoConfig | None = None,
+        high_res_vision_config: AutoConfig | None = None,
         image_token_id: int = 100015,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        if high_res_vision_config is None:
+            high_res_vision_config = {}
+            logger.info("`high_res_vision_config` is `None`. Initializing the `SamVisionConfig` with default values.")
 
+        if isinstance(high_res_vision_config, dict):
+            high_res_vision_config["model_type"] = high_res_vision_config.get("model_type", "sam_vision_model")
+            high_res_vision_config = CONFIG_MAPPING[high_res_vision_config["model_type"]](**high_res_vision_config)
+
+        self.high_res_vision_config = high_res_vision_config
         if text_config is None:
             text_config = {}
             logger.info("`text_config` is `None`. Initializing the `LlamaConfig` with default values.")
@@ -95,16 +100,7 @@ class DeepseekVLHybridConfig(PretrainedConfig):
         self.text_config = text_config
         self.vision_config = vision_config
         self.image_token_id = image_token_id
-
-        if high_res_vision_config is None:
-            high_res_vision_config = {}
-            logger.info("`high_res_vision_config` is `None`. Initializing the `SamVisionConfig` with default values.")
-
-        if isinstance(high_res_vision_config, dict):
-            high_res_vision_config["model_type"] = high_res_vision_config.get("model_type", "sam_vision_model")
-            high_res_vision_config = CONFIG_MAPPING[high_res_vision_config["model_type"]](**high_res_vision_config)
-
-        self.high_res_vision_config = high_res_vision_config
+        super().__init__(**kwargs)
 
 
 __all__ = ["DeepseekVLHybridConfig"]

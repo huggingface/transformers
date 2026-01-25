@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +13,15 @@
 # limitations under the License.
 """Fast Image processor class for ImageGPT."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
 import torch
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
 )
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling
@@ -30,14 +29,8 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
+from .image_processing_imagegpt import ImageGPTImageProcessorKwargs
 
 
 def squared_euclidean_distance_torch(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
@@ -74,20 +67,6 @@ def color_quantize_torch(x: torch.Tensor, clusters: torch.Tensor) -> torch.Tenso
     return torch.argmin(d, dim=1)
 
 
-class ImageGPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    clusters (`np.ndarray` or `list[list[int]]` or `torch.Tensor`, *optional*):
-        The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overridden by `clusters`
-        in `preprocess`.
-    do_color_quantize (`bool`, *optional*, defaults to `True`):
-        Controls whether to apply color quantization to convert continuous pixel values to discrete cluster indices.
-        When True, each pixel is assigned to its nearest color cluster, enabling ImageGPT's discrete token modeling.
-    """
-
-    clusters: Optional[Union[np.ndarray, list[list[int]], torch.Tensor]]
-    do_color_quantize: Optional[bool]
-
-
 @auto_docstring
 class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     model_input_names = ["input_ids"]
@@ -98,12 +77,12 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     image_std = [0.5, 0.5, 0.5]
     do_rescale = True
     do_normalize = True
-    valid_kwargs = ImageGPTFastImageProcessorKwargs
+    valid_kwargs = ImageGPTImageProcessorKwargs
 
     def __init__(
         self,
-        clusters: Optional[Union[list, np.ndarray, torch.Tensor]] = None,  # keep as arg for backwards compatibility
-        **kwargs: Unpack[ImageGPTFastImageProcessorKwargs],
+        clusters: list | np.ndarray | torch.Tensor | None = None,  # keep as arg for backwards compatibility
+        **kwargs: Unpack[ImageGPTImageProcessorKwargs],
     ):
         r"""
         clusters (`np.ndarray` or `list[list[int]]` or `torch.Tensor`, *optional*):
@@ -118,18 +97,18 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: dict[str, int],
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: dict[str, int],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        do_color_quantize: Optional[bool] = None,
-        clusters: Optional[Union[list, np.ndarray, torch.Tensor]] = None,
-        disable_grouping: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_color_quantize: bool | None = None,
+        clusters: list | np.ndarray | torch.Tensor | None = None,
+        disable_grouping: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
         # Group images by size for batched resizing
@@ -184,12 +163,8 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
 
             input_ids = reorder_images(input_ids_grouped, grouped_images_index)
 
-            return BatchFeature(
-                data={"input_ids": torch.stack(input_ids, dim=0) if return_tensors else input_ids},
-                tensor_type=return_tensors,
-            )
+            return BatchFeature(data={"input_ids": input_ids}, tensor_type=return_tensors)
 
-        pixel_values = torch.stack(pixel_values, dim=0) if return_tensors else pixel_values
         return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
 
     def to_dict(self):

@@ -341,9 +341,10 @@ class ImageProcessingTestMixin:
         }
         dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
         dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        # Fast processors filter None values from to_dict(), so differences should only be special keys
         self.assertTrue(
-            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+            all(key in ["default_to_square", "data_format"] for key in difference.keys()),
+            f"Fast processors should only differ in special keys, found: {list(difference.keys())}",
         )
         # check that the remaining keys are the same
         self.assertEqual(dict_fast_0, dict_fast_1)
@@ -391,9 +392,10 @@ class ImageProcessingTestMixin:
         }
         dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
         dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        # Fast processors filter None values from to_dict(), so differences should only be special keys
         self.assertTrue(
-            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+            all(key in ["default_to_square", "data_format"] for key in difference.keys()),
+            f"Fast processors should only differ in special keys, found: {list(difference.keys())}",
         )
         # check that the remaining keys are the same
         self.assertEqual(dict_fast_0, dict_fast_1)
@@ -519,8 +521,8 @@ class ImageProcessingTestMixin:
                 image_inputs[0],
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=[0.0, 0.0, 0.0, 0.0],
+                image_std=[1.0, 1.0, 1.0, 1.0],
             ).pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
@@ -530,8 +532,8 @@ class ImageProcessingTestMixin:
                 image_inputs,
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=[0.0, 0.0, 0.0, 0.0],
+                image_std=[1.0, 1.0, 1.0, 1.0],
             ).pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
@@ -692,6 +694,37 @@ class ImageProcessingTestMixin:
             f"Model '{model_type}' (processor: {image_processor_name}) was added after the cutoff date and must have "
             f"a fast image processor implementation. Please implement the corresponding fast processor.",
         )
+
+    def test_fast_image_processor_explicit_none_preserved(self):
+        """Test that explicitly setting an attribute to None is preserved through save/load."""
+        if self.fast_image_processing_class is None:
+            self.skipTest("Skipping test as fast image processor is not defined")
+
+        # Find an attribute with a non-None class default to test explicit None override
+        test_attr = None
+        for attr in ["do_resize", "do_rescale", "do_normalize"]:
+            if getattr(self.fast_image_processing_class, attr, None) is not None:
+                test_attr = attr
+                break
+
+        if test_attr is None:
+            self.skipTest("Could not find a suitable attribute to test")
+
+        # Create processor with explicit None (override the attribute)
+        kwargs = self.image_processor_dict.copy()
+        kwargs[test_attr] = None
+        image_processor = self.fast_image_processing_class(**kwargs)
+
+        # Verify it's in to_dict() as None (not filtered out)
+        self.assertIn(test_attr, image_processor.to_dict())
+        self.assertIsNone(image_processor.to_dict()[test_attr])
+
+        # Verify explicit None survives save/load cycle
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            image_processor.save_pretrained(tmpdirname)
+            reloaded = self.fast_image_processing_class.from_pretrained(tmpdirname)
+
+        self.assertIsNone(getattr(reloaded, test_attr), f"Explicit None for {test_attr} was lost after reload")
 
 
 class AnnotationFormatTestMixin:

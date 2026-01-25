@@ -120,8 +120,6 @@ class SuperGlueModelTester:
 class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SuperGlueForKeypointMatching,) if is_torch_available() else ()
 
-    fx_compatible = False
-    test_pruning = False
     test_resize_embeddings = False
     has_attentions = True
 
@@ -149,20 +147,20 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="SuperGlue does not output any loss term in the forward pass")
@@ -306,7 +304,7 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
             else:
                 # indexing the first element does not always work
                 # e.g. models that output similarity scores of size (N, M) would need to index [0, 0]
-                slice_ids = [slice(0, index) for index in single_row_object.shape]
+                slice_ids = tuple(slice(0, index) for index in single_row_object.shape)
                 batched_row = batched_object[slice_ids]
                 self.assertFalse(
                     torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
@@ -394,14 +392,15 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
         predicted_matches_values = outputs.matches[0, 0, :30]
         predicted_matching_scores_values = outputs.matching_scores[0, 0, :20]
 
-        expected_number_of_matches = 282
-        expected_matches_values = torch.tensor([125,630,137,138,136,143,135,-1,-1,153,
-                                                154,156,117,160,-1,149,147,152,168,-1,
-                                                165,182,-1,190,187,188,189,112,-1,193],
-                                                device=predicted_matches_values.device)  # fmt:skip
-        expected_matching_scores_values = torch.tensor([0.9899,0.0033,0.9897,0.9889,0.9879,0.7464,0.7109,0.0,0.0,0.9841,
-                                                        0.9889,0.9639,0.0114,0.9559,0.0,0.9735,0.8018,0.5190,0.9157,0.0],
-                                                        device=predicted_matches_values.device)  # fmt:skip
+        expected_number_of_matches = 278
+        expected_matches_values = torch.tensor(
+            [125, 631, 137, 138, 136, 143, 135,  -1,  -1, 153, 154, 156, 117, 160, -1, 149, 147, 152, 168,  -1, 165, 182,  -1, 190, 187, 188, 189, 112, -1, 193],
+            device=predicted_matches_values.device
+        )  # fmt:skip
+        expected_matching_scores_values = torch.tensor(
+            [0.9899, 0.0553, 0.9897, 0.9889, 0.9879, 0.7557, 0.7155, 0.0000, 0.0000, 0.9840, 0.9889, 0.9644, 0.0102, 0.9557, 0.0000, 0.9737, 0.8050, 0.5204, 0.9167, 0.0000],
+            device=predicted_matches_values.device
+        )  # fmt:skip
 
         """
         Because of inconsistencies introduced between CUDA versions, the checks here are less strict. SuperGlue relies

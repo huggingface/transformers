@@ -72,7 +72,6 @@ ALIGNの使用を開始するのに役立つ公式のHugging Faceとコミュニ
 ## AlignConfig
 
 [[autodoc]] AlignConfig
-    - from_text_vision_configs
 
 ## AlignTextConfig
 

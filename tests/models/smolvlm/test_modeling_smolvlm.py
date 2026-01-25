@@ -38,6 +38,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -167,9 +168,7 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (SmolVLMModel,) if is_torch_available() else ()
-    fx_compatible = False
-    test_torchscript = False
-    test_pruning = False
+    skip_test_image_features_output_shape = True  # SmolVLM merges batch_size with num_images in index 0
     test_resize_embeddings = True
 
     def setUp(self):
@@ -323,18 +322,25 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTesterMixin, unittest.TestCase):
+class SmolVLMForConditionalGenerationModelTest(
+    GenerationTesterMixin, ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Model tester for `SmolVLMForConditionalGeneration`.
     """
 
     all_model_classes = (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-text-to-text": SmolVLMForConditionalGeneration} if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+    pipeline_model_mapping = (
+        {
+            "image-text-to-text": SmolVLMForConditionalGeneration,
+            "any-to-any": SmolVLMForConditionalGeneration,
+        }
+        if is_torch_available()
+        else ()
+    )
+    skip_test_image_features_output_shape = True  # SmolVLM merges batch_size with num_images in index 0
     test_resize_embeddings = True
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = SmolVLMVisionText2TextModelTester(self)
@@ -348,22 +354,6 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
     @is_flaky(description="TODO: check why flaky")
     def test_generate_methods_with_logits_to_keep(self):
         super().test_generate_methods_with_logits_to_keep()
-
-    @unittest.skip
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
 
     @unittest.skip(reason="Unsupported")
     def test_generate_with_static_cache(self):

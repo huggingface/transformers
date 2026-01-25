@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,9 +19,9 @@ URL: https://github.com/facebookresearch/dinov3/tree/main
 import argparse
 import os
 import re
-from typing import Optional
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from huggingface_hub import HfApi, hf_hub_download
 from PIL import Image
@@ -75,7 +74,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 # fmt: on
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -182,7 +181,8 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
 
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read())).convert("RGB")
     return image
 
 

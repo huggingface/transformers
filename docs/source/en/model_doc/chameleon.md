@@ -25,8 +25,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Chameleon model was proposed in [Chameleon: Mixed-Modal Early-Fusion Foundation Models
-](https://huggingface.co/papers/2405.09818) by META AI Chameleon Team. Chameleon is a Vision-Language Model that use vector quantization to tokenize images which enables the model to generate multimodal output. The model takes images and texts as input, including an interleaved format, and generates textual response. Image generation module is not released yet.
+The Chameleon model was proposed in [Chameleon: Mixed-Modal Early-Fusion Foundation Models](https://huggingface.co/papers/2405.09818) by META AI Chameleon Team. Chameleon is a Vision-Language Model that use vector quantization to tokenize images which enables the model to generate multimodal output. The model takes images and texts as input, including an interleaved format, and generates textual response. Image generation module is not released yet.
 
 The abstract from the paper is the following:
 
@@ -183,6 +182,7 @@ model = ChameleonForConditionalGeneration.from_pretrained(
 ## ChameleonProcessor
 
 [[autodoc]] ChameleonProcessor
+    - __call__
 
 ## ChameleonImageProcessor
 
@@ -203,8 +203,10 @@ model = ChameleonForConditionalGeneration.from_pretrained(
 
 [[autodoc]] ChameleonModel
     - forward
+    - get_image_features
 
 ## ChameleonForConditionalGeneration
 
 [[autodoc]] ChameleonForConditionalGeneration
     - forward
+    - get_image_features

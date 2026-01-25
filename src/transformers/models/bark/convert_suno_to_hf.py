@@ -229,11 +229,9 @@ def load_whole_bark_model(
     fineAcoustic = BarkFineModel.from_pretrained(fine_path)
     codec = EncodecModel.from_pretrained("facebook/encodec_24khz")
 
-    bark_config = BarkConfig.from_sub_model_configs(
-        semanticConfig, coarseAcousticConfig, fineAcousticConfig, codecConfig
-    )
+    bark_config = BarkConfig(semanticConfig, coarseAcousticConfig, fineAcousticConfig, codecConfig)
 
-    bark_generation_config = BarkGenerationConfig.from_sub_model_configs(
+    bark_generation_config = BarkGenerationConfig(
         semantic.generation_config, coarseAcoustic.generation_config, fineAcoustic.generation_config
     )
 

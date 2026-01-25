@@ -1,4 +1,4 @@
-### `tiny-agents` CLI and MCP Tools
+# `tiny-agents` CLI and MCP Tools
 
 To showcase the use of MCP tools, let's see how to integrate the `transformers serve` server with the [`tiny-agents`](https://huggingface.co/blog/python-tiny-agents) CLI.
 

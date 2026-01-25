@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from functools import partial
-from typing import Any, Callable, TypeVar, Union, overload
+from typing import Any, TypeVar, overload
 
 import torch
 import torch.nn as nn
@@ -76,13 +77,13 @@ def one_hot(x: torch.Tensor, v_bins: torch.Tensor) -> torch.Tensor:
 
 
 def batched_gather(data: torch.Tensor, inds: torch.Tensor, dim: int = 0, no_batch_dims: int = 0) -> torch.Tensor:
-    ranges: list[Union[slice, torch.Tensor]] = []
+    ranges: list[slice | torch.Tensor] = []
     for i, s in enumerate(data.shape[:no_batch_dims]):
         r = torch.arange(s)
         r = r.view(*(*((1,) * i), -1, *((1,) * (len(inds.shape) - i - 1))))
         ranges.append(r)
 
-    remaining_dims: list[Union[slice, torch.Tensor]] = [slice(None) for _ in range(len(data.shape) - no_batch_dims)]
+    remaining_dims: list[slice | torch.Tensor] = [slice(None) for _ in range(len(data.shape) - no_batch_dims)]
     remaining_dims[dim - no_batch_dims if dim >= 0 else dim] = inds
     ranges.extend(remaining_dims)
     # Matt note: Editing this to get around the behaviour of using a list as an array index changing
@@ -94,9 +95,9 @@ T = TypeVar("T")
 
 
 def dict_map(
-    fn: Callable[[T], Any], dic: dict[Any, Union[dict, list, tuple, T]], leaf_type: type[T]
-) -> dict[Any, Union[dict, list, tuple, Any]]:
-    new_dict: dict[Any, Union[dict, list, tuple, Any]] = {}
+    fn: Callable[[T], Any], dic: dict[Any, dict | list | tuple | T], leaf_type: type[T]
+) -> dict[Any, dict | list | tuple | Any]:
+    new_dict: dict[Any, dict | list | tuple | Any] = {}
     for k, v in dic.items():
         if isinstance(v, dict):
             new_dict[k] = dict_map(fn, v, leaf_type)

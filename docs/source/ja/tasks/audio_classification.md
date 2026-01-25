@@ -219,7 +219,7 @@ MInDS-14 データセットのサンプリング レートは 8khz です (こ�
 ...     gradient_accumulation_steps=4,
 ...     per_device_eval_batch_size=32,
 ...     num_train_epochs=10,
-...     warmup_ratio=0.1,
+...     warmup_steps=0.1,
 ...     logging_steps=10,
 ...     load_best_model_at_end=True,
 ...     metric_for_best_model="accuracy",

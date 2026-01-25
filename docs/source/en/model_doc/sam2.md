@@ -69,12 +69,13 @@ SAM2 can be used for automatic mask generation to segment all objects in an imag
 You can segment objects by providing a single point click on the object you want to segment:
 
 ```python
->>> from transformers import Sam2Processor, Sam2Model, infer_device
+>>> from transformers import Sam2Processor, Sam2Model
+from accelerate import Accelerator
 >>> import torch
 >>> from PIL import Image
 >>> import requests
 
->>> device = infer_device()
+>>> device = Accelerator().device
 
 >>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large").to(device)
 >>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
@@ -157,12 +158,13 @@ Generated masks for 2 objects
 Process multiple images simultaneously for improved efficiency:
 
 ```python
->>> from transformers import Sam2Processor, Sam2Model, infer_device
+>>> from transformers import Sam2Processor, Sam2Model
+from accelerate import Accelerator
 >>> import torch
 >>> from PIL import Image
 >>> import requests
 
->>> device = infer_device()
+>>> device = Accelerator().device
 
 >>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large").to(device)
 >>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
@@ -349,3 +351,4 @@ SAM2 can use masks from previous predictions as input to refine segmentation:
 
 [[autodoc]] Sam2Model
     - forward
+    - get_image_features

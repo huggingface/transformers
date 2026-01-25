@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,16 +13,14 @@
 # limitations under the License.
 """Time Series Transformer model configuration"""
 
-from typing import Optional, Union
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class TimeSeriesTransformerConfig(PretrainedConfig):
+class TimeSeriesTransformerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TimeSeriesTransformerModel`]. It is used to
     instantiate a Time Series Transformer model according to the specified arguments, defining the model architecture.
@@ -32,8 +29,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
     [huggingface/time-series-transformer-tourism-monthly](https://huggingface.co/huggingface/time-series-transformer-tourism-monthly)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         prediction_length (`int`):
@@ -130,19 +127,19 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        prediction_length: Optional[int] = None,
-        context_length: Optional[int] = None,
+        prediction_length: int | None = None,
+        context_length: int | None = None,
         distribution_output: str = "student_t",
         loss: str = "nll",
         input_size: int = 1,
         lags_sequence: list[int] = [1, 2, 3, 4, 5, 6, 7],
-        scaling: Optional[Union[str, bool]] = "mean",
+        scaling: str | bool | None = "mean",
         num_dynamic_real_features: int = 0,
         num_static_categorical_features: int = 0,
         num_static_real_features: int = 0,
         num_time_features: int = 0,
-        cardinality: Optional[list[int]] = None,
-        embedding_dimension: Optional[list[int]] = None,
+        cardinality: list[int] | None = None,
+        embedding_dimension: list[int] | None = None,
         encoder_ffn_dim: int = 32,
         decoder_ffn_dim: int = 32,
         encoder_attention_heads: int = 2,

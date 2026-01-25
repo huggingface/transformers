@@ -1,8 +1,6 @@
-from ..utils import is_accelerate_available, is_torch_available, logging
+from ..quantizers.quantizers_utils import should_convert_module
+from ..utils import is_torch_available, logging
 
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 if is_torch_available():
     import torch
@@ -91,7 +89,7 @@ def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
 
     Explanation of the example:
     ---------------------------
-    Let's take the first value for example 0b10100001, we we will only focus on the first column,
+    Let's take the first value for example 0b10100001, we will only focus on the first column,
     because every element is unpacked across the first dimension
     - First 2 bits: `01` → 0 at [0][0]
     - Second 2 bits: `00` → -1 at [0][2]
@@ -172,7 +170,7 @@ class BitLinear(nn.Module):
         Activation function : Performs symmetric, per-token quantization on the input activations.
         Parameters:
         -----------
-        x : torch.Tensor
+        input : torch.Tensor
             Input activations to be quantized.
         num_bits : int, optional (default=8)
             Number of bits to use for quantization, determining the quantization range.
@@ -314,109 +312,53 @@ class AutoBitLinear(nn.Linear):
         return output
 
 
-def _replace_with_bitnet_linear(
-    model,
-    modules_to_not_convert=None,
-    current_key_name=None,
-    quantization_config=None,
-    has_been_replaced=False,
-    pre_quantized=False,
-):
+def replace_with_bitnet_linear(model, modules_to_not_convert: list[str] | None = None, quantization_config=None):
     """
-    Private method that wraps the recursion for module replacement.
+    Public method that replaces the linear layers of the given model with bitnet quantized layers.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
-    """
-
-    if current_key_name is None:
-        current_key_name = []
-
-    for name, module in model.named_children():
-        if current_key_name is None:
-            current_key_name = []
-        current_key_name.append(name)
-
-        # Check if the current key is not in the `modules_to_not_convert`
-        if not any(key in ".".join(current_key_name) for key in modules_to_not_convert):
-            with init_empty_weights():
-                if isinstance(module, nn.Linear) and name not in modules_to_not_convert:
-                    in_features = module.in_features
-                    out_features = module.out_features
-                    if quantization_config and quantization_config.linear_class == "autobitlinear":
-                        model._modules[name] = AutoBitLinear(
-                            in_features=in_features,
-                            out_features=out_features,
-                            bias=module.bias is not None,
-                            device=module.weight.device,
-                            dtype=module.weight.dtype,
-                            online_quant=(quantization_config.quantization_mode == "online"),
-                            use_rms_norm=quantization_config.use_rms_norm,
-                            rms_norm_eps=quantization_config.rms_norm_eps,
-                        )
-                        if quantization_config.quantization_mode == "offline":
-                            model._modules[name].requires_grad_(False)
-                    else:
-                        model._modules[name] = BitLinear(
-                            in_features=in_features,
-                            out_features=out_features,
-                            bias=module.bias is not None,
-                            device=module.weight.device,
-                            dtype=module.weight.dtype,
-                            use_rms_norm=quantization_config.use_rms_norm if quantization_config else False,
-                            rms_norm_eps=quantization_config.rms_norm_eps if quantization_config else 1e-6,
-                        )
-                        model._modules[name].requires_grad_(False)
-                    has_been_replaced = True
-
-        if len(list(module.children())) > 0:
-            _, has_been_replaced = _replace_with_bitnet_linear(
-                module,
-                modules_to_not_convert=modules_to_not_convert,
-                current_key_name=current_key_name,
-                quantization_config=quantization_config,
-                has_been_replaced=has_been_replaced,
-            )
-        # Remove the last key for recursion
-        current_key_name.pop(-1)
-    return model, has_been_replaced
-
-
-def replace_with_bitnet_linear(
-    model,
-    modules_to_not_convert=None,
-    current_key_name=None,
-    quantization_config=None,
-    pre_quantized=False,
-):
-    """
-    A helper function to replace all `torch.nn.Linear` modules by `BitLinear158` modules`.
-
-    The function will be run recursively and replace all `torch.nn.Linear` modules except for the `lm_head` that should
-    be kept as a `torch.nn.Linear` module. The replacement is done under `init_empty_weights` context manager so no
-    CPU/GPU memory is required to run this function. Each weight will be quantized along the channel.
-
-    Parameters:
+    Args:
         model (`torch.nn.Module`):
-            Input model or `torch.nn.Module` as the function is run recursively.
-        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `["lm_head"]`):
-            Names of the modules to not convert in `BitLinear`. In practice we keep the `lm_head` in full precision
-            for numerical stability reasons.
-        current_key_name (`list[`str`]`, *optional*):
-            An array to track the current key of the recursion. This is used to check whether the current key (part of
-            it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
-            `disk`).
+            The model to convert, can be any `torch.nn.Module` instance.
+        modules_to_not_convert (`list[str]`, *optional*, defaults to `None`):
+            A list of nn.Linear weights to not convert. If a parameter path is in the list (e.g. `lm_head.weight`), the corresponding module will not be
+            converted.
+        quantization_config (`BitNetConfig`):
+            The quantization config object that contains the quantization parameters.
     """
-    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
-    if quantization_config and quantization_config.modules_to_not_convert is not None:
-        modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
-    modules_to_not_convert = list(set(modules_to_not_convert))
-    model, has_been_replaced = _replace_with_bitnet_linear(
-        model,
-        modules_to_not_convert,
-        current_key_name,
-        quantization_config,
-        pre_quantized=pre_quantized,
-    )
+
+    has_been_replaced = False
+    # we need this to correctly materialize the weights during quantization
+    for module_name, module in model.named_modules():
+        if not should_convert_module(module_name, modules_to_not_convert):
+            continue
+        with torch.device("meta"):
+            if isinstance(module, nn.Linear):
+                if quantization_config and quantization_config.linear_class == "autobitlinear":
+                    new_module = AutoBitLinear(
+                        in_features=module.in_features,
+                        out_features=module.out_features,
+                        bias=module.bias is not None,
+                        device=module.weight.device,
+                        dtype=module.weight.dtype,
+                        online_quant=(quantization_config.quantization_mode == "online"),
+                        use_rms_norm=quantization_config.use_rms_norm,
+                        rms_norm_eps=quantization_config.rms_norm_eps,
+                    )
+                    if quantization_config.quantization_mode == "offline":
+                        new_module.requires_grad_(False)
+                else:
+                    new_module = BitLinear(
+                        in_features=module.in_features,
+                        out_features=module.out_features,
+                        bias=module.bias is not None,
+                        device=module.weight.device,
+                        dtype=module.weight.dtype,
+                        use_rms_norm=quantization_config.use_rms_norm if quantization_config else False,
+                        rms_norm_eps=quantization_config.rms_norm_eps if quantization_config else 1e-6,
+                    )
+                    new_module.requires_grad_(False)
+                model.set_submodule(module_name, new_module)
+                has_been_replaced = True
 
     if not has_been_replaced:
         logger.warning(

@@ -48,14 +48,13 @@ Note: Meta (FAIR) released a new version of [Wav2Vec2-BERT 2.0](https://huggingf
 - Wav2Vec2 model was trained using connectionist temporal classification (CTC) so the model output has to be decoded
   using [`Wav2Vec2CTCTokenizer`].
 
-
 ## Using Flash Attention 2
 
 Flash Attention 2 is an faster, optimized version of the model.
 
 ### Installation
 
-First, check whether your hardware is compatible with Flash Attention 2. The latest list of compatible hardware can be found in the [official documentation](https://github.com/Dao-AILab/flash-attention#installation-and-features). If your hardware is not compatible with Flash Attention 2, you can still benefit from attention kernel optimisations through Better Transformer support covered [above](https://huggingface.co/docs/transformers/main/en/model_doc/bark#using-better-transformer).
+First, check whether your hardware is compatible with Flash Attention 2. The latest list of compatible hardware can be found in the [official documentation](https://github.com/Dao-AILab/flash-attention#installation-and-features).
 
 Next, [install](https://github.com/Dao-AILab/flash-attention#installation-and-features) the latest version of Flash Attention 2:
 
@@ -151,12 +150,13 @@ Otherwise, [`~Wav2Vec2ProcessorWithLM.batch_decode`] performance will be slower 
 ```python
 >>> # Let's see how to use a user-managed pool for batch decoding multiple audios
 >>> from multiprocessing import get_context
->>> from transformers import AutoTokenizer, AutoProcessor, AutoModelForCTC, infer_device
+>>> from transformers import AutoTokenizer, AutoProcessor, AutoModelForCTC
+from accelerate import Accelerator
 >>> from datasets import load_dataset
 >>> import datasets
 >>> import torch
 
->>> device = infer_device()
+>>> device = Accelerator().device
 >>> # import model, feature extractor, tokenizer
 >>> model = AutoModelForCTC.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm").to(device)
 >>> processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
@@ -176,7 +176,7 @@ Otherwise, [`~Wav2Vec2ProcessorWithLM.batch_decode`] performance will be slower 
 
 
 >>> def map_to_pred(batch, pool):
-...     device = infer_device()
+...     device = Accelerator().device
 ...     inputs = processor(batch["speech"], sampling_rate=16_000, padding=True, return_tensors="pt")
 ...     inputs = {k: v.to(device) for k, v in inputs.items()}
 

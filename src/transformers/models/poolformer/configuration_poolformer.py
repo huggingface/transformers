@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Sea AI Labs and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,28 +13,22 @@
 # limitations under the License.
 """PoolFormer model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
-from packaging import version
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PoolFormerConfig(PretrainedConfig):
+class PoolFormerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of [`PoolFormerModel`]. It is used to instantiate a
     PoolFormer model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the PoolFormer
     [sail/poolformer_s12](https://huggingface.co/sail/poolformer_s12) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -129,20 +122,4 @@ class PoolFormerConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class PoolFormerOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 2e-3
-
-
-__all__ = ["PoolFormerConfig", "PoolFormerOnnxConfig"]
+__all__ = ["PoolFormerConfig"]

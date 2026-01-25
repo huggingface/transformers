@@ -35,17 +35,6 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["beam_constraints"] = [
-        "Constraint",
-        "ConstraintListState",
-        "DisjunctiveConstraint",
-        "PhrasalConstraint",
-    ]
-    _import_structure["beam_search"] = [
-        "BeamHypotheses",
-        "BeamScorer",
-        "ConstrainedBeamSearchScorer",
-    ]
     _import_structure["candidate_generator"] = [
         "AssistedCandidateGenerator",
         "CandidateGenerator",
@@ -78,6 +67,7 @@ else:
         "SuppressTokensAtBeginLogitsProcessor",
         "SynthIDTextWatermarkLogitsProcessor",
         "TemperatureLogitsWarper",
+        "TopHLogitsWarper",
         "TopKLogitsWarper",
         "TopPLogitsWarper",
         "TypicalLogitsWarper",
@@ -96,7 +86,11 @@ else:
         "StopStringCriteria",
     ]
     _import_structure["continuous_batching"] = [
+        "ContinuousBatchingManager",
         "ContinuousMixin",
+        "FIFOScheduler",
+        "PrefillFirstScheduler",
+        "Scheduler",
     ]
     _import_structure["utils"] = [
         "GenerationMixin",
@@ -131,15 +125,19 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .beam_constraints import Constraint, ConstraintListState, DisjunctiveConstraint, PhrasalConstraint
-        from .beam_search import BeamHypotheses, BeamScorer, ConstrainedBeamSearchScorer
         from .candidate_generator import (
             AssistedCandidateGenerator,
             CandidateGenerator,
             EarlyExitCandidateGenerator,
             PromptLookupCandidateGenerator,
         )
-        from .continuous_batching import ContinuousMixin
+        from .continuous_batching import (
+            ContinuousBatchingManager,
+            ContinuousMixin,
+            FIFOScheduler,
+            PrefillFirstScheduler,
+            Scheduler,
+        )
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
             ClassifierFreeGuidanceLogitsProcessor,
@@ -166,6 +164,7 @@ if TYPE_CHECKING:
             SuppressTokensLogitsProcessor,
             SynthIDTextWatermarkLogitsProcessor,
             TemperatureLogitsWarper,
+            TopHLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
             TypicalLogitsWarper,

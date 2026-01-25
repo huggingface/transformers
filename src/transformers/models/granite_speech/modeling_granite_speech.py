@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,17 +14,19 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_peft_available, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_peft_available, logging
+from ...utils.generic import check_model_inputs
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_granite_speech import GraniteSpeechConfig, GraniteSpeechEncoderConfig
 
@@ -52,11 +53,11 @@ class GraniteSpeechCausalLMOutputWithPast(ModelOutput):
         `past_key_values` input) to speed up sequential decoding.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 ### Projector
@@ -249,10 +250,38 @@ class GraniteSpeechConformerBlock(nn.Module):
         return hidden_states
 
 
-class GraniteSpeechCTCEncoder(nn.Module):
+@auto_docstring
+class GraniteSpeechPreTrainedModel(PreTrainedModel):
+    config: GraniteSpeechConfig
+    input_modalities = ("audio", "text")
+
+    _supports_flash_attn = False  # `blip_2_qformer` dependency does not allow for this
+    _supports_sdpa = True
+
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module):
+        """Initialize the weights."""
+        super()._init_weights(module)
+        if isinstance(module, GraniteSpeechEncoderProjector):
+            init.normal_(module.query)
+        elif isinstance(module, GraniteSpeechCTCEncoder):
+            context_size = module.config.context_size
+            seq = torch.arange(context_size)
+            relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
+            attention_dists = torch.clamp(relpos_dist, -context_size, context_size) + module.config.max_pos_emb
+            init.copy_(module.attention_dists, attention_dists)
+
+
+class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
+    config: GraniteSpeechEncoderConfig
+    input_modalities = "audio"
+    _can_record_outputs = {
+        "hidden_states": GraniteSpeechConformerBlock,
+        "attentions": GraniteSpeechConformerAttention,
+    }
+
     def __init__(self, config: GraniteSpeechEncoderConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
 
         # Precompute clamped relative positional encoding distances
         seq = torch.arange(config.context_size)
@@ -265,8 +294,12 @@ class GraniteSpeechCTCEncoder(nn.Module):
         self.out = nn.Linear(config.hidden_dim, config.output_dim, bias=True)
         self.out_mid = nn.Linear(config.output_dim, config.hidden_dim, bias=True)
         self.num_layers = config.num_layers
+        self.post_init()
 
-    def forward(self, hidden_states: torch.Tensor):
+    @check_model_inputs
+    def forward(
+        self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
         hidden_states = self.input_linear(hidden_states)
         for idx, layer in enumerate(self.layers, start=1):
             hidden_states = layer(hidden_states, attention_dists=self.attention_dists)
@@ -275,33 +308,8 @@ class GraniteSpeechCTCEncoder(nn.Module):
                 hidden_states_mid = hidden_states.clone()
                 hidden_states_mid = self.out(hidden_states_mid)
                 hidden_states += self.out_mid(nn.Softmax(dim=-1)(hidden_states_mid))
-        return hidden_states
 
-
-@auto_docstring
-class GraniteSpeechPreTrainedModel(PreTrainedModel):
-    config: GraniteSpeechConfig
-
-    _supports_flash_attn = False  # `blip_2_qformer` dependency does not allow for this
-    _supports_sdpa = True
-
-    def _init_weights(self, module: nn.Module):
-        """Initialize the weights."""
-        std = self.config.initializer_range
-
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, GraniteSpeechEncoderProjector):
-            module.query.data.normal_()
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
 @auto_docstring(
@@ -318,9 +326,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         # model; don't need to consider it twice
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
 
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-
         self.encoder = GraniteSpeechCTCEncoder(config.encoder_config)
         self.projector = GraniteSpeechEncoderProjector(config)
 
@@ -334,6 +339,12 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
 
         self.post_init()
 
+    def set_decoder(self, decoder):
+        self.language_model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.language_model.get_decoder()
+
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
@@ -346,31 +357,36 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
-    def get_audio_features(self, input_features: torch.Tensor) -> torch.Tensor:
-        """Get the audio features to merged into the multimodal embeddings."""
-        encoder_embeds = self.encoder(input_features)
-        projected_embeds = self.projector(encoder_embeds)
-        return projected_embeds
+    @can_return_tuple
+    @auto_docstring
+    def get_audio_features(
+        self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        audio_outputs = self.encoder(input_features, return_dict=True, **kwargs)
+        projected_embeds = self.projector(audio_outputs.last_hidden_state)
+        audio_outputs.pooler_output = projected_embeds
+
+        return audio_outputs
 
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        input_features: Optional[torch.FloatTensor] = None,
-        input_features_mask: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **lm_kwargs,
-    ) -> Union[tuple[torch.Tensor], GraniteSpeechCausalLMOutputWithPast]:
+    ) -> tuple[torch.Tensor] | GraniteSpeechCausalLMOutputWithPast:
         r"""
         input_features_mask (`torch.Tensor`, *optional*):
             Mask to be applied to audio features prior to scattering into the language embeddings.
@@ -407,7 +423,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             if input_features.dtype != self.dtype:
                 input_features = input_features.to(self.dtype)
             # Get the audio features from the encoder / projector
-            audio_embeds = self.get_audio_features(input_features)
+            audio_embeds = self.get_audio_features(input_features, return_dict=True).pooler_output
 
             # Merge the audio features into the LLM embeddings
             inputs_embeds = self.get_merged_audio_embeddings(
@@ -470,6 +486,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward audio inputs to the model
@@ -481,18 +498,19 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
         # If we're in cached decoding stage, input_features should be None because
         # input ids do not contain special audio token anymore Otherwise we need
         # input feature values to be passed to the model
-        if cache_position[0] == 0:
+        if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["input_features"] = input_features
         return model_inputs
 
     def get_merged_audio_embeddings(
-        self, input_ids: torch.Tensor, audio_features: torch.Tensor, input_features_mask: Optional[torch.Tensor] = None
+        self, input_ids: torch.Tensor, audio_features: torch.Tensor, input_features_mask: torch.Tensor | None = None
     ) -> torch.Tensor:
         """
         Adds the audio token to the model's LLM vocabulary so that we can pass it
@@ -551,20 +569,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         self._hf_peft_config_loaded = False
         super().save_pretrained(save_directory, *args, **kwargs)
         self._hf_peft_config_loaded = prev_val
-
-    @staticmethod
-    def _fix_state_dict_key_on_save(key) -> tuple[str, bool]:
-        # save the model with the original weights format
-        return key.replace(".base_layer", ""), False
-
-    def _fix_state_dict_keys_on_save(self, state_dict):
-        if is_peft_available and self._hf_peft_config_loaded:
-            # state dict is only adapter, should keep the same
-            return state_dict
-        # rename back the base model state dict
-        return {
-            self._fix_state_dict_key_on_save(key)[0]: value for key, value in state_dict.items() if ".lora_" not in key
-        }
 
     def _get_adapter_name(self):
         return list(self.peft_config.keys())[0]

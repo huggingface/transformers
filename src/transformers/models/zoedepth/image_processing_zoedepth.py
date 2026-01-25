@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@
 
 import math
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 import numpy as np
 
@@ -40,6 +39,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
@@ -61,12 +61,31 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+class ZoeDepthImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    keep_aspect_ratio (`bool`, *optional*, defaults to `True`):
+        If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it
+        for both dimensions. This ensures that the image is scaled down as little as possible while still fitting
+        within the desired output size. In case `ensure_multiple_of` is also set, the image is further resized to a
+        size that is a multiple of this value by flooring the height and width to the nearest multiple of this value.
+        Can be overridden by `keep_aspect_ratio` in `preprocess`.
+    ensure_multiple_of (`int`, *optional*, defaults to 32):
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by flooring
+        the height and width to the nearest multiple of this value.
+        Works both with and without `keep_aspect_ratio` being set to `True`.
+        Can be overridden by `ensure_multiple_of` in `preprocess`.
+    """
+
+    keep_aspect_ratio: bool
+    ensure_multiple_of: int
+
+
 def get_resize_output_image_size(
     input_image: np.ndarray,
-    output_size: Union[int, Iterable[int]],
+    output_size: int | Iterable[int],
     keep_aspect_ratio: bool,
     multiple: int,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: str | ChannelDimension | None = None,
 ) -> tuple[int, int]:
     def constrain_to_multiple_of(val, multiple, min_val=0):
         x = (np.round(val / multiple) * multiple).astype(int)
@@ -145,17 +164,18 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = ZoeDepthImageProcessorKwargs
 
     def __init__(
         self,
         do_pad: bool = True,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         keep_aspect_ratio: bool = True,
         ensure_multiple_of: int = 32,
@@ -183,8 +203,8 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Resize an image to target size `(size["height"], size["width"])`. If `keep_aspect_ratio` is `True`, the image
@@ -249,8 +269,8 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         mode: PaddingMode = PaddingMode.REFLECT,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Pad an image as done in the original ZoeDepth implementation.
@@ -299,20 +319,20 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_pad: Optional[bool] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[int] = None,
-        keep_aspect_ratio: Optional[bool] = None,
-        ensure_multiple_of: Optional[int] = None,
-        resample: Optional[PILImageResampling] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_pad: bool | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_resize: bool | None = None,
+        size: int | None = None,
+        keep_aspect_ratio: bool | None = None,
+        ensure_multiple_of: int | None = None,
+        resample: PILImageResampling | None = None,
+        return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -448,10 +468,10 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
     def post_process_depth_estimation(
         self,
         outputs: "ZoeDepthDepthEstimatorOutput",
-        source_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
-        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
-        outputs_flipped: Optional[Union["ZoeDepthDepthEstimatorOutput", None]] = None,
-        do_remove_padding: Optional[Union[bool, None]] = None,
+        source_sizes: TensorType | list[tuple[int, int]] | None | None = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None | None = None,
+        outputs_flipped: Union["ZoeDepthDepthEstimatorOutput", None] | None = None,
+        do_remove_padding: bool | None | None = None,
     ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`ZoeDepthDepthEstimatorOutput`] into final depth predictions and depth PIL images.

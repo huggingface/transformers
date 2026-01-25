@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 Google Research and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,10 +21,10 @@ Hyperparameters are taken from run_task_main.py and hparam_utils.py of the origi
 
 """
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 
 
-class TapasConfig(PretrainedConfig):
+class TapasConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TapasModel`]. It is used to instantiate a TAPAS
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -33,7 +32,7 @@ class TapasConfig(PretrainedConfig):
     [google/tapas-base-finetuned-sqa](https://huggingface.co/google/tapas-base-finetuned-sqa) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    documentation from [`PreTrainedConfig`] for more information.
 
     Hyperparameters additional to BERT are taken from run_task_main.py and hparam_utils.py of the original
     implementation. Original implementation available at https://github.com/google-research/tapas/tree/master.
@@ -152,6 +151,8 @@ class TapasConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        bos_token_id=None,
+        eos_token_id=None,
         positive_label_weight=10.0,
         num_aggregation_labels=0,
         aggregation_loss_weight=1.0,
@@ -176,11 +177,20 @@ class TapasConfig(PretrainedConfig):
         disable_per_token_loss=False,
         aggregation_labels=None,
         no_aggregation_label_index=None,
+        is_decoder=False,
+        add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
 
         # BERT hyperparameters (with updated max_position_embeddings and type_vocab_sizes)
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

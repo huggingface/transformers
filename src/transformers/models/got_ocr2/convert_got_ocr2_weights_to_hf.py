@@ -16,7 +16,6 @@ import argparse
 import gc
 import glob
 import os
-from typing import Optional
 
 import regex as re
 import torch
@@ -32,7 +31,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
-from transformers.tokenization_utils import AddedToken
+from transformers.tokenization_python import AddedToken
 
 
 if is_vision_available():
@@ -61,7 +60,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 CONTEXT_LENGTH = 8000
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -135,7 +134,7 @@ def write_model(
     print("Saving the model.")
     model.save_pretrained(model_path)
     if push_to_hub:
-        model.push_to_hub("stepfun-ai/GOT-OCR-2.0-hf", use_temp_dir=True)
+        model.push_to_hub("stepfun-ai/GOT-OCR-2.0-hf")
     del state_dict, model
 
     # Safety check: reload the converted model
@@ -164,7 +163,7 @@ class GotOcr2Converter(TikTokenConverter):
         special_tokens: list[str],
         pattern: str,
         model_max_length: int,
-        chat_template: Optional[str] = None,
+        chat_template: str | None = None,
         **kwargs,
     ):
         super().__init__(vocab_file, pattern=pattern)
@@ -217,7 +216,7 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, push_to_hub: bool = Fals
     tokenizer.save_pretrained(save_dir)
 
     if push_to_hub:
-        tokenizer.push_to_hub("stepfun-ai/GOT-OCR-2.0-hf", use_temp_dir=True)
+        tokenizer.push_to_hub("stepfun-ai/GOT-OCR-2.0-hf")
 
 
 def write_image_processor(save_dir: str, push_to_hub: bool = False):
@@ -233,7 +232,7 @@ def write_image_processor(save_dir: str, push_to_hub: bool = False):
 
     image_processor.save_pretrained(save_dir)
     if push_to_hub:
-        image_processor.push_to_hub("stepfun-ai/GOT-OCR-2.0-hf", use_temp_dir=True)
+        image_processor.push_to_hub("stepfun-ai/GOT-OCR-2.0-hf")
 
 
 def main():
@@ -250,7 +249,9 @@ def main():
     )
 
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     args = parser.parse_args()
     write_tokenizer(

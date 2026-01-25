@@ -22,6 +22,7 @@ import numpy as np
 from transformers import ClvpConfig, ClvpDecoderConfig, ClvpEncoderConfig
 from transformers.testing_utils import (
     cleanup,
+    require_numba,
     require_torch,
     slow,
     torch_device,
@@ -32,7 +33,6 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     ids_tensor,
     random_attention_mask,
 )
@@ -162,8 +162,6 @@ class ClvpEncoderTester:
 @require_torch
 class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ClvpEncoder,) if is_torch_available() else ()
-    test_pruning = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = ClvpEncoderTester(self)
@@ -186,7 +184,7 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="ClvpEncoder does not output loss")
-    def test_training_gradient_checkpointing(self):
+    def test_gradient_checkpointing_enable_disable(self):
         pass
 
 
@@ -281,8 +279,6 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_model_classes = (ClvpModel, ClvpForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": ClvpModelForConditionalGeneration} if is_torch_available() else {}
 
-    test_pruning = False
-
     def setUp(self):
         self.model_tester = ClvpDecoderTester(self)
         self.decoder_config_tester = ConfigTester(self, config_class=ClvpDecoderConfig, hidden_size=32)
@@ -316,21 +312,6 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         loss = model(**inputs).loss
         loss.backward()
 
-    def test_training_gradient_checkpointing(self):
-        # we will only test the ClvpForCausalLM since it outputs loss
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.use_cache = False
-        config.return_dict = True
-
-        model = ClvpForCausalLM(config)
-        model.to(torch_device)
-        model.gradient_checkpointing_enable()
-        model.train()
-        inputs = self._prepare_for_class(inputs_dict, ClvpForCausalLM, return_labels=True)
-
-        loss = model(**inputs).loss
-        loss.backward()
-
     @unittest.skip(reason="Clvp `prepare_inputs_for_generation` function doesn't have cache position.")
     def test_generate_continue_from_inputs_embeds(self):
         pass
@@ -360,10 +341,10 @@ class ClvpModelForConditionalGenerationTester:
         speech_config = self.clvp_encoder_tester.get_config()
         speech_config.vocab_size = 300
 
-        return ClvpConfig.from_sub_model_configs(
-            text_config,
-            speech_config,
-            decoder_config,
+        return ClvpConfig(
+            text_config=text_config,
+            speech_config=speech_config,
+            decoder_config=decoder_config,
             projection_dim=16,
         )
 
@@ -406,15 +387,14 @@ class ClvpModelForConditionalGenerationTester:
 
 
 @require_torch
+@require_numba
 class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ClvpModelForConditionalGeneration,) if is_torch_available() else ()
     # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
     all_generative_model_classes = ()
 
-    test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = ClvpModelForConditionalGenerationTester(self)
@@ -499,36 +479,6 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
     def test_model_get_set_embeddings(self):
         pass
 
-    # override as the `logit_scale` parameter initialization is different for Clvp
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initialized as per the original implementation
-                    if name == "logit_scale":
-                        expected_value = np.log(1 / 0.07)
-                        returned_value = param.data.item()
-
-                        self.assertAlmostEqual(
-                            returned_value,
-                            expected_value,
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        expected_range = [0.0, 1.0]
-                        returned_range = ((param.data.mean() * 1e9).round() / 1e9).item()
-
-                        self.assertIn(
-                            returned_range,
-                            expected_range,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     def test_load_speech_text_decoder_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -557,6 +507,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
 @slow
 @require_torch
+@require_numba
 class ClvpIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.text = "This is an example text."

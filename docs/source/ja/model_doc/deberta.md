@@ -83,16 +83,12 @@ DeBERTa を使い始めるのに役立つ公式 Hugging Face およびコミュ�
 ## DebertaTokenizer
 
 [[autodoc]] DebertaTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## DebertaTokenizerFast
 
 [[autodoc]] DebertaTokenizerFast
-    - build_inputs_with_special_tokens
-    - create_token_type_ids_from_sequences
 
 
 ## DebertaModel

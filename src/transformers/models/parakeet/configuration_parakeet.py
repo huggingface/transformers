@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,20 @@
 # limitations under the License.
 """Parakeet model configuration."""
 
-from typing import Union
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class ParakeetEncoderConfig(PretrainedConfig):
+class ParakeetEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ParakeetEncoder`]. It is used to instantiate a
     `ParakeetEncoder` model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -44,6 +41,8 @@ class ParakeetEncoderConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler.
         attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the attention layers.
+        convolution_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in convolutions of the conformer's convolution module.
         conv_kernel_size (`int`, *optional*, defaults to 9):
             The kernel size of the convolution layers in the Conformer block.
         subsampling_factor (`int`, *optional*, defaults to 8):
@@ -102,6 +101,7 @@ class ParakeetEncoderConfig(PretrainedConfig):
         intermediate_size=4096,
         hidden_act="silu",
         attention_bias=True,
+        convolution_bias=True,
         conv_kernel_size=9,
         subsampling_factor=8,
         subsampling_conv_channels=256,
@@ -118,9 +118,6 @@ class ParakeetEncoderConfig(PretrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        super().__init__(
-            **kwargs,
-        )
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -128,11 +125,9 @@ class ParakeetEncoderConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.attention_bias = attention_bias
+        self.convolution_bias = convolution_bias
 
-        if (conv_kernel_size - 1) % 2 != 0:
-            raise ValueError(f"conv_kernel_size must be odd, got {conv_kernel_size}")
         self.conv_kernel_size = conv_kernel_size
-
         self.subsampling_conv_kernel_size = subsampling_conv_kernel_size
         self.subsampling_conv_stride = subsampling_conv_stride
 
@@ -149,14 +144,18 @@ class ParakeetEncoderConfig(PretrainedConfig):
         self.scale_input = scale_input
         self.initializer_range = initializer_range
 
+        super().__init__(
+            **kwargs,
+        )
 
-class ParakeetCTCConfig(PretrainedConfig):
+
+class ParakeetCTCConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ParakeetForCTC`]. It is used to instantiate a
     Parakeet CTC model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
             vocab_size (`int`, *optional*, defaults to 1025):
@@ -199,7 +198,7 @@ class ParakeetCTCConfig(PretrainedConfig):
         vocab_size=1025,
         ctc_loss_reduction="mean",
         ctc_zero_infinity=True,
-        encoder_config: Union[dict, ParakeetEncoderConfig] = None,
+        encoder_config: dict | ParakeetEncoderConfig = None,
         pad_token_id=1024,
         **kwargs,
     ):
@@ -214,11 +213,9 @@ class ParakeetCTCConfig(PretrainedConfig):
 
         self.encoder_config = self.encoder_config
         self.initializer_range = self.encoder_config.initializer_range
+        self.pad_token_id = pad_token_id
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     @classmethod
     def from_encoder_config(cls, encoder_config: ParakeetEncoderConfig, **kwargs):

@@ -70,20 +70,25 @@ This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) 
 
 [[autodoc]] Idefics3Model
     - forward
+    - get_image_features
 
 ## Idefics3ForConditionalGeneration
 
 [[autodoc]] Idefics3ForConditionalGeneration
     - forward
+    - get_image_features
 
 ## Idefics3ImageProcessor
+
 [[autodoc]] Idefics3ImageProcessor
     - preprocess
 
 ## Idefics3ImageProcessorFast
+
 [[autodoc]] Idefics3ImageProcessorFast
     - preprocess
 
 ## Idefics3Processor
+
 [[autodoc]] Idefics3Processor
     - __call__

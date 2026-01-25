@@ -27,15 +27,13 @@ from transformers.testing_utils import (
     cleanup,
     is_flash_attn_2_available,
     require_flash_attn,
-    require_read_token,
     require_torch,
     require_torch_large_accelerator,
     slow,
     torch_device,
 )
 
-from ...models.cohere.test_modeling_cohere import CohereModelTest, CohereModelTester
-from ...test_configuration_common import ConfigTester
+from ...models.cohere.test_modeling_cohere import CohereModelTester
 
 
 if is_torch_available():
@@ -46,6 +44,11 @@ if is_torch_available():
         Cohere2Model,
     )
 
+from ...generation.test_utils import GenerationTesterMixin
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin
+from ...test_pipeline_mixin import PipelineTesterMixin
+
 
 class Cohere2ModelTester(CohereModelTester):
     config_class = Cohere2Config
@@ -55,7 +58,7 @@ class Cohere2ModelTester(CohereModelTester):
 
 
 @require_torch
-class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
+class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Cohere2Model, Cohere2ForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -67,13 +70,23 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
     )
     _is_stateful = True
 
+    # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
+    # This is because we are hitting edge cases with the causal_mask buffer
+    model_split_percents = [0.5, 0.7, 0.8]
+
     def setUp(self):
         self.model_tester = Cohere2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Cohere2Config, hidden_size=37)
 
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
 
 @slow
-@require_read_token
 @require_torch_large_accelerator
 class Cohere2IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
@@ -225,7 +238,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
-    @require_read_token
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non trivial as
         we need to correctly slice the attention mask in all cases (because we use a hybrid cache).

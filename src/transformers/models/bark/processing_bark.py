@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Suno AI Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,14 +17,13 @@ Processor class for Bark
 
 import json
 import os
-from typing import Optional
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ...utils.hub import cached_file
 from ..auto import AutoTokenizer
 
@@ -33,25 +31,8 @@ from ..auto import AutoTokenizer
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 class BarkProcessor(ProcessorMixin):
-    r"""
-    Constructs a Bark processor which wraps a text tokenizer and optional Bark voice presets into a single processor.
-
-    Args:
-        tokenizer ([`PreTrainedTokenizer`]):
-            An instance of [`PreTrainedTokenizer`].
-        speaker_embeddings (`dict[dict[str]]`, *optional*):
-            Optional nested speaker embeddings dictionary. The first level contains voice preset names (e.g
-            `"en_speaker_4"`). The second level contains `"semantic_prompt"`, `"coarse_prompt"` and `"fine_prompt"`
-            embeddings. The values correspond to the path of the corresponding `np.ndarray`. See
-            [here](https://suno-ai.notion.site/8b8e8749ed514b0cbf3f699013548683?v=bc67cff786b04b50b3ceb756fd05f68c) for
-            a list of `voice_preset_names`.
-
-    """
-
-    tokenizer_class = "AutoTokenizer"
-    attributes = ["tokenizer"]
-
     preset_shape = {
         "semantic_prompt": 1,  # 1D array of shape (X,)
         "coarse_prompt": 2,  # 2D array of shape (2,X)
@@ -59,6 +40,14 @@ class BarkProcessor(ProcessorMixin):
     }
 
     def __init__(self, tokenizer, speaker_embeddings=None):
+        r"""
+        speaker_embeddings (`dict[dict[str]]`, *optional*):
+            Optional nested speaker embeddings dictionary. The first level contains voice preset names (e.g
+            `"en_speaker_4"`). The second level contains `"semantic_prompt"`, `"coarse_prompt"` and `"fine_prompt"`
+            embeddings. The values correspond to the path of the corresponding `np.ndarray`. See
+            [here](https://suno-ai.notion.site/8b8e8749ed514b0cbf3f699013548683?v=bc67cff786b04b50b3ceb756fd05f68c) for
+            a list of `voice_preset_names`.
+        """
         super().__init__(tokenizer)
 
         self.speaker_embeddings = speaker_embeddings
@@ -85,7 +74,7 @@ class BarkProcessor(ProcessorMixin):
                 Additional keyword arguments passed along to both
                 [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`].
         """
-
+        token = kwargs.get("token")
         if speaker_embeddings_dict_path is not None:
             speaker_embeddings_path = cached_file(
                 pretrained_processor_name_or_path,
@@ -94,9 +83,8 @@ class BarkProcessor(ProcessorMixin):
                 cache_dir=kwargs.pop("cache_dir", None),
                 force_download=kwargs.pop("force_download", False),
                 proxies=kwargs.pop("proxies", None),
-                resume_download=kwargs.pop("resume_download", None),
                 local_files_only=kwargs.pop("local_files_only", False),
-                token=kwargs.pop("use_auth_token", None),
+                token=token,
                 revision=kwargs.pop("revision", None),
                 _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
@@ -178,10 +166,11 @@ class BarkProcessor(ProcessorMixin):
 
         super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
-    def _load_voice_preset(self, voice_preset: Optional[str] = None, **kwargs):
+    def _load_voice_preset(self, voice_preset: str | None = None, **kwargs):
         voice_preset_paths = self.speaker_embeddings[voice_preset]
 
         voice_preset_dict = {}
+        token = kwargs.get("token")
         for key in ["semantic_prompt", "coarse_prompt", "fine_prompt"]:
             if key not in voice_preset_paths:
                 raise ValueError(
@@ -195,9 +184,8 @@ class BarkProcessor(ProcessorMixin):
                 cache_dir=kwargs.pop("cache_dir", None),
                 force_download=kwargs.pop("force_download", False),
                 proxies=kwargs.pop("proxies", None),
-                resume_download=kwargs.pop("resume_download", None),
                 local_files_only=kwargs.pop("local_files_only", False),
-                token=kwargs.pop("use_auth_token", None),
+                token=token,
                 revision=kwargs.pop("revision", None),
                 _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
@@ -214,7 +202,7 @@ class BarkProcessor(ProcessorMixin):
 
         return voice_preset_dict
 
-    def _validate_voice_preset_dict(self, voice_preset: Optional[dict] = None):
+    def _validate_voice_preset_dict(self, voice_preset: dict | None = None):
         for key in ["semantic_prompt", "coarse_prompt", "fine_prompt"]:
             if key not in voice_preset:
                 raise ValueError(f"Voice preset unrecognized, missing {key} as a key.")
@@ -264,6 +252,7 @@ class BarkProcessor(ProcessorMixin):
                 for voice_preset in unavailable_keys:
                     del self.speaker_embeddings[voice_preset]
 
+    @auto_docstring
     def __call__(
         self,
         text=None,
@@ -275,27 +264,12 @@ class BarkProcessor(ProcessorMixin):
         return_token_type_ids=False,
         **kwargs,
     ) -> BatchEncoding:
-        """
-        Main method to prepare for the model one or several sequences(s). This method forwards the `text` and `kwargs`
-        arguments to the AutoTokenizer's [`~AutoTokenizer.__call__`] to encode the text. The method also proposes a
-        voice preset which is a dictionary of arrays that conditions `Bark`'s output. `kwargs` arguments are forwarded
-        to the tokenizer and to `cached_file` method if `voice_preset` is a valid filename.
-
-        Args:
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            voice_preset (`str`, `dict[np.ndarray]`):
-                The voice preset, i.e the speaker embeddings. It can either be a valid voice_preset name, e.g
-                `"en_speaker_1"`, or directly a dictionary of `np.ndarray` embeddings for each submodel of `Bark`. Or
-                it can be a valid file name of a local `.npz` single voice preset containing the keys
-                `"semantic_prompt"`, `"coarse_prompt"` and `"fine_prompt"`.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
+        r"""
+        voice_preset (`str`, `dict[np.ndarray]`):
+            The voice preset, i.e the speaker embeddings. It can either be a valid voice_preset name, e.g
+            `"en_speaker_1"`, or directly a dictionary of `np.ndarray` embeddings for each submodel of `Bark`. Or
+            it can be a valid file name of a local `.npz` single voice preset containing the keys
+            `"semantic_prompt"`, `"coarse_prompt"` and `"fine_prompt"`.
 
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] object containing the output of the `tokenizer`.

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,45 +13,31 @@
 # limitations under the License.
 """Testing suite for the PyTorch Janus model."""
 
-import tempfile
 import unittest
 
 import numpy as np
 
-from transformers import AutoProcessor, AutoTokenizer, JanusProcessor
+from transformers import JanusProcessor
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = JanusProcessor
+    model_id = "deepseek-community/Janus-Pro-1B"
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def _setup_from_pretrained(cls, model_id, **kwargs):
         special_image_tokens = {
             "image_token": "<image_placeholder>",
             "boi_token": "<begin_of_image>",
             "eoi_token": "<end_of_image>",
         }
-
-        processor = self.processor_class.from_pretrained(
-            "deepseek-community/Janus-Pro-1B",
-            extra_special_tokens=special_image_tokens,
-            **self.prepare_processor_dict(),
-        )
+        processor = super()._setup_from_pretrained(model_id, extra_special_tokens=special_image_tokens)
         # Set the processor to use the default system prompt to False as it's used based on input modality.
         # Hence set to False to avoid any issues in the test irrespective of inputs.
         processor.use_default_system_prompt = False
-        processor.save_pretrained(self.tmpdirname)
-
-    def get_tokenizer(self, **kwargs):
-        return AutoTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_processor(self):
-        return AutoProcessor.from_pretrained(self.tmpdirname)
+        return processor
 
     def test_chat_template_single(self):
         """
@@ -444,8 +429,8 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             do_rescale=True,
-            rescale_factor=-1,
-            return_tensors="np",
+            rescale_factor=-1.0,
+            return_tensors="pt",
         )
         self.assertLessEqual(out_dict[self.images_input_name][0][0].mean(), 0)
 
@@ -457,9 +442,9 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         orig_image_input = self.prepare_image_inputs()
         orig_image = np.array(orig_image_input).transpose(2, 0, 1)
 
-        inputs = processor(text=input_str, images=orig_image, do_resize=False, do_pad=False, return_tensors="np")
+        inputs = processor(text=input_str, images=orig_image, do_resize=False, do_pad=False, return_tensors="pt")
         normalized_image_input = inputs.pixel_values
-        unnormalized_images = processor.postprocess(normalized_image_input, return_tensors="np")["pixel_values"]
+        unnormalized_images = processor.postprocess(normalized_image_input, return_tensors="pt")["pixel_values"]
 
         # For an image where pixels go from 0 to 255 the diff can be 1 due to some numerical precision errors when scaling and unscaling
-        self.assertTrue(np.abs(orig_image - unnormalized_images).max() >= 1)
+        self.assertTrue(np.abs(orig_image - unnormalized_images.numpy()).max() >= 1)

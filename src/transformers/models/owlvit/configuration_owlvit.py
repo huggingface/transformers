@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,31 +13,22 @@
 # limitations under the License.
 """OWL-ViT model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
-
-
-if TYPE_CHECKING:
-    from ...processing_utils import ProcessorMixin
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class OwlViTTextConfig(PretrainedConfig):
+class OwlViTTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`OwlViTTextModel`]. It is used to instantiate an
     OwlViT text encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the OwlViT
     [google/owlvit-base-patch32](https://huggingface.co/google/owlvit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -111,7 +101,10 @@ class OwlViTTextConfig(PretrainedConfig):
         eos_token_id=49407,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -126,15 +119,15 @@ class OwlViTTextConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
 
 
-class OwlViTVisionConfig(PretrainedConfig):
+class OwlViTVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`OwlViTVisionModel`]. It is used to instantiate
     an OWL-ViT image encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the OWL-ViT
     [google/owlvit-base-patch32](https://huggingface.co/google/owlvit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -214,15 +207,15 @@ class OwlViTVisionConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
 
 
-class OwlViTConfig(PretrainedConfig):
+class OwlViTConfig(PreTrainedConfig):
     r"""
     [`OwlViTConfig`] is the configuration class to store the configuration of an [`OwlViTModel`]. It is used to
     instantiate an OWL-ViT model according to the specified arguments, defining the text model and vision model
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the OWL-ViT
     [google/owlvit-base-patch32](https://huggingface.co/google/owlvit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -252,86 +245,26 @@ class OwlViTConfig(PretrainedConfig):
         return_dict=True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the OwlViTTextConfig with default values.")
+            text_config = OwlViTTextConfig()
+            logger.info("`text_config` is `None`. initializing the `OwlViTTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = OwlViTTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
-            logger.info("vision_config is None. initializing the OwlViTVisionConfig with default values.")
+            vision_config = OwlViTVisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `OwlViTVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = OwlViTVisionConfig(**vision_config)
 
-        self.text_config = OwlViTTextConfig(**text_config)
-        self.vision_config = OwlViTVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.return_dict = return_dict
         self.initializer_factor = 1.0
-
-    @classmethod
-    def from_text_vision_configs(cls, text_config: dict, vision_config: dict, **kwargs):
-        r"""
-        Instantiate a [`OwlViTConfig`] (or a derived class) from owlvit text model configuration and owlvit vision
-        model configuration.
-
-        Returns:
-            [`OwlViTConfig`]: An instance of a configuration object
-        """
-        config_dict = {}
-        config_dict["text_config"] = text_config
-        config_dict["vision_config"] = vision_config
-
-        return cls.from_dict(config_dict, **kwargs)
+        super().__init__(**kwargs)
 
 
-class OwlViTOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("logits_per_image", {0: "batch"}),
-                ("logits_per_text", {0: "batch"}),
-                ("text_embeds", {0: "batch"}),
-                ("image_embeds", {0: "batch"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    def generate_dummy_inputs(
-        self,
-        processor: "ProcessorMixin",
-        batch_size: int = -1,
-        seq_length: int = -1,
-    ) -> Mapping[str, Any]:
-        text_input_dict = super().generate_dummy_inputs(
-            processor.tokenizer,
-            batch_size=batch_size,
-            seq_length=seq_length,
-        )
-        image_input_dict = super().generate_dummy_inputs(
-            processor.image_processor,
-            batch_size=batch_size,
-        )
-        return {**text_input_dict, **image_input_dict}
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 14
-
-
-__all__ = ["OwlViTConfig", "OwlViTOnnxConfig", "OwlViTTextConfig", "OwlViTVisionConfig"]
+__all__ = ["OwlViTConfig", "OwlViTTextConfig", "OwlViTVisionConfig"]

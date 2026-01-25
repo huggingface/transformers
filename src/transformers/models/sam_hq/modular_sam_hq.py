@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -14,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -50,8 +48,8 @@ class SamHQPromptEncoderConfig(SamPromptEncoderConfig):
     similar configuration to that of the SAM_HQ model. The configuration is used to store the configuration of the model.
     [Uminosachi/sam-hq](https://huggingface.co/Uminosachi/sam-hq) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model's output.Read the documentation from
-    [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model's output.Read the documentation from
+    [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -68,8 +66,6 @@ class SamHQPromptEncoderConfig(SamPromptEncoderConfig):
             The non-linear activation function in the encoder and pooler.
     """
 
-    pass
-
 
 class SamHQVisionConfig(SamVisionConfig):
     pass
@@ -82,8 +78,8 @@ class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
     will yield a similar configuration to that of the SAM_HQ-vit-h
     [facebook/sam_hq-vit-huge](https://huggingface.co/facebook/sam_hq-vit-huge) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -126,8 +122,8 @@ class SamHQConfig(SamConfig):
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     SAM-HQ-ViT-H [sushmanth/sam_hq_vit_h](https://huggingface.co/sushmanth/sam_hq_vit_h) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (Union[`dict`, `SamHQVisionConfig`], *optional*):
@@ -140,8 +136,6 @@ class SamHQConfig(SamConfig):
             Dictionary of keyword arguments.
     """
 
-    pass
-
 
 class SamHQVisionEncoderOutput(SamVisionEncoderOutput):
     r"""
@@ -153,7 +147,7 @@ class SamHQVisionEncoderOutput(SamVisionEncoderOutput):
         This is specific to SAM-HQ and not present in base SAM.
     """
 
-    intermediate_embeddings: Optional[list[torch.FloatTensor]] = None
+    intermediate_embeddings: list[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -169,8 +163,8 @@ class SamHQMMaskDecoderOutputs(ModelOutput):
     """
 
     masks: torch.FloatTensor
-    iou_scores: Optional[torch.FloatTensor] = None
-    mask_decoder_attentions: Optional[torch.FloatTensor] = None
+    iou_scores: torch.FloatTensor | None = None
+    mask_decoder_attentions: torch.FloatTensor | None = None
 
 
 class SamHQImageSegmentationOutput(SamImageSegmentationOutput):
@@ -195,10 +189,10 @@ class SamHQVisionEncoder(SamVisionEncoder, SamHQPreTrainedModel):
         "attentions": SamHQVisionAttention,
     }
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
-    ) -> Union[tuple, SamHQVisionEncoderOutput]:
+        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | SamHQVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -289,9 +283,9 @@ class SamHQMaskDecoder(nn.Module):
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
         hq_token_only: bool,
-        intermediate_embeddings: Optional[list[torch.Tensor]] = None,
-        attention_similarity: Optional[torch.Tensor] = None,
-        target_embedding: Optional[torch.Tensor] = None,
+        intermediate_embeddings: list[torch.Tensor] | None = None,
+        attention_similarity: torch.Tensor | None = None,
+        target_embedding: torch.Tensor | None = None,
     ) -> SamHQMMaskDecoderOutputs:
         """
         Predict high-quality masks given image and prompt embeddings.
@@ -446,9 +440,6 @@ class SamHQVisionModel(SamVisionModel):
     """
 )
 class SamHQModel(SamModel):
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
-
     def __init__(self, config):
         super().__init__(config)
         self.vision_encoder = SamHQVisionEncoder(config.vision_config)
@@ -476,17 +467,17 @@ class SamHQModel(SamModel):
 
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
-        image_embeddings: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        input_points: torch.FloatTensor | None = None,
+        input_labels: torch.LongTensor | None = None,
+        input_boxes: torch.FloatTensor | None = None,
+        input_masks: torch.LongTensor | None = None,
+        image_embeddings: torch.FloatTensor | None = None,
         multimask_output: bool = True,
         hq_token_only: bool = False,
-        attention_similarity: Optional[torch.FloatTensor] = None,
-        target_embedding: Optional[torch.FloatTensor] = None,
-        intermediate_embeddings: Optional[list[torch.FloatTensor]] = None,
+        attention_similarity: torch.FloatTensor | None = None,
+        target_embedding: torch.FloatTensor | None = None,
+        intermediate_embeddings: list[torch.FloatTensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> list[dict[str, torch.Tensor]]:
         r"""
@@ -553,16 +544,18 @@ class SamHQModel(SamModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("sushmanth/sam_hq_vit_b")
         >>> processor = AutoProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
 
-        >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> input_points = [[[400, 650]]]  # 2D location of a window on the car
-        >>> inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt")
+        >>> inputs = processor(images=image, input_points=input_points, return_tensors="pt")
 
         >>> # Get high-quality segmentation mask
         >>> outputs = model(**inputs)

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_dpt.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -25,10 +24,10 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Optional, Union
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_base import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -41,38 +40,16 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, requires_backends
+from .image_processing_dpt import DPTImageProcessorKwargs
 
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
 
-class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    ensure_multiple_of (`int`, *optional*, defaults to 1):
-        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden
-        by `ensure_multiple_of` in `preprocess`.
-    size_divisor (`int`, *optional*):
-        If `do_pad` is `True`, pads the image dimensions to be divisible by this value. This was introduced in the
-        DINOv2 paper, which uses the model in combination with DPT.
-    keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
-        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
-        be overridden by `keep_aspect_ratio` in `preprocess`.
-    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
-        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g.
-        ADE20k). The background label will be replaced by 255.
-    """
-
-    ensure_multiple_of: Optional[int]
-    size_divisor: Optional[int]
-    keep_aspect_ratio: Optional[bool]
-    do_reduce_labels: Optional[bool]
-
-
 def get_resize_output_image_size(
     input_image: "torch.Tensor",
-    output_size: Union[int, Iterable[int]],
+    output_size: int | Iterable[int],
     keep_aspect_ratio: bool,
     multiple: int,
 ) -> SizeDict:
@@ -123,13 +100,13 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_reduce_labels = None
 
-    valid_kwargs = DPTFastImageProcessorKwargs
+    valid_kwargs = DPTImageProcessorKwargs
     do_pad = False
     rescale_factor = 1 / 255
     ensure_multiple_of = 1
     keep_aspect_ratio = False
 
-    def __init__(self, **kwargs: Unpack[DPTFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[DPTImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def reduce_label(self, labels: list["torch.Tensor"]):
@@ -146,8 +123,8 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
-        **kwargs: Unpack[DPTFastImageProcessorKwargs],
+        segmentation_maps: ImageInput | None = None,
+        **kwargs: Unpack[DPTImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -158,11 +135,11 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput],
+        segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[DPTFastImageProcessorKwargs],
+        device: Union[str, "torch.device"] | None = None,
+        **kwargs: Unpack[DPTImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
@@ -197,20 +174,20 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         do_reduce_labels: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         keep_aspect_ratio: bool,
-        ensure_multiple_of: Optional[int],
+        ensure_multiple_of: int | None,
         do_pad: bool,
-        size_divisor: Optional[int],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        size_divisor: int | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         if do_reduce_labels:
@@ -247,10 +224,9 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-        return BatchFeature(data={"pixel_values": processed_images})
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """
         Converts the output of [`DPTForSemanticSegmentation`] into semantic segmentation maps.
 
@@ -296,9 +272,9 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
-        ensure_multiple_of: Optional[int] = 1,
+        ensure_multiple_of: int | None = 1,
         keep_aspect_ratio: bool = False,
     ) -> "torch.Tensor":
         """
@@ -358,12 +334,12 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         pad_top, pad_bottom = _get_pad(height, size_divisor)
         pad_left, pad_right = _get_pad(width, size_divisor)
         padding = (pad_left, pad_top, pad_right, pad_bottom)
-        return F.pad(image, padding)
+        return tvF.pad(image, padding)
 
     def post_process_depth_estimation(
         self,
         outputs: "DepthEstimatorOutput",
-        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None | None = None,
     ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.

@@ -17,7 +17,6 @@ import gc
 import json
 import math
 import os
-from typing import Optional
 
 import regex as re
 import torch
@@ -90,7 +89,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 CONTEXT_LENGTH = 131072
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -210,7 +209,6 @@ def write_model(
     model_path,
     input_base_path,
     num_shards,
-    safe_serialization=True,
     instruct=False,
 ):
     os.makedirs(model_path, exist_ok=True)
@@ -235,7 +233,7 @@ def write_model(
     cross_attention_num_layers = params["vision_num_cross_attention_layers"]
 
     # some constants from original code
-    rope_scaling = {
+    rope_parameters = {
         "rope_type": "llama3",
         "factor": 8.0,
         "low_freq_factor": 1.0,
@@ -280,7 +278,7 @@ def write_model(
         cross_attention_layers=cross_attention_layers_shift,
         intermediate_size=text_intermediate_size,
         max_position_embeddings=max_position_embeddings,
-        rope_scaling=rope_scaling,
+        rope_parameters=rope_parameters,
         bos_token_id=bos_token_id,
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
@@ -448,7 +446,7 @@ def write_model(
     del model.config._name_or_path
 
     print("Saving the model.")
-    model.save_pretrained(model_path, safe_serialization=safe_serialization)
+    model.save_pretrained(model_path)
     del state_dict, model
 
     # Safety check: reload the converted model
@@ -478,7 +476,7 @@ class MllamaConverter(TikTokenConverter):
         special_tokens: list[str],
         pattern: str,
         model_max_length: int,
-        chat_template: Optional[str] = None,
+        chat_template: str | None = None,
         **kwargs,
     ):
         super().__init__(vocab_file, pattern=pattern)
@@ -600,9 +598,6 @@ def main():
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
-        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
-    )
-    parser.add_argument(
         "--special_tokens",
         default=None,
         type=list[str],
@@ -623,7 +618,6 @@ def main():
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
-        safe_serialization=args.safe_serialization,
         num_shards=args.num_shards,
         instruct=args.instruct,
     )

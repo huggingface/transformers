@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,60 +15,17 @@
 Audio/Text processor class for CLAP
 """
 
-from typing import Optional, Union
-
-from ...audio_utils import AudioInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
-from ...utils.deprecation import deprecate_kwarg
+from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 class ClapProcessor(ProcessorMixin):
-    r"""
-    Constructs a CLAP processor which wraps a CLAP feature extractor and a RoBerta tokenizer into a single processor.
-
-    [`ClapProcessor`] offers all the functionalities of [`ClapFeatureExtractor`] and [`RobertaTokenizerFast`]. See the
-    [`~ClapProcessor.__call__`] and [`~ClapProcessor.decode`] for more information.
-
-    Args:
-        feature_extractor ([`ClapFeatureExtractor`]):
-            The audio processor is a required input.
-        tokenizer ([`RobertaTokenizerFast`]):
-            The tokenizer is a required input.
-    """
-
-    feature_extractor_class = "ClapFeatureExtractor"
-    tokenizer_class = ("RobertaTokenizer", "RobertaTokenizerFast")
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
-
-    @deprecate_kwarg("audios", version="v4.59.0", new_name="audio")
-    def __call__(
-        self,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audios: Optional[AudioInput] = None,
-        audio: Optional[AudioInput] = None,
-        **kwargs: Unpack[ProcessingKwargs],
-    ):
-        """
-        Forwards the `audio` and `sampling_rate` arguments to [`~ClapFeatureExtractor.__call__`] and the `text`
-        argument to [`~RobertaTokenizerFast.__call__`]. Please refer to the docstring of the above two methods for more
-        information.
-        """
-        # The `deprecate_kwarg` will not work if the inputs are passed as arguments, so we check
-        # again that the correct naming is used
-        if audios is not None and audio is None:
-            logger.warning(
-                "Using `audios` keyword argument is deprecated when calling ClapProcessor, instead use `audio`."
-            )
-            audio = audios
-
-        return super().__call__(text=text, audio=audio, **kwargs)
 
 
 __all__ = ["ClapProcessor"]

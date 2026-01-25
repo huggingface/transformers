@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,9 +13,9 @@
 # limitations under the License.
 """ZoeDepth model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ..auto.configuration_auto import CONFIG_MAPPING
+from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -26,18 +25,18 @@ ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class ZoeDepthConfig(PretrainedConfig):
+class ZoeDepthConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ZoeDepthForDepthEstimation`]. It is used to instantiate an ZoeDepth
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the ZoeDepth
     [Intel/zoedepth-nyu](https://huggingface.co/Intel/zoedepth-nyu) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[dict[str, Any], PretrainedConfig]`, *optional*, defaults to `BeitConfig()`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `BeitConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -133,6 +132,7 @@ class ZoeDepthConfig(PretrainedConfig):
     ```"""
 
     model_type = "zoedepth"
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
@@ -168,8 +168,6 @@ class ZoeDepthConfig(PretrainedConfig):
         patch_transformer_num_attention_heads=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if readout_type not in ["ignore", "add", "project"]:
             raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")
 
@@ -233,13 +231,7 @@ class ZoeDepthConfig(PretrainedConfig):
         self.patch_transformer_intermediate_size = patch_transformer_intermediate_size
         self.patch_transformer_num_attention_heads = patch_transformer_num_attention_heads
 
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP", "ZoeDepthConfig"]

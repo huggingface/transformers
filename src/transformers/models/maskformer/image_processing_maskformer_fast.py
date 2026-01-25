@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,16 +14,17 @@
 """Fast Image processor class for MaskFormer."""
 
 import math
-import warnings
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 from torch import nn
+
+from transformers.image_transforms import get_size_with_aspect_ratio
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     SizeDict,
     get_image_size_for_max_height_width,
     get_max_height_width,
@@ -42,33 +42,27 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
     logging,
 )
 from .image_processing_maskformer import (
+    MaskFormerImageProcessorKwargs,
     compute_segments,
     convert_segmentation_to_rle,
-    get_size_with_aspect_ratio,
     remove_low_and_no_objects,
 )
 
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
-    from transformers import MaskFormerForInstanceSegmentationOutput
+    pass
 
 
 def convert_segmentation_map_to_binary_masks_fast(
     segmentation_map: "torch.Tensor",
-    instance_id_to_semantic_id: Optional[dict[int, int]] = None,
-    ignore_index: Optional[int] = None,
+    instance_id_to_semantic_id: dict[int, int] | None = None,
+    ignore_index: int | None = None,
     do_reduce_labels: bool = False,
 ):
     if do_reduce_labels and ignore_index is None:
@@ -100,28 +94,6 @@ def convert_segmentation_map_to_binary_masks_fast(
     return binary_masks.float(), labels.long()
 
 
-class MaskFormerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    size_divisor (`int`, *optional*, defaults to 32):
-        Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
-        Swin Transformer.
-    ignore_index (`int`, *optional*):
-        Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
-        denoted with 0 (background) will be replaced with `ignore_index`.
-    do_reduce_labels (`bool`, *optional*, defaults to `False`):
-        Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
-        The background label will be replaced by `ignore_index`.
-    num_labels (`int`, *optional*):
-        The number of labels in the segmentation map.
-    """
-
-    size_divisor: Optional[int]
-    ignore_index: Optional[int]
-    do_reduce_labels: Optional[bool]
-    num_labels: Optional[int]
-
-
 @auto_docstring
 class MaskFormerImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -137,12 +109,9 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
     model_input_names = ["pixel_values", "pixel_mask"]
     size_divisor = 32
     do_reduce_labels = False
-    valid_kwargs = MaskFormerFastImageProcessorKwargs
+    valid_kwargs = MaskFormerImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[MaskFormerFastImageProcessorKwargs]) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
-
+    def __init__(self, **kwargs: Unpack[MaskFormerImageProcessorKwargs]) -> None:
         size = kwargs.pop("size", None)
         max_size = kwargs.pop("max_size", None)
 
@@ -178,7 +147,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         image: torch.Tensor,
         size: SizeDict,
         size_divisor: int = 0,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -203,7 +172,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
             interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 Resampling filter to use if resizing the image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
@@ -227,7 +196,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
             width = int(math.ceil(width / size_divisor) * size_divisor)
             new_size = (height, width)
 
-        image = F.resize(
+        image = tvF.resize(
             image,
             size=new_size,
             interpolation=interpolation,
@@ -239,7 +208,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         self,
         images: torch.Tensor,
         padded_size: tuple[int, int],
-        segmentation_maps: Optional[torch.Tensor] = None,
+        segmentation_maps: torch.Tensor | None = None,
         fill: int = 0,
         ignore_index: int = 255,
     ) -> BatchFeature:
@@ -253,9 +222,9 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
             )
         if original_size != padded_size:
             padding = [0, 0, padding_right, padding_bottom]
-            images = F.pad(images, padding, fill=fill)
+            images = tvF.pad(images, padding, fill=fill)
             if segmentation_maps is not None:
-                segmentation_maps = F.pad(segmentation_maps, padding, fill=ignore_index)
+                segmentation_maps = [tvF.pad(mask, padding, fill=ignore_index) for mask in segmentation_maps]
 
         # Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
         pixel_mask = torch.zeros((images.shape[0], *padded_size), dtype=torch.int64, device=images.device)
@@ -267,9 +236,9 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
-        instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]] = None,
-        **kwargs: Unpack[MaskFormerFastImageProcessorKwargs],
+        segmentation_maps: ImageInput | None = None,
+        instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None = None,
+        **kwargs: Unpack[MaskFormerImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -288,11 +257,11 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         segmentation_maps: ImageInput,
-        instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]],
+        instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[MaskFormerFastImageProcessorKwargs],
+        device: Union[str, "torch.device"] | None = None,
+        **kwargs: Unpack[MaskFormerImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
@@ -316,21 +285,21 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         segmentation_maps: Optional["torch.Tensor"],
-        instance_id_to_semantic_id: Optional[dict[int, int]],
-        do_resize: Optional[bool],
-        size: Optional[SizeDict],
-        pad_size: Optional[SizeDict],
-        size_divisor: Optional[int],
-        interpolation: Optional[Union["PILImageResampling", "F.InterpolationMode"]],
-        do_rescale: Optional[bool],
-        rescale_factor: Optional[float],
-        do_normalize: Optional[bool],
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        ignore_index: Optional[int],
-        do_reduce_labels: Optional[bool],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        instance_id_to_semantic_id: dict[int, int] | None,
+        do_resize: bool | None,
+        size: SizeDict | None,
+        pad_size: SizeDict | None,
+        size_divisor: int | None,
+        interpolation: Union["PILImageResampling", "tvF.InterpolationMode"] | None,
+        do_rescale: bool | None,
+        rescale_factor: float | None,
+        do_normalize: bool | None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        ignore_index: int | None,
+        do_reduce_labels: bool | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         if segmentation_maps is not None and len(images) != len(segmentation_maps):
@@ -349,14 +318,14 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
                 stacked_images = self.resize(
                     image=stacked_images, size=size, size_divisor=size_divisor, interpolation=interpolation
                 )
-                if segmentation_maps is not None:
+            if segmentation_maps is not None:
+                stacked_segmentation_maps = grouped_segmentation_maps[shape]
+                if do_resize:
                     stacked_segmentation_maps = self.resize(
-                        image=grouped_segmentation_maps[shape],
+                        image=stacked_segmentation_maps,
                         size=size,
                         size_divisor=size_divisor,
-                        interpolation=F.InterpolationMode.NEAREST_EXACT
-                        if is_torchvision_v2_available()
-                        else F.InterpolationMode.NEAREST,
+                        interpolation=tvF.InterpolationMode.NEAREST_EXACT,
                     )
             resized_images_grouped[shape] = stacked_images
             if segmentation_maps is not None:
@@ -390,14 +359,18 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
                 mask_labels.append(masks)
                 class_labels.append(classes)
 
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        processed_pixel_masks_grouped = {}
         if segmentation_maps is not None:
-            grouped_segmentation_maps, grouped_segmentation_maps_index = group_images_by_shape(
-                mask_labels, disable_grouping=disable_grouping
+            # group mask_labels as paired inputs and not images so as not to stack them
+            grouped_images, grouped_segmentation_maps, grouped_images_index = group_images_by_shape(
+                resized_images, mask_labels, disable_grouping=disable_grouping
             )
             processed_segmentation_maps_grouped = {}
+        else:
+            grouped_images, grouped_images_index = group_images_by_shape(
+                resized_images, disable_grouping=disable_grouping
+            )
+        processed_images_grouped = {}
+        processed_pixel_masks_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
@@ -412,76 +385,25 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = padded_images
             processed_pixel_masks_grouped[shape] = pixel_masks
             if segmentation_maps is not None:
-                processed_segmentation_maps_grouped[shape] = padded_segmentation_maps.squeeze(1)
+                processed_segmentation_maps_grouped[shape] = padded_segmentation_maps
+
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_pixel_masks = reorder_images(processed_pixel_masks_grouped, grouped_images_index)
         encoded_inputs = BatchFeature(
-            data={
-                "pixel_values": torch.stack(processed_images, dim=0) if return_tensors else processed_images,
-                "pixel_mask": torch.stack(processed_pixel_masks, dim=0) if return_tensors else processed_pixel_masks,
-            },
+            data={"pixel_values": processed_images, "pixel_mask": processed_pixel_masks},
             tensor_type=return_tensors,
         )
         if segmentation_maps is not None:
-            mask_labels = reorder_images(processed_segmentation_maps_grouped, grouped_segmentation_maps_index)
+            mask_labels = reorder_images(processed_segmentation_maps_grouped, grouped_images_index)
             # we cannot batch them since they don't share a common class size
             encoded_inputs["mask_labels"] = mask_labels
             encoded_inputs["class_labels"] = class_labels
 
         return encoded_inputs
 
-    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.post_process_segmentation
-    def post_process_segmentation(
-        self, outputs: "MaskFormerForInstanceSegmentationOutput", target_size: Optional[tuple[int, int]] = None
-    ) -> "torch.Tensor":
-        """
-        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image segmentation predictions. Only
-        supports PyTorch.
-
-        Args:
-            outputs ([`MaskFormerForInstanceSegmentationOutput`]):
-                The outputs from [`MaskFormerForInstanceSegmentation`].
-
-            target_size (`tuple[int, int]`, *optional*):
-                If set, the `masks_queries_logits` will be resized to `target_size`.
-
-        Returns:
-            `torch.Tensor`:
-                A tensor of shape (`batch_size, num_class_labels, height, width`).
-        """
-        warnings.warn(
-            "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_instance_segmentation`",
-            FutureWarning,
-        )
-
-        # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
-        class_queries_logits = outputs.class_queries_logits
-        # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_queries_logits = outputs.masks_queries_logits
-        if target_size is not None:
-            masks_queries_logits = torch.nn.functional.interpolate(
-                masks_queries_logits,
-                size=target_size,
-                mode="bilinear",
-                align_corners=False,
-            )
-        # remove the null class `[..., :-1]`
-        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
-        # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_probs = masks_queries_logits.sigmoid()
-        # now we want to sum over the queries,
-        # $ out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} $
-        # where $ softmax(p) \in R^{q, c} $ is the mask classes
-        # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
-        # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
-        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
-
-        return segmentation
-
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.post_process_semantic_segmentation
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None
+        self, outputs, target_sizes: list[tuple[int, int]] | None = None
     ) -> "torch.Tensor":
         """
         Converts the output of [`MaskFormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
@@ -537,9 +459,9 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        target_sizes: Optional[list[tuple[int, int]]] = None,
-        return_coco_annotation: Optional[bool] = False,
-        return_binary_maps: Optional[bool] = False,
+        target_sizes: list[tuple[int, int]] | None = None,
+        return_coco_annotation: bool | None = False,
+        return_binary_maps: bool | None = False,
     ) -> list[dict]:
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into instance segmentation predictions. Only
@@ -654,8 +576,8 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        label_ids_to_fuse: Optional[set[int]] = None,
-        target_sizes: Optional[list[tuple[int, int]]] = None,
+        label_ids_to_fuse: set[int] | None = None,
+        target_sizes: list[tuple[int, int]] | None = None,
     ) -> list[dict]:
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation

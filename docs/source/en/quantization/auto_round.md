@@ -66,6 +66,7 @@ For 2 bits, we recommend using `auto-round-best` or `auto-round`.
 <hfoption id="quantization auto-round api">
 
 ### AutoRound API Usage
+
 This setting offers a better trade-off between accuracy and tuning cost, and is recommended in all scenarios.
 
 ```python
@@ -98,6 +99,7 @@ autoround.quantize_and_save(output_dir, format='auto_round')
 <hfoption id="quantization auto-round-best">
 
 ### AutoRoundBest recipe
+
 This setting provides the best accuracy in most scenarios but is 4–5× slower than the standard AutoRound recipe. It is especially recommended for 2-bit quantization and is a good choice if sufficient resources are available.
 
 ```python
@@ -128,6 +130,7 @@ autoround.quantize_and_save(output_dir, format='auto_round')
 <hfoption id="quantization auto-round-light">
 
 ### AutoRoundLight recipe
+
 This setting offers the best speed (2 - 3X faster than AutoRound), but it may cause a significant accuracy drop for small models and 2-bit quantization. It is recommended for 4-bit settings and models larger than 3B.
 
 ```python
@@ -279,8 +282,10 @@ If you encounter any issues with auto-round, please open an issue on
 the [AutoRound](https://github.com/intel/auto-round/issues) repository.
 
 ## Acknowledgement
+
 Special thanks to open-source low precision libraries such as AutoGPTQ, AutoAWQ, GPTQModel, Triton, Marlin, and ExLLaMAV2 for providing low-precision CUDA kernels, which are leveraged in AutoRound.
 
 ## Contribution
+
 Contributions to [AutoRound](https://github.com/intel/auto-round/pulls) are welcome and greatly appreciated!
 Whether it's fixing bugs, improving documentation, adding new features, or suggesting improvements, your help is always valued.

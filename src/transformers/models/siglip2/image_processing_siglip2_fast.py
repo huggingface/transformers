@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,34 +13,22 @@
 # limitations under the License.
 """Fast Image processor class for SigLIP2."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    SizeDict,
-)
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
+from ...image_utils import ImageInput, PILImageResampling
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
     logging,
 )
-from .image_processing_siglip2 import get_image_size_for_max_num_patches
+from .image_processing_siglip2 import Siglip2ImageProcessorKwargs, get_image_size_for_max_num_patches
 
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
 
@@ -76,19 +63,6 @@ def pad_along_first_dim(
     return tensor, mask
 
 
-class Siglip2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    patch_size (`int`, *optional*, defaults to 16):
-        The size (resolution) of each patch the image will be split to.
-    max_num_patches (`int`, *optional*, defaults to 256):
-        The image will be resized to have at most this number of patches,
-        and then padded in "patch" dimension to match this number exactly.
-    """
-
-    patch_size: Optional[int]
-    max_num_patches: Optional[int]
-
-
 @auto_docstring
 class Siglip2ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -99,10 +73,10 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     patch_size = 16
     max_num_patches = 256
-    valid_kwargs = Siglip2FastImageProcessorKwargs
+    valid_kwargs = Siglip2ImageProcessorKwargs
     unused_kwargs = ["size", "do_center_crop", "crop_size"]
 
-    def __init__(self, **kwargs: Unpack[Siglip2FastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Siglip2ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _validate_preprocess_kwargs(self, **kwargs) -> tuple:
@@ -111,7 +85,7 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
         return super()._validate_preprocess_kwargs(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Siglip2FastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Siglip2ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(
@@ -120,13 +94,13 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         patch_size: int,
         max_num_patches: int,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         pixel_masks = []
@@ -141,8 +115,8 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
                     patch_size=patch_size,
                     max_num_patches=max_num_patches,
                 )
-                side_dict = SizeDict(height=height, width=width)
-                image = self.resize(image=image, size=side_dict, interpolation=interpolation)
+                size_dict = SizeDict(height=height, width=width)
+                image = self.resize(image=image, size=size_dict, interpolation=interpolation)
 
             image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
 

@@ -17,16 +17,15 @@ import copy
 import tempfile
 import unittest
 
-from parameterized import parameterized
 from pytest import mark
 
-from transformers import LongcatFlashConfig, is_torch_available, set_seed
+from transformers import LongcatFlashConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_large_cpu_ram,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -38,7 +37,7 @@ from ...test_modeling_common import ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, LongcatFlashForCausalLM, LongcatFlashModel
+    from transformers import AutoTokenizer, Cache, LongcatFlashForCausalLM, LongcatFlashModel
 
 
 class LongcatFlashModelTester(CausalLMModelTester):
@@ -210,15 +209,6 @@ class LongcatFlashModelTester(CausalLMModelTester):
 
 @require_torch
 class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": LongcatFlashModel,
-            "text-generation": LongcatFlashForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     model_split_percents = [0.5, 0.8]
 
     model_tester_class = LongcatFlashModelTester
@@ -231,52 +221,18 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
-    def test_past_key_values_format(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        batch_size, seq_length = inputs["input_ids"].shape
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, Cache)
 
         k_embed_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
         v_embed_dim = config.v_head_dim
 
-        self_attention_keys_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
-        self_attention_values_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
+        expected_key_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
+        expected_value_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
 
-        num_hidden_layers = config.num_hidden_layers
-        all_cache_shapes = [[self_attention_keys_shape, self_attention_values_shape] for _ in range(num_hidden_layers)]
-
-        super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
-
-    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        from transformers.cache_utils import Cache
-
-        self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
-
-        k_embed_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-        v_embed_dim = config.v_head_dim
-
-        expected_key_shape = (batch_size, config.num_key_value_heads, cache_length, k_embed_dim)
-        expected_value_shape = (batch_size, config.num_key_value_heads, cache_length, v_embed_dim)
-
-        if isinstance(decoder_past_key_values, Cache):
-            for layer_idx in range(config.num_hidden_layers):
-                self.assertEqual(decoder_past_key_values.layers[layer_idx].keys.shape, expected_key_shape)
-                self.assertEqual(decoder_past_key_values.layers[layer_idx].values.shape, expected_value_shape)
-        else:
-            for layer_past in decoder_past_key_values:
-                self.assertEqual(layer_past[0].shape, expected_key_shape)
-                self.assertEqual(layer_past[1].shape, expected_value_shape)
-
-    @unittest.skip("MoE experts may not receive gradients with small test data")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip("MoE experts may not receive gradients with small test data")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip("MoE experts may not receive gradients with small test data")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        for layer_idx in range(config.num_hidden_layers):
+            self.assertEqual(past_key_values.layers[layer_idx].keys.shape, expected_key_shape)
+            self.assertEqual(past_key_values.layers[layer_idx].values.shape, expected_value_shape)
 
     @unittest.skip("LongcatFlash router uses weight.type() directly in forward which prevents offloading")
     def test_cpu_offload(self):
@@ -316,36 +272,8 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
 
         return config
 
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-
-        set_seed(42)
-        original_model = self.model_tester_class.base_model_class(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = self.model_tester_class.base_model_class(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @mark.flash_attn_test
     @slow
@@ -435,16 +363,16 @@ class LongcatFlashIntegrationTest(unittest.TestCase):
     @require_large_cpu_ram
     def test_longcat_generation_cpu(self):
         # takes absolutely forever and a lot RAM, but allows to test the output in the CI
-        model = LongcatFlashForCausalLM.from_pretrained(self.model_id, device_map="cpu", dtype=torch.bfloat16)
+        model = LongcatFlashForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
         chat = [{"role": "user", "content": "Paris is..."}]
         inputs = tokenizer.apply_chat_template(chat, tokenize=True, add_generation_prompt=True, return_tensors="pt")
 
         with torch.no_grad():
-            outputs = model.generate(inputs, max_new_tokens=10, do_sample=False)
+            outputs = model.generate(inputs, max_new_tokens=3, do_sample=False)
 
         response = tokenizer.batch_decode(outputs, skip_special_tokens=False)[0]
-        expected_output = "[Round 0] USER:Paris is... ASSISTANT:Paris is... a city of timeless charm, where"
+        expected_output = "[Round 0] USER:Paris is... ASSISTANT:Paris is..."
 
         self.assertEqual(response, expected_output)

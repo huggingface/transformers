@@ -73,9 +73,10 @@ pipeline(text=messages, max_new_tokens=20, return_full_text=False)
 import torch
 import requests
 from PIL import Image
-from transformers import AutoProcessor, LlavaNextForConditionalGeneration, infer_device
+from transformers import AutoProcessor, LlavaNextForConditionalGeneration
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
 model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", dtype=torch.float16).to(device)
@@ -205,6 +206,7 @@ print(processor.decode(output[0], skip_special_tokens=True))
 ## LlavaNextProcessor
 
 [[autodoc]] LlavaNextProcessor
+    - __call__
 
 ## LlavaNextModel
 
@@ -214,3 +216,4 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] LlavaNextForConditionalGeneration
     - forward
+    - get_image_features

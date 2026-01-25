@@ -43,7 +43,7 @@ AutoModel.register(NewModelConfig, NewModel)
 
 <Tip warning={true}>
 
-あなたの`NewModelConfig`が[`~transformers.PretrainedConfig`]のサブクラスである場合、その`model_type`属性がコンフィグを登録するときに使用するキー（ここでは`"new-model"`）と同じに設定されていることを確認してください。
+あなたの`NewModelConfig`が[`~transformers.PreTrainedConfig`]のサブクラスである場合、その`model_type`属性がコンフィグを登録するときに使用するキー（ここでは`"new-model"`）と同じに設定されていることを確認してください。
 
 同様に、あなたの`NewModel`が[`PreTrainedModel`]のサブクラスである場合、その`config_class`属性がモデルを登録する際に使用するクラス（ここでは`NewModelConfig`）と同じに設定されていることを確認してください。
 
@@ -229,10 +229,6 @@ AutoModel.register(NewModelConfig, NewModel)
 ### AutoModelForVisualQuestionAnswering
 
 [[autodoc]] AutoModelForVisualQuestionAnswering
-
-### AutoModelForVision2Seq
-
-[[autodoc]] AutoModelForVision2Seq
 
 
 ### AutoModelForImageTextToText

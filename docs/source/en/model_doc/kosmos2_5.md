@@ -45,7 +45,8 @@ import re
 import torch
 import requests
 from PIL import Image, ImageDraw
-from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration, infer_device
+from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
+from accelerate import Accelerator
 
 repo = "microsoft/kosmos-2.5"
 device = "cuda:0"
@@ -84,7 +85,8 @@ import re
 import torch
 import requests
 from PIL import Image, ImageDraw
-from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration, infer_device
+from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
+from accelerate import Accelerator
 
 repo = "microsoft/kosmos-2.5"
 device = "cuda:0"
@@ -222,6 +224,7 @@ print(generated_text[0])
 ## Kosmos2_5Processor
 
 [[autodoc]] Kosmos2_5Processor
+    - __call__
 
 ## Kosmos2_5Model
 

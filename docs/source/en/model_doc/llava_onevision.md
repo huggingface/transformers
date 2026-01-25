@@ -112,10 +112,11 @@ The original code can be found [here](https://github.com/LLaVA-VL/LLaVA-NeXT/tre
 Here's how to load the model and perform inference in half-precision (`torch.float16`):
 
 ```python
-from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration, infer_device
+from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
+from accelerate import Accelerator
 import torch
 
-device = f"{infer_device}:0"
+device = Accelerator().device
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf") 
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
@@ -297,6 +298,7 @@ model = LlavaOnevisionForConditionalGeneration.from_pretrained(
 ## LlavaOnevisionProcessor
 
 [[autodoc]] LlavaOnevisionProcessor
+    - __call__
 
 ## LlavaOnevisionImageProcessor
 
@@ -320,3 +322,5 @@ model = LlavaOnevisionForConditionalGeneration.from_pretrained(
 
 [[autodoc]] LlavaOnevisionForConditionalGeneration
     - forward
+    - get_image_features
+    - get_video_features

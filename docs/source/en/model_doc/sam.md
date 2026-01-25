@@ -50,9 +50,10 @@ Below is an example on how to run mask generation given an image and a 2D point:
 import torch
 from PIL import Image
 import requests
-from transformers import SamModel, SamProcessor, infer_device
+from transformers import SamModel, SamProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
 processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
@@ -76,9 +77,10 @@ You can also process your own masks alongside the input images in the processor 
 import torch
 from PIL import Image
 import requests
-from transformers import SamModel, SamProcessor, infer_device
+from transformers import SamModel, SamProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
 processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
@@ -141,6 +143,7 @@ alt="drawing" width="900"/>
 ## SamProcessor
 
 [[autodoc]] SamProcessor
+    - __call__
 
 ## SamImageProcessor
 

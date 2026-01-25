@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,9 +20,10 @@ URL: https://github.com/SysCV/sam-hq
 """
 
 import argparse
+from io import BytesIO
 
+import httpx
 import numpy as np
-import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -173,8 +173,9 @@ def convert_sam_hq_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, 
     hf_model = hf_model.to(device)
 
     # Test the model with a sample image
-    img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+    url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+    with httpx.stream("GET", url) as response:
+        raw_image = Image.open(BytesIO(response.read())).convert("RGB")
 
     input_points = [[[500, 375]]]
     input_labels = [[1]]

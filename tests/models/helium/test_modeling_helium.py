@@ -18,7 +18,6 @@ import unittest
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    require_read_token,
     require_torch,
     slow,
     torch_device,
@@ -31,9 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        HeliumForCausalLM,
-        HeliumForSequenceClassification,
-        HeliumForTokenClassification,
         HeliumModel,
     )
 
@@ -45,34 +41,20 @@ class HeliumModelTester(CausalLMModelTester):
 
 @require_torch
 class HeliumModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": HeliumModel,
-            "text-classification": HeliumForSequenceClassification,
-            "token-classification": HeliumForTokenClassification,
-            "text-generation": HeliumForCausalLM,
-            "zero-shot": HeliumForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
-
     model_tester_class = HeliumModelTester
 
 
 @slow
-# @require_torch_gpu
 class HeliumIntegrationTest(unittest.TestCase):
     input_text = ["Hello, today is a great day to"]
 
-    @require_read_token
     def test_model_2b(self):
         model_id = "kyutai/helium-1-preview"
         expected_texts = Expectations(
             {
-                ("rocm", (9, 5)): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now, and I"],
+                ("rocm", (9, 5)): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now, and I have"],
                 (None, None): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now and I have"],
                 ("cuda", 8): ['Hello, today is a great day to start a new project. I have been working on a new project for a while now, and I'],
             }

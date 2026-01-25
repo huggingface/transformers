@@ -1,6 +1,6 @@
 # Contributing a new model to Transformers
 
-Modular Transformers lowers the bar for contributing models and significantly reduces the code required to add a model by allowing imports and inheritance.
+Modular Transformers lowers the bar for contributing models and significantly reduces the code required to add a model by allowing imports and inheritance. We recommend to go through [general contribution guidelines for new models](./contributing#do-you-want-to-implement-a-new-model) before diving into the details here.
 
 One of Transformers' core design feature is the [single model, single file](https://huggingface.co/blog/transformers-design-philosophy) policy. Model components - such as attention layers - are repeated across many files and any independent implementations tend to diverge as fixes and changes are applied to specific parts of the code.
 
@@ -288,7 +288,7 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
@@ -488,7 +488,7 @@ class LlamaForCausalLM(nn.Module):
       input_ids: torch.LongTensor = None,
       attention_mask: Optional[torch.Tensor] = None,
       position_ids: Optional[torch.LongTensor] = None,
-      past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+      past_key_values: Optional[Cache] = None,
       inputs_embeds: Optional[torch.FloatTensor] = None,
       labels: Optional[torch.LongTensor] = None,
       use_cache: Optional[bool] = None,
@@ -514,7 +514,7 @@ class NewModelForCausalLM(LlamaForCausalLM):    |    class LlamaForCausalLM(nn.M
                                                 |         input_ids: torch.LongTensor = None,
                                                 |         attention_mask: Optional[torch.Tensor] = None,
                                                 |         position_ids: Optional[torch.LongTensor] = None,
-                                                |         past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = |None,
+                                                |         past_key_values: Optional[Cache] = |None,
                                                 |         inputs_embeds: Optional[torch.FloatTensor] = None,
                                                 |         labels: Optional[torch.LongTensor] = None,
                                                 |         use_cache: Optional[bool] = None,

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,42 +11,32 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for SeamlessM4T."""
+"""Tokenization class for SeamlessM4T."""
 
-import os
-from shutil import copyfile
-from typing import Any, Optional, Union
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers.models import BPE
 
-import sentencepiece as spm
-
-from ...convert_slow_tokenizer import import_protobuf
-from ...tokenization_utils import (
+from ...tokenization_python import (
     BatchEncoding,
     PreTokenizedInput,
-    PreTrainedTokenizer,
     TextInput,
 )
-from ...tokenization_utils_base import AddedToken
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import PaddingStrategy, logging
-from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 
-
-SPIECE_UNDERLINE = "▁"
-
-
-VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
+VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
 
 
-@requires(backends=("sentencepiece",))
-class SeamlessM4TTokenizer(PreTrainedTokenizer):
+class SeamlessM4TTokenizer(TokenizersBackend):
     """
-    Construct a SeamlessM4T tokenizer.
+    Construct a SeamlessM4T tokenizer (backed by HuggingFace's *tokenizers* library). Based on
+    [BPE](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=bpe#models).
 
-    Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
-    [SentencePiece](https://github.com/google/sentencepiece).
+    This tokenizer inherits from [`TokenizersBackend`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     The tokenization method is `<language code> <tokens> <eos>` for source language documents, and `<eos> <language
     code> <tokens> <eos>` for target language documents.
@@ -66,8 +55,10 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     ```
 
     Args:
-        vocab_file (`str`):
-            Path to the vocabulary file.
+        vocab (`list` or `dict`, *optional*):
+            List of (token, score) tuples or dict mapping tokens to indices. If not provided, uses default vocab.
+        merges (`str` or `list`, *optional*):
+            List of merge rules for BPE model. If not provided, uses empty list.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -100,190 +91,126 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        tokenizer_file (`str`, *optional*):
-            The path to a tokenizer file to use instead of the vocab file.
         src_lang (`str`, *optional*, defaults to `"eng"`):
             The language to use as source language for translation.
         tgt_lang (`str`, *optional*, defaults to `"fra"`):
             The language to use as target language for translation.
-        sp_model_kwargs (`dict[str, Any]`, *optional*):
-            Additional keyword arguments to pass to the model initialization.
         additional_special_tokens (tuple or list of `str` or `tokenizers.AddedToken`, *optional*):
-            A tuple or a list of additional special tokens. Can be used to specify the list of languages that will be
-            supported by the tokenizer.
-        add_prefix_space (`bool`, *optional*, defaults to `True`):
-            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word.
+            A tuple or a list of additional special tokens.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    model = BPE
 
-    prefix_tokens: list[int] = []
-    suffix_tokens: list[int] = []
+    prefix_tokens: list[int] = None
+    suffix_tokens: list[int] = None
 
     def __init__(
         self,
-        vocab_file,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
         cls_token="<s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        tokenizer_file=None,
         src_lang="eng",
         tgt_lang="fra",
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
         additional_special_tokens=None,
-        add_prefix_space=True,
+        keep_accents=None,
+        vocab_file=None,
         **kwargs,
     ):
-        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-        # Add this unused argument to keep some important Copied from statements
-        self.legacy = False
-        self.vocab_file = vocab_file
-
-        self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
-
-        # Vocab    |    0    |    1    |   2    |    3    |  4   |  5   |  6   |   7  |   8  |  9
-        # -------- | ------- | ------- | ------ | ------- | ---- | ---- | ---- | ---- | ---- | ----
-        # spm  | '<unk>'   | '<s>' | '</s>' | 'an' | 'en' | '_d' | 'er' | 'in' | '_s' | '_a'
-        # fairseq  | '<pad>'   | '<unk>' | '<s>' | '</s>' | 'an' | 'en' | '▁d' | 'er' | 'in' | '▁s'
-
-        # Mimic fairseq token-to-id alignment for the first 4 token
-        self._added_tokens_decoder = {
-            0: AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token,
-            1: AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token,
-            2: AddedToken(bos_token, special=True) if isinstance(bos_token, str) else bos_token,
-            3: AddedToken(eos_token, special=True) if isinstance(eos_token, str) else eos_token,
+        self._vocab = vocab or {
+            str(pad_token): 0,
+            str(unk_token): 1,
+            str(bos_token): 2,
+            str(eos_token): 3,
         }
 
-        # The first "real" token "an" has position 4 in the original fairseq vocab and position 3 in the spm vocab
-        self.fairseq_offset = 1
+        self._merges = merges or []
+        self._tokenizer = Tokenizer(
+            BPE(
+                vocab=self._vocab,
+                merges=self._merges,
+                dropout=None,
+                unk_token=str(unk_token),
+                fuse_unk=True,
+                byte_fallback=False,
+            )
+        )
 
-        self.sp_model_size = len(self.sp_model)
+        self._tokenizer.normalizer = normalizers.Sequence(
+            [
+                normalizers.Replace(Regex(r"[\n\r\t]"), " "),
+                normalizers.NFKC(),
+                normalizers.Strip(left=False, right=True),
+                normalizers.Replace(Regex(r" +▁"), "▁"),
+                normalizers.Replace(Regex(r"^▁+$"), ""),
+                normalizers.Replace(Regex(r" {2,}"), "▁"),
+            ]
+        )
 
-        self._src_lang = f"__{src_lang}__" if "__" not in src_lang else src_lang
-        self._tgt_lang = f"__{tgt_lang}__" if "__" not in tgt_lang else tgt_lang
-        self.add_prefix_space = add_prefix_space
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="first", split=True)
+
+        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="first", split=True)
+
+        if "__" not in src_lang:
+            src_lang = f"__{src_lang}__"
+        if "__" not in tgt_lang:
+            tgt_lang = f"__{tgt_lang}__"
+
+        # V5: Convert additional_special_tokens parameter to extra_special_tokens for backward compatibility
+        # PreTrainedTokenizerBase.__init__() will handle the conversion, but we need to pass it via kwargs
+        if additional_special_tokens is not None:
+            kwargs.setdefault("additional_special_tokens", additional_special_tokens)
 
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
-            unk_token=unk_token,
             sep_token=sep_token,
             cls_token=cls_token,
+            unk_token=unk_token,
             pad_token=pad_token,
-            tokenizer_file=tokenizer_file,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
-            additional_special_tokens=additional_special_tokens,
-            sp_model_kwargs=self.sp_model_kwargs,
-            add_prefix_space=add_prefix_space,
+            keep_accents=keep_accents,
+            vocab_file=vocab_file,
             **kwargs,
         )
 
-        self.set_src_lang_special_tokens(self._src_lang)
+        # Build fairseq mappings
+        self.fairseq_offset = 1
+        self.fairseq_tokens_to_ids = {
+            "<pad>": 0,
+            "<unk>": 1,
+            "<s>": 2,
+            "</s>": 3,
+        }
+        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+
+        self._src_lang = src_lang
+        self._tgt_lang = tgt_lang
+
         self.set_tgt_lang_special_tokens(self._tgt_lang)
 
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.__getstate__
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["sp_model"] = None
-        state["sp_model_proto"] = self.sp_model.serialized_model_proto()
-        return state
-
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.__setstate__
-    def __setstate__(self, d):
-        self.__dict__ = d
-
-        # for backward compatibility
-        if not hasattr(self, "sp_model_kwargs"):
-            self.sp_model_kwargs = {}
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
+    @classmethod
+    def convert_from_spm_model(cls, vocab, **kwargs):
+        """When converting from spm, offset is needed to account for special tokens."""
+        _vocab = {
+            "<pad>": 0,
+            "<unk>": 1,
+            "<s>": 2,
+            "</s>": 3,
+        }
+        for i, token in enumerate(list(vocab.keys())):
+            _vocab[token] = i + 1  # offset by 1 to account for special tokens
+        kwargs["vocab"] = _vocab
+        return kwargs
 
     @property
-    def vocab_size(self):
-        return len(self.sp_model)
-
-    def __call__(
-        self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        text_target: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        text_pair_target: Optional[
-            Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]
-        ] = None,
-        padding: Union[bool, str, PaddingStrategy] = True,
-        pad_to_multiple_of: Optional[int] = 2,
-        src_lang: Optional[str] = None,
-        tgt_lang: Optional[str] = None,
-        **kwargs,
-    ):
-        """
-        Args:
-            text (`str`, `list[str]`, `list[list[str]]`, *optional*):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            text_pair (`str`, `list[str]`, `list[list[str]]`, *optional*):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            text_target (`str`, `list[str]`, `list[list[str]]`, *optional*):
-                The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
-                list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
-                you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            text_pair_target (`str`, `list[str]`, `list[list[str]]`, *optional*):
-                The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
-                list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
-                you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
-                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                 index) among:
-
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            pad_to_multiple_of (`int`, *optional*):
-                If set will pad the sequence to a multiple of the provided value.
-
-                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                `>= 7.5` (Volta).
-            src_lang (`str`, *optional*):
-                A string representing the source language. If not specified, the last `src_lang` specified (either
-                during initialization or when calling this tokenizer) will be used.
-            tgt_lang (`str`, *optional*):
-                A string representing the target language. If not specified, the last `tgt_lang` specified (either
-                during initialization or when calling this tokenizer) will be used.
-            kwargs (*optional*):
-                Remaining dictionary of keyword arguments that will be passed to [`PreTrainedTokenizer.__call__`].
-        """
-        if src_lang is not None:
-            self.src_lang = src_lang
-        if tgt_lang is not None:
-            self.tgt_lang = tgt_lang
-
-        output = super().__call__(
-            text=text,
-            text_pair=text_pair,
-            text_target=text_target,
-            text_pair_target=text_pair_target,
-            padding=padding,
-            pad_to_multiple_of=pad_to_multiple_of,
-            **kwargs,
-        )
-
-        return BatchEncoding(output, tensor_type=kwargs.get("return_tensors"))
-
-    @property
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
     def src_lang(self) -> str:
         return self._src_lang
 
@@ -307,97 +234,12 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
             self._tgt_lang = new_tgt_lang
         self.set_tgt_lang_special_tokens(self._tgt_lang)
 
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.get_special_tokens_mask
-    def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
-    ) -> list[int]:
-        """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` method.
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-
-        if already_has_special_tokens:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
-            )
-
-        prefix_ones = [1] * len(self.prefix_tokens)
-        suffix_ones = [1] * len(self.suffix_tokens)
-        if token_ids_1 is None:
-            return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
-        return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
-
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.build_inputs_with_special_tokens
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
-    ) -> list[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. An NLLB sequence has the following format, where `X` represents the sequence:
-
-        - `input_ids` (for encoder) `X [eos, src_lang_code]`
-        - `decoder_input_ids`: (for decoder) `X [eos, tgt_lang_code]`
-
-        BOS is never used. Pairs of sequences are not the expected use case, but they will be handled without a
-        separator.
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        if token_ids_1 is None:
-            return self.prefix_tokens + token_ids_0 + self.suffix_tokens
-        # We don't expect to process pairs, but leave the pair logic for API consistency
-        return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
-
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.create_token_type_ids_from_sequences
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
-    ) -> list[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. nllb does not
-        make use of token type ids, therefore a list of zeros is returned.
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `list[int]`: List of zeros.
-
-        """
-
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-
-        if token_ids_1 is None:
-            return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
-
     def _build_translation_inputs(
-        self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
+        self, raw_inputs, return_tensors: str, src_lang: str | None, tgt_lang: str | None, **extra_kwargs
     ):
         """Used by translation pipeline, to prepare inputs for the generate function"""
         if src_lang is None or tgt_lang is None:
-            raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model.")
+            raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model")
         self.src_lang = src_lang
         inputs = self(raw_inputs, add_special_tokens=True, return_tensors=return_tensors, **extra_kwargs)
         if "__" not in tgt_lang:
@@ -406,129 +248,61 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         inputs["forced_bos_token_id"] = tgt_lang_id
         return inputs
 
-    def get_vocab(self):
-        vocab = {
-            self.convert_ids_to_tokens(i): i for i in range(self.fairseq_offset, self.vocab_size + self.fairseq_offset)
-        }
-        vocab.update(self.added_tokens_encoder)
-        return vocab
-
-    @property
-    def unk_token_length(self):
-        return len(self.sp_model.encode(str(self.unk_token)))
-
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
-    def get_spm_processor(self, from_slow=False):
-        tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        if self.legacy or from_slow:  # no dependency on protobuf
-            tokenizer.Load(self.vocab_file)
-            return tokenizer
-
-        with open(self.vocab_file, "rb") as f:
-            sp_model = f.read()
-            model_pb2 = import_protobuf(f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)")
-            model = model_pb2.ModelProto.FromString(sp_model)
-            normalizer_spec = model_pb2.NormalizerSpec()
-            normalizer_spec.add_dummy_prefix = False
-            model.normalizer_spec.MergeFrom(normalizer_spec)
-            sp_model = model.SerializeToString()
-            tokenizer.LoadFromSerializedProto(sp_model)
-        return tokenizer
-
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
-    def tokenize(self, text: "TextInput", **kwargs) -> list[str]:
-        """
-        Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
-        first token is special.
-        """
-        if self.legacy or len(text) == 0:
-            return super().tokenize(text, **kwargs)
-
-        text = text.replace(SPIECE_UNDERLINE, " ")
-        if self.add_prefix_space:
-            text = SPIECE_UNDERLINE + text
-
-        tokens = super().tokenize(text, **kwargs)
-
-        if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
-            tokens = tokens[1:]
-        return tokens
-
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
-    def _tokenize(self, text, **kwargs):
-        """
-        Returns a tokenized string.
-
-        We de-activated the `add_dummy_prefix` option, thus the sentencepiece internals will always strip any
-        SPIECE_UNDERLINE. For example: `self.sp_model.encode(f"{SPIECE_UNDERLINE}Hey", out_type = str)` will give
-        `['H', 'e', 'y']` instead of `['▁He', 'y']`. Thus we always encode `f"{unk_token}text"` and strip the
-        `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
-        `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
-        """
-        if self.legacy or not text.startswith((SPIECE_UNDERLINE, " ")):
-            return self.sp_model.encode(text, out_type=str)
-
-        # 1. Encode string + prefix ex: "<unk> Hey"
-        tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
-        # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
-        return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
-
-    def _convert_token_to_id(self, token):
-        """Converts a token (str) in an id using the vocab."""
-        spm_id = self.sp_model.PieceToId(token)
-
-        # Need to return unknown token if the SP model returned 0
-        return spm_id + self.fairseq_offset if spm_id else self.unk_token_id
-
-    def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        return self.sp_model.IdToPiece(index - self.fairseq_offset)
-
-    def convert_tokens_to_string(self, tokens):
-        """Converts a sequence of tokens (strings for sub-words) in a single string."""
-        # since we manually add the prefix space, we have to remove it when decoding
-        if tokens[0].startswith(SPIECE_UNDERLINE) and self.add_prefix_space:
-            tokens[0] = tokens[0][1:]
-
-        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
-        return out_string
-
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
-        elif not os.path.isfile(self.vocab_file):
-            with open(out_vocab_file, "wb") as fi:
-                content_spiece_model = self.sp_model.serialized_model_proto()
-                fi.write(content_spiece_model)
-
-        return (out_vocab_file,)
-
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.prepare_seq2seq_batch with eng_Latn->eng, fra_Latn->fra
     def prepare_seq2seq_batch(
         self,
         src_texts: list[str],
         src_lang: str = "eng",
-        tgt_texts: Optional[list[str]] = None,
+        tgt_texts: list[str] | None = None,
         tgt_lang: str = "fra",
+        max_length: int | None = None,
+        max_target_length: int | None = None,
+        padding: str = "longest",
+        return_tensors: str | None = None,
+        truncation: bool = True,
         **kwargs,
     ) -> BatchEncoding:
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
-        return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
 
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer._switch_to_input_mode
+        if max_length is None:
+            max_length = self.model_max_length
+
+        model_inputs = self(
+            src_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            max_length=max_length,
+            padding=padding,
+            truncation=truncation,
+            **kwargs,
+        )
+
+        if tgt_texts is None:
+            return model_inputs
+
+        # Process tgt_texts
+        if max_target_length is None:
+            max_target_length = max_length
+
+        self._switch_to_target_mode()
+        labels = self(
+            tgt_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            padding=padding,
+            max_length=max_target_length,
+            truncation=truncation,
+            **kwargs,
+        )
+        model_inputs["labels"] = labels["input_ids"]
+
+        self._switch_to_input_mode()
+
+        return model_inputs
+
     def _switch_to_input_mode(self):
         return self.set_src_lang_special_tokens(self.src_lang)
 
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer._switch_to_target_mode
     def _switch_to_target_mode(self):
         return self.set_tgt_lang_special_tokens(self.tgt_lang)
 
@@ -537,31 +311,117 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         Prefix=[src_lang_code], suffix = [eos]
         """
         self.cur_lang_code = self.convert_tokens_to_ids(src_lang)
-        self.init_kwargs["src_lang"] = src_lang
 
         if self.cur_lang_code == self.unk_token_id:
             logger.warning_once(
-                f"`src_lang={src_lang}` has not be found in the vocabulary. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
+                f"`src_lang={src_lang}` has not be found in the `vocabulary`. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
             )
 
         self.prefix_tokens = [self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
 
-    # https://github.com/facebookresearch/fairseq2/blob/c53f18e6be6b8b46b722f2249b8397b7eccd7ad3/src/fairseq2/models/nllb/tokenizer.py#L112-L116
+        prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
+        suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
+
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=prefix_tokens_str + ["$A"] + suffix_tokens_str,
+            pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
+            special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
+        )
+
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
         """Reset the special tokens to the target lang setting.
         Prefix=[eos, tgt_lang_code] and suffix=[eos].
         """
         self.cur_lang_code = self.convert_tokens_to_ids(lang)
-        self.init_kwargs["tgt_lang"] = lang
 
         if self.cur_lang_code == self.unk_token_id:
             logger.warning_once(
-                f"`tgt_lang={lang}` has not be found in the vocabulary. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
+                f"`tgt_lang={lang}` has not be found in the `vocabulary`. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
             )
 
         self.prefix_tokens = [self.eos_token_id, self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
+
+        prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
+        suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
+
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=prefix_tokens_str + ["$A"] + suffix_tokens_str,
+            pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
+            special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
+        )
+
+    def __call__(
+        self,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        text_pair: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        text_target: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        text_pair_target: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        padding: bool | str | PaddingStrategy = False,
+        pad_to_multiple_of: int | None = None,
+        src_lang: str | None = None,
+        tgt_lang: str | None = None,
+        **kwargs,
+    ):
+        """
+        Args:
+            text (`str`, `list[str]`, `list[list[str]]`, *optional*):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            text_pair (`str`, `list[str]`, `list[list[str]]`, *optional*):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            text_target (`str`, `list[str]`, `list[list[str]]`, *optional*):
+                The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
+                list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
+                you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            text_pair_target (`str`, `list[str]`, `list[list[str]]`, *optional*):
+                The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
+                list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
+                you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
+                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                 index) among:
+
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            pad_to_multiple_of (`int`, *optional*, defaults to `None`):
+                If set will pad the sequence to a multiple of the provided value.
+
+                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
+                `>= 7.5` (Volta).
+            src_lang (`str`, *optional*):
+                A string representing the source language. If not specified, the last `src_lang` specified (either
+                during initialization or when calling this tokenizer) will be used.
+            tgt_lang (`str`, *optional*):
+                A string representing the target language. If not specified, the last `tgt_lang` specified (either
+                during initialization or when calling this tokenizer) will be used.
+            kwargs (*optional*):
+                Remaining dictionary of keyword arguments that will be passed to [`TokenizersBackend.__call__`].
+        """
+        if src_lang is not None:
+            self.src_lang = src_lang
+        if tgt_lang is not None:
+            self.tgt_lang = tgt_lang
+
+        output = super().__call__(
+            text=text,
+            text_pair=text_pair,
+            text_target=text_target,
+            text_pair_target=text_pair_target,
+            padding=padding,
+            pad_to_multiple_of=pad_to_multiple_of,
+            **kwargs,
+        )
+
+        return output
 
 
 __all__ = ["SeamlessM4TTokenizer"]

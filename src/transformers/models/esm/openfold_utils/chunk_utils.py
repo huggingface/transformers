@@ -13,16 +13,16 @@
 # limitations under the License.
 import logging
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from functools import partial
-from typing import Any, Callable, Optional, Union
+from typing import Any
 
 import torch
 
 from .tensor_utils import tensor_tree_map, tree_map
 
 
-def _fetch_dims(tree: Union[dict, list, tuple, torch.Tensor]) -> list[tuple[int, ...]]:
+def _fetch_dims(tree: dict | list | tuple | torch.Tensor) -> list[tuple[int, ...]]:
     shapes = []
     if isinstance(tree, dict):
         for v in tree.values():
@@ -53,8 +53,8 @@ def _get_minimal_slice_set(
     start: Sequence[int],
     end: Sequence[int],
     dims: Sequence[int],
-    start_edges: Optional[Sequence[bool]] = None,
-    end_edges: Optional[Sequence[bool]] = None,
+    start_edges: Sequence[bool] | None = None,
+    end_edges: Sequence[bool] | None = None,
 ) -> list[tuple[slice, ...]]:
     """
     Produces an ordered sequence of tensor slices that, when used in sequence on a tensor with shape dims, yields
@@ -320,8 +320,8 @@ class ChunkSizeTuner:
         max_chunk_size: int = 512,
     ):
         self.max_chunk_size = max_chunk_size
-        self.cached_chunk_size: Optional[int] = None
-        self.cached_arg_data: Optional[tuple] = None
+        self.cached_chunk_size: int | None = None
+        self.cached_arg_data: tuple | None = None
 
     def _determine_favorable_chunk_size(self, fn: Callable, args: tuple, min_chunk_size: int) -> int:
         logging.info("Tuning chunk size...")
@@ -329,7 +329,7 @@ class ChunkSizeTuner:
         if min_chunk_size >= self.max_chunk_size:
             return min_chunk_size
 
-        candidates: list[int] = [2**l for l in range(int(math.log(self.max_chunk_size, 2)) + 1)]
+        candidates: list[int] = [2**l for l in range(int(math.log2(self.max_chunk_size)) + 1)]
         candidates = [c for c in candidates if c > min_chunk_size]
         candidates = [min_chunk_size] + candidates
         candidates[-1] += 4

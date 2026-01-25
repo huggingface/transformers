@@ -16,6 +16,7 @@
 import copy
 import tempfile
 import unittest
+import unittest.mock
 from functools import cached_property
 
 import timeout_decorator  # noqa
@@ -421,8 +422,6 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = False  # Fix me Michael
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = BartModelTester(self)
@@ -439,7 +438,7 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -479,6 +478,35 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             with torch.no_grad():
                 model(**inputs)[0]
 
+    def test_input_embeddings_support_forward_hook(self):
+        # Make sure that registering hooks on the input embeddings are indeed called
+        # in forward. This is necessary for gradient checkpointing in PEFT, see also #41821.
+        # For BART with tied embeddings, encoder and decoder have separate embedding modules,
+        # so we need to check that hooks on those modules are called during forward.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            hooks = []
+            base_model = model.model if hasattr(model, "model") else model
+
+            if hasattr(base_model, "encoder") and hasattr(base_model.encoder, "embed_tokens"):
+                hook = unittest.mock.MagicMock(return_value=None)
+                base_model.encoder.embed_tokens.register_forward_hook(hook)
+                hooks.append(hook)
+            if hasattr(base_model, "decoder") and hasattr(base_model.decoder, "embed_tokens"):
+                hook = unittest.mock.MagicMock(return_value=None)
+                base_model.decoder.embed_tokens.register_forward_hook(hook)
+                hooks.append(hook)
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            model(**inputs)
+
+            total_calls = sum(hook.call_count for hook in hooks)
+            self.assertGreater(total_calls, 0, f"Hooks on embeddings were not called for {model_class.__name__}")
+
     @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
@@ -515,7 +543,7 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
         if a.numel() > 100:
@@ -594,7 +622,7 @@ class FastIntegrationTests(unittest.TestCase):
         dct = tok(ARTICLE, return_tensors="pt")
         generated_ids = hf.generate(**dct, num_beams=4)
         result = tok.batch_decode(generated_ids)[0]
-        assert EXPECTED == result
+        assert result == EXPECTED
 
     def test_xsum_1_1_batch_generation(self):
         # test batch
@@ -866,7 +894,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        model = BartModel.from_pretrained("facebook/bart-large").to(torch_device)
+        model = BartModel.from_pretrained("facebook/bart-large", dtype=torch.float32).to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = input_ids.ne(model.config.pad_token_id)
         with torch.no_grad():
@@ -934,7 +962,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             " state."
             "</s>"
         )
-        dct = tok.batch_encode_plus(
+        dct = tok(
             [PGE_ARTICLE],
             max_length=1024,
             padding="max_length",
@@ -958,9 +986,9 @@ class BartModelIntegrationTests(unittest.TestCase):
         self.assertEqual(EXPECTED_SUMMARY, decoded[0])
 
     def test_xsum_config_generation_params(self):
-        config = BartConfig.from_pretrained("facebook/bart-large-xsum")
-        expected_params = {"num_beams": 6, "do_sample": False, "early_stopping": True, "length_penalty": 1.0}
-        config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
+        model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-xsum")
+        expected_params = {"num_beams": 6, "do_sample": None, "early_stopping": True, "length_penalty": None}
+        config_params = {k: getattr(model.generation_config, k, "MISSING") for k, v in expected_params.items()}
         self.assertDictEqual(expected_params, config_params)
 
     @slow
@@ -1160,7 +1188,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             " up to four years in prison.  Her next court appearance is scheduled for May 18."
         )
 
-        dct = tok.batch_encode_plus(
+        dct = tok(
             [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY],
             max_length=1024,
             padding="max_length",
@@ -1262,9 +1290,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_decoder_attention_mask(self):
-        model = BartForConditionalGeneration.from_pretrained("facebook/bart-large", forced_bos_token_id=0).to(
-            torch_device
-        )
+        model = BartForConditionalGeneration.from_pretrained("facebook/bart-large").to(torch_device)
         tokenizer = self.default_tokenizer
         sentence = "UN Chief Says There Is No <mask> in Syria"
         input_ids = tokenizer(sentence, return_tensors="pt").input_ids.to(torch_device)
@@ -1285,6 +1311,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             max_new_tokens=20,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            forced_bos_token_id=0,
         )
         generated_sentence = tokenizer.batch_decode(generated_ids)[0]
         expected_sentence = "</s><pad><pad><pad><s>UN Chief Says There Is No Plan B for Peace in Syria</s>"
@@ -1505,8 +1532,6 @@ class BartStandaloneDecoderModelTester:
 @require_torch
 class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BartDecoder, BartForCausalLM) if is_torch_available() else ()
-    fx_comptatible = True
-    test_pruning = False
     is_encoder_decoder = False
     test_missing_keys = False
 

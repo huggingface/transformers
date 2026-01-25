@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -60,15 +59,18 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
 
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
-        if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
-            for n in name
-        ) or name[-1] in ["_step"]:
+        if (
+            any(
+                n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
+                for n in name
+            )
+            or name[-1] == "_step"
+        ):
             logger.info("Skipping {}".format("/".join(name)))
             continue
 
         pointer = model
-        if name[-1] not in ["wtet"]:
+        if name[-1] != "wtet":
             pointer = getattr(pointer, "transformer")
 
         for m_name in name:

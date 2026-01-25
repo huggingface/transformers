@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,30 +16,24 @@
 import math
 from collections import defaultdict
 from functools import lru_cache
-from typing import Optional, Union
+from typing import Optional
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
+from ...image_transforms import split_to_tiles
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 
 def get_factors(dividend: int) -> set[int]:
@@ -97,30 +90,6 @@ def get_max_res_without_distortion(
         new_width = min(math.floor(original_width * scale_h), target_width)
 
     return new_height, new_width
-
-
-def split_to_tiles(images: torch.Tensor, num_tiles_height: int, num_tiles_width: int) -> torch.Tensor:
-    # Split image into number of required tiles (width x height)
-    batch_size, num_channels, height, width = images.size()
-    images = images.view(
-        batch_size,
-        num_channels,
-        num_tiles_height,
-        height // num_tiles_height,
-        num_tiles_width,
-        width // num_tiles_width,
-    )
-    # Permute dimensions to reorder the axes
-    image = images.permute(0, 2, 4, 1, 3, 5).contiguous()
-    # Reshape into the desired output shape (batch_size * 4, num_channels, width/2, height/2)
-    image = image.view(
-        batch_size,
-        num_tiles_width * num_tiles_height,
-        num_channels,
-        height // num_tiles_height,
-        width // num_tiles_width,
-    )
-    return image
 
 
 @lru_cache(maxsize=1)
@@ -183,7 +152,7 @@ def find_supported_resolutions(max_num_chunks: int, patch_size: SizeDict) -> tor
 def pad_to_best_fit(
     images: "torch.Tensor",
     target_size: tuple[int, int],
-    background_color: Union[int, tuple[int, int, int]] = 0,
+    background_color: int | tuple[int, int, int] = 0,
 ) -> "torch.Tensor":
     """
     Pads an image to fit the target size.
@@ -211,7 +180,7 @@ def pad_to_best_fit(
     target_height, target_width = target_size
     paste_x_right = target_width - width
     paste_y_right = target_height - height
-    padded_images = F.pad(images, padding=[0, 0, paste_x_right, paste_y_right], fill=background_color)
+    padded_images = tvF.pad(images, padding=[0, 0, paste_x_right, paste_y_right], fill=background_color)
 
     return padded_images
 
@@ -315,8 +284,8 @@ def get_best_fit(
     return optimal_canvas
 
 
-class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
+class Llama4ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
     max_patches (`int`, *optional*, defaults to 16):
         The maximum number of patches to be extracted from the image.
         Can be overridden by the `max_patches` parameter in the `preprocess` method.
@@ -327,8 +296,8 @@ class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         but never upsample, unless the image is smaller than the patch size.
     """
 
-    max_patches: Optional[int]
-    resize_to_max_canvas: Optional[bool]
+    max_patches: int
+    resize_to_max_canvas: bool
 
 
 @auto_docstring
@@ -356,8 +325,8 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Union[float, list[float]],
-        image_std: Union[float, list[float]],
+        image_mean: float | list[float],
+        image_std: float | list[float],
     ) -> "torch.Tensor":
         """
         Rescale and normalize images.
@@ -383,14 +352,14 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
         size: SizeDict,
         max_patches: int,
         resize_to_max_canvas: bool,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         possible_resolutions = find_supported_resolutions(max_num_chunks=max_patches, patch_size=size)
@@ -449,10 +418,9 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
                 )
                 grouped_processed_images[shape] = torch.cat([processed_images, global_tiles.unsqueeze(1)], dim=1)
         processed_images = reorder_images(grouped_processed_images, grouped_images_index)
-        aspect_ratios_list = reorder_images(grouped_aspect_ratios, grouped_images_index)
+        aspect_ratios = reorder_images(grouped_aspect_ratios, grouped_images_index)
 
         processed_images = torch.cat(processed_images, dim=0) if return_tensors else processed_images
-        aspect_ratios = torch.stack(aspect_ratios_list, dim=0) if return_tensors else aspect_ratios_list
         return BatchFeature(
             data={"pixel_values": processed_images, "aspect_ratios": aspect_ratios}, tensor_type=return_tensors
         )

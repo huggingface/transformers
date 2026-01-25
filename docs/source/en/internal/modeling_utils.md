@@ -20,6 +20,24 @@ This page lists all the custom layers used by the library, as well as the utilit
 
 Most of those are only useful if you are studying the code of the models in the library.
 
+## WeightConverter
+
+[[autodoc]] WeightConverter
+
+### Conversion operations
+
+[[autodoc]] ConversionOps
+
+[[autodoc]] Chunk
+
+[[autodoc]] Concatenate
+
+[[autodoc]] MergeModulelist
+
+[[autodoc]] SplitModulelist
+
+[[autodoc]] PermuteForRope
+
 ## Layers
 
 [[autodoc]] GradientCheckpointingLayer
@@ -45,11 +63,5 @@ Most of those are only useful if you are studying the code of the models in the 
 ## PyTorch Helper Functions
 
 [[autodoc]] pytorch_utils.apply_chunking_to_forward
-
-[[autodoc]] pytorch_utils.find_pruneable_heads_and_indices
-
-[[autodoc]] pytorch_utils.prune_layer
-
-[[autodoc]] pytorch_utils.prune_conv1d_layer
 
 [[autodoc]] pytorch_utils.prune_linear_layer

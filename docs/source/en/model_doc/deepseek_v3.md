@@ -34,6 +34,7 @@ We are super happy to make this code community-powered, and would love to see ho
 - static cache is not supported (this should be just a generation config issue / config shape issues)
 
 ### Usage tips
+
 The model uses Multi-head Latent Attention (MLA) and DeepSeekMoE architectures for efficient inference and cost-effective training. It employs an auxiliary-loss-free strategy for load balancing and multi-token prediction training objective. The model can be used for various language tasks after being pre-trained on 14.8 trillion tokens and going through Supervised Fine-Tuning and Reinforcement Learning stages.
 
 You can run the model in `FP8` automatically, using 2 nodes of 8 H100 should be more than enough!

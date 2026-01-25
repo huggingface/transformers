@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,15 +15,11 @@
 Processor class for InstructBLIP. Largely copy of Blip2Processor with addition of a tokenizer for the Q-Former.
 """
 
-import os
-from typing import Optional, Union
-
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
-from ...utils import logging
-from ..auto import AutoTokenizer
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
@@ -43,35 +38,19 @@ class InstructBlipProcessorKwargs(ProcessingKwargs, total=False):
             "return_length": False,
             "verbose": True,
         },
-        "images_kwargs": {},
     }
 
 
+@auto_docstring
 class InstructBlipProcessor(ProcessorMixin):
-    r"""
-    Constructs an InstructBLIP processor which wraps a BLIP image processor and a LLaMa/T5 tokenizer into a single
-    processor.
-
-    [`InstructBlipProcessor`] offers all the functionalities of [`BlipImageProcessor`] and [`AutoTokenizer`]. See the
-    docstring of [`~BlipProcessor.__call__`] and [`~BlipProcessor.decode`] for more information.
-
-    Args:
-        image_processor (`BlipImageProcessor`):
-            An instance of [`BlipImageProcessor`]. The image processor is a required input.
-        tokenizer (`AutoTokenizer`):
-            An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
+    def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
+        r"""
         qformer_tokenizer (`AutoTokenizer`):
             An instance of ['PreTrainedTokenizer`]. The Q-Former tokenizer is a required input.
-        num_query_tokens (`int`, *optional*):"
+        num_query_tokens (`int`, *optional*):
+            "
             Number of tokens used by the Qformer as queries, should be same as in model's config.
-    """
-
-    attributes = ["image_processor", "tokenizer", "qformer_tokenizer"]
-    image_processor_class = ("BlipImageProcessor", "BlipImageProcessorFast")
-    tokenizer_class = "AutoTokenizer"
-    qformer_tokenizer_class = "AutoTokenizer"
-
-    def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
+        """
         if not hasattr(tokenizer, "image_token"):
             self.image_token = AddedToken("<image>", normalized=False, special=True)
             tokenizer.add_tokens([self.image_token], special_tokens=True)
@@ -81,28 +60,13 @@ class InstructBlipProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, qformer_tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[InstructBlipProcessorKwargs],
     ) -> BatchFeature:
-        """
-        This method uses [`BlipImageProcessor.__call__`] method to prepare image(s) for the model, and
-        [`BertTokenizerFast.__call__`] to prepare text for the model.
-
-        Please refer to the docstring of the above two methods for more information.
-        Args:
-            images (`ImageInput`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-        """
         if images is None and text is None:
             raise ValueError("You have to specify at least images or text.")
 
@@ -154,37 +118,6 @@ class InstructBlipProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         qformer_input_names = ["qformer_input_ids", "qformer_attention_mask"]
         return tokenizer_input_names + image_processor_input_names + qformer_input_names
-
-    # overwrite to save the Q-Former tokenizer in a separate folder
-    def save_pretrained(self, save_directory, **kwargs):
-        if os.path.isfile(save_directory):
-            raise ValueError(f"Provided path ({save_directory}) should be a directory, not a file")
-        os.makedirs(save_directory, exist_ok=True)
-        qformer_tokenizer_path = os.path.join(save_directory, "qformer_tokenizer")
-        self.qformer_tokenizer.save_pretrained(qformer_tokenizer_path)
-
-        # We modify the attributes so that only the tokenizer and image processor are saved in the main folder
-        qformer_present = "qformer_tokenizer" in self.attributes
-        if qformer_present:
-            self.attributes.remove("qformer_tokenizer")
-
-        outputs = super().save_pretrained(save_directory, **kwargs)
-
-        if qformer_present:
-            self.attributes += ["qformer_tokenizer"]
-        return outputs
-
-    # overwrite to load the Q-Former tokenizer from a separate folder
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        processor = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        # if return_unused_kwargs a tuple is returned where the second element is 'unused_kwargs'
-        if isinstance(processor, tuple):
-            processor = processor[0]
-        qformer_tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, subfolder="qformer_tokenizer")
-        processor.qformer_tokenizer = qformer_tokenizer
-        return processor
 
 
 __all__ = ["InstructBlipProcessor"]

@@ -19,6 +19,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import (
     AutoProcessor,
+    BitsAndBytesConfig,
     PerceptionLMConfig,
     PerceptionLMForConditionalGeneration,
     PerceptionLMModel,
@@ -27,7 +28,6 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
-    require_read_token,
     require_torch,
     slow,
     torch_device,
@@ -177,7 +177,7 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
         if is_torch_available()
         else ()
     )
-    test_pruning = False
+
     _is_composite = True
 
     def setUp(self):
@@ -281,21 +281,13 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
         self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
         super().test_training_gradient_checkpointing()
 
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
-        super().test_training_gradient_checkpointing_use_reentrant()
-
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
         super().test_training_gradient_checkpointing_use_reentrant_false()
 
-    @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
-    def test_can_init_all_missing_weights(self):
-        pass
-
-    @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
-    def test_initialization(self):
-        pass
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(
         reason="PE/TIMM's attention implementation is self configured and won't raise ValueError on global attention implementation."
@@ -374,6 +366,15 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_generate_compilation_all_outputs(self):
         pass
 
+    @unittest.skip("Cannot set output_attentions on timm models.")
+    def test_get_image_features_attentions(self):
+        pass
+
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
+        # For models that rely on timm for their vision backend, it's hard to infer how many layers the model has
+        # from the timm config alone. So, we're just hardcoding the expected number of hidden states here.
+        return 2
+
 
 TEST_MODEL_PATH = "facebook/Perception-LM-1B"
 
@@ -381,7 +382,6 @@ TEST_MODEL_PATH = "facebook/Perception-LM-1B"
 @require_torch
 @require_bitsandbytes
 @slow
-@require_read_token
 class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)
@@ -422,7 +422,7 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     def test_small_model_integration_test(self):
         model = PerceptionLMForConditionalGeneration.from_pretrained(
-            TEST_MODEL_PATH, load_in_4bit=True, cache_dir="./"
+            TEST_MODEL_PATH, quantization_config=BitsAndBytesConfig(load_in_4bit=True), cache_dir="./"
         )
 
         inputs = self.processor.apply_chat_template(
@@ -448,7 +448,9 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     def test_small_model_integration_test_batched(self):
-        model = PerceptionLMForConditionalGeneration.from_pretrained(TEST_MODEL_PATH, load_in_4bit=True)
+        model = PerceptionLMForConditionalGeneration.from_pretrained(
+            TEST_MODEL_PATH, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)
         inputs = processor.apply_chat_template(
             [self.conversation1, self.conversation2],
@@ -474,7 +476,9 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     def test_generation_no_images(self):
         # model_id = "facebook/Perception-LM-1B"
-        model = PerceptionLMForConditionalGeneration.from_pretrained(TEST_MODEL_PATH, load_in_4bit=True)
+        model = PerceptionLMForConditionalGeneration.from_pretrained(
+            TEST_MODEL_PATH, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)
 
         # Prepare inputs with no images

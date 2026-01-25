@@ -20,6 +20,7 @@ from transformers import DINOv3ConvNextConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -28,7 +29,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import DINOv3ConvNextModel
+    from transformers import DINOv3ConvNextBackbone, DINOv3ConvNextModel
 
 
 if is_vision_available():
@@ -104,6 +105,49 @@ class DINOv3ConvNextModelTester:
             ),
         )
 
+    def create_and_check_backbone(self, config, pixel_values, labels):
+        model = DINOv3ConvNextBackbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify hidden states
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        expected_size = self.image_size // (4 * (2 ** (len(config.depths) - 1)))
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], expected_size, expected_size]
+        )
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), len(config.out_features))
+
+        # verify backbone works with out_features=None
+        config.out_features = None
+        model = DINOv3ConvNextBackbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify feature maps
+        self.parent.assertEqual(len(result.feature_maps), 1)
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], expected_size, expected_size]
+        )
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), 1)
+
+        model = DINOv3ConvNextBackbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify feature maps
+        self.parent.assertEqual(len(result.feature_maps), 1)
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], expected_size, expected_size]
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels = config_and_inputs
@@ -121,11 +165,8 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     all_model_classes = (DINOv3ConvNextModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": DINOv3ConvNextModel} if is_torch_available() else {}
 
-    fx_compatible = False
-    test_pruning = False
     test_resize_embeddings = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = DINOv3ConvNextModelTester(self)
@@ -155,6 +196,10 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_backbone(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_backbone(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -240,3 +285,14 @@ class DINOv3ConvNextModelIntegrationTest(unittest.TestCase):
         last_layer_patch_tokens = outputs.last_hidden_state[:, 1:]
         expected_slice = torch.tensor([0.4905, -3.7135, 1.8485, -1.0403, -1.0908], device=torch_device)
         torch.testing.assert_close(last_layer_patch_tokens[0, 0, :5], expected_slice, rtol=1e-4, atol=1e-4)
+
+
+@require_torch
+class DINOv3ConvNextBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (DINOv3ConvNextBackbone,) if is_torch_available() else ()
+    config_class = DINOv3ConvNextConfig
+
+    has_attentions = False
+
+    def setUp(self):
+        self.model_tester = DINOv3ConvNextModelTester(self)

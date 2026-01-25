@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,20 +14,19 @@
 """Fast Image processor class for Kosmos2_5."""
 
 import math
-from typing import Optional, Union
 
 import torch
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
 from ...image_utils import ChannelDimension, ImageInput, get_image_size
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
+from .image_processing_kosmos2_5 import Kosmos2_5ImageProcessorKwargs
 
 
 # Similar to transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches but dealing with a batch of images directly.
@@ -56,19 +54,6 @@ def torch_extract_patches(image_tensor, patch_height, patch_width):
     return patches
 
 
-class Kosmos2_5FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
-        The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.
-    max_patches (`int`, *optional*, defaults to 4096):
-        The maximum number of patches to extract from the image as per the
-        [KOSMOS 2.5 paper](https://huggingface.co/papers/2309.11419).
-    """
-
-    patch_size: Optional[dict[str, int]]
-    max_patches: Optional[int]
-
-
 @auto_docstring
 class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
     # To be checked against the slow image processor
@@ -78,20 +63,13 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
     patch_size = {"height": 16, "width": 16}
     max_patches = 4096
     rescale_factor = None
-    valid_kwargs = Kosmos2_5FastImageProcessorKwargs
+    valid_kwargs = Kosmos2_5ImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[Kosmos2_5FastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Kosmos2_5ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Kosmos2_5FastImageProcessorKwargs]) -> BatchFeature:
-        r"""
-        patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
-            The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.
-        max_patches (`int`, *optional*, defaults to 4096):
-            The maximum number of patches to extract from the image as per the
-            [KOSMOS 2.5 paper](https://huggingface.co/papers/2309.11419).
-        """
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Kosmos2_5ImageProcessorKwargs]) -> BatchFeature:
         # return super().preprocess(images, **kwargs)
         # TODO: revert once the issue is fixed: https://huggingface.slack.com/archives/C02TXKQQLE5/p1743411133979019
         return super().preprocess(images, image_mean=0.0, image_std=0.0, **kwargs)
@@ -225,8 +203,8 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         max_patches: int,
         patch_size: dict[str, int],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Q: should we have this?
@@ -277,8 +255,8 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
 
         encoded_outputs = BatchFeature(
             data={
-                "flattened_patches": torch.stack(flattened_patches, dim=0) if return_tensors else flattened_patches,
-                "attention_mask": torch.stack(attention_masks, dim=0) if return_tensors else attention_masks,
+                "flattened_patches": flattened_patches,
+                "attention_mask": attention_masks,
                 "width": width,
                 "height": height,
                 "rows": rows,

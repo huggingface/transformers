@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,8 @@
 # limitations under the License.
 import copy
 import math
-import warnings
 import zlib
-from collections.abc import Iterator
-from typing import Callable, Optional, Union
+from collections.abc import Callable, Iterator
 
 import numpy as np
 import torch
@@ -385,32 +382,32 @@ class WhisperGenerationMixin(GenerationMixin):
 
     def generate(
         self,
-        input_features: Optional[torch.Tensor] = None,
-        generation_config: Optional[GenerationConfig] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
+        input_features: torch.Tensor | None = None,
+        generation_config: GenerationConfig | None = None,
+        logits_processor: LogitsProcessorList | None = None,
+        stopping_criteria: StoppingCriteriaList | None = None,
+        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], list[int]] | None = None,
         synced_gpus: bool = False,
-        return_timestamps: Optional[bool] = None,
-        task: Optional[str] = None,
-        language: Optional[Union[str, list[str]]] = None,
-        is_multilingual: Optional[bool] = None,
-        prompt_ids: Optional[torch.Tensor] = None,
-        prompt_condition_type: Optional[str] = None,  # first-segment, all-segments
-        condition_on_prev_tokens: Optional[bool] = None,
-        temperature: Optional[Union[float, tuple[float, ...]]] = None,
-        compression_ratio_threshold: Optional[float] = None,
-        logprob_threshold: Optional[float] = None,
-        no_speech_threshold: Optional[float] = None,
-        num_segment_frames: Optional[int] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        return_timestamps: bool | None = None,
+        task: str | None = None,
+        language: str | list[str] | None = None,
+        is_multilingual: bool | None = None,
+        prompt_ids: torch.Tensor | None = None,
+        prompt_condition_type: str | None = None,  # first-segment, all-segments
+        condition_on_prev_tokens: bool | None = None,
+        temperature: float | tuple[float, ...] | None = None,
+        compression_ratio_threshold: float | None = None,
+        logprob_threshold: float | None = None,
+        no_speech_threshold: float | None = None,
+        num_segment_frames: int | None = None,
+        attention_mask: torch.Tensor | None = None,
         time_precision: float = 0.02,
         time_precision_features: float = 0.01,
-        return_token_timestamps: Optional[bool] = None,
+        return_token_timestamps: bool | None = None,
         return_segments: bool = False,
-        return_dict_in_generate: Optional[bool] = None,
-        force_unique_generate_call: Optional[bool] = None,
-        monitor_progress: Optional[Callable[[torch.Tensor], None]] = None,
+        return_dict_in_generate: bool | None = None,
+        force_unique_generate_call: bool | None = None,
+        monitor_progress: Callable[[torch.Tensor], None] | None = None,
         **kwargs,
     ):
         """
@@ -423,7 +420,7 @@ class WhisperGenerationMixin(GenerationMixin):
         parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
 
         For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
+        guide](../generation_strategies).
 
         </Tip>
 
@@ -649,14 +646,6 @@ class WhisperGenerationMixin(GenerationMixin):
         ```
 
         """
-        # 0. deprecate old inputs
-        if "inputs" in kwargs:
-            input_features = kwargs.pop("inputs")
-            warnings.warn(
-                "The input name `inputs` is deprecated. Please make sure to use `input_features` instead.",
-                FutureWarning,
-            )
-
         # 1. prepare generation config
         generation_config, kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
@@ -1178,26 +1167,16 @@ class WhisperGenerationMixin(GenerationMixin):
                 if not is_shortform:
                     # we don't save `past_key_values` as this is too costly for longform
                     return None
-                elif isinstance(values, EncoderDecoderCache):
-                    all_past_key_values = []
-                    for layer_idx in range(self.config.decoder_layers):
-                        layer_past_key_values = []
-                        for cache_cls in [values.self_attention_cache, values.cross_attention_cache]:
-                            for v in [cache_cls.layers[layer_idx].keys, cache_cls.layers[layer_idx].values]:
-                                layer_past_key_values.append(v[batch_idx][None].cpu())
-                        all_past_key_values.append(tuple(layer_past_key_values))
-                    return EncoderDecoderCache.from_legacy_cache(tuple(all_past_key_values))
-                else:
-                    all_past_key_values = []
-                    for v in range(len(values)):
-                        layer_past_key_values = []
-                        for w in values[v]:
-                            if len(w) != 0:
-                                layer_past_key_values.append(w[batch_idx][None].cpu())
-                            else:
-                                layer_past_key_values.append(w)
-                        all_past_key_values.append(tuple(layer_past_key_values))
-                    return tuple(all_past_key_values)
+                all_past_key_values = []
+                for layer_idx in range(self.config.decoder_layers):
+                    layer_cache = (
+                        values.self_attention_cache.layers[layer_idx].keys[batch_idx][None].cpu(),
+                        values.self_attention_cache.layers[layer_idx].values[batch_idx][None].cpu(),
+                        values.cross_attention_cache.layers[layer_idx].keys[batch_idx][None].cpu(),
+                        values.cross_attention_cache.layers[layer_idx].values[batch_idx][None].cpu(),
+                    )
+                    all_past_key_values.append(layer_cache)
+                return EncoderDecoderCache(all_past_key_values)
 
             return values[batch_idx].cpu()
 
@@ -1234,15 +1213,24 @@ class WhisperGenerationMixin(GenerationMixin):
                 )
             elif key == "past_key_values":
                 if seek_outputs[0][key] is not None:
-                    outputs[key] = tuple(
-                        tuple(
-                            torch.stack([v[key][i][j] for v in seek_outputs]).squeeze(1).to(device)
-                            for j in range(len(seek_outputs[0][key][0]))
+                    all_past_key_values = []
+                    for layer_idx in range(len(seek_outputs[0][key])):
+                        self_attention_k, self_attention_v, cross_attention_k, cross_attention_v = (
+                            torch.stack(
+                                [
+                                    getattr(getattr(sub_output[key], sub_cache).layers[layer_idx], sub_key)
+                                    for sub_output in seek_outputs
+                                ]
+                            )
+                            .squeeze(1)
+                            .to(device)
+                            for sub_cache in ["self_attention_cache", "cross_attention_cache"]
+                            for sub_key in ["keys", "values"]
                         )
-                        for i in range(len(seek_outputs[0][key]))
-                    )
-                    if isinstance(seek_outputs[0][key], EncoderDecoderCache):
-                        outputs[key] = EncoderDecoderCache.from_legacy_cache(outputs[key])
+                        all_past_key_values.append(
+                            (self_attention_k, self_attention_v, cross_attention_k, cross_attention_v)
+                        )
+                    outputs[key] = EncoderDecoderCache(tuple(all_past_key_values))
                 else:
                     outputs[key] = None
 
@@ -1621,9 +1609,9 @@ class WhisperGenerationMixin(GenerationMixin):
 
     def detect_language(
         self,
-        input_features: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[Union[torch.FloatTensor, BaseModelOutput]] = None,
-        generation_config: Optional[GenerationConfig] = None,
+        input_features: torch.FloatTensor | None = None,
+        encoder_outputs: torch.FloatTensor | BaseModelOutput | None = None,
+        generation_config: GenerationConfig | None = None,
         num_segment_frames: int = 3000,
     ) -> torch.Tensor:
         """
@@ -1703,18 +1691,7 @@ class WhisperGenerationMixin(GenerationMixin):
                     "Model generation config has no `alignment_heads`, token-level timestamps not available. "
                     "See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the generation config."
                 )
-            if "num_frames" in kwargs:
-                generation_config.num_frames = kwargs.pop("num_frames")
-                if isinstance(generation_config.num_frames, torch.Tensor):
-                    generation_config.num_frames = generation_config.num_frames.cpu()
-                else:
-                    generation_config.num_frames = torch.tensor(generation_config.num_frames)
-
-                logger.warning_once(
-                    "`num_frames` is deprecated and will be removed in Transformers v5. Use `attention_mask` instead, as it can be used to infer the number of frames. "
-                    "You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True"
-                )
-            elif attention_mask is not None:
+            if attention_mask is not None:
                 generation_config.num_frames = attention_mask.sum(-1).cpu()
             else:
                 logger.warning_once(

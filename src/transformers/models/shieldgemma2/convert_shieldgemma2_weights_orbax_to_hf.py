@@ -406,7 +406,7 @@ def main(*args):
             num_hidden_layers=34,
             num_key_value_heads=4,
             sliding_window=1024,
-            rope_scaling={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
+            rope_parameters={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
@@ -460,7 +460,7 @@ def main(*args):
     model.load_state_dict(result.state_tree, assign=True, strict=True)
     model.config.dtype = dtype
     logging.info("Loaded Shieldgemma2 in Hugging Face Transformers.")
-    model.save_pretrained(output_path, safe_serialization=True)
+    model.save_pretrained(output_path)
     logging.info("Saved Shieldgemma2 to SafeTensors in %s", output_path)
     del model
     del result

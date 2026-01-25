@@ -25,6 +25,8 @@
     title: 分享您的模型
   - local: llm_tutorial
     title: 使用LLMs进行生成
+  - local: generation_strategies
+    title: 生成策略
   title: 教程
 - sections:
   - isExpanded: false
@@ -44,8 +46,6 @@
     title: 聊天模型的模板
   - local: serialization
     title: 导出为 ONNX
-  - local: torchscript
-    title: 导出为 TorchScript
   - local: gguf
     title: 与 GGUF 格式的互操作性
   - local: tiktoken
@@ -109,8 +109,6 @@
       title: 模型
     - local: main_classes/text_generation
       title: 文本生成
-    - local: main_classes/onnx
-      title: ONNX
     - local: main_classes/optimizer_schedules
       title: Optimization
     - local: main_classes/output

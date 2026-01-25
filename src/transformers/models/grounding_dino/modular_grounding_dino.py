@@ -1,4 +1,23 @@
-from typing import TYPE_CHECKING, Optional, Union
+# Copyright 2025 the HuggingFace Inc. team. All rights reserved.
+#
+# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
+# and OPT implementations in this library. It has been modified from its
+# original forms to accommodate minor architectural differences compared
+# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from typing import TYPE_CHECKING
 
 import torch
 
@@ -51,7 +70,7 @@ class GroundingDinoImageProcessorFast(DetrImageProcessorFast):
         self,
         outputs: "GroundingDinoObjectDetectionOutput",
         threshold: float = 0.1,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
     ):
         """
         Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -99,18 +118,6 @@ class GroundingDinoImageProcessorFast(DetrImageProcessorFast):
             results.append({"scores": scores, "labels": labels, "boxes": boxes})
 
         return results
-
-    def post_process(self):
-        raise NotImplementedError("Post-processing is not implemented for Grounding-Dino yet.")
-
-    def post_process_segmentation(self):
-        raise NotImplementedError("Segmentation post-processing is not implemented for Grounding-Dino yet.")
-
-    def post_process_instance(self):
-        raise NotImplementedError("Instance post-processing is not implemented for Grounding-Dino yet.")
-
-    def post_process_panoptic(self):
-        raise NotImplementedError("Panoptic post-processing is not implemented for Grounding-Dino yet.")
 
     def post_process_instance_segmentation(self):
         raise NotImplementedError("Segmentation post-processing is not implemented for Grounding-Dino yet.")

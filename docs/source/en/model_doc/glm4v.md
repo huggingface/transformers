@@ -1,49 +1,61 @@
-<!--Copyright 2025 The ZhipuAI Inc. and The HuggingFace Inc. team. All rights reserved.
+<!--Copyright 2025 the HuggingFace Team. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
 *This model was released on 2025-07-01 and added to Hugging Face Transformers on 2025-06-25.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">    </div>
-</div>
-
-# GLM-4.1V
+# GLM-V
 
 ## Overview
 
-**GLM-4.1V-9B-Thinking** is a bilingual vision-language model optimized for reasoning, built on GLM-4-9B. It introduces
-a "thinking paradigm" with reinforcement learning, achieving state-of-the-art results among 10B-class models and
-rivaling 72B-scale models. It supports 64k context, 4K resolution, and arbitrary aspect ratios, with an open-source base
-model for further research. You can check our paper [here](https://huggingface.co/papers/2507.01006). and below is a abstract.
+The GLM-V model was proposed in [GLM-4.5V and GLM-4.1V-Thinking: Towards Versatile Multimodal Reasoning with Scalable Reinforcement Learning](https://huggingface.co/papers/2507.01006v6).
 
-*We present GLM-4.1V-Thinking, a vision-language model (VLM) designed to advance general-purpose multimodal understanding
-and reasoning. In this report, we share our key findings in the development of the reasoning-centric training framework.
-We first develop a capable vision foundation model with significant potential through large-scale pre-training, which
-arguably sets the upper bound for the final performance. We then propose Reinforcement Learning with Curriculum
-Sampling (RLCS) to unlock the full potential of the model, leading to comprehensive capability enhancement across a
-diverse range of tasks, including STEM problem solving, video understanding, content recognition, coding, grounding,
-GUI-based agents, and long document understanding. We open-source GLM-4.1V-9B-Thinking, which achieves state-of-the-art
-performance among models of comparable size. In a comprehensive evaluation across 28 public benchmarks, our model
-outperforms Qwen2.5-VL-7B on nearly all tasks and achieves comparable or even superior performance on 18 benchmarks
-relative to the significantly larger Qwen2.5-VL-72B. Notably, GLM-4.1V-9B-Thinking also demonstrates competitive or
-superior performance compared to closed-source models such as GPT-4o on challenging tasks including long document
-understanding and STEM reasoning, further underscoring its strong capabilities. Code, models and more information
-are released at https://github.com/THUDM/GLM-4.1V-Thinking.*
+The abstract from the paper is the following:
+
+> *We present GLM-4.1V-Thinking, GLM-4.5V, and GLM-4.6V, a family of vision-language models (VLMs) designed to advance
+general-purpose multimodal understanding and reasoning. In this report, we share our key findings in the development of
+the reasoning-centric training framework. We first develop a capable vision foundation model with significant potential
+through large-scale pre-training, which arguably sets the upper bound for the final performance. We then propose
+Reinforcement Learning with Curriculum Sampling (RLCS) to unlock the full potential of the model, leading to
+comprehensive capability enhancement across a diverse range of tasks, including STEM problem solving, video
+understanding, content recognition, coding, grounding, GUI-based agents, and long document interpretation. In a
+comprehensive evaluation across 42 public benchmarks, GLM-4.5V achieves state-of-the-art performance on nearly all tasks
+among open-source models of similar size, and demonstrates competitive or even superior results compared to
+closed-source models such as Gemini-2.5-Flash on challenging tasks including Coding and GUI Agents. Meanwhile, the
+smaller GLM-4.1V-9B-Thinking remains highly competitive-achieving superior results to the much larger Qwen2.5-VL-72B on
+29 benchmarks. We open-source both GLM-4.1V-9B-Thinking and GLM-4.5V. We further introduce the GLM-4.6V series,
+open-source multimodal models with native tool use and a 128K context window. A brief overview is available at this
+https URL. Code, models and more information are released at https://github.com/zai-org/GLM-V*
+
+## Support Model
+
+This Model type support these model of zai-org:
+
++ [GLM-4.1V-9B-Base](https://huggingface.co/zai-org/GLM-4.1V-9B-Base)
++ [GLM-4.1V-9B-Thinking](https://huggingface.co/zai-org/GLM-4.1V-9B-Thinking)
++ [GLM-4.6V-Flash](https://huggingface.co/zai-org/GLM-4.6V-Flash)
++ [AutoGLM-Phone-9B](https://huggingface.co/zai-org/AutoGLM-Phone-9B)
++ [AutoGLM-Phone-9B-Multilingual](https://huggingface.co/zai-org/AutoGLM-Phone-9B-Multilingual)
++ [Glyph](https://huggingface.co/zai-org/Glyph)
++ [WebVIA-Agent](https://huggingface.co/zai-org/WebVIA-Agent)
++ [UI2Code_N](https://huggingface.co/zai-org/UI2Code_N)
+
+This model was contributed by [Raushan Turganbay](https://huggingface.co/RaushanTurganbay)
+and [Yuxuan Zhang](https://huggingface.co/ZHANGYUXUAN-zR).
 
 ## Usage
 
@@ -55,6 +67,7 @@ The example below demonstrates how to generate text based on an image with [`Pip
 ```py
 import torch
 from transformers import pipeline
+
 pipe = pipeline(
     task="image-text-to-text",
     model="THUDM/GLM-4.1V-9B-Thinking",
@@ -69,11 +82,11 @@ messages = [
                 "type": "image",
                 "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
             },
-            { "type": "text", "text": "Describe this image."},
+            {"type": "text", "text": "Describe this image."},
         ]
     }
 ]
-pipe(text=messages,max_new_tokens=20, return_full_text=False)
+pipe(text=messages, max_new_tokens=20, return_full_text=False)
 ```
 
 </hfoption>
@@ -92,15 +105,15 @@ model = Glm4vForConditionalGeneration.from_pretrained(
 processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
 messages = [
     {
-        "role":"user",
-        "content":[
+        "role": "user",
+        "content": [
             {
-                "type":"image",
+                "type": "image",
                 "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
             },
             {
-                "type":"text",
-                "text":"Describe this image."
+                "type": "text",
+                "text": "Describe this image."
             }
         ]
     }
@@ -117,10 +130,10 @@ inputs = processor.apply_chat_template(
 
 generated_ids = model.generate(**inputs, max_new_tokens=128)
 generated_ids_trimmed = [
-            out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+    out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
 ]
 output_text = processor.batch_decode(
-       generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
 )
 print(output_text)
 ```
@@ -132,10 +145,11 @@ Using GLM-4.1V with video input is similar to using it with image input.
 The model can process video data and generate text based on the content of the video.
 
 ```python
-from transformers import AutoProcessor, Glm4vForConditionalGeneration, infer_device
+from transformers import AutoProcessor, Glm4vForConditionalGeneration
+from accelerate import Accelerator
 import torch
 
-device = f"{infer_device()}:0"
+device = Accelerator().device
 
 processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
 model = Glm4vForConditionalGeneration.from_pretrained(
@@ -159,15 +173,20 @@ messages = [
         ],
     }
 ]
-inputs = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt", padding=True).to(model.device)
+inputs = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_dict=True,
+                                       return_tensors="pt", padding=True).to(model.device)
 generated_ids = model.generate(**inputs, max_new_tokens=1024, do_sample=True, temperature=1.0)
-output_text = processor.decode(generated_ids[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+output_text = processor.decode(generated_ids[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 print(output_text)
 ```
 
 ## Glm4vConfig
 
 [[autodoc]] Glm4vConfig
+
+## Glm4vVisionConfig
+
+[[autodoc]] Glm4vVisionConfig
 
 ## Glm4vTextConfig
 
@@ -176,21 +195,27 @@ print(output_text)
 ## Glm4vImageProcessor
 
 [[autodoc]] Glm4vImageProcessor
-    - preprocess
+- preprocess
 
 ## Glm4vVideoProcessor
 
 [[autodoc]] Glm4vVideoProcessor
-    - preprocess
+- preprocess
 
 ## Glm4vImageProcessorFast
 
 [[autodoc]] Glm4vImageProcessorFast
-    - preprocess
+- preprocess
 
 ## Glm4vProcessor
 
 [[autodoc]] Glm4vProcessor
+    - __call__
+
+## Glm4vVisionModel
+
+[[autodoc]] Glm4vVisionModel
+    - forward
 
 ## Glm4vTextModel
 
@@ -201,8 +226,12 @@ print(output_text)
 
 [[autodoc]] Glm4vModel
     - forward
+    - get_video_features
+    - get_image_features
 
 ## Glm4vForConditionalGeneration
 
 [[autodoc]] Glm4vForConditionalGeneration
     - forward
+    - get_video_features
+    - get_image_features

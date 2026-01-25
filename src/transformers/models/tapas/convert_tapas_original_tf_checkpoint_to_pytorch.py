@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -96,7 +95,7 @@ def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
                 continue
         # in case the model is TapasForMaskedLM, we skip the pooler
         if isinstance(model, TapasForMaskedLM):
-            if any(n in ["pooler"] for n in name):
+            if any(n == "pooler" for n in name):
                 logger.info(f"Skipping {'/'.join(name)}")
                 continue
         # if first scope name starts with "bert", change it to "tapas"

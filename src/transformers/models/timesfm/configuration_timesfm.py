@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google LLC and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,22 @@
 # limitations under the License.
 """TimesFM model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class TimesFmConfig(PretrainedConfig):
+class TimesFmConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`TimesFmModelForPrediction`] or a [`TFTimesFmModel`]. It is used to
+    This is the configuration class to store the configuration of a [`TimesFmModelForPrediction`]. It is used to
     instantiate a TimesFM model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the TimesFM
     [google/timesfm-2.0-500m-pytorch](https://huggingface.co/google/timesfm-2.0-500m-pytorch) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Arguments:
         patch_length (`int`, *optional*, defaults to 32):
@@ -118,10 +117,8 @@ class TimesFmConfig(PretrainedConfig):
         self.min_timescale = min_timescale
         self.max_timescale = max_timescale
 
-        super().__init__(
-            is_encoder_decoder=self.is_encoder_decoder,
-            **kwargs,
-        )
+        kwargs["is_encoder_decoder"] = self.is_encoder_decoder
+        super().__init__(**kwargs)
 
 
 __all__ = ["TimesFmConfig"]

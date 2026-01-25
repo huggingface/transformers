@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,22 @@
 # limitations under the License.
 """Pop2Piano model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Pop2PianoConfig(PretrainedConfig):
+class Pop2PianoConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Pop2PianoForConditionalGeneration`]. It is used
     to instantiate a Pop2PianoForConditionalGeneration model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     Pop2Piano [sweetcocoa/pop2piano](https://huggingface.co/sweetcocoa/pop2piano) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 2400):
@@ -93,8 +92,12 @@ class Pop2PianoConfig(PretrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         dense_act_fn="relu",
+        is_decoder=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.composer_vocab_size = composer_vocab_size
         self.d_model = d_model
@@ -115,13 +118,10 @@ class Pop2PianoConfig(PretrainedConfig):
         self.hidden_size = self.d_model
         self.num_attention_heads = num_heads
         self.num_hidden_layers = num_layers
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["Pop2PianoConfig"]

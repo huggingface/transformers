@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 KAIST and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,22 @@
 # limitations under the License.
 """GLPN model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class GLPNConfig(PretrainedConfig):
+class GLPNConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GLPNModel`]. It is used to instantiate an GLPN
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the GLPN
     [vinvino02/glpn-kitti](https://huggingface.co/vinvino02/glpn-kitti) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_channels (`int`, *optional*, defaults to 3):

@@ -6,9 +6,6 @@ on:
       docker:
         required: true
         type: string
-      start_sha:
-        required: true
-        type: string
       job:
         required: true
         type: string
@@ -24,7 +21,13 @@ on:
       commit_sha:
         required: false
         type: string
-
+      pr_number:
+        required: false
+        type: string
+    outputs:
+      report:
+        description: "Content of the report of new failures"
+        value: ${{ jobs.process_new_failures_with_commit_info.outputs.report }}
 
 env:
   HF_HOME: /mnt/cache
@@ -34,17 +37,21 @@ env:
   RUN_SLOW: yes
   # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
   # This token is created under the bot `hf-transformers-bot`.
-  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
 
 
 jobs:
   check_new_failures:
-    name: " "
+    name: "Find commits for new failing tests"
+    strategy:
+      matrix:
+        run_idx: [1]
     runs-on:
       group: aws-g5-4xlarge-cache
+    outputs:
+      process: ${{ steps.check_file.outputs.process }}
     container:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -55,14 +62,19 @@ jobs:
           path: /transformers/ci_results_${{ inputs.job }}
 
       - name: Check file
+        id: check_file
         working-directory: /transformers
+        env:
+          job: ${{ inputs.job }}
         run: |
-          if [ -f ci_results_${{ inputs.job }}/new_failures.json ]; then
-            echo "`ci_results_${{ inputs.job }}/new_failures.json` exists, continue ..."
+          if [ -f "ci_results_${job}/new_failures.json" ]; then
+            echo "\`ci_results_${job}/new_failures.json\` exists, continue ..."
             echo "process=true" >> $GITHUB_ENV
+            echo "process=true" >> $GITHUB_OUTPUT
           else
-            echo "`ci_results_${{ inputs.job }}/new_failures.json` doesn't exist, abort."
+            echo "\`ci_results_${job}/new_failures.json\` doesn't exist, abort."
             echo "process=false" >> $GITHUB_ENV
+            echo "process=false" >> $GITHUB_OUTPUT
           fi
 
       - uses: actions/download-artifact@v4
@@ -81,27 +93,62 @@ jobs:
             echo "PREV_WORKFLOW_RUN_ID=" >> $GITHUB_ENV
           fi
 
-          if [ -f setup_values/other_workflow_run_id.txt ]; then
-            echo "OTHER_WORKFLOW_RUN_ID=$(cat setup_values/other_workflow_run_id.txt)" >> $GITHUB_ENV
-          else
-            echo "OTHER_WORKFLOW_RUN_ID=" >> $GITHUB_ENV
-          fi
-
       - name: Update clone
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
-        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
+        env:
+          commit_sha: ${{ inputs.commit_sha || github.sha }}
+        run: |
+          git fetch origin "$commit_sha" && git checkout "$commit_sha"
 
-      - name: Get target commit
+      - name: Get `START_SHA`
         working-directory: /transformers/utils
         if: ${{ env.process == 'true' }}
+        env:
+          commit_sha: ${{ inputs.commit_sha || github.sha }}
         run: |
-          echo "END_SHA=$(TOKEN=${{ secrets.ACCESS_REPO_INFO_TOKEN }} python3 -c 'import os; from get_previous_daily_ci import get_last_daily_ci_run_commit; commit=get_last_daily_ci_run_commit(token=os.environ["TOKEN"], workflow_run_id=os.environ["PREV_WORKFLOW_RUN_ID"]); print(commit)')" >> $GITHUB_ENV
+          echo "START_SHA=$commit_sha" >> $GITHUB_ENV
 
-      - name: Checkout to `start_sha`
-        working-directory: /transformers
-        if: ${{ env.process == 'true' }}
-        run: git fetch && git checkout ${{ inputs.start_sha }}
+      # This is used if the CI is triggered from a pull request `self-comment-ci.yml` (after security check is verified)
+      - name: Extract the base commit on `main` (of the merge commit created by Github) if it is a PR
+        id: pr_info
+        if: ${{ env.process == 'true' && inputs.pr_number != '' }}
+        uses: actions/github-script@v6
+        with:
+          script: |            
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: ${{ inputs.pr_number }}
+            });
+
+            const { data: merge_commit }  = await github.rest.repos.getCommit({
+              owner: pr.base.repo.owner.login,
+              repo: pr.base.repo.name,
+              ref: '${{ inputs.commit_sha }}',
+            });
+
+            core.setOutput('merge_commit_base_sha', merge_commit.parents[0].sha);
+
+      # Usually, `END_SHA` should be the commit of the last previous workflow run of the **SAME** (scheduled) workflow.
+      # (This is why we don't need to specify `workflow_id` which would be fetched automatically in the python script.)
+      - name: Get `END_SHA` from previous CI runs of the same workflow
+        working-directory: /transformers/utils
+        if: ${{ env.process == 'true' && inputs.pr_number == '' }}
+        env:
+          ACCESS_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+        run: |
+          echo "END_SHA=$(TOKEN="$ACCESS_TOKEN" python3 -c 'import os; from get_previous_daily_ci import get_last_daily_ci_run_commit; commit=get_last_daily_ci_run_commit(token=os.environ["TOKEN"], workflow_run_id=os.environ["PREV_WORKFLOW_RUN_ID"]); print(commit)')" >> $GITHUB_ENV
+
+      # However, for workflow runs triggered by `issue_comment` (for pull requests), we want to check against the
+      # parent commit (on `main`) of the `merge_commit` (dynamically created by GitHub). In this case, the goal is to
+      # see if a reported failing test is actually ONLY failing on the `merge_commit`.
+      - name: Set `END_SHA`
+        if: ${{ env.process == 'true' && inputs.pr_number != '' }}
+        env:
+          merge_commit_base_sha: ${{ steps.pr_info.outputs.merge_commit_base_sha }}
+        run: |
+          echo "END_SHA=$merge_commit_base_sha" >> $GITHUB_ENV
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -119,6 +166,10 @@ jobs:
         run: |
           python3 utils/print_env.py
 
+      - name: Install pytest-flakefinder
+        if: ${{ env.process == 'true' }}
+        run: python3 -m pip install pytest-flakefinder
+
       - name: Show installed libraries and their versions
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
@@ -127,37 +178,78 @@ jobs:
       - name: Check failed tests
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
-        run: python3 utils/check_bad_commit.py --start_commit ${{ inputs.start_sha }} --end_commit ${{ env.END_SHA }} --file ci_results_${{ inputs.job }}/new_failures.json --output_file new_failures_with_bad_commit.json
+        env:
+          job: ${{ inputs.job }}
+          run_idx: ${{ matrix.run_idx }}
+        run: python3 utils/check_bad_commit.py --start_commit "$START_SHA" --end_commit "$END_SHA" --file "ci_results_${job}/new_failures.json" --output_file "new_failures_with_bad_commit_${job}_${run_idx}.json"
 
       - name: Show results
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
-        run: |
-          ls -l new_failures_with_bad_commit.json
-          cat new_failures_with_bad_commit.json
-
-      - name: Checkout back
-        working-directory: /transformers
-        if: ${{ env.process == 'true' }}
-        run: |
-          git checkout ${{ inputs.start_sha }}
-
-      - name: Process report
-        shell: bash
-        working-directory: /transformers
-        if: ${{ env.process == 'true' }}
         env:
-          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-          TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
-          JOB_NAME: ${{ inputs.job }}
-          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
+          job: ${{ inputs.job }}
+          run_idx: ${{ matrix.run_idx }}
         run: |
-          python3 utils/process_bad_commit_report.py
+          ls -l "new_failures_with_bad_commit_${job}_${run_idx}.json"
+          cat "new_failures_with_bad_commit_${job}_${run_idx}.json"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}
+          path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
+
+  process_new_failures_with_commit_info:
+    name: "process bad commit reports"
+    needs: check_new_failures
+    if: needs.check_new_failures.outputs.process == 'true'
+    runs-on:
+      group: aws-g5-4xlarge-cache
+    outputs:
+      report: ${{ steps.set_output.outputs.report }}
+    container:
+      image: ${{ inputs.docker }}
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci_results_${{ inputs.job }}
+          path: /transformers/ci_results_${{ inputs.job }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: new_failures_with_bad_commit_${{ inputs.job }}*
+          path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}
+          merge-multiple: true
+
+      - name: Check files
+        working-directory: /transformers
+        env:
+          job: ${{ inputs.job }}
+        run: |
+          ls -la /transformers
+          ls -la "/transformers/new_failures_with_bad_commit_${job}"
+
+      # Currently, we only run with a single runner by using `run_idx: [1]`. We might try to run with multiple runners
+      # to further reduce the false positive caused by flaky tests, which requires further processing to merge reports.
+      - name: Merge files
+        shell: bash
+        working-directory: /transformers
+        env:
+          job: ${{ inputs.job }}
+        run: |
+          cp "/transformers/new_failures_with_bad_commit_${job}/new_failures_with_bad_commit_${job}_1.json" new_failures_with_bad_commit.json
+
+      - name: Update clone
+        working-directory: /transformers
+        env:
+          commit_sha: ${{ inputs.commit_sha || github.sha }}
+        run: |
+          git fetch origin "$commit_sha" && git checkout "$commit_sha"
 
       - name: Process report
         shell: bash
         working-directory: /transformers
-        if: ${{ env.process == 'true' }}
         env:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
@@ -170,15 +262,40 @@ jobs:
             echo EOF
           } >> "$GITHUB_ENV"
 
+      # The output is useful if a caller needs more processing, for example, we have a chain
+      # self-comment-ci.yml -> self-scheduled.yml -> this one (check_failed_tests.yml),
+      # and `self-comment-ci.yml` needs further processing before sending a GitHub comment to the pull request page.
+      - name: Show results & Set outputs
+        id: set_output
+        working-directory: /transformers
+        run: |
+          ls -l new_failures_with_bad_commit.json
+          cat new_failures_with_bad_commit.json
+
+          {
+            echo 'report<<EOF'
+            cat new_failures_with_bad_commit.json
+            echo ''  # Force a newline
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: new_failures_with_bad_commit_${{ inputs.job }}
+          path: /transformers/new_failures_with_bad_commit.json
+
       - name: Prepare Slack report title
         working-directory: /transformers
-        if: ${{ env.process == 'true' }}
+        env:
+          ci_event: ${{ inputs.ci_event }}
+          job: ${{ inputs.job }}
         run: |
           pip install slack_sdk
-          echo "title=$(python3 -c 'import sys; sys.path.append("utils"); from utils.notification_service import job_to_test_map; ci_event = "${{ inputs.ci_event }}"; job = "${{ inputs.job }}"; test_name = job_to_test_map[job]; title = f"New failed tests of {ci_event}" + ":" + f" {test_name}"; print(title)')" >> $GITHUB_ENV
+          echo "title=$(python3 -c 'import sys; import os; sys.path.append("utils"); from utils.notification_service import job_to_test_map; ci_event = os.environ["ci_event"]; job = os.environ["job"]; test_name = job_to_test_map[job]; title = f"New failed tests of {ci_event}" + ":" + f" {test_name}"; print(title)')" >> $GITHUB_ENV
 
       - name: Send processed report
-        if: ${{ env.process == 'true' && !endsWith(env.REPORT_TEXT, '{}') }}
+        if: ${{ !endsWith(env.REPORT_TEXT, '{}') }}
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
         with:
           # Slack channel id, channel name, or user id to post message.

@@ -22,11 +22,10 @@ from pathlib import Path
 import pytest
 
 import transformers
-from transformers import BertConfig, GPT2Model, is_safetensors_available, is_torch_available
+from transformers import BertConfig, GPT2Model, is_torch_available
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
-    SMALL_MODEL_IDENTIFIER,
     RequestCounter,
     require_torch,
     slow,
@@ -56,7 +55,6 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
-        AutoModelWithLMHead,
         BertForMaskedLM,
         BertForPreTraining,
         BertForQuestionAnswering,
@@ -69,7 +67,6 @@ if is_torch_available():
         GPT2Config,
         GPT2LMHeadModel,
         ResNetBackbone,
-        RobertaForMaskedLM,
         T5Config,
         T5ForConditionalGeneration,
         TapasConfig,
@@ -107,7 +104,7 @@ class AutoModelTest(unittest.TestCase):
         self.assertEqual(len(loading_info["missing_keys"]), 0)
         # When using PyTorch checkpoint, the expected value is `8`. With `safetensors` checkpoint (if it is
         # installed), the expected value becomes `7`.
-        EXPECTED_NUM_OF_UNEXPECTED_KEYS = 7 if is_safetensors_available() else 8
+        EXPECTED_NUM_OF_UNEXPECTED_KEYS = 7
         self.assertEqual(len(loading_info["unexpected_keys"]), EXPECTED_NUM_OF_UNEXPECTED_KEYS)
         self.assertEqual(len(loading_info["mismatched_keys"]), 0)
         self.assertEqual(len(loading_info["error_msgs"]), 0)
@@ -126,18 +123,6 @@ class AutoModelTest(unittest.TestCase):
         # Only one value should not be initialized and in the missing keys.
         for value in loading_info.values():
             self.assertEqual(len(value), 0)
-
-    @slow
-    def test_lmhead_model_from_pretrained(self):
-        model_name = "google-bert/bert-base-uncased"
-        config = AutoConfig.from_pretrained(model_name)
-        self.assertIsNotNone(config)
-        self.assertIsInstance(config, BertConfig)
-
-        model = AutoModelWithLMHead.from_pretrained(model_name)
-        model, loading_info = AutoModelWithLMHead.from_pretrained(model_name, output_loading_info=True)
-        self.assertIsNotNone(model)
-        self.assertIsInstance(model, BertForMaskedLM)
 
     @slow
     def test_model_for_causal_lm(self):
@@ -258,18 +243,6 @@ class AutoModelTest(unittest.TestCase):
         model = AutoBackbone.from_pretrained("microsoft/resnet-18", out_features=["stage2", "stage4"])
         self.assertEqual(model.out_indices, [2, 4])
         self.assertEqual(model.out_features, ["stage2", "stage4"])
-
-    def test_from_pretrained_identifier(self):
-        model = AutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
-        self.assertIsInstance(model, BertForMaskedLM)
-        self.assertEqual(model.num_parameters(), 14410)
-        self.assertEqual(model.num_parameters(only_trainable=True), 14410)
-
-    def test_from_identifier_from_model_type(self):
-        model = AutoModelWithLMHead.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER)
-        self.assertIsInstance(model, RobertaForMaskedLM)
-        self.assertEqual(model.num_parameters(), 14410)
-        self.assertEqual(model.num_parameters(only_trainable=True), 14410)
 
     def test_from_pretrained_with_tuple_values(self):
         # For the auto model mapping, FunnelConfig has two models: FunnelModel and FunnelBaseModel
@@ -502,25 +475,6 @@ class AutoModelTest(unittest.TestCase):
         ):
             _ = AutoModel.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
-    def test_model_file_not_found(self):
-        with self.assertRaisesRegex(
-            EnvironmentError,
-            "hf-internal-testing/config-no-model does not appear to have a file named pytorch_model.bin",
-        ):
-            _ = AutoModel.from_pretrained("hf-internal-testing/config-no-model")
-
-    def test_model_from_tf_error(self):
-        with self.assertRaisesRegex(
-            EnvironmentError, "does not appear to have a file named pytorch_model.bin or model.safetensors."
-        ):
-            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
-
-    def test_model_from_flax_error(self):
-        with self.assertRaisesRegex(
-            EnvironmentError, "does not appear to have a file named pytorch_model.bin or model.safetensors."
-        ):
-            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
-
     @unittest.skip("Failing on main")
     def test_cached_model_has_minimum_calls_to_head(self):
         # Make sure we have cached the model.
@@ -574,14 +528,16 @@ class AutoModelTest(unittest.TestCase):
         # patching was added in v4.45)
         self.assertTrue("GenerationMixin" in str(model.__class__.__bases__))
 
+    @unittest.skip("@Cyril: add the post_init() on the hub repo")
     def test_model_with_dotted_name_and_relative_imports(self):
         """
         Test for issue #40496: AutoModel.from_pretrained() doesn't work for models with '.' in their name
         when there's a relative import.
 
-        Without the fix, this raises: ModuleNotFoundError: No module named 'transformers_modules.test-model_v1'
+        Without the fix, this raises: ModuleNotFoundError:
+        No module named 'transformers_modules.hf-internal-testing.remote_code_model_with_dots_v1'
         """
-        model_id = "hf-internal-testing/remote_code_model_with_dots"
+        model_id = "hf-internal-testing/remote_code_model_with_dots_v1.0"
 
         model = AutoModel.from_pretrained(model_id, trust_remote_code=True)
         self.assertIsNotNone(model)

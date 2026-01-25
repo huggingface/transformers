@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,6 +34,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -127,18 +127,18 @@ class DeepseekVLModelTester:
 
 
 @require_torch
-class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DeepseekVLModel, DeepseekVLForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": DeepseekVLModel,
             "image-text-to-text": DeepseekVLForConditionalGeneration,
+            "any-to-any": DeepseekVLForConditionalGeneration,
         }
         if is_torch_available()
         else {}
     )
     _is_composite = True
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = DeepseekVLModelTester(self)
@@ -185,11 +185,6 @@ class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
-
-    @unittest.skip(reason="Siglip uses a non-standard initialization scheme")
-    # Copied from tests.models.siglip.test_modeling_siglip.SiglipVisionModelTest.test_initialization
-    def test_initialization(self):
-        pass
 
     # Copied from tests.models.janus.test_modeling_janus.JanusVisionText2TextModelTest.test_sdpa_can_dispatch_composite_models
     def test_sdpa_can_dispatch_composite_models(self):

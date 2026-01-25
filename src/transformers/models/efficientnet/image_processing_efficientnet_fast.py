@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,43 +14,25 @@
 """Fast Image processor class for EfficientNet."""
 
 from functools import lru_cache
-from typing import Optional, Union
+from typing import Optional
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 
-from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature, DefaultFastImageProcessorKwargs
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
-
-
-class EfficientNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-        rescale_offset (`bool`, *optional*, defaults to `self.rescale_offset`):
-            Whether to rescale the image between [-max_range/2, scale_range/2] instead of [0, scale_range].
-        include_top (`bool`, *optional*, defaults to `self.include_top`):
-            Normalize the image again with the standard deviation only for image classification if set to True.
-    """
-
-    rescale_offset: bool
-    include_top: bool
+from .image_processing_efficientnet import EfficientNetImageProcessorKwargs
 
 
 @auto_docstring
 class EfficientNetImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.NEAREST
+    resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 346, "width": 346}
@@ -63,16 +44,16 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
     rescale_offset = False
     do_normalize = True
     include_top = True
-    valid_kwargs = EfficientNetFastImageProcessorKwargs
+    valid_kwargs = EfficientNetImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[EfficientNetFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[EfficientNetImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def rescale(
         self,
         image: "torch.Tensor",
         scale: float,
-        offset: Optional[bool] = True,
+        offset: bool | None = True,
         **kwargs,
     ) -> "torch.Tensor":
         """
@@ -107,13 +88,13 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
     @lru_cache(maxsize=10)
     def _fuse_mean_std_and_rescale_factor(
         self,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
         device: Optional["torch.device"] = None,
-        rescale_offset: Optional[bool] = False,
+        rescale_offset: bool | None = False,
     ) -> tuple:
         if do_rescale and do_normalize and not rescale_offset:
             # Fused rescale and normalize
@@ -128,8 +109,8 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Union[float, list[float]],
-        image_std: Union[float, list[float]],
+        image_mean: float | list[float],
+        image_std: float | list[float],
         rescale_offset: bool = False,
     ) -> "torch.Tensor":
         """
@@ -157,7 +138,7 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -165,10 +146,10 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         rescale_offset: bool,
         do_normalize: bool,
         include_top: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -196,12 +177,11 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientNetFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientNetImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
 

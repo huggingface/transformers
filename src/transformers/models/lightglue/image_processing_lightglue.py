@@ -17,8 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
-from typing import Optional, Union
+
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -40,23 +40,33 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_matplotlib_available, logging, requires_backends
+from ...processing_utils import ImagesKwargs
+from ...utils import TensorType, logging, requires_backends
 from ...utils.import_utils import requires
-from .modeling_lightglue import LightGlueKeypointMatchingOutput
 
 
-if is_vision_available():
-    from PIL import Image, ImageDraw
+if TYPE_CHECKING:
+    from .modeling_lightglue import LightGlueKeypointMatchingOutput
 
 if is_vision_available():
     import PIL
+    from PIL import Image, ImageDraw
 
 logger = logging.get_logger(__name__)
 
 
+class LightGlueImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `True`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: bool
+
+
 def is_grayscale(
     image: np.ndarray,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: str | ChannelDimension | None = None,
 ):
     if input_data_format == ChannelDimension.FIRST:
         if image.shape[0] == 1:
@@ -70,7 +80,7 @@ def is_grayscale(
 
 def convert_to_grayscale(
     image: ImageInput,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: str | ChannelDimension | None = None,
 ) -> ImageInput:
     """
     Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image.
@@ -162,7 +172,7 @@ class LightGlueImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
@@ -184,8 +194,8 @@ class LightGlueImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ):
         """
@@ -222,15 +232,15 @@ class LightGlueImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_grayscale: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_grayscale: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -334,15 +344,15 @@ class LightGlueImageProcessor(BaseImageProcessor):
 
     def post_process_keypoint_matching(
         self,
-        outputs: LightGlueKeypointMatchingOutput,
-        target_sizes: Union[TensorType, list[tuple]],
+        outputs: "LightGlueKeypointMatchingOutput",
+        target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the raw output of [`KeypointMatchingOutput`] into lists of keypoints, scores and descriptors
+        Converts the raw output of [`LightGlueKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
         Args:
-            outputs ([`KeypointMatchingOutput`]):
+            outputs ([`LightGlueKeypointMatchingOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` or `list[tuple[tuple[int, int]]]`, *optional*):
                 Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`tuple[int, int]`) containing the
@@ -383,8 +393,8 @@ class LightGlueImageProcessor(BaseImageProcessor):
             matches0 = matches[mask0]
             scores0 = scores[mask0]
 
-            # Filter out matches with low scores
-            valid_matches = torch.logical_and(scores0 > threshold, matches0 > -1)
+            # Filter out matches with low scores, invalid matches, and out-of-bounds indices
+            valid_matches = (scores0 > threshold) & (matches0 > -1) & (matches0 < keypoints1.shape[0])
 
             matched_keypoints0 = keypoints0[valid_matches]
             matched_keypoints1 = keypoints1[matches0[valid_matches]]
@@ -460,61 +470,6 @@ class LightGlueImageProcessor(BaseImageProcessor):
         g = int(255 * score)
         b = 0
         return (r, g, b)
-
-    def plot_keypoint_matching(self, images: ImageInput, keypoint_matching_output: LightGlueKeypointMatchingOutput):
-        """
-        Plots the image pairs side by side with the detected keypoints as well as the matching between them. Requires
-        matplotlib to be installed.
-
-        .. deprecated::
-            `plot_keypoint_matching` is deprecated and will be removed in a future version. Use `visualize_keypoint_matching` instead.
-
-        Args:
-            images (`ImageInput`):
-                Image pairs to plot. Same as `LightGlueImageProcessor.preprocess`. Expects either a list of 2 images or
-                a list of list of 2 images list with pixel values ranging from 0 to 255.
-            keypoint_matching_output ([`LightGlueKeypointMatchingOutput`]):
-                Raw outputs of the model.
-        """
-        warnings.warn(
-            "`plot_keypoint_matching` is deprecated and will be removed in transformers v. "
-            "Use `visualize_keypoint_matching` instead.",
-            FutureWarning,
-        )
-
-        if is_matplotlib_available():
-            import matplotlib.pyplot as plt
-        else:
-            raise ImportError("Please install matplotlib to use `plot_keypoint_matching` method")
-
-        images = validate_and_format_image_pairs(images)
-        images = [to_numpy_array(image) for image in images]
-        image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]
-
-        for image_pair, pair_output in zip(image_pairs, keypoint_matching_output):
-            height0, width0 = image_pair[0].shape[:2]
-            height1, width1 = image_pair[1].shape[:2]
-            plot_image = np.zeros((max(height0, height1), width0 + width1, 3))
-            plot_image[:height0, :width0] = image_pair[0] / 255.0
-            plot_image[:height1, width0:] = image_pair[1] / 255.0
-            plt.imshow(plot_image)
-            plt.axis("off")
-
-            keypoints0_x, keypoints0_y = pair_output["keypoints0"].unbind(1)
-            keypoints1_x, keypoints1_y = pair_output["keypoints1"].unbind(1)
-            for keypoint0_x, keypoint0_y, keypoint1_x, keypoint1_y, matching_score in zip(
-                keypoints0_x, keypoints0_y, keypoints1_x, keypoints1_y, pair_output["matching_scores"]
-            ):
-                plt.plot(
-                    [keypoint0_x, keypoint1_x + width0],
-                    [keypoint0_y, keypoint1_y],
-                    color=plt.get_cmap("RdYlGn")(matching_score.item()),
-                    alpha=0.9,
-                    linewidth=0.5,
-                )
-                plt.scatter(keypoint0_x, keypoint0_y, c="black", s=2)
-                plt.scatter(keypoint1_x + width0, keypoint1_y, c="black", s=2)
-            plt.show()
 
 
 __all__ = ["LightGlueImageProcessor"]

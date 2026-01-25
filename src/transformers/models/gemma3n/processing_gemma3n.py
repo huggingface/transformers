@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -13,57 +12,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import AudioKwargs, ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-
-
-class Gemma3nImagesKwargs(ImagesKwargs):
-    do_convert_rgb: Optional[bool]
+from ...utils import auto_docstring
 
 
 class Gemma3nProcessorKwargs(ProcessingKwargs, total=False):
-    audio_kwargs: AudioKwargs
-    images_kwargs: Gemma3nImagesKwargs
     _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
+        "text_kwargs": {"padding": False},
     }
 
 
+@auto_docstring
 class Gemma3nProcessor(ProcessorMixin):
-    """
-    A processor for Gemma 3n, wrapping the full capabilities of a feature extractor, image processor, and tokenizer
-    into a single processor.
-
-    Args:
-        feature_extractor (`Gemma3nAudioFeatureExtractor`):
-            Feature extractor that converts raw audio waveforms into MEL spectrograms for the audio encoder. This
-            should return a `BatchFeature` with `input_features` and `input_features_mask` features.
-        image_processor (`SiglipImageProcessorFast`):
-            Image processor that prepares batches of images for the vision encoder. This should return a `BatchFeature`
-            with a `pixel_values` feature.
-        tokenizer (`GemmaTokenizerFast`):
-            The text tokenizer for the model.
-        chat_template (`string`, *optional*):
-            A Jinja template for generating text prompts from a set of messages.
-        audio_seq_length (int, *optional*, defaults to 188):
-            The number of audio soft tokens that will be added to the text prompt
-        image_seq_length (int, *optional*, defaults to 256):
-            The number of image soft tokens that should be added to
-    """
-
-    attributes = ["feature_extractor", "image_processor", "tokenizer"]
-    feature_extractor_class = "AutoFeatureExtractor"
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         feature_extractor,
@@ -74,6 +40,12 @@ class Gemma3nProcessor(ProcessorMixin):
         image_seq_length: int = 256,
         **kwargs,
     ):
+        r"""
+        audio_seq_length (int, *optional*, defaults to 188):
+            The number of audio soft tokens that will be added to the text prompt
+        image_seq_length (int, *optional*, defaults to 256):
+            The number of image soft tokens that should be added to
+        """
         self.audio_seq_length = audio_seq_length
         self.audio_token_id = tokenizer.audio_token_id
         self.boa_token = tokenizer.boa_token
@@ -96,12 +68,12 @@ class Gemma3nProcessor(ProcessorMixin):
             **kwargs,
         )
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio: Optional[Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]]] = None,
-        videos=None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        audio: np.ndarray | list[float] | list[np.ndarray] | list[list[float]] | None = None,
         **kwargs: Unpack[Gemma3nProcessorKwargs],
     ) -> BatchFeature:
         if text is None and images is None and audio is None:
@@ -116,7 +88,7 @@ class Gemma3nProcessor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         if audio is not None:
             audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
@@ -160,6 +132,14 @@ class Gemma3nProcessor(ProcessorMixin):
         text_inputs = {k: v.tolist() for k, v in text_inputs.items()}  # in case user requested list inputs
         text_inputs["token_type_ids"] = token_type_ids.tolist()
         return BatchFeature(data={**text_inputs, **image_inputs, **audio_inputs}, tensor_type=return_tensors)
+
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids"]
+        image_processor_input_names = self.image_processor.model_input_names
+        audio_processor_input_names = self.feature_extractor.model_input_names
+        image_processor_input_names = [name for name in image_processor_input_names if name != "num_crops"]
+        return list(tokenizer_input_names + image_processor_input_names + audio_processor_input_names)
 
 
 __all__ = ["Gemma3nProcessor"]

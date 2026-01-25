@@ -84,9 +84,6 @@ class RwkvModelTester:
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
 
-    def get_large_model_config(self):
-        return RwkvConfig.from_pretrained("sgugger/rwkv-4-pile-7b")
-
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
@@ -218,9 +215,8 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {"feature-extraction": RwkvModel, "text-generation": RwkvForCausalLM} if is_torch_available() else {}
     )
-    fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
+    test_torch_exportable = False  # uses custom kernels by default, not compatible with torch.export
 
     def setUp(self):
         self.model_tester = RwkvModelTester(self)
@@ -264,35 +260,6 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_state_equivalency(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_state_equivalency(*config_and_inputs)
-
-    def test_initialization(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, param in model.named_parameters():
-                if "time_decay" in name:
-                    if param.requires_grad:
-                        self.assertTrue(param.data.max().item() == 3.0)
-                        self.assertTrue(param.data.min().item() == -5.0)
-                elif "time_first" in name:
-                    if param.requires_grad:
-                        # check if it's a ones like
-                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
-                elif any(x in name for x in ["time_mix_key", "time_mix_receptance"]):
-                    if param.requires_grad:
-                        self.assertInterval(
-                            param.data,
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                elif "time_mix_value" in name:
-                    if param.requires_grad:
-                        self.assertInterval(
-                            param.data,
-                            [0.0, 1.3],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     def test_attention_outputs(self):
         r"""

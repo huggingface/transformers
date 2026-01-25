@@ -54,10 +54,11 @@ SAM2's key strength is its ability to track objects across video frames. Here's 
 #### Basic Video Tracking
 
 ```python
->>> from transformers import Sam2VideoModel, Sam2VideoProcessor, infer_device
+>>> from transformers import Sam2VideoModel, Sam2VideoProcessor
+from accelerate import Accelerator
 >>> import torch
 
->>> device = infer_device()
+>>> device = Accelerator().device
 >>> model = Sam2VideoModel.from_pretrained("facebook/sam2.1-hiera-tiny").to(device, dtype=torch.bfloat16)
 >>> processor = Sam2VideoProcessor.from_pretrained("facebook/sam2.1-hiera-tiny")
 
@@ -315,3 +316,4 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] Sam2VideoModel
     - forward
     - propagate_in_video_iterator
+    - get_image_features

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Cohere team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 """AyaVision model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -22,15 +21,15 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class AyaVisionConfig(PretrainedConfig):
+class AyaVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AyaVisionForConditionalGeneration`]. It is used to instantiate an
     AyaVision model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of AyaVision.
     e.g. [CohereForAI/aya-vision-8b](https://huggingface.co/CohereForAI/aya-vision-8b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SiglipVisionConfig`):
@@ -49,6 +48,8 @@ class AyaVisionConfig(PretrainedConfig):
             The epsilon value used for layer normalization in the adapter.
         image_token_index (`int`, *optional*, defaults to 255036):
             The image token index to encode the image prompt.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings.
     """
 
     model_type = "aya_vision"
@@ -66,11 +67,13 @@ class AyaVisionConfig(PretrainedConfig):
         downsample_factor=2,
         adapter_layer_norm_eps=1e-6,
         image_token_index=255036,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.image_token_index = image_token_index
         self.downsample_factor = downsample_factor
         self.adapter_layer_norm_eps = adapter_layer_norm_eps
+        self.tie_word_embeddings = tie_word_embeddings
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(
                 "vision_feature_select_strategy should be one of 'default', 'full'."

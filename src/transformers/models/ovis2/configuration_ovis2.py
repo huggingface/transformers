@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ..qwen2.configuration_qwen2 import Qwen2Config
 
 
-class Ovis2VisionConfig(PretrainedConfig):
+class Ovis2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Ovis2VisionModel`]. It is used to instantiate a
     Ovis2VisionModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -106,14 +105,14 @@ class Ovis2VisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
-class Ovis2Config(PretrainedConfig):
+class Ovis2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Ovis2ForConditionalGeneration`]. It is used to instantiate a
     Ovis2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of Ovis2.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     e.g. [thisisiron/Ovis2-1B-hf](https://huggingface.co/thisisiron/Ovis2-1B-hf)
 

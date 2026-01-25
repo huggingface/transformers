@@ -29,7 +29,6 @@ rendered properly in your Markdown viewer.
 
 You can find all the original Whisper checkpoints under the [Whisper](https://huggingface.co/collections/openai/whisper-release-6501bba2cf999715fd953013) collection.
 
-
 > [!TIP]
 > Click on the Whisper models in the right sidebar for more examples of how to apply Whisper to different audio tasks.
 
@@ -101,9 +100,7 @@ transcription[0]
 
 [[autodoc]] WhisperTokenizer
     - set_prefix_tokens
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
     - batch_decode
     - decode
@@ -114,9 +111,7 @@ transcription[0]
 
 [[autodoc]] WhisperTokenizerFast
     - set_prefix_tokens
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
     - batch_decode
     - decode

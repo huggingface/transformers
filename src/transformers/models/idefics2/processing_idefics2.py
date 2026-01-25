@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,19 +15,19 @@
 Processor class for IDEFICS2.
 """
 
+import re
 from itertools import accumulate
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import (
-    ImagesKwargs,
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
 )
 from ...tokenization_utils_base import AddedToken, TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 if TYPE_CHECKING:
@@ -46,50 +45,27 @@ def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
 
 
-class Idefics2ImagesKwargs(ImagesKwargs, total=False):
-    image_seq_len: Optional[int]
-
-
 class Idefics2ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Idefics2ImagesKwargs
-
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
             "padding": False,
             "is_split_into_words": False,
         },
-        "images_kwargs": {},
     }
 
 
+@auto_docstring
 class Idefics2Processor(ProcessorMixin):
-    r"""
-    Constructs a IDEFICS2 processor which wraps a LLama tokenizer and IDEFICS2 image processor into a single processor.
-
-    [`IdeficsProcessor`] offers all the functionalities of [`Idefics2ImageProcessor`] and [`LlamaTokenizerFast`]. See
-    the docstring of [`~IdeficsProcessor.__call__`] and [`~IdeficsProcessor.decode`] for more information.
-
-    Args:
-        image_processor (`Idefics2ImageProcessor`):
-            An instance of [`Idefics2ImageProcessor`]. The image processor is a required input.
-        tokenizer (`PreTrainedTokenizerBase`, *optional*):
-            An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
+    def __init__(
+        self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: str | None = None, **kwargs
+    ):
+        r"""
         image_seq_len (`int`, *optional*, defaults to 64):
             The length of the image sequence i.e. the number of <image> tokens per image in the input.
             This parameter is used to build the string from the input prompt and image tokens and should match the
             config.perceiver_config.resampler_n_latents value for the model used.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Idefics2ImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
-    def __init__(
-        self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: Optional[str] = None, **kwargs
-    ):
+        """
         if not hasattr(tokenizer, "image_token"):
             self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True).content
             self.image_token = AddedToken("<image>", normalized=False, special=True).content
@@ -119,60 +95,13 @@ class Idefics2Processor(ProcessorMixin):
             prompt_images.append(images)
         return prompt_images
 
+    @auto_docstring
     def __call__(
         self,
-        images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
+        images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Idefics2ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Processes the input prompts and returns a BatchEncoding.
-
-        Example:
-
-        ```python
-        >>> import requests
-        >>> from transformers import Idefics2Processor
-        >>> from transformers.image_utils import load_image
-
-        >>> processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b", image_seq_len=2)
-        >>> processor.image_processor.do_image_splitting = False  # Force as False to simplify the example
-
-        >>> url1 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-        >>> url2 = "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg"
-
-        >>> image1, image2 = load_image(url1), load_image(url2)
-        >>> images = [[image1], [image2]]
-
-        >>> text = [
-        ...     "<image>In this image, we see",
-        ...     "bla bla bla<image>",
-        ... ]
-        >>> outputs = processor(images=images, text=text, return_tensors="pt", padding=True)
-        >>> input_ids = outputs.input_ids
-        >>> input_tokens = processor.tokenizer.batch_decode(input_ids)
-        >>> print(input_tokens)
-        ['<s><fake_token_around_image><image><image><fake_token_around_image> In this image, we see', '<s> bla bla bla<fake_token_around_image><image><image><fake_token_around_image>']
-        ```
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`, *optional*):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. If is of type `list[ImageInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
-            text (`Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]`, *optional*):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-
-                Wherever an image token, `<image>` is encountered it is expanded to
-                `<fake_token_around_image>` + `<image>` * `image_seq_len` * <fake_token_around_image>`.
-            return_tensors (`Union[str, TensorType]`, *optional*):
-                If set, will return tensors of a particular framework. See [`PreTrainedTokenizerFast.__call__`] for more
-                information.
-
-        """
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
 
@@ -181,8 +110,6 @@ class Idefics2Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        image_seq_len = output_kwargs["images_kwargs"].pop("image_seq_len", None)
-        image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
         n_images_in_text = []
@@ -197,19 +124,21 @@ class Idefics2Processor(ProcessorMixin):
             # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
             fake_image_token = self.fake_image_token
             image_token = self.image_token
-            image_str = f"{fake_image_token}{image_token * image_seq_len}{fake_image_token}"
+            image_str = f"{fake_image_token}{image_token * self.image_seq_len}{fake_image_token}"
 
             if self.image_processor.do_image_splitting:
                 # A single image token is split into 4 patches + 1 original image
                 image_str = image_str * 5
-                image_seq_len *= 5
 
             prompt_strings = []
+            closing_fake_pattern = re.compile(rf"{re.escape(fake_image_token)}(?=[^\s<])")
             for sample in text:
                 n_images_in_text.append(sample.count(image_token))
                 sample = sample.replace(image_token, image_str)
                 # Remove any double fake tokens if images are adjacent
                 sample = sample.replace(f"{fake_image_token}{fake_image_token}", f"{fake_image_token}")
+                # Ensure words attached directly after the closing fake token remain word-boundary aligned
+                sample = closing_fake_pattern.sub(f"{fake_image_token} ", sample)
                 prompt_strings.append(sample)
 
             text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])

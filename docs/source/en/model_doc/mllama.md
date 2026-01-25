@@ -54,7 +54,7 @@ model.set_output_embeddings(resized_embeddings)
 
 ## Usage Example
 
-#### Instruct model
+### Instruct model
 
 ```python
 import torch
@@ -67,7 +67,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 messages = [
     [
         {
-            "role": "user", 
+            "role": "user",
             "content": [
                 {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
                 {"type": "text", "text": "What does the image show?"}
@@ -80,7 +80,7 @@ output = model.generate(**inputs, max_new_tokens=25)
 print(processor.decode(output[0]))
 ```
 
-#### Base model
+### Base model
 
 ```python
 import requests
@@ -108,10 +108,15 @@ print(processor.decode(output[0], skip_special_tokens=True))
 ## MllamaProcessor
 
 [[autodoc]] MllamaProcessor
+    - __call__
 
 ## MllamaImageProcessor
 
 [[autodoc]] MllamaImageProcessor
+
+## MllamaImageProcessorFast
+
+[[autodoc]] MllamaImageProcessorFast
 
 ## MllamaForConditionalGeneration
 
@@ -131,11 +136,6 @@ print(processor.decode(output[0], skip_special_tokens=True))
 ## MllamaModel
 
 [[autodoc]] MllamaModel
-
-## MllamaForCausalLM
-
-[[autodoc]] MllamaForCausalLM
-    - forward
 
 ## MllamaVisionModel
 

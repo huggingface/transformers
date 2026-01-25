@@ -50,7 +50,7 @@ MusicGen Melody is compatible with two generation modes: greedy and sampling. In
 
 Transformers supports both mono (1-channel) and stereo (2-channel) variants of MusicGen Melody. The mono channel versions generate a single set of codebooks. The stereo versions generate 2 sets of codebooks, 1 for each channel (left/right), and each set of codebooks is decoded independently through the audio compression model. The audio streams for each channel are combined to give the final stereo output.
 
-#### Audio Conditional Generation
+### Audio Conditional Generation
 
 The model can generate an audio sample conditioned on a text and an audio prompt through use of the [`MusicgenMelodyProcessor`] to pre-process the inputs.
 
@@ -266,6 +266,7 @@ Tips:
 ## MusicgenMelodyProcessor
 
 [[autodoc]] MusicgenMelodyProcessor
+    - __call__
     - get_unconditional_inputs
 
 ## MusicgenMelodyFeatureExtractor

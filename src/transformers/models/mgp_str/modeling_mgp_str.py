@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Alibaba Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +15,12 @@
 
 import collections.abc
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -51,7 +50,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class MgpstrDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -85,10 +84,10 @@ class MgpstrModelOutput(ModelOutput):
         heads.
     """
 
-    logits: Optional[tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    a3_attentions: Optional[tuple[torch.FloatTensor]] = None
+    logits: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    a3_attentions: tuple[torch.FloatTensor] | None = None
 
 
 class MgpstrEmbeddings(nn.Module):
@@ -176,7 +175,7 @@ class MgpstrAttention(nn.Module):
             .reshape(batch_size, num, 3, self.num_heads, channel // self.num_heads)
             .permute(2, 0, 3, 1, 4)
         )
-        query, key, value = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
+        query, key, value = qkv[0], qkv[1], qkv[2]
 
         attention_probs = (query @ key.transpose(-2, -1)) * self.scale
         attention_probs = attention_probs.softmax(dim=-1)
@@ -284,19 +283,20 @@ class MgpstrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "mgp_str"
     _no_split_modules = []
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, MgpstrEmbeddings):
-            nn.init.trunc_normal_(module.pos_embed, mean=0.0, std=std)
-            nn.init.trunc_normal_(module.cls_token, mean=0.0, std=std)
+            init.trunc_normal_(module.pos_embed, mean=0.0, std=std)
+            init.trunc_normal_(module.cls_token, mean=0.0, std=std)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            nn.init.trunc_normal_(module.weight.data, mean=0.0, std=std)
+            init.trunc_normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 @auto_docstring
@@ -317,10 +317,11 @@ class MgpstrModel(MgpstrPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.FloatTensor], BaseModelOutput]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor] | BaseModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -379,11 +380,12 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_a3_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.FloatTensor], MgpstrModelOutput]:
+        output_attentions: bool | None = None,
+        output_a3_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor] | MgpstrModelOutput:
         r"""
         output_a3_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of a3 modules. See `a3_attentions` under returned tensors
@@ -396,12 +398,14 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         ...     MgpstrProcessor,
         ...     MgpstrForSceneTextRecognition,
         ... )
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> # load image from the IIIT-5k dataset
         >>> url = "https://i.postimg.cc/ZKwLg2Gw/367-14.png"
-        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
 
         >>> processor = MgpstrProcessor.from_pretrained("alibaba-damo/mgp-str-base")
         >>> pixel_values = processor(images=image, return_tensors="pt").pixel_values

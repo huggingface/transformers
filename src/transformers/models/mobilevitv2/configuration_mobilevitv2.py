@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,28 +13,22 @@
 # limitations under the License.
 """MobileViTV2 model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
-from packaging import version
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MobileViTV2Config(PretrainedConfig):
+class MobileViTV2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MobileViTV2Model`]. It is used to instantiate a
     MobileViTV2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MobileViTV2
     [apple/mobilevitv2-1.0](https://huggingface.co/apple/mobilevitv2-1.0) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_channels (`int`, *optional*, defaults to 3):
@@ -146,23 +139,4 @@ class MobileViTV2Config(PretrainedConfig):
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
 
-class MobileViTV2OnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict([("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"})])
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "image-classification":
-            return OrderedDict([("logits", {0: "batch"})])
-        else:
-            return OrderedDict([("last_hidden_state", {0: "batch"}), ("pooler_output", {0: "batch"})])
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-
-__all__ = ["MobileViTV2Config", "MobileViTV2OnnxConfig"]
+__all__ = ["MobileViTV2Config"]

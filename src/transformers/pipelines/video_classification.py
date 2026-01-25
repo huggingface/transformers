@@ -11,9 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
 from io import BytesIO
-from typing import Any, Optional, Union, overload
+from typing import Any, overload
 
 import httpx
 
@@ -88,7 +87,7 @@ class VideoClassificationPipeline(Pipeline):
     @overload
     def __call__(self, inputs: list[str], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
 
-    def __call__(self, inputs: Optional[Union[str, list[str]]] = None, **kwargs):
+    def __call__(self, inputs: str | list[str] | None, **kwargs):
         """
         Assign labels to the video(s) passed as inputs.
 
@@ -126,13 +125,6 @@ class VideoClassificationPipeline(Pipeline):
             - **label** (`str`) -- The label identified by the model.
             - **score** (`int`) -- The score attributed by the model for that label.
         """
-        # After deprecation of this is completed, remove the default `None` value for `images`
-        if "videos" in kwargs:
-            warnings.warn(
-                "The `videos` argument has been renamed to `inputs`. In version 5 of Transformers, `videos` will no longer be accepted",
-                FutureWarning,
-            )
-            inputs = kwargs.pop("videos")
         if inputs is None:
             raise ValueError("Cannot call the video-classification pipeline without an inputs argument!")
         return super().__call__(inputs, **kwargs)

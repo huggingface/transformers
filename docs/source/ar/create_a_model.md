@@ -54,19 +54,19 @@ DistilBertConfig {
  
 ```
 
-يمكن تعديل خصائص النموذج المدرب مسبقًا في دالة [`~PretrainedConfig.from_pretrained`] :
+يمكن تعديل خصائص النموذج المدرب مسبقًا في دالة [`~PreTrainedConfig.from_pretrained`] :
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("distilbert/distilbert-base-uncased", activation="relu", attention_dropout=0.4)
 ```
 
-بمجرد أن تصبح راضيًا عن تكوين نموذجك، يمكنك حفظه باستخدام [`~PretrainedConfig.save_pretrained`]. يتم تخزين ملف التكوين الخاص بك على أنه ملف JSON في دليل الحفظ المحدد:
+بمجرد أن تصبح راضيًا عن تكوين نموذجك، يمكنك حفظه باستخدام [`~PreTrainedConfig.save_pretrained`]. يتم تخزين ملف التكوين الخاص بك على أنه ملف JSON في دليل الحفظ المحدد:
 
 ```py
 >>> my_config.save_pretrained(save_directory="./your_model_save_path")
 ```
 
-لإعادة استخدام ملف التكوين، قم بتحميله باستخدام [`~PretrainedConfig.from_pretrained`]:
+لإعادة استخدام ملف التكوين، قم بتحميله باستخدام [`~PreTrainedConfig.from_pretrained`]:
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/config.json")

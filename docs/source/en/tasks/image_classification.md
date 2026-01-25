@@ -26,7 +26,7 @@ after a natural disaster, monitoring crop health, or helping screen medical imag
 
 This guide illustrates how to:
 
-1. Fine-tune [ViT](../model_doc/vit) on the [Food-101](https://huggingface.co/datasets/food101) dataset to classify a food item in an image.
+1. Fine-tune [ViT](../model_doc/vit) on the [Food-101](https://huggingface.co/datasets/ethz/food101) dataset to classify a food item in an image.
 2. Use your fine-tuned model for inference.
 
 <Tip>
@@ -57,7 +57,7 @@ experiment and make sure everything works before spending more time training on 
 ```py
 >>> from datasets import load_dataset
 
->>> food = load_dataset("food101", split="train[:5000]")
+>>> food = load_dataset("ethz/food101", split="train[:5000]")
 ```
 
 Split the dataset's `train` split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
@@ -211,7 +211,7 @@ At this point, only three steps remain:
 ...     gradient_accumulation_steps=4,
 ...     per_device_eval_batch_size=16,
 ...     num_train_epochs=3,
-...     warmup_ratio=0.1,
+...     warmup_steps=0.1,
 ...     logging_steps=10,
 ...     load_best_model_at_end=True,
 ...     metric_for_best_model="accuracy",
@@ -250,7 +250,7 @@ Great, now that you've fine-tuned a model, you can use it for inference!
 Load an image you'd like to run inference on:
 
 ```py
->>> ds = load_dataset("food101", split="validation[:10]")
+>>> ds = load_dataset("ethz/food101", split="validation[:10]")
 >>> image = ds["image"][0]
 ```
 

@@ -28,10 +28,8 @@ import json
 import logging
 import os
 import sys
-import warnings
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Optional
 
 import albumentations as A
 import evaluate
@@ -52,7 +50,6 @@ from transformers import (
     TrainingArguments,
     default_data_collator,
 )
-from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
@@ -90,19 +87,19 @@ class DataTrainingArguments:
     them on the command line.
     """
 
-    dataset_name: Optional[str] = field(
+    dataset_name: str | None = field(
         default="segments/sidewalk-semantic",
         metadata={
             "help": "Name of a dataset from the hub (could be your own, possibly private dataset hosted on the hub)."
         },
     )
-    dataset_config_name: Optional[str] = field(
+    dataset_config_name: str | None = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
-    train_val_split: Optional[float] = field(
+    train_val_split: float | None = field(
         default=0.15, metadata={"help": "Percent to split off of train for validation."}
     )
-    max_train_samples: Optional[int] = field(
+    max_train_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -111,7 +108,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_eval_samples: Optional[int] = field(
+    max_eval_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -120,11 +117,7 @@ class DataTrainingArguments:
             )
         },
     )
-    do_reduce_labels: Optional[bool] = field(
-        default=False,
-        metadata={"help": "Whether or not to reduce all labels by 1 and replace background by 255."},
-    )
-    reduce_labels: Optional[bool] = field(
+    do_reduce_labels: bool | None = field(
         default=False,
         metadata={"help": "Whether or not to reduce all labels by 1 and replace background by 255."},
     )
@@ -133,12 +126,6 @@ class DataTrainingArguments:
         if self.dataset_name is None and (self.train_dir is None and self.validation_dir is None):
             raise ValueError(
                 "You must specify either a dataset name from the hub or a train and/or validation directory."
-            )
-        if self.reduce_labels:
-            self.do_reduce_labels = self.reduce_labels
-            warnings.warn(
-                "The `reduce_labels` argument is deprecated and will be removed in v4.45. Please use `do_reduce_labels` instead.",
-                FutureWarning,
             )
 
 
@@ -152,10 +139,10 @@ class ModelArguments:
         default="nvidia/mit-b0",
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
     )
-    config_name: Optional[str] = field(
+    config_name: str | None = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
-    cache_dir: Optional[str] = field(
+    cache_dir: str | None = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
     )
     model_revision: str = field(
@@ -216,25 +203,10 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        f"Process rank: {training_args.local_process_index}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
         + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
-
-    # Detecting last checkpoint.
-    last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
-        last_checkpoint = get_last_checkpoint(training_args.output_dir)
-        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
-            raise ValueError(
-                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
-                "Use --overwrite_output_dir to overcome."
-            )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
-            logger.info(
-                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
-                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
-            )
 
     # Load dataset
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
@@ -419,8 +391,6 @@ def main():
         checkpoint = None
         if training_args.resume_from_checkpoint is not None:
             checkpoint = training_args.resume_from_checkpoint
-        elif last_checkpoint is not None:
-            checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()
         trainer.log_metrics("train", train_result.metrics)

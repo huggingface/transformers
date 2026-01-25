@@ -267,6 +267,7 @@ about how many forward passes you inputs are actually going to trigger, you can 
 independently of the inputs. The caveats from the previous section still apply.
 
 ## Pipeline FP16 inference
+
 Models can be run in FP16 which can be significantly faster on GPU while saving memory. Most models will not suffer noticeable performance loss from this. The larger the model, the less likely that it will.
 
 To enable FP16 inference, you can simply pass `dtype=torch.float16` or `dtype='float16'` to the pipeline constructor. Note that this only works for models with a PyTorch backend. Your inputs will be converted to FP16 internally.
@@ -334,6 +335,7 @@ Pipelines available for audio tasks include the following.
 Pipelines available for computer vision tasks include the following.
 
 ### DepthEstimationPipeline
+
 [[autodoc]] DepthEstimationPipeline
     - __call__
     - all
@@ -402,12 +404,6 @@ Pipelines available for natural language processing tasks include the following.
     - __call__
     - all
 
-### SummarizationPipeline
-
-[[autodoc]] SummarizationPipeline
-    - __call__
-    - all
-
 ### TableQuestionAnsweringPipeline
 
 [[autodoc]] TableQuestionAnsweringPipeline
@@ -425,21 +421,9 @@ Pipelines available for natural language processing tasks include the following.
     - __call__
     - all
 
-### Text2TextGenerationPipeline
-
-[[autodoc]] Text2TextGenerationPipeline
-    - __call__
-    - all
-
 ### TokenClassificationPipeline
 
 [[autodoc]] TokenClassificationPipeline
-    - __call__
-    - all
-
-### TranslationPipeline
-
-[[autodoc]] TranslationPipeline
     - __call__
     - all
 
@@ -471,15 +455,15 @@ Pipelines available for multimodal tasks include the following.
     - __call__
     - all
 
-### ImageToTextPipeline
-
-[[autodoc]] ImageToTextPipeline
-    - __call__
-    - all
-
 ### ImageTextToTextPipeline
 
 [[autodoc]] ImageTextToTextPipeline
+    - __call__
+    - all
+
+### AnyToAnyPipeline
+
+[[autodoc]] AnyToAnyPipeline
     - __call__
     - all
 

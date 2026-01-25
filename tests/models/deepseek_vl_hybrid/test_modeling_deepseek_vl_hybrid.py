@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,6 +34,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -154,7 +154,7 @@ class DeepseekVLHybridModelTester:
 
 
 @require_torch
-class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (DeepseekVLHybridModel, DeepseekVLHybridForConditionalGeneration) if is_torch_available() else ()
     )
@@ -162,12 +162,13 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         {
             "feature-extraction": DeepseekVLHybridModel,
             "image-text-to-text": DeepseekVLHybridForConditionalGeneration,
+            "any-to-any": DeepseekVLHybridForConditionalGeneration,
         }
         if is_torch_available()
         else {}
     )
     _is_composite = True
-    test_pruning = False
+    model_split_percents = [0.5, 0.85, 0.9]  # it tries to offload everything with the default value
 
     def setUp(self):
         self.model_tester = DeepseekVLHybridModelTester(self)
@@ -216,11 +217,6 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
-
-    @unittest.skip(reason="Siglip uses a non-standard initialization scheme")
-    # Copied from tests.models.siglip.test_modeling_siglip.SiglipVisionModelTest.test_initialization
-    def test_initialization(self):
-        pass
 
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
@@ -275,6 +271,13 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
                     and submodule.config._attn_implementation == "eager"
                 ):
                     self.assertTrue(submodule.config._attn_implementation == "sdpa")
+
+    @require_torch_accelerator
+    @slow
+    def test_sdpa_can_dispatch_on_flash(self):
+        self.skipTest(
+            "deepseek_vl_hybrid uses SAM, which requires an attention_mask input for relative positional embeddings"
+        )
 
 
 @require_torch

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +13,6 @@
 # limitations under the License.
 """Image processor class for LayoutLMv2."""
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -30,6 +27,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
@@ -51,6 +49,25 @@ if is_pytesseract_available():
 logger = logging.get_logger(__name__)
 
 
+class LayoutLMv2ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    apply_ocr (`bool`, *optional*, defaults to `True`):
+        Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes. Can be overridden by
+        the `apply_ocr` parameter in the `preprocess` method.
+    ocr_lang (`str`, *optional*):
+        The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
+        used. Can be overridden by the `ocr_lang` parameter in the `preprocess` method.
+    tesseract_config (`str`, *optional*):
+        Any additional custom configuration flags that are forwarded to the `config` parameter when calling
+        Tesseract. For example: '--psm 6'. Can be overridden by the `tesseract_config` parameter in the
+        `preprocess` method.
+    """
+
+    apply_ocr: bool
+    ocr_lang: str | None
+    tesseract_config: str | None
+
+
 def normalize_box(box, width, height):
     return [
         int(1000 * (box[0] / width)),
@@ -62,9 +79,9 @@ def normalize_box(box, width, height):
 
 def apply_tesseract(
     image: np.ndarray,
-    lang: Optional[str],
-    tesseract_config: Optional[str] = None,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    lang: str | None,
+    tesseract_config: str | None = None,
+    input_data_format: str | ChannelDimension | None = None,
 ):
     """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
     tesseract_config = tesseract_config if tesseract_config is not None else ""
@@ -125,15 +142,16 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = LayoutLMv2ImageProcessorKwargs
 
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         apply_ocr: bool = True,
-        ocr_lang: Optional[str] = None,
-        tesseract_config: Optional[str] = "",
+        ocr_lang: str | None = None,
+        tesseract_config: str | None = "",
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -153,8 +171,8 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -200,15 +218,15 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        apply_ocr: Optional[bool] = None,
-        ocr_lang: Optional[str] = None,
-        tesseract_config: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        apply_ocr: bool | None = None,
+        ocr_lang: str | None = None,
+        tesseract_config: str | None = None,
+        return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.

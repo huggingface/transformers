@@ -48,6 +48,7 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_it.md">Italiano</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
@@ -63,8 +64,8 @@ limitations under the License.
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/transformers_as_a_model_definition.png"/>
 </h3>
 
-Transformers acts as the model-definition framework for state-of-the-art machine learning models in text, computer
-vision, audio, video, and multimodal model, for both inference and training.
+Transformers acts as the model-definition framework for state-of-the-art machine learning with text, computer
+vision, audio, video, and multimodal models, for both inference and training.
 
 It centralizes the model definition so that this definition is agreed upon across the ecosystem. `transformers` is the
 pivot across frameworks: if a model definition is supported, it will be compatible with the majority of training
@@ -110,10 +111,10 @@ git clone https://github.com/huggingface/transformers.git
 cd transformers
 
 # pip
-pip install .[torch]
+pip install '.[torch]'
 
 # uv
-uv pip install .[torch]
+uv pip install '.[torch]'
 ```
 
 ## Quickstart
@@ -133,7 +134,7 @@ pipeline("the secret to baking a really good cake is ")
 To chat with a model, the usage pattern is the same. The only difference is you need to construct a chat history (the input to `Pipeline`) between you and the system.
 
 > [!TIP]
-> You can also chat with a model directly from the command line.
+> You can also chat with a model directly from the command line, as long as [`transformers serve` is running](https://huggingface.co/docs/transformers/main/en/serving).
 > ```shell
 > transformers chat Qwen/Qwen2.5-0.5B-Instruct
 > ```
@@ -223,7 +224,7 @@ pipeline(
     - Reduce compute time and production costs.
     - Dozens of model architectures with 1M+ pretrained checkpoints across all modalities.
 
-1. Choose the right framework for every part of a models lifetime:
+1. Choose the right framework for every part of a model's lifetime:
     - Train state-of-the-art models in 3 lines of code.
     - Move a single model between PyTorch/JAX/TF2.0 frameworks at will.
     - Pick the right framework for training, evaluation, and production.

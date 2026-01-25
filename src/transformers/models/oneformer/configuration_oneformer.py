@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 SHI Labs and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,18 +13,16 @@
 # limitations under the License.
 """OneFormer model configuration"""
 
-from typing import Optional
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class OneFormerConfig(PretrainedConfig):
+class OneFormerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`OneFormerModel`]. It is used to instantiate a
     OneFormer model according to the specified arguments, defining the model architecture. Instantiating a
@@ -33,11 +30,11 @@ class OneFormerConfig(PretrainedConfig):
     [shi-labs/oneformer_ade20k_swin_tiny](https://huggingface.co/shi-labs/oneformer_ade20k_swin_tiny) architecture
     trained on [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PretrainedConfig`, *optional*, defaults to `SwinConfig`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `SwinConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -146,15 +143,16 @@ class OneFormerConfig(PretrainedConfig):
     """
 
     model_type = "oneformer"
+    sub_configs = {"backbone_config": AutoConfig}
     attribute_map = {"hidden_size": "hidden_dim"}
 
     def __init__(
         self,
-        backbone_config: Optional[dict] = None,
-        backbone: Optional[str] = None,
+        backbone_config: dict | PreTrainedConfig | None = None,
+        backbone: str | None = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
-        backbone_kwargs: Optional[dict] = None,
+        backbone_kwargs: dict | None = None,
         ignore_value: int = 255,
         num_queries: int = 150,
         no_object_weight: int = 0.1,
@@ -172,7 +170,7 @@ class OneFormerConfig(PretrainedConfig):
         is_training: bool = False,
         use_auxiliary_loss: bool = True,
         output_auxiliary_logits: bool = True,
-        strides: Optional[list] = [4, 8, 16, 32],
+        strides: list | None = [4, 8, 16, 32],
         task_seq_len: int = 77,
         text_encoder_width: int = 256,
         text_encoder_context_length: int = 77,
@@ -272,14 +270,6 @@ class OneFormerConfig(PretrainedConfig):
         self.num_hidden_layers = decoder_layers
 
         super().__init__(**kwargs)
-
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
 
 
 __all__ = ["OneFormerConfig"]

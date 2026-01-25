@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,36 +13,28 @@
 # limitations under the License.
 """OpenAI ImageGPT configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
-
-if TYPE_CHECKING:
-    from ... import FeatureExtractionMixin
 
 logger = logging.get_logger(__name__)
 
 
-class ImageGPTConfig(PretrainedConfig):
+class ImageGPTConfig(PreTrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`ImageGPTModel`] or a [`TFImageGPTModel`]. It is
+    This is the configuration class to store the configuration of a [`ImageGPTModel`]. It is
     used to instantiate a GPT-2 model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the ImageGPT
     [openai/imagegpt-small](https://huggingface.co/openai/imagegpt-small) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
         vocab_size (`int`, *optional*, defaults to 512):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`ImageGPTModel`] or [`TFImageGPTModel`].
+            `inputs_ids` passed when calling [`ImageGPTModel`].
         n_positions (`int`, *optional*, defaults to 32*32):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -121,8 +112,13 @@ class ImageGPTConfig(PretrainedConfig):
         tie_word_embeddings=False,
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
+        add_cross_attention=False,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.n_positions = n_positions
         self.n_embd = n_embd
@@ -139,59 +135,12 @@ class ImageGPTConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
         self.reorder_and_upcast_attn = reorder_and_upcast_attn
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
-class ImageGPTOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    def generate_dummy_inputs(
-        self,
-        preprocessor: "FeatureExtractionMixin",
-        batch_size: int = 1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-        num_channels: int = 3,
-        image_width: int = 32,
-        image_height: int = 32,
-    ) -> Mapping[str, Any]:
-        """
-        Generate inputs to provide to the ONNX exporter.
-
-        Args:
-            preprocessor ([`PreTrainedTokenizerBase`] or [`FeatureExtractionMixin`]):
-                The preprocessor associated with this model configuration.
-            batch_size (`int`, *optional*, defaults to -1):
-                The batch size to export the model for (-1 means dynamic axis).
-            num_choices (`int`, *optional*, defaults to -1):
-                The number of candidate answers provided for multiple choice task (-1 means dynamic axis).
-            seq_length (`int`, *optional*, defaults to -1):
-                The sequence length to export the model for (-1 means dynamic axis).
-            is_pair (`bool`, *optional*, defaults to `False`):
-                Indicate if the input is a pair (sentence 1, sentence 2)
-            num_channels (`int`, *optional*, defaults to 3):
-                The number of channels of the generated images.
-            image_width (`int`, *optional*, defaults to 40):
-                The width of the generated images.
-            image_height (`int`, *optional*, defaults to 40):
-                The height of the generated images.
-
-        Returns:
-            Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
-        """
-
-        input_image = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
-        inputs = dict(preprocessor(images=input_image, return_tensors="pt"))
-
-        return inputs
-
-
-__all__ = ["ImageGPTConfig", "ImageGPTOnnxConfig"]
+__all__ = ["ImageGPTConfig"]

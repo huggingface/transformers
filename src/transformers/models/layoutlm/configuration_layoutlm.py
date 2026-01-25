@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2010, The Microsoft Research Asia LayoutLM Team authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,19 +13,14 @@
 # limitations under the License.
 """LayoutLM model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import Any, Optional
-
-from ... import PretrainedConfig, PreTrainedTokenizer
-from ...onnx import OnnxConfig, PatchingSpec
-from ...utils import is_torch_available, logging
+from ... import PreTrainedConfig
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class LayoutLMConfig(PretrainedConfig):
+class LayoutLMConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LayoutLMModel`]. It is used to instantiate a
     LayoutLM model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -67,12 +61,18 @@ class LayoutLMConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
             The value used to pad input_ids.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
         max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum value that the 2D position embedding might ever used. Typically set this to something large
             just in case (e.g., 1024).
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -106,11 +106,17 @@ class LayoutLMConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        eos_token_id=None,
+        bos_token_id=None,
         use_cache=True,
         max_2d_position_embeddings=1024,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -125,66 +131,7 @@ class LayoutLMConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.max_2d_position_embeddings = max_2d_position_embeddings
+        self.tie_word_embeddings = tie_word_embeddings
 
 
-class LayoutLMOnnxConfig(OnnxConfig):
-    def __init__(
-        self,
-        config: PretrainedConfig,
-        task: str = "default",
-        patching_specs: Optional[list[PatchingSpec]] = None,
-    ):
-        super().__init__(config, task=task, patching_specs=patching_specs)
-        self.max_2d_positions = config.max_2d_position_embeddings - 1
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("bbox", {0: "batch", 1: "sequence"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
-                ("token_type_ids", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    def generate_dummy_inputs(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-    ) -> Mapping[str, Any]:
-        """
-        Generate inputs to provide to the ONNX exporter
-
-        Args:
-            tokenizer: The tokenizer associated with this model configuration
-            batch_size: The batch size (int) to export the model for (-1 means dynamic axis)
-            seq_length: The sequence length (int) to export the model for (-1 means dynamic axis)
-            is_pair: Indicate if the input is a pair (sentence 1, sentence 2)
-
-        Returns:
-            Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
-        """
-
-        input_dict = super().generate_dummy_inputs(
-            tokenizer,
-            batch_size=batch_size,
-            seq_length=seq_length,
-            is_pair=is_pair,
-        )
-
-        # Generate a dummy bbox
-        box = [48, 84, 73, 128]
-
-        if not is_torch_available():
-            raise ValueError("Cannot generate dummy inputs without PyTorch installed.")
-        import torch
-
-        batch_size, seq_length = input_dict["input_ids"].shape
-        input_dict["bbox"] = torch.tensor([*[box] * seq_length]).tile(batch_size, 1, 1)
-        return input_dict
-
-
-__all__ = ["LayoutLMConfig", "LayoutLMOnnxConfig"]
+__all__ = ["LayoutLMConfig"]

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_sam2_video.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The Meta AI Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,17 +17,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class Sam2VideoPromptEncoderConfig(PretrainedConfig):
+class Sam2VideoPromptEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam2VideoPromptEncoder`]. The [`Sam2VideoPromptEncoder`]
     module is used to encode the input 2D points and bounding boxes.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -74,13 +73,13 @@ class Sam2VideoPromptEncoderConfig(PretrainedConfig):
         self.scale = scale
 
 
-class Sam2VideoMaskDecoderConfig(PretrainedConfig):
+class Sam2VideoMaskDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam2VideoMaskDecoder`]. It is used to instantiate a SAM2_VIDEO
     memory encoder according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -147,15 +146,15 @@ class Sam2VideoMaskDecoderConfig(PretrainedConfig):
         self.attention_downsample_rate = attention_downsample_rate
 
 
-class Sam2VideoConfig(PretrainedConfig):
+class Sam2VideoConfig(PreTrainedConfig):
     r"""
     [`Sam2Config`] is the configuration class to store the configuration of a [`Sam2Model`]. It is used to instantiate a
     SAM2 model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
     configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
     [facebook/sam2.1-hiera-tiny](https://huggingface.co/facebook/sam2.1-hiera-tiny) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (Union[`dict`, `Sam2VisionConfig`], *optional*):
@@ -186,6 +185,8 @@ class Sam2VideoConfig(PretrainedConfig):
             Whether to use multimask output for tracking.
         max_object_pointers_in_encoder (`int`, *optional*, defaults to 16):
             The maximum number of object pointers in the encoder.
+        max_cond_frame_num (`int`, *optional*, defaults to -1):
+            Maximum number of conditioning frames to use in memory attention. Set to -1 to use all conditioning frames.
         enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
             Whether to enable temporal positional encoding for object pointers.
         memory_attention_hidden_size (`int`, *optional*, defaults to 256):
@@ -293,6 +294,7 @@ class Sam2VideoConfig(PretrainedConfig):
         multimask_max_pt_num=1,
         multimask_output_for_tracking=True,
         max_object_pointers_in_encoder=16,
+        max_cond_frame_num=-1,
         enable_temporal_pos_encoding_for_object_pointers=True,
         # memory attention
         memory_attention_hidden_size=256,
@@ -354,6 +356,7 @@ class Sam2VideoConfig(PretrainedConfig):
         self.multimask_max_pt_num = multimask_max_pt_num
         self.multimask_output_for_tracking = multimask_output_for_tracking
         self.max_object_pointers_in_encoder = max_object_pointers_in_encoder
+        self.max_cond_frame_num = max_cond_frame_num
         # The next 4 are True for sam2.1 and False for sam2
         self.enable_occlusion_spatial_embedding = enable_occlusion_spatial_embedding
         self.enable_temporal_pos_encoding_for_object_pointers = enable_temporal_pos_encoding_for_object_pointers

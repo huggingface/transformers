@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ from datasets import load_dataset
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-from transformers import is_torch_available
+from transformers import BitsAndBytesConfig, is_torch_available
 from transformers.models.colqwen2.configuration_colqwen2 import ColQwen2Config
 from transformers.models.colqwen2.modeling_colqwen2 import ColQwen2ForRetrieval, ColQwen2ForRetrievalOutput
 from transformers.models.colqwen2.processing_colqwen2 import ColQwen2Processor
@@ -70,7 +69,7 @@ class ColQwen2ForRetrievalModelTester:
             "num_hidden_layers": 2,
             "num_key_value_heads": 2,
             "rms_norm_eps": 1e-06,
-            "rope_scaling": {"mrope_section": [4, 6, 6], "rope_type": "default", "type": "default"},
+            "rope_parameters": {"mrope_section": [4, 6, 6], "rope_type": "default", "type": "default"},
             "sliding_window": 32768,
             "tie_word_embeddings": True,
             "vision_config": {
@@ -200,9 +199,7 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (ColQwen2ForRetrieval,) if is_torch_available() else ()
-    fx_compatible = False
-    test_torchscript = False
-    test_pruning = False
+
     test_resize_embeddings = True
 
     def setUp(self):
@@ -281,6 +278,10 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_compile_dynamic(self):
         pass
 
+    @unittest.skip(reason="This architecture doesn't support weight tying/untying.")
+    def test_load_save_without_tied_weights(self):
+        pass
+
 
 @require_torch
 class ColQwen2ModelIntegrationTest(unittest.TestCase):
@@ -301,7 +302,7 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         model = ColQwen2ForRetrieval.from_pretrained(
             self.model_name,
             dtype=torch.float16,
-            load_in_8bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         ).eval()
 
         # Load the test dataset
@@ -337,12 +338,61 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
                     [15.6562, 12.2656, 20.2969],
                 ],
                 ("cuda", 8): [
-                    [15.0703, 8.7422, 15.0312],
-                    [9.5078, 16.8906, 10.6250],
-                    [15.6484, 12.3984, 20.4688],
+                    [16.2812, 8.3672, 14.5703],
+                    [9.4922, 17.1875, 10.3281],
+                    [15.0312, 11.3984, 20.1719],
                 ],
             }
         )
         expected_scores = torch.tensor(expectations.get_expectation(), dtype=scores.dtype)
 
         assert torch.allclose(scores, expected_scores, atol=1e-3), f"Expected scores {expected_scores}, got {scores}"
+
+    @slow
+    def test_model_integration_test_2(self):
+        """
+        Test if the model is able to retrieve the correct pages for a small and easy dataset.
+        This test uses a ColQwen2.5 checkpoint that is compatible with the ColQwen2 architecture.
+        """
+        model = ColQwen2ForRetrieval.from_pretrained(
+            "Sahil-Kabir/colqwen2.5-v0.2-hf",
+            device_map=torch_device,
+            dtype=torch.bfloat16,
+        ).eval()
+        processor = ColQwen2Processor.from_pretrained("Sahil-Kabir/colqwen2.5-v0.2-hf", trust_remote_code=True)
+
+        # Load the test dataset
+        ds = load_dataset("hf-internal-testing/document-visual-retrieval-test", split="test")
+
+        # Preprocess the examples
+        batch_images = processor(images=list(ds["image"])).to(torch_device)
+        batch_queries = processor(text=list(ds["query"])).to(torch_device)
+
+        with torch.inference_mode():
+            image_embeddings = model(**batch_images).embeddings
+            query_embeddings = model(**batch_queries).embeddings
+
+        # Compute retrieval scores
+        scores = processor.score_retrieval(
+            query_embeddings=query_embeddings,
+            passage_embeddings=image_embeddings,
+        )
+
+        assert scores.ndim == 2, f"Expected 2D tensor, got {scores.ndim}"
+        assert scores.shape == (len(ds), len(ds)), f"Expected shape {(len(ds), len(ds))}, got {scores.shape}"
+
+        # Check if the maximum scores per row are in the diagonal of the matrix score
+        self.assertTrue((scores.argmax(axis=1) == torch.arange(len(ds), device=scores.device)).all())
+        # Further validation: fine-grained check, with a hardcoded score from the original Hf implementation.
+        expectations = Expectations(
+            {
+                ("cuda", 8): [
+                    [16.3750, 10.9375, 14.7500],
+                    [11.3750, 16.8750, 12.0625],
+                    [15.3125, 13.1250, 21.5000],
+                ]
+            }
+        )
+        expected_scores = torch.tensor(expectations.get_expectation(), dtype=scores.dtype)
+
+        assert torch.allclose(scores, expected_scores, atol=0.15), f"Expected scores {expected_scores}, got {scores}"

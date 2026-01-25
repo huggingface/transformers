@@ -31,6 +31,7 @@ from transformers.testing_utils import (
     patch_testing_methods_to_collect_info,
     patch_torch_compile_force_graph,
 )
+from transformers.utils import enable_tf32
 
 
 NOT_DEVICE_TESTS = {
@@ -54,12 +55,10 @@ NOT_DEVICE_TESTS = {
     "test_gradient_checkpointing_backward_compatibility",
     "test_gradient_checkpointing_enable_disable",
     "test_torch_save_load",
-    "test_initialization",
     "test_forward_signature",
     "test_model_get_set_embeddings",
     "test_model_main_input_name",
     "test_correct_missing_keys",
-    "test_tie_model_weights",
     "test_can_use_safetensors",
     "test_load_save_without_tied_weights",
     "test_tied_weights_keys",
@@ -89,6 +88,11 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "not_device_test: mark the tests always running on cpu")
     config.addinivalue_line("markers", "torch_compile_test: mark test which tests torch compile functionality")
     config.addinivalue_line("markers", "torch_export_test: mark test which tests torch export functionality")
+    config.addinivalue_line("markers", "flash_attn_test: mark test which tests flash attention functionality")
+    config.addinivalue_line("markers", "flash_attn_3_test: mark test which tests flash attention 3 functionality")
+    config.addinivalue_line("markers", "training_ci: mark test for training CI validation")
+
+    os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
 
 
 def pytest_collection_modifyitems(items):
@@ -135,11 +139,9 @@ _pytest.doctest.DoctestModule = HfDoctestModule
 doctest.DocTestParser = HfDocTestParser
 
 if is_torch_available():
-    import torch
-
     # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
     # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
-    torch.backends.cudnn.allow_tf32 = False
+    enable_tf32(False)
 
     # patch `torch.compile`: if `TORCH_COMPILE_FORCE_FULLGRAPH=1` (or values considered as true, e.g. yes, y, etc.),
     # the patched version will always run with `fullgraph=True`.

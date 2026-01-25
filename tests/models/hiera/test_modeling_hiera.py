@@ -243,11 +243,8 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = HieraModelTester(self)
@@ -526,12 +523,12 @@ def prepare_img():
 
 @require_torch
 @require_vision
+@slow
 class HieraModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return AutoImageProcessor.from_pretrained("facebook/hiera-tiny-224-in1k-hf") if is_vision_available() else None
 
-    @slow
     def test_inference_image_classification_head(self):
         model = HieraForImageClassification.from_pretrained("facebook/hiera-tiny-224-in1k-hf").to(torch_device)
 
@@ -559,7 +556,7 @@ class HieraModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([[0.8028, 0.2409, -0.2254, -0.3712, -0.2848]]).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :5], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.logits[:, :5], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_interpolate_pos_encoding(self):
         model = HieraModel.from_pretrained("facebook/hiera-tiny-224-hf").to(torch_device)
@@ -580,12 +577,15 @@ class HieraModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[1.7853, 0.0690, 0.3177], [2.6853, -0.2334, 0.0889], [1.5445, -0.1515, -0.0300]]
+            [
+                [1.7840, 0.0678, 0.3173],
+                [2.6844, -0.2343, 0.0878],
+                [1.5457, -0.1520, -0.0306],
+            ]
         ).to(torch_device)
 
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
-    @slow
     def test_inference_for_pretraining(self):
         # make random mask reproducible
         torch.manual_seed(2)
@@ -613,11 +613,11 @@ class HieraModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor(
             [
-                [1.6407, 1.6506, 1.6541, 1.6617, 1.6703],
-                [1.9730, 1.9842, 1.9848, 1.9896, 1.9947],
-                [1.5949, 1.8262, 1.2602, 1.4801, 1.4448],
-                [1.2341, 1.7907, 0.8618, 1.5202, 1.4523],
-                [2.0140, 1.9846, 1.9434, 1.9019, 1.8648],
+                [1.6410, 1.6510, 1.6545, 1.6622, 1.6708],
+                [1.9736, 1.9849, 1.9855, 1.9904, 1.9954],
+                [1.5943, 1.8277, 1.2627, 1.4798, 1.4432],
+                [1.2344, 1.7911, 0.8622, 1.5206, 1.4526],
+                [2.0146, 1.9852, 1.9438, 1.9023, 1.8652],
             ]
         )
 

@@ -20,7 +20,7 @@ import unittest
 
 import numpy as np
 
-from transformers import PretrainedConfig, VitsConfig
+from transformers import PreTrainedConfig, VitsConfig
 from transformers.testing_utils import (
     Expectations,
     is_flaky,
@@ -58,7 +58,7 @@ def _config_zero_init(config):
     for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
-        if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
+        if isinstance(getattr(configs_no_init, key, None), PreTrainedConfig):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
             setattr(configs_no_init, key, no_init_subconfig)
     return configs_no_init
@@ -160,9 +160,8 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {"feature-extraction": VitsModel, "text-to-audio": VitsModel} if is_torch_available() else {}
     )
     is_encoder_decoder = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_torchscript = False
     has_attentions = False
 
     def setUp(self):
@@ -219,46 +218,6 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="VITS is not deterministic")
     def test_batching_equivalence(self):
         pass
-
-    @is_flaky(
-        max_attempts=3,
-        description="Weight initialisation for the VITS conv layers sometimes exceeds the kaiming normal range",
-    )
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        uniform_init_parms = [
-            "emb_rel_k",
-            "emb_rel_v",
-            "conv_1",
-            "conv_2",
-            "conv_pre",
-            "conv_post",
-            "conv_proj",
-            "conv_dds",
-            "project",
-            "wavenet.in_layers",
-            "wavenet.res_skip_layers",
-            "upsampler",
-            "resblocks",
-        ]
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     @unittest.skip(reason="VITS has no inputs_embeds")
     def test_inputs_embeds(self):
@@ -391,13 +350,13 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
 
 
 @require_torch

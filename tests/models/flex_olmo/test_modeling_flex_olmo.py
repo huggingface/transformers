@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +14,6 @@
 """Testing suite for the PyTorch FlexOlmo model."""
 
 import unittest
-
-import pytest
 
 from transformers import is_torch_available
 from transformers.models.auto.tokenization_auto import AutoTokenizer
@@ -38,7 +35,6 @@ if is_torch_available():
         FlexOlmoForCausalLM,
         FlexOlmoModel,
     )
-    from transformers.models.flex_olmo.modeling_flex_olmo import FlexOlmoRotaryEmbedding
 
 
 class FlexOlmoModelTester(CausalLMModelTester):
@@ -48,20 +44,8 @@ class FlexOlmoModelTester(CausalLMModelTester):
 
 @require_torch
 class FlexOlmoModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (FlexOlmoModel, FlexOlmoForCausalLM) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": FlexOlmoModel,
-            "text-generation": FlexOlmoForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-    fx_compatible = False
-    test_torchscript = False
     test_all_params_have_gradient = False
     model_tester_class = FlexOlmoModelTester
-    rotary_embedding_layer = FlexOlmoRotaryEmbedding
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -69,11 +53,6 @@ class FlexOlmoModelTest(CausalLMModelTest, unittest.TestCase):
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = FlexOlmoForCausalLM if is_torch_available() else None
-
-    @unittest.skip("Dynamic control flow in MoE")
-    @pytest.mark.torch_compile_test
-    def test_torch_compile_for_training(self):
-        pass
 
 
 @require_torch

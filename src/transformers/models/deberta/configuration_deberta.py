@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, Microsoft and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,36 +13,27 @@
 # limitations under the License.
 """DeBERTa model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Union
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-
-
-if TYPE_CHECKING:
-    from ... import FeatureExtractionMixin, PreTrainedTokenizerBase
 
 
 logger = logging.get_logger(__name__)
 
 
-class DebertaConfig(PretrainedConfig):
+class DebertaConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DebertaModel`] or a [`TFDebertaModel`]. It is
+    This is the configuration class to store the configuration of a [`DebertaModel`]. It is
     used to instantiate a DeBERTa model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the DeBERTa
     [microsoft/deberta-base](https://huggingface.co/microsoft/deberta-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the DeBERTa model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`DebertaModel`] or [`TFDebertaModel`].
+            `inputs_ids` passed when calling [`DebertaModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -64,7 +54,7 @@ class DebertaConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 0):
-            The vocabulary size of the `token_type_ids` passed when calling [`DebertaModel`] or [`TFDebertaModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`DebertaModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -121,11 +111,14 @@ class DebertaConfig(PretrainedConfig):
         relative_attention=False,
         max_relative_positions=-1,
         pad_token_id=0,
+        bos_token_id=None,
+        eos_token_id=None,
         position_biased_input=True,
         pos_att_type=None,
         pooler_dropout=0,
         pooler_hidden_act="gelu",
         legacy=True,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -143,6 +136,9 @@ class DebertaConfig(PretrainedConfig):
         self.relative_attention = relative_attention
         self.max_relative_positions = max_relative_positions
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.position_biased_input = position_biased_input
 
         # Backwards compatibility
@@ -159,41 +155,4 @@ class DebertaConfig(PretrainedConfig):
         self.legacy = legacy
 
 
-# Copied from transformers.models.deberta_v2.configuration_deberta_v2.DebertaV2OnnxConfig
-class DebertaOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        if self._config.type_vocab_size > 0:
-            return OrderedDict(
-                [("input_ids", dynamic_axis), ("attention_mask", dynamic_axis), ("token_type_ids", dynamic_axis)]
-            )
-        else:
-            return OrderedDict([("input_ids", dynamic_axis), ("attention_mask", dynamic_axis)])
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 12
-
-    def generate_dummy_inputs(
-        self,
-        preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin"],
-        batch_size: int = -1,
-        seq_length: int = -1,
-        num_choices: int = -1,
-        is_pair: bool = False,
-        num_channels: int = 3,
-        image_width: int = 40,
-        image_height: int = 40,
-        tokenizer: "PreTrainedTokenizerBase" = None,
-    ) -> Mapping[str, Any]:
-        dummy_inputs = super().generate_dummy_inputs(preprocessor=preprocessor)
-        if self._config.type_vocab_size == 0 and "token_type_ids" in dummy_inputs:
-            del dummy_inputs["token_type_ids"]
-        return dummy_inputs
-
-
-__all__ = ["DebertaConfig", "DebertaOnnxConfig"]
+__all__ = ["DebertaConfig"]

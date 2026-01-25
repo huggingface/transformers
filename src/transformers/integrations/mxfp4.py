@@ -12,18 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_accelerate_available, is_torch_available, logging
+from ..utils import is_torch_available, is_torch_xpu_available, logging
 
 
 if is_torch_available():
     import torch
     from torch import nn
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
-
-import re
 from contextlib import contextmanager
+
+from ..core_model_loading import ConversionOps
+from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 
 
 logger = logging.get_logger(__name__)
@@ -70,6 +68,126 @@ def on_device(dev):
     yield
 
 
+class Mxfp4Quantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        model: torch.nn.Module | None = None,
+        missing_keys: list[str] | None = None,
+        full_layer_name: str | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        _, value = tuple(input_dict.items())[0]
+        value = value[0] if isinstance(value, list) else value
+
+        module, _ = get_module_from_name(model, full_layer_name)
+
+        with torch.device(value.device):
+            if isinstance(module, Mxfp4GptOssExperts):
+                triton_weight_tensor, weight_scale = quantize_to_mxfp4(value.transpose(-1, -2), triton_kernels_hub)
+                PrecisionConfig, FlexCtx, InFlexData = (
+                    triton_kernels_hub.matmul_ogs.PrecisionConfig,
+                    triton_kernels_hub.matmul_ogs.FlexCtx,
+                    triton_kernels_hub.matmul_ogs.InFlexData,
+                )
+                triton_weight_tensor, weight_scale = swizzle_mxfp4(
+                    triton_weight_tensor, weight_scale, triton_kernels_hub
+                )
+
+                proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
+
+                if proj in module._parameters:
+                    # Remove the nn.Parameter registration so we can attach the Triton tensor
+                    del module._parameters[proj]
+
+                setattr(module, proj, triton_weight_tensor)
+                setattr(
+                    module,
+                    f"{proj}_precision_config",
+                    PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
+                )
+
+                missing_keys.discard(f"{full_layer_name}")
+                module._is_hf_initialized = True
+
+                return {}
+
+
+class Mxfp4Dequantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        model: torch.nn.Module | None = None,
+        full_layer_name: str | None = None,
+        missing_keys=None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        param_data = {}
+        if "_blocks" in input_dict.keys():
+            if isinstance(input_dict["_blocks"], list):
+                param_data["_blocks"] = input_dict["_blocks"][0]
+            else:
+                param_data["_blocks"] = input_dict["_blocks"]
+        if "_scales" in input_dict.keys():
+            if isinstance(input_dict["_scales"], list):
+                param_data["_scales"] = input_dict["_scales"][0]
+            else:
+                param_data["_scales"] = input_dict["_scales"]
+
+        # Here we are dequantizing the weights
+        dequantized = dequantize_convertops(param_data["_blocks"], param_data["_scales"], param_data["_blocks"].device)
+        return {full_layer_name: dequantized}
+
+
+class Mxfp4Deserialize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        model: torch.nn.Module | None = None,
+        full_layer_name: str | None = None,
+        missing_keys: list[str] | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        param_data = {}
+        if "_blocks" in input_dict.keys():
+            if isinstance(input_dict["_blocks"], list):
+                param_data["_blocks"] = input_dict["_blocks"][0]
+            else:
+                param_data["_blocks"] = input_dict["_blocks"]
+        if "_scales" in input_dict.keys():
+            if isinstance(input_dict["_scales"], list):
+                param_data["_scales"] = input_dict["_scales"][0]
+            else:
+                param_data["_scales"] = input_dict["_scales"]
+
+        # Eagerly set tensors on the module and perform swizzle
+        module, _ = get_module_from_name(model, full_layer_name)
+        proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
+        swizzle_mxfp4_convertops(
+            param_data["_blocks"],
+            param_data["_scales"],
+            module,
+            proj,
+            param_data["_blocks"].device,
+            triton_kernels_hub,
+        )
+        missing_keys.discard(f"{full_layer_name}")
+        module._is_hf_initialized = True
+        # We return an empty mapping since the module was updated in-place. This prevents
+        # the loader from trying to materialize the original meta-parameter names again.
+        # We don't use set_param_for_module since it expects mainly a torch.nn.Parameter or a safetensors pointer
+        return {}
+
+
 # Copied from GPT_OSS repo and vllm
 def quantize_to_mxfp4(w, triton_kernels_hub):
     downcast_to_mxfp_torch = triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp_torch
@@ -110,10 +228,14 @@ def convert_moe_packed_tensors(
     """
     import math
 
+    blocks = blocks.to(torch.uint8)
     # Check if blocks and scales are on CPU, and move to GPU if so
     if not blocks.is_cuda and torch.cuda.is_available():
         blocks = blocks.cuda()
         scales = scales.cuda()
+    elif (blocks.device.type != "xpu") and is_torch_xpu_available():
+        blocks = blocks.to("xpu")
+        scales = scales.to("xpu")
 
     scales = scales.to(torch.int32) - 127  # TODO that's because 128=2**7
 
@@ -159,26 +281,20 @@ class Mxfp4GptOssExperts(nn.Module):
         self.intermediate_size = config.intermediate_size
         self.hidden_size = config.hidden_size
 
-        self.gate_up_proj_blocks = nn.Parameter(
+        self.gate_up_proj = nn.Parameter(
             torch.zeros(self.num_experts, 2 * self.intermediate_size, self.hidden_size // 32, 16, dtype=torch.uint8),
             requires_grad=False,
         )
-        self.gate_up_proj_scales = nn.Parameter(
-            torch.zeros(self.num_experts, 2 * self.intermediate_size, self.hidden_size // 32, dtype=torch.uint8),
-            requires_grad=False,
-        )
+
         self.gate_up_proj_bias = nn.Parameter(
             torch.zeros(self.num_experts, 2 * self.intermediate_size, dtype=torch.float32), requires_grad=False
         )
 
-        self.down_proj_blocks = nn.Parameter(
+        self.down_proj = nn.Parameter(
             torch.zeros((self.num_experts, self.hidden_size, self.intermediate_size // 32, 16), dtype=torch.uint8),
             requires_grad=False,
         )
-        self.down_proj_scales = nn.Parameter(
-            torch.zeros(self.num_experts, self.hidden_size, self.intermediate_size // 32, dtype=torch.uint8),
-            requires_grad=False,
-        )
+
         self.down_proj_bias = nn.Parameter(
             torch.zeros(self.num_experts, self.hidden_size, dtype=torch.float32), requires_grad=False
         )
@@ -312,15 +428,6 @@ def mlp_forward(self, hidden_states):
     return routed_out, router_logits
 
 
-def should_convert_module(current_key_name, patterns):
-    current_key_name_str = ".".join(current_key_name)
-    if not any(
-        re.match(f"{key}\\.", current_key_name_str) or re.match(f"{key}", current_key_name_str) for key in patterns
-    ):
-        return True
-    return False
-
-
 def dequantize(module, param_name, param_value, target_device, dq_param_name, **kwargs):
     from ..integrations.tensor_parallel import shard_and_distribute_module
 
@@ -343,7 +450,6 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
                     to_contiguous,
                     rank,
                     device_mesh,
-                    set_param=False,
                 )
             blocks_attr = f"{proj}_blocks"
             scales_attr = f"{proj}_scales"
@@ -352,9 +458,19 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
                 if target_device == "cpu" and torch.cuda.is_available():
                     torch.cuda.empty_cache()
+                elif target_device == "cpu" and is_torch_xpu_available():
+                    torch.xpu.empty_cache()
                 setattr(module, proj, torch.nn.Parameter(dequantized.to(target_device)))
                 delattr(module, blocks_attr)
                 delattr(module, scales_attr)
+
+
+def dequantize_convertops(blocks, scales, target_device):
+    dequantized = convert_moe_packed_tensors(blocks, scales)
+    if target_device == "cpu" and torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    dequantized = torch.nn.Parameter(dequantized.to(target_device))
+    return dequantized
 
 
 def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, triton_kernels_hub, **kwargs):
@@ -396,7 +512,7 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, trito
         else:
             blocks = blocks.reshape(local_experts, -1, module.intermediate_size // 2)
         if getattr(target_device, "type", target_device) == "cpu":
-            target_device = "cuda"
+            target_device = torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
         blocks = blocks.to(target_device).contiguous()
         scales = scales.to(target_device).contiguous()
         with on_device(target_device):
@@ -424,70 +540,87 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, trito
         del blocks
 
 
-def _replace_with_mxfp4_linear(
-    model,
-    modules_to_not_convert=None,
-    current_key_name=None,
-    quantization_config=None,
-    has_been_replaced=False,
-    config=None,
-):
-    if current_key_name is None:
-        current_key_name = []
+def swizzle_mxfp4_convertops(blocks, scales, module, proj, target_device, triton_kernels_hub):
+    """
+    This transforms the weights obtained using `convert_gpt_oss.py` to load them into `Mxfp4GptOssExperts`.
+    """
+    PrecisionConfig, FlexCtx, InFlexData = (
+        triton_kernels_hub.matmul_ogs.PrecisionConfig,
+        triton_kernels_hub.matmul_ogs.FlexCtx,
+        triton_kernels_hub.matmul_ogs.InFlexData,
+    )
 
-    for name, module in model.named_children():
-        current_key_name.append(name)
-        if not should_convert_module(current_key_name, modules_to_not_convert):
-            current_key_name.pop(-1)
+    local_experts = blocks.size(0)
+    if getattr(target_device, "type", target_device) == "cpu":
+        target_device = torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
+
+    blocks = blocks.to(target_device).contiguous()
+    scales = scales.to(target_device).contiguous()
+
+    if proj == "gate_up_proj":
+        blocks = blocks.reshape(local_experts, module.intermediate_size * 2, -1)
+    else:
+        blocks = blocks.reshape(local_experts, -1, module.intermediate_size // 2)
+    if getattr(target_device, "type", target_device) == "cpu":
+        target_device = "cuda"
+
+    with on_device(target_device):
+        triton_weight_tensor, weight_scale = swizzle_mxfp4(
+            blocks.transpose(-2, -1), scales.transpose(-2, -1), triton_kernels_hub
+        )
+    # need to overwrite the shapes for the kernels
+    if proj == "gate_up_proj":
+        triton_weight_tensor.shape = torch.Size([local_experts, module.hidden_size, module.intermediate_size * 2])
+    else:
+        triton_weight_tensor.shape = torch.Size([local_experts, module.intermediate_size, module.hidden_size])
+
+    # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It's like a subtensor
+    # Since the Experts module registers gate_up_proj and down_proj as nn.Parameters, we need to remove them so we can attach the Triton tensor
+    if proj in module._parameters:
+        # Remove the nn.Parameter registration so we can attach the Triton tensor
+        del module._parameters[proj]
+    setattr(module, proj, triton_weight_tensor)
+    setattr(
+        module,
+        f"{proj}_precision_config",
+        PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
+    )
+
+
+def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_convert: list[str] | None = None):
+    """
+    Public method that replaces the expert layers of the given model with mxfp4 quantized layers.
+
+    Args:
+        model (`torch.nn.Module`):
+            The model to convert, can be any `torch.nn.Module` instance.
+        quantization_config (`Mxfp4Config`, defaults to `None`):
+            The quantization config object that contains the quantization parameters.
+        modules_to_not_convert (`list`, *optional*, defaults to `None`):
+            A list of modules to not convert. If a module name is in the list (e.g. `lm_head`), it will not be
+            converted.
+    """
+    if quantization_config.dequantize:
+        return model
+
+    from .hub_kernels import get_kernel
+
+    global triton_kernels_hub
+    triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+
+    has_been_replaced = False
+    for module_name, module in model.named_modules():
+        if not should_convert_module(module_name, modules_to_not_convert):
             continue
         if module.__class__.__name__ == "GptOssExperts" and not quantization_config.dequantize:
-            with init_empty_weights():
-                model._modules[name] = Mxfp4GptOssExperts(config)
+            with torch.device("meta"):
+                model.set_submodule(module_name, Mxfp4GptOssExperts(model.config))
                 has_been_replaced = True
         if module.__class__.__name__ == "GptOssMLP" and not quantization_config.dequantize:
             from types import MethodType
 
             module.forward = MethodType(mlp_forward, module)
-        if len(list(module.children())) > 0:
-            _, has_been_replaced = _replace_with_mxfp4_linear(
-                module,
-                modules_to_not_convert,
-                current_key_name,
-                quantization_config,
-                has_been_replaced=has_been_replaced,
-                config=config,
-            )
-        current_key_name.pop(-1)
-    return model, has_been_replaced
 
-
-def replace_with_mxfp4_linear(
-    model,
-    modules_to_not_convert=None,
-    current_key_name=None,
-    quantization_config=None,
-    config=None,
-):
-    if quantization_config.dequantize:
-        return model
-    else:
-        from kernels import get_kernel
-
-        global triton_kernels_hub
-        triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
-
-    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
-
-    if quantization_config.modules_to_not_convert is not None:
-        modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
-    modules_to_not_convert = list(set(modules_to_not_convert))
-    model, has_been_replaced = _replace_with_mxfp4_linear(
-        model,
-        modules_to_not_convert,
-        current_key_name,
-        quantization_config,
-        config=config,
-    )
     if not has_been_replaced:
         logger.warning(
             "You are loading your model using mixed-precision FP4 quantization but no linear modules were found in your model."

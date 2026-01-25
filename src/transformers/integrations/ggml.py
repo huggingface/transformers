@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The ggml.ai team and The HuggingFace Inc. team. and pygguf author (github.com/99991)
 # https://github.com/99991/pygguf
 #
@@ -76,7 +75,7 @@ GGUF_CONFIG_MAPPING = {
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
         "vocab_size": "vocab_size",
     },
-    "qwen2moe": {
+    "qwen2_moe": {
         "context_length": "max_position_embeddings",
         "block_count": "num_hidden_layers",
         "feed_forward_length": "intermediate_size",
@@ -313,6 +312,16 @@ GGUF_TOKENIZER_MAPPING = {
     },
 }
 
+# We only need to set here the parameters that default to different values between transformers and llamacpp.
+GGUF_CONFIG_DEFAULTS_MAPPING = {
+    "qwen3_moe": {
+        # NOTE: Qwen3MoeConfig defaults to false but llama.cpp needs this to be true.
+        # See: https://github.com/ggml-org/llama.cpp/blob/17f7f4baad8b3a716ee139da7bb56ae984e8c0fa/src/models/qwen3moe.cpp#L85-L96
+        #      (the parameter right after LLM_FFN_SILU corresponds to norm_topk_prob)
+        "norm_topk_prob": True,
+    },
+}
+
 
 def _gguf_parse_value(_value, data_type):
     if not isinstance(data_type, list):
@@ -329,11 +338,11 @@ def _gguf_parse_value(_value, data_type):
         _value = int(_value[0])
     elif data_type in [6, 12]:
         _value = float(_value[0])
-    elif data_type in [7]:
+    elif data_type == 7:
         _value = bool(_value[0])
-    elif data_type in [8]:
+    elif data_type == 8:
         _value = array("B", list(_value)).tobytes().decode()
-    elif data_type in [9]:
+    elif data_type == 9:
         _value = _gguf_parse_value(_value, array_data_type)
     return _value
 

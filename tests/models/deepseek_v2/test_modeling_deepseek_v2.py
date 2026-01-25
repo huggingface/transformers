@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,10 +15,8 @@
 
 import unittest
 
-import pytest
-
 from transformers import BitsAndBytesConfig, Cache, is_torch_available
-from transformers.testing_utils import require_read_token, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -27,7 +24,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, DeepseekV2ForCausalLM, DeepseekV2ForSequenceClassification, DeepseekV2Model
+    from transformers import AutoTokenizer, DeepseekV2ForCausalLM, DeepseekV2Model
     from transformers.models.deepseek_v2.modeling_deepseek_v2 import DeepseekV2RotaryEmbedding
 
 
@@ -54,24 +51,29 @@ class DeepseekV2ModelTester(CausalLMModelTester):
 
 @require_torch
 class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": DeepseekV2Model,
-            "text-classification": DeepseekV2ForSequenceClassification,
-            "text-generation": DeepseekV2ForCausalLM,
-            "zero-shot": DeepseekV2ForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-    fx_compatible = False
-    test_torchscript = False
     test_all_params_have_gradient = False
     model_tester_class = DeepseekV2ModelTester
     model_split_percents = [0.5, 0.7, 0.8]
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DeepseekV2ForCausalLM if is_torch_available() else None
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        """Needs to be overridden as deepseek has special MLA cache format (though we don't really use the MLA)"""
+        self.assertIsInstance(past_key_values, Cache)
+
+        # (batch, head, seq_length, head_features)
+        expected_common_shape = (
+            batch_size,
+            getattr(config, "num_key_value_heads", config.num_attention_heads),
+            seq_length,
+        )
+        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
+        expected_value_shape = expected_common_shape + (config.v_head_dim,)
+
+        for layer in past_key_values.layers:
+            self.assertEqual(layer.keys.shape, expected_key_shape)
+            self.assertEqual(layer.values.shape, expected_value_shape)
 
     def test_model_rope_scaling_frequencies(self):
         """
@@ -100,7 +102,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
-        config.rope_scaling = {"rope_type": "linear", "factor": scaling_factor}
+        config.rope_parameters = {"rope_type": "linear", "rope_theta": 10000.0, "factor": scaling_factor}
         linear_scaling_rope = DeepseekV2RotaryEmbedding(config=config).to(torch_device)
         linear_freqs_cis_short = linear_scaling_rope(x, position_ids_short)
         linear_freqs_cis_long = linear_scaling_rope(x, position_ids_long)
@@ -109,7 +111,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
-        config.rope_scaling = {"rope_type": "dynamic", "factor": scaling_factor}
+        config.rope_parameters = {"rope_type": "dynamic", "rope_theta": 10000.0, "factor": scaling_factor}
         ntk_scaling_rope = DeepseekV2RotaryEmbedding(config=config).to(torch_device)
         ntk_freqs_cis_short = ntk_scaling_rope(x, position_ids_short)
         ntk_freqs_cis_long = ntk_scaling_rope(x, position_ids_long)
@@ -120,7 +122,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
 
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
-        config.rope_scaling = {"rope_type": "yarn", "factor": scaling_factor}
+        config.rope_parameters = {"rope_type": "yarn", "rope_theta": 10000.0, "factor": scaling_factor}
         yarn_scaling_rope = DeepseekV2RotaryEmbedding(config=config).to(torch_device)
         yarn_freqs_cis_short = yarn_scaling_rope(x, position_ids_short)
         yarn_freqs_cis_long = yarn_scaling_rope(x, position_ids_long)
@@ -130,50 +132,19 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_freqs_cis_long, original_freqs_cis_long)
 
-    def test_past_key_values_format(self):
-        """
-        Overwriting to pass the expected cache shapes (Deepseek-V3 uses MLA so the cache shapes are non-standard)
-        """
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        batch_size, seq_length = inputs["input_ids"].shape
-        # difference: last dim
-        k_embed_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-        v_embed_dim = config.v_head_dim
-        self_attention_key_cache_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
-        self_attention_value_cache_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
-        # build the full cache shapes
-        num_hidden_layers = config.num_hidden_layers
-        all_cache_shapes = [
-            [self_attention_key_cache_shape, self_attention_value_cache_shape] for _ in range(num_hidden_layers)
-        ]
-        super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
-
-    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        """Needs to be overridden as deepseek has special MLA cache format (though we don't really use the MLA)"""
-        self.assertIsInstance(decoder_past_key_values, Cache)
-
-        # (batch, head, seq_length, head_features)
-        expected_common_shape = (
-            batch_size,
-            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
-            cache_length,
-        )
-        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
-        expected_value_shape = expected_common_shape + (config.v_head_dim,)
-
-        if isinstance(decoder_past_key_values, Cache):
-            for layer in decoder_past_key_values.layers:
-                self.assertEqual(layer.keys.shape, expected_key_shape)
-                self.assertEqual(layer.values.shape, expected_value_shape)
-
-    @unittest.skip("Dynamic control flow in MoE")
-    @pytest.mark.torch_compile_test
-    def test_torch_compile_for_training(self):
-        pass
+    def test_tp_plan_matches_params(self):
+        """Need to overwrite as the plan contains keys that are valid but depend on some configs flags and cannot
+        be valid all at the same time"""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        # The key is valid but not always used based on the flag
+        if config.q_lora_rank is not None:
+            config.base_model_tp_plan.pop("layers.*.self_attn.q_proj")
+        super().test_tp_plan_matches_params()
+        # Put them back in class attribute
+        config.base_model_tp_plan.update({"layers.*.self_attn.q_proj": "colwise"})
 
 
 @slow
-@require_read_token
 @require_torch_accelerator
 class DeepseekV2IntegrationTest(unittest.TestCase):
     def test_deepseek_v2_lite(self):

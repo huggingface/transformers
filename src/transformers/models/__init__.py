@@ -18,13 +18,16 @@ from ..utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .afmoe import *
     from .aimv2 import *
     from .albert import *
     from .align import *
     from .altclip import *
+    from .apertus import *
     from .arcee import *
     from .aria import *
     from .audio_spectrogram_transformer import *
+    from .audioflamingo3 import *
     from .auto import *
     from .autoformer import *
     from .aya_vision import *
@@ -76,6 +79,7 @@ if TYPE_CHECKING:
     from .csm import *
     from .ctrl import *
     from .cvt import *
+    from .cwm import *
     from .d_fine import *
     from .dab_detr import *
     from .dac import *
@@ -105,6 +109,7 @@ if TYPE_CHECKING:
     from .dinov3_vit import *
     from .distilbert import *
     from .dit import *
+    from .doge import *
     from .donut import *
     from .dots1 import *
     from .dpr import *
@@ -117,13 +122,18 @@ if TYPE_CHECKING:
     from .emu3 import *
     from .encodec import *
     from .encoder_decoder import *
+    from .eomt import *
     from .ernie import *
+    from .ernie4_5 import *
+    from .ernie4_5_moe import *
+    from .ernie4_5_vl_moe import *
     from .esm import *
     from .evolla import *
     from .exaone4 import *
     from .falcon import *
     from .falcon_h1 import *
     from .falcon_mamba import *
+    from .fast_vlm import *
     from .fastspeech2_conformer import *
     from .flaubert import *
     from .flava import *
@@ -141,6 +151,13 @@ if TYPE_CHECKING:
     from .git import *
     from .glm import *
     from .glm4 import *
+    from .glm4_moe import *
+    from .glm4_moe_lite import *
+    from .glm4v import *
+    from .glm4v_moe import *
+    from .glm46v import *
+    from .glm_image import *
+    from .glmasr import *
     from .glpn import *
     from .got_ocr2 import *
     from .gpt2 import *
@@ -175,11 +192,14 @@ if TYPE_CHECKING:
     from .instructblip import *
     from .instructblipvideo import *
     from .internvl import *
+    from .jais2 import *
     from .jamba import *
     from .janus import *
     from .jetmoe import *
     from .kosmos2 import *
+    from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
+    from .lasr import *
     from .layoutlm import *
     from .layoutlmv2 import *
     from .layoutlmv3 import *
@@ -187,6 +207,7 @@ if TYPE_CHECKING:
     from .led import *
     from .levit import *
     from .lfm2 import *
+    from .lfm2_moe import *
     from .lfm2_vl import *
     from .lightglue import *
     from .lilt import *
@@ -200,6 +221,7 @@ if TYPE_CHECKING:
     from .longformer import *
     from .longt5 import *
     from .luke import *
+    from .lw_detr import *
     from .lxmert import *
     from .m2m_100 import *
     from .mamba import *
@@ -212,16 +234,20 @@ if TYPE_CHECKING:
     from .mbart50 import *
     from .megatron_bert import *
     from .megatron_gpt2 import *
+    from .metaclip_2 import *
     from .mgp_str import *
     from .mimi import *
     from .minimax import *
+    from .minimax_m2 import *
     from .ministral import *
+    from .ministral3 import *
     from .mistral import *
     from .mistral3 import *
     from .mixtral import *
     from .mlcd import *
     from .mllama import *
     from .mluke import *
+    from .mm_grounding_dino import *
     from .mobilebert import *
     from .mobilenet_v1 import *
     from .mobilenet_v2 import *
@@ -239,6 +265,7 @@ if TYPE_CHECKING:
     from .musicgen_melody import *
     from .mvp import *
     from .myt5 import *
+    from .nanochat import *
     from .nemotron import *
     from .nllb import *
     from .nllb_moe import *
@@ -255,10 +282,14 @@ if TYPE_CHECKING:
     from .ovis2 import *
     from .owlv2 import *
     from .owlvit import *
+    from .paddleocr_vl import *
     from .paligemma import *
     from .parakeet import *
     from .patchtsmixer import *
     from .patchtst import *
+    from .pe_audio import *
+    from .pe_audio_video import *
+    from .pe_video import *
     from .pegasus import *
     from .pegasus_x import *
     from .perceiver import *
@@ -270,6 +301,7 @@ if TYPE_CHECKING:
     from .phimoe import *
     from .phobert import *
     from .pix2struct import *
+    from .pixio import *
     from .pixtral import *
     from .plbart import *
     from .poolformer import *
@@ -306,6 +338,10 @@ if TYPE_CHECKING:
     from .sam import *
     from .sam2 import *
     from .sam2_video import *
+    from .sam3 import *
+    from .sam3_tracker import *
+    from .sam3_tracker_video import *
+    from .sam3_video import *
     from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
@@ -317,7 +353,9 @@ if TYPE_CHECKING:
     from .shieldgemma2 import *
     from .siglip import *
     from .siglip2 import *
+    from .smollm3 import *
     from .smolvlm import *
+    from .solar_open import *
     from .speech_encoder_decoder import *
     from .speech_to_text import *
     from .speecht5 import *
@@ -334,6 +372,7 @@ if TYPE_CHECKING:
     from .switch_transformers import *
     from .t5 import *
     from .t5gemma import *
+    from .t5gemma2 import *
     from .table_transformer import *
     from .tapas import *
     from .textnet import *
@@ -351,6 +390,7 @@ if TYPE_CHECKING:
     from .univnet import *
     from .upernet import *
     from .vaultgemma import *
+    from .video_llama_3 import *
     from .video_llava import *
     from .videomae import *
     from .vilt import *

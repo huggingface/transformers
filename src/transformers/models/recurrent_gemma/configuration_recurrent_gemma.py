@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,14 +13,15 @@
 # limitations under the License.
 """RecurrentGemma model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class RecurrentGemmaConfig(PretrainedConfig):
+class RecurrentGemmaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RecurrentGemmaModel`]. It is used to instantiate a RecurrentGemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -29,8 +29,8 @@ class RecurrentGemmaConfig(PretrainedConfig):
 
     e.g. [google/recurrentgemma-2b](https://huggingface.co/google/recurrentgemma-2b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -72,16 +72,18 @@ class RecurrentGemmaConfig(PretrainedConfig):
             Beginning of stream token id.
         hidden_activation (``str` or `function``, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The hidden activation used in the recurrent block as well as the MLP layer of the decoder layers.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.5):
-            The partial rotary factor used in the initialization of the rotary embeddings.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         block_types (`list[str]`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`):
             List of aleternating blocks that will be repeated to initialize the `temporal_block` layer.
         attention_dropout (`float`, *optional*, defaults to 0.0): dropout value to use after the attention softmax.
         num_key_value_heads (`16`, *optional*, defaults to 16): Number of key value heads to use GQA.
         attention_bias (`bool`, *optional*, defaults to `False`): whether or not the linear q,k,v of the Attention layer should have bias
         w_init_variance_scale (`float`, *optional*, defaults to 0.01): weight initialization variance.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     ```python
     >>> from transformers import RecurrentGemmaModel, RecurrentGemmaConfig
 
@@ -99,28 +101,28 @@ class RecurrentGemmaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_hidden_layers=26,
-        vocab_size=256000,
-        hidden_size=2560,
-        intermediate_size=3 * 2560,
-        num_attention_heads=10,
-        lru_width=None,
-        attention_window_size=2048,
-        conv1d_width=4,
-        logits_soft_cap=30.0,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=0,
-        eos_token_id=1,
-        bos_token_id=2,
-        hidden_activation="gelu_pytorch_tanh",
-        partial_rotary_factor=0.5,
-        rope_theta=10000.0,
-        block_types=("recurrent", "recurrent", "attention"),
-        attention_dropout=0.0,
-        num_key_value_heads=None,
-        attention_bias=False,
-        w_init_variance_scale=0.01,
+        num_hidden_layers: int | None = 26,
+        vocab_size: int | None = 256000,
+        hidden_size: int | None = 2560,
+        intermediate_size: int | None = 3 * 2560,
+        num_attention_heads: int | None = 10,
+        lru_width: int | None = None,
+        attention_window_size: int | None = 2048,
+        conv1d_width: int | None = 4,
+        logits_soft_cap: float | None = 30.0,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 0,
+        eos_token_id: int | None = 1,
+        bos_token_id: int | None = 2,
+        hidden_activation: str | None = "gelu_pytorch_tanh",
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        block_types: list[str] | None = ("recurrent", "recurrent", "attention"),
+        attention_dropout: float | None = 0.0,
+        num_key_value_heads: int | None = None,
+        attention_bias: str | None = False,
+        w_init_variance_scale: float | None = 0.01,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.num_hidden_layers = num_hidden_layers
@@ -134,8 +136,6 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.logits_soft_cap = logits_soft_cap
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.partial_rotary_factor = partial_rotary_factor
         self.block_types = list(block_types)
         self.hidden_activation = hidden_activation
         self.head_dim = self.hidden_size // self.num_attention_heads
@@ -146,12 +146,14 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.w_init_variance_scale = w_init_variance_scale
         self.final_w_init_variance_scale = 2.0 / self.num_hidden_layers
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        self.rope_parameters = rope_parameters
+        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
+
+        super().__init__(**kwargs)
 
     @property
     def layers_block_type(self):

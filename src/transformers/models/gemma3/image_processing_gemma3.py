@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import itertools
 import math
-from typing import Optional, Union
 
 import numpy as np
 
@@ -40,6 +38,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -48,6 +47,24 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
+
+
+class Gemma3ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    do_pan_and_scan (`bool`, *optional*):
+        Whether to apply `pan_and_scan` to images.
+    pan_and_scan_min_crop_size (`int`, *optional*):
+        Minimum size of each crop in pan and scan.
+    pan_and_scan_max_num_crops (`int`, *optional*):
+        Maximum number of crops per image in pan and scan.
+    pan_and_scan_min_ratio_to_activate (`float`, *optional*):
+        Minimum aspect ratio to activate pan and scan.
+    """
+
+    do_pan_and_scan: bool
+    pan_and_scan_min_crop_size: int
+    pan_and_scan_max_num_crops: int
+    pan_and_scan_min_ratio_to_activate: float
 
 
 class Gemma3ImageProcessor(BaseImageProcessor):
@@ -91,22 +108,23 @@ class Gemma3ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "num_crops"]
+    valid_kwargs = Gemma3ImageProcessorKwargs
 
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_convert_rgb: Optional[bool] = True,
-        do_pan_and_scan: Optional[bool] = None,
-        pan_and_scan_min_crop_size: Optional[int] = None,
-        pan_and_scan_max_num_crops: Optional[int] = None,
-        pan_and_scan_min_ratio_to_activate: Optional[float] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_convert_rgb: bool | None = True,
+        do_pan_and_scan: bool | None = None,
+        pan_and_scan_min_crop_size: int | None = None,
+        pan_and_scan_max_num_crops: int | None = None,
+        pan_and_scan_min_ratio_to_activate: float | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -135,8 +153,8 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         pan_and_scan_min_crop_size: int,
         pan_and_scan_max_num_crops: int,
         pan_and_scan_min_ratio_to_activate: float,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Pan and Scan and image, by cropping into smaller images when the aspect ratio exceeds
@@ -218,8 +236,8 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         pan_and_scan_min_crop_size: int,
         pan_and_scan_max_num_crops: int,
         pan_and_scan_min_ratio_to_activate: float,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         pas_images_list = []
         num_crops = []
@@ -240,22 +258,22 @@ class Gemma3ImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        do_convert_rgb: Optional[bool] = None,
-        do_pan_and_scan: Optional[bool] = None,
-        pan_and_scan_min_crop_size: Optional[int] = None,
-        pan_and_scan_max_num_crops: Optional[int] = None,
-        pan_and_scan_min_ratio_to_activate: Optional[float] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: ChannelDimension | None = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
+        do_convert_rgb: bool | None = None,
+        do_pan_and_scan: bool | None = None,
+        pan_and_scan_min_crop_size: int | None = None,
+        pan_and_scan_max_num_crops: int | None = None,
+        pan_and_scan_min_ratio_to_activate: float | None = None,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.

@@ -16,11 +16,13 @@
 import copy
 import unittest
 
+import pytest
 import requests
 from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
+    BitsAndBytesConfig,
     VipLlavaConfig,
     VipLlavaForConditionalGeneration,
     VipLlavaModel,
@@ -176,8 +178,7 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
         else ()
     )
     pipeline_model_mapping = {"image-text-to-text": VipLlavaForConditionalGeneration} if is_torch_available() else {}
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     _is_composite = True
 
@@ -255,23 +256,17 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
             assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
@@ -293,7 +288,9 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test(self):
         model_id = "llava-hf/vip-llava-7b-hf"
 
-        model = VipLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = VipLlavaForConditionalGeneration.from_pretrained(
+            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/compel-neg.png"
@@ -301,8 +298,7 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image = Image.open(requests.get(url, stream=True).raw)
         prompt = "USER: <image>\nCan you please describe this image?\nASSISTANT:"
 
-        inputs = processor(prompt, image, return_tensors="pt").to(torch_device, torch.float16)
-
+        inputs = processor(text=prompt, images=image, return_tensors="pt").to(torch_device, torch.float16)
         outputs = model.generate(**inputs, max_new_tokens=10)
 
         EXPECTED_OUTPUT = "USER:  \nCan you please describe this image?\nASSISTANT: The image features a brown and white cat sitting on"

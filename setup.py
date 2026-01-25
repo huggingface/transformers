@@ -21,12 +21,12 @@ To create the package for pypi.
    current release branch.
 
    If releasing on a special branch, copy the updated README.md on the main branch for the commit you will make
-   for the post-release and run `make fix-copies` on the main branch as well.
+   for the post-release and run `make fix-repo` on the main branch as well.
 
 2. Run `make pre-release` (or `make pre-patch` for a patch release) and commit these changes with the message:
    "Release: <VERSION>" and push.
 
-3. Go back to the main branch and run `make post-release` then `make fix-copies`. Commit these changes with the
+3. Go back to the main branch and run `make post-release` then `make fix-repo`. Commit these changes with the
    message "v<NEXT_VERSION>.dev.0" and push to main.
 
 # If you were just cutting the branch in preparation for a release, you can stop here for now.
@@ -36,38 +36,9 @@ To create the package for pypi.
 5. On the release branch, add a tag in git to mark the release: "git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi' "
    Push the tag to git: git push --tags origin v<RELEASE>-release
 
-6. Build both the sources and the wheel. Do not change anything in setup.py between
-   creating the wheel and the source distribution (obviously).
-
-   Run `make build-release`. This will build the release and do some sanity checks for you. If this ends with an error
-   message, you need to fix things before going further.
-
-   You should now have a /dist directory with both .whl and .tar.gz source versions.
-
-7. Check that everything looks correct by uploading the package to the pypi test server:
-
-   twine upload dist/* -r testpypi
-   (pypi suggest using twine as other methods upload files via plaintext.)
-   You may have to specify the repository url, use the following command then:
-   twine upload dist/* -r testpypi --repository-url=https://test.pypi.org/legacy/
-
-   Check that you can install it in a virtualenv by running:
-   pip install -i https://test.pypi.org/simple/ transformers
-
-   Check you can run the following commands:
-   python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))"
-   python -c "from transformers import *"
-   python utils/check_build.py --check_lib
-
-   If making a patch release, double check the bug you are patching is indeed resolved.
-
-8. Upload the final version to actual pypi:
-   twine upload dist/* -r pypi
-
-9. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
+6. Have a core maintainer review and approve the deployment to pypi.
 """
 
-import os
 import re
 import shutil
 from pathlib import Path
@@ -91,21 +62,20 @@ if stale_egg_info.exists():
 
 # IMPORTANT:
 # 1. all dependencies should be listed here with their version requirements if any
-# 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
+# 2. once modified, run: `make style` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow>=10.0.1,<=15.0",
-    "accelerate>=0.26.0",
+    "accelerate>=1.1.0",
     "av",
     "beautifulsoup4",
     "blobfile",
     "codecarbon>=2.8.1",
     "cookiecutter==1.7.3",
-    "dataclasses",
     "datasets>=2.15.0",  # We need either this pin or pyarrow<21.0.0
     "deepspeed>=0.9.3",
     "diffusers",
     "dill<0.3.5",
-    "evaluate>=0.2.0",
+    "evaluate>=0.4.6",
     "faiss-cpu",
     "fastapi",
     "filelock",
@@ -114,10 +84,11 @@ _deps = [
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
     "hf_xet",
-    "huggingface-hub==1.0.0.rc2",
+    "huggingface-hub>=1.3.0,<2.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
+    "jmespath>=1.0.1",
     "kenlm",
     "kernels>=0.10.2,<0.11",
     "librosa",
@@ -125,9 +96,6 @@ _deps = [
     "nltk<=3.8.1",
     "num2words",
     "numpy>=1.17",
-    "onnxconverter-common",
-    "onnxruntime-tools>=1.4.2",
-    "onnxruntime>=1.4.0",
     "openai>=1.98.0",
     "opencv-python",
     "optimum-benchmark>=0.3.0",
@@ -135,25 +103,25 @@ _deps = [
     "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
     "packaging>=20.0",
     "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
+    "peft>=0.18.0",
     "phonemizer",
     "protobuf",
     "psutil",
     "pyyaml>=5.1",
     "pydantic>=2",
-    "pytest>=7.2.0",
-    "pytest-asyncio",
+    "pytest>=7.2.0,<9.0.0",
+    "pytest-asyncio>=1.2.0",
     "pytest-rerunfailures<16.0",
     "pytest-timeout",
     "pytest-xdist",
     "pytest-order",
-    "python>=3.9.0",
+    "python>=3.10.0",
     "ray[tune]>=2.7.0",
     "regex!=2019.12.17",
-    "requests",
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
-    "ruff==0.13.1",
+    "ruff==0.14.10",
     # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
     # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
     # `Trainer` tests (see references to `run_translation.py`).
@@ -165,20 +133,20 @@ _deps = [
     "scikit-learn",
     "scipy",
     "sentencepiece>=0.1.91,!=0.1.92",
-    "sigopt",
     "starlette",
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
     "tensorboard",
     "timeout-decorator",
     "tiktoken",
-    "timm<=1.0.19,!=1.0.18",
+    "timm>=1.0.23",
     "tokenizers>=0.22.0,<=0.23.0",
     "torch>=2.2",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.27",
+    "typer-slim",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "urllib3<2.0.0",
@@ -187,7 +155,7 @@ _deps = [
     "libcst",
     "rich",
     "opentelemetry-api",
-    "mistral-common[opencv]>=1.6.3",
+    "mistral-common[image]>=1.8.8",
 ]
 
 
@@ -243,14 +211,13 @@ class DepsTableUpdateCommand(Command):
         content = [
             "# THIS FILE HAS BEEN AUTOGENERATED. To update:",
             "# 1. modify the `_deps` dict in setup.py",
-            "# 2. run `make deps_table_update``",
+            "# 2. run `make fix-repo``",
             "deps = {",
             entries,
             "}",
             "",
         ]
         target = "src/transformers/dependency_versions_table.py"
-        print(f"updating {target}")
         with open(target, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(content))
 
@@ -264,27 +231,21 @@ extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
 extras["hf_xet"] = deps_list("hf_xet")
 
-if os.name == "nt":  # windows
-    extras["retrieval"] = deps_list("datasets")  # faiss is not supported on windows
-else:
-    extras["retrieval"] = deps_list("faiss-cpu", "datasets")
+extras["retrieval"] = deps_list("faiss-cpu", "datasets")
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["ftfy"] = deps_list("ftfy")
-extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
-extras["onnx"] = deps_list("onnxconverter-common") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
-extras["sigopt"] = deps_list("sigopt")
 extras["hub-kernels"] = deps_list("kernels")
 
 extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"]
 
-extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette") + extras["torch"]
+extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"]
 extras["audio"] = deps_list(
     "librosa",
     "pyctcdecode",
@@ -303,8 +264,8 @@ extras["video"] = deps_list("av")
 extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
-extras["mistral-common"] = deps_list("mistral-common[opencv]")
-extras["chat_template"] = deps_list("jinja2")
+extras["mistral-common"] = deps_list("mistral-common[image]")
+extras["chat_template"] = deps_list("jinja2", "jmespath")
 extras["testing"] = (
     deps_list(
         "pytest",
@@ -376,7 +337,6 @@ extras["dev-torch"] = (
     + extras["ja"]
     + extras["sklearn"]
     + extras["modelcreation"]
-    + extras["onnxruntime"]
     + extras["num2words"]
 )
 
@@ -392,7 +352,6 @@ extras["torchhub"] = deps_list(
     "packaging",
     "protobuf",
     "regex",
-    "requests",
     "sentencepiece",
     "torch",
     "tokenizers",
@@ -402,6 +361,7 @@ extras["torchhub"] = deps_list(
 extras["benchmark"] = deps_list("optimum-benchmark")
 
 # OpenTelemetry dependencies for metrics collection in continuous batching
+# TODO: refactor this to split API and SDK; SDK and exporter should only be needed to run code that collects metrics whereas API is what people will need to instrument their code and handle exporter themselves
 extras["open-telemetry"] = deps_list("opentelemetry-api") + ["opentelemetry-exporter-otlp", "opentelemetry-sdk"]
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
@@ -412,15 +372,15 @@ install_requires = [
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
     deps["pyyaml"],  # used for the model cards metadata
     deps["regex"],  # for OpenAI GPT
-    deps["requests"],  # for downloading models over HTTPS
     deps["tokenizers"],
+    deps["typer-slim"],  # CLI utilities. In practice, already a dependency of huggingface_hub
     deps["safetensors"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]
 
 setup(
     name="transformers",
-    version="4.57.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="5.0.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",
@@ -435,22 +395,16 @@ setup(
     package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx", "py.typed"]},
     zip_safe=False,
     extras_require=extras,
-    entry_points={
-        "console_scripts": [
-            "transformers=transformers.commands.transformers_cli:main",
-        ]
-    },
-    python_requires=">=3.9.0",
+    entry_points={"console_scripts": ["transformers=transformers.cli.transformers:main"]},
+    python_requires=">=3.10.0",
     install_requires=list(install_requires),
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
         "Intended Audience :: Education",
         "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
@@ -463,7 +417,6 @@ setup(
 extras["tests_torch"] = deps_list()
 extras["tests_hub"] = deps_list()
 extras["tests_pipelines_torch"] = deps_list()
-extras["tests_onnx"] = deps_list()
 extras["tests_examples_torch"] = deps_list()
 extras["tests_custom_tokenizers"] = deps_list()
 extras["tests_exotic_models"] = deps_list()

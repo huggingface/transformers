@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,29 +13,27 @@
 # limitations under the License.
 """VitPose model configuration"""
 
-from typing import Optional
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto.configuration_auto import CONFIG_MAPPING
+from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class VitPoseConfig(PretrainedConfig):
+class VitPoseConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VitPoseForPoseEstimation`]. It is used to instantiate a
     VitPose model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the VitPose
     [usyd-community/vitpose-base-simple](https://huggingface.co/usyd-community/vitpose-base-simple) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `VitPoseBackboneConfig()`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `VitPoseBackboneConfig()`):
             The configuration of the backbone model. Currently, only `backbone_config` with `vitpose_backbone` as `model_type` is supported.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -74,21 +71,20 @@ class VitPoseConfig(PretrainedConfig):
     ```"""
 
     model_type = "vitpose"
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
-        backbone_config: Optional[PretrainedConfig] = None,
-        backbone: Optional[str] = None,
+        backbone_config: PreTrainedConfig | None = None,
+        backbone: str | None = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
-        backbone_kwargs: Optional[dict] = None,
+        backbone_kwargs: dict | None = None,
         initializer_range: float = 0.02,
         scale_factor: int = 4,
         use_simple_decoder: bool = True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if use_pretrained_backbone:
             logger.info(
                 "`use_pretrained_backbone` is `True`. For the pure inference purpose of VitPose weight do not set this value."
@@ -122,13 +118,7 @@ class VitPoseConfig(PretrainedConfig):
         self.scale_factor = scale_factor
         self.use_simple_decoder = use_simple_decoder
 
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["VitPoseConfig"]

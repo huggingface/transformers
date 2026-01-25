@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
 import math
 from collections import OrderedDict
 
@@ -26,7 +27,8 @@ from .utils.import_utils import is_torchdynamo_compiling
 logger = logging.get_logger(__name__)
 
 
-class PytorchGELUTanh(nn.Module):
+@use_kernel_forward_from_hub("GeluTanh")
+class GELUTanh(nn.Module):
     """
     A fast C implementation of the tanh approximation of the GeLU activation function. See
     https://huggingface.co/papers/1606.08415.
@@ -35,8 +37,22 @@ class PytorchGELUTanh(nn.Module):
     match due to rounding errors.
     """
 
+    def __init__(self, use_gelu_tanh_python: bool = False):
+        super().__init__()
+        if use_gelu_tanh_python:
+            self.act = self._gelu_tanh_python
+        else:
+            self.act = functools.partial(nn.functional.gelu, approximate="tanh")
+
+    def _gelu_tanh_python(self, input: Tensor) -> Tensor:
+        return input * 0.5 * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
+
     def forward(self, input: Tensor) -> Tensor:
-        return nn.functional.gelu(input, approximate="tanh")
+        return self.act(input)
+
+
+# Added for compatibility with autoawq which is archived now and imports PytorchGELUTanh from activations.py
+PytorchGELUTanh = GELUTanh
 
 
 @use_kernel_forward_from_hub("NewGELU")
@@ -50,6 +66,7 @@ class NewGELUActivation(nn.Module):
         return 0.5 * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
 
 
+@use_kernel_forward_from_hub("GeLU")
 class GELUActivation(nn.Module):
     """
     Original Implementation of the GELU activation function in Google BERT repo when initially created. For
@@ -70,6 +87,20 @@ class GELUActivation(nn.Module):
 
     def forward(self, input: Tensor) -> Tensor:
         return self.act(input)
+
+
+@use_kernel_forward_from_hub("SiLU")
+class SiLUActivation(nn.Module):
+    """
+    See Gaussian Error Linear Units (Hendrycks et al., https://arxiv.org/abs/1606.08415) where the SiLU (Sigmoid Linear
+    Unit) was originally introduced and coined, and see Sigmoid-Weighted Linear Units for Neural Network Function
+    Approximation in Reinforcement Learning (Elfwing et al., https://arxiv.org/abs/1702.03118) and Swish: a Self-Gated
+    Activation Function (Ramachandran et al., https://arxiv.org/abs/1710.05941v1) where the SiLU was experimented with
+    later.
+    """
+
+    def forward(self, input: Tensor) -> Tensor:
+        return nn.functional.silu(input)
 
 
 @use_kernel_forward_from_hub("FastGELU")
@@ -174,7 +205,7 @@ class LaplaceActivation(nn.Module):
 
 class ReLUSquaredActivation(nn.Module):
     """
-    Applies the relu^2 activation introduced in https://huggingface.co/papers/2109.08668v2
+    Applies the relu^2 activation introduced in https://huggingface.co/papers/2109.08668
     """
 
     def forward(self, input):
@@ -290,7 +321,8 @@ ACT2CLS = {
     "gelu_fast": FastGELUActivation,
     "gelu_new": NewGELUActivation,
     "gelu_python": (GELUActivation, {"use_gelu_python": True}),
-    "gelu_pytorch_tanh": PytorchGELUTanh,
+    "gelu_pytorch_tanh": GELUTanh,
+    "gelu_python_tanh": (GELUTanh, {"use_gelu_tanh_python": True}),
     "gelu_accurate": AccurateGELUActivation,
     "laplace": LaplaceActivation,
     "leaky_relu": nn.LeakyReLU,
@@ -301,7 +333,7 @@ ACT2CLS = {
     "relu2": ReLUSquaredActivation,
     "relu6": nn.ReLU6,
     "sigmoid": nn.Sigmoid,
-    "silu": nn.SiLU,
+    "silu": SiLUActivation,
     "swish": nn.SiLU,
     "tanh": nn.Tanh,
     "prelu": nn.PReLU,

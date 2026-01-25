@@ -22,27 +22,20 @@ import json
 import os
 import sys
 import typing
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, TypedDict, TypeVar, Union
+from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union
 
 import numpy as np
 import typing_extensions
+from huggingface_hub import create_repo, is_offline_mode
+from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
 from .audio_utils import AudioInput, load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, ImageInput, is_vision_available
-from .utils.chat_template_utils import render_jinja_template
-from .video_utils import VideoInput, VideoMetadata
-
-
-if is_vision_available():
-    from .image_utils import PILImageResampling
-
-
 from .tokenization_utils_base import (
     PaddingStrategy,
     PreTokenizedInput,
@@ -61,19 +54,32 @@ from .utils import (
     cached_file,
     copy_func,
     direct_transformers_import,
-    download_url,
-    is_offline_mode,
-    is_remote_url,
     is_torch_available,
     list_repo_templates,
     logging,
 )
-from .utils.deprecation import deprecate_kwarg
+from .utils.chat_template_utils import render_jinja_template
+from .utils.type_validators import (
+    device_validator,
+    image_size_validator,
+    padding_validator,
+    positive_any_number,
+    positive_int,
+    resampling_validator,
+    tensor_type_validator,
+    truncation_validator,
+    video_metadata_validator,
+)
+from .video_utils import VideoInput, VideoMetadataType
 
 
 if is_torch_available():
+    import torch
+
     from .modeling_utils import PreTrainedAudioTokenizerBase
 
+if is_vision_available():
+    from .image_utils import PILImageResampling
 
 logger = logging.get_logger(__name__)
 
@@ -84,12 +90,64 @@ SpecificProcessorType = TypeVar("SpecificProcessorType", bound="ProcessorMixin")
 transformers_module = direct_transformers_import(Path(__file__).parent)
 
 
-AUTO_TO_BASE_CLASS_MAPPING = {
-    "AutoTokenizer": "PreTrainedTokenizerBase",
-    "AutoFeatureExtractor": "FeatureExtractionMixin",
-    "AutoImageProcessor": "ImageProcessingMixin",
-    "AutoVideoProcessor": "BaseVideoProcessor",
+class _LazyAutoProcessorMapping(dict):
+    """
+    Lazy dictionary to avoid circular imports.
+    The mapping names are only imported when accessed.
+    """
+
+    _MAPPING_NAMES = {
+        "image_processor": ("transformers.models.auto.image_processing_auto", "AutoImageProcessor"),
+        "video_processor": ("transformers.models.auto.video_processing_auto", "AutoVideoProcessor"),
+        "feature_extractor": ("transformers.models.auto.feature_extraction_auto", "AutoFeatureExtractor"),
+        "audio_processor": ("transformers.models.auto.feature_extraction_auto", "AutoFeatureExtractor"),
+        "tokenizer": ("transformers.models.auto.tokenization_auto", "AutoTokenizer"),
+    }
+
+    def __getitem__(self, key):
+        if key not in self._MAPPING_NAMES:
+            raise KeyError(key)
+        module_name, attr_name = self._MAPPING_NAMES[key]
+        module = __import__(module_name, fromlist=[attr_name])
+        return getattr(module, attr_name)
+
+    def __contains__(self, key):
+        return key in self._MAPPING_NAMES
+
+    def keys(self):
+        return self._MAPPING_NAMES.keys()
+
+
+MODALITY_TO_AUTOPROCESSOR_MAPPING = _LazyAutoProcessorMapping()
+
+MODALITY_TO_BASE_CLASS_MAPPING = {
+    "audio_tokenizer": "DacModel",
+    "audio_processor": "FeatureExtractionMixin",
+    "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
+    "feature_extractor": "FeatureExtractionMixin",
+    "image_processor": "ImageProcessingMixin",
+    "video_processor": "BaseVideoProcessor",
 }
+
+
+def _get_modality_for_attribute(attribute_name: str) -> str:
+    """
+    Get the canonical modality type for a given attribute name.
+
+    For example:
+    - "image_processor" -> "image_processor"
+    - "encoder_image_processor" -> "image_processor"
+    - "text_tokenizer" -> "tokenizer"
+    - "my_feature_extractor" -> "feature_extractor"
+    """
+    for modality in MODALITY_TO_AUTOPROCESSOR_MAPPING.keys():
+        if modality in attribute_name:
+            return modality
+    raise ValueError(
+        f"Cannot determine modality for attribute '{attribute_name}'. "
+        f"Attribute name must contain one of: {list(MODALITY_TO_AUTOPROCESSOR_MAPPING.keys())}"
+    )
+
 
 if sys.version_info >= (3, 11):
     Unpack = typing.Unpack
@@ -135,27 +193,32 @@ class TextKwargs(TypedDict, total=False):
             The side on which padding will be applied.
         return_mm_token_type_ids (`bool`, *optional*):
             Whether to return multimodal token type ids indicating mm placeholder token positions.
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
+            If set, will return tensors of a particular framework. Acceptable values are:
+            - `'pt'`: Return PyTorch `torch.Tensor` objects.
+            - `'np'`: Return NumPy `np.ndarray` objects.
     """
 
-    text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
-    text_target: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]
-    text_pair_target: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
-    add_special_tokens: Optional[bool]
-    padding: Union[bool, str, PaddingStrategy]
-    truncation: Union[bool, str, TruncationStrategy]
-    max_length: Optional[int]
-    stride: Optional[int]
-    is_split_into_words: Optional[bool]
-    pad_to_multiple_of: Optional[int]
-    return_token_type_ids: Optional[bool]
-    return_attention_mask: Optional[bool]
-    return_overflowing_tokens: Optional[bool]
-    return_special_tokens_mask: Optional[bool]
-    return_offsets_mapping: Optional[bool]
-    return_length: Optional[bool]
-    verbose: Optional[bool]
-    padding_side: Optional[str]
-    return_mm_token_type_ids: Optional[bool]
+    text_pair: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None
+    text_target: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None
+    text_pair_target: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None
+    add_special_tokens: bool | None
+    padding: Annotated[bool | str | PaddingStrategy | None, padding_validator()]
+    truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator()]
+    max_length: Annotated[int | None, positive_int()]
+    stride: Annotated[int | None, positive_int()]
+    is_split_into_words: bool | None
+    pad_to_multiple_of: Annotated[int | None, positive_int()]
+    return_token_type_ids: bool | None
+    return_attention_mask: bool | None
+    return_overflowing_tokens: bool | None
+    return_special_tokens_mask: bool | None
+    return_offsets_mapping: bool | None
+    return_length: bool | None
+    verbose: bool | None
+    padding_side: Literal["left", "right"] | None
+    return_mm_token_type_ids: bool | None
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
 
 
 class ImagesKwargs(TypedDict, total=False):
@@ -164,12 +227,16 @@ class ImagesKwargs(TypedDict, total=False):
     class methods and docstrings.
 
     Attributes:
+        do_convert_rgb (`bool`):
+            Whether to convert the video to RGB format.
         do_resize (`bool`, *optional*):
             Whether to resize the image.
         size (`dict[str, int]`, *optional*):
             Resize the shorter side of the input to `size["shortest_edge"]`.
         crop_size (`dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
+        do_convert_rgb (`bool`):
+            Whether to convert the video to RGB format.
         resample (`PILImageResampling`, *optional*):
             Resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*):
@@ -178,12 +245,12 @@ class ImagesKwargs(TypedDict, total=False):
             Scale factor to use if rescaling the image.
         do_normalize (`bool`, *optional*):
             Whether to normalize the image.
-        image_mean (`float` or `list[float]`, *optional*):
+        image_mean (`float` or `list[float] or tuple[float, float, float]`, *optional*):
             Mean to use if normalizing the image.
-        image_std (`float` or `list[float]`, *optional*):
+        image_std (`float` or `list[float] or tuple[float, float, float]`, *optional*):
             Standard deviation to use if normalizing the image.
         do_pad (`bool`, *optional*):
-            Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
+            Whether to pad the images in the batch.
         pad_size (`dict[str, int]`, *optional*):
             The size `{"height": int, "width" int}` to pad the images to.
         do_center_crop (`bool`, *optional*):
@@ -192,25 +259,38 @@ class ImagesKwargs(TypedDict, total=False):
             The channel dimension format for the output image.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input image.
-        device (`str`, *optional*):
+        device (`Union[str, torch.Tensor]`, *optional*):
             The device to use for processing (e.g. "cpu", "cuda"), only relevant for fast image processing.
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
+            If set, will return tensors of a particular framework. Acceptable values are:
+            - `'pt'`: Return PyTorch `torch.Tensor` objects.
+            - `'np'`: Return NumPy `np.ndarray` objects.
+        disable_grouping (`bool`, *optional*):
+            Whether to group images by shapes when processing or not, only relevant for fast image processing.
+        image_seq_length (`int`, *optional*):
+            The number of image tokens to be used for each image in the input.
+            Added for backward compatibility but this should be set as a processor attribute in future models.
     """
 
-    do_resize: Optional[bool]
-    size: Optional[dict[str, int]]
-    crop_size: Optional[dict[str, int]]
-    resample: Optional[Union["PILImageResampling", int]]
-    do_rescale: Optional[bool]
-    rescale_factor: Optional[float]
-    do_normalize: Optional[bool]
-    image_mean: Optional[Union[float, list[float]]]
-    image_std: Optional[Union[float, list[float]]]
-    do_pad: Optional[bool]
-    pad_size: Optional[dict[str, int]]
-    do_center_crop: Optional[bool]
-    data_format: Optional[ChannelDimension]
-    input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Optional[str]
+    do_convert_rgb: bool | None
+    do_resize: bool | None
+    size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    crop_size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    resample: Annotated[Union["PILImageResampling", int] | None, resampling_validator()]
+    do_rescale: bool | None
+    rescale_factor: float | None
+    do_normalize: bool | None
+    image_mean: float | list[float] | tuple[float, ...] | None
+    image_std: float | list[float] | tuple[float, ...] | None
+    do_pad: bool | None
+    pad_size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    do_center_crop: bool | None
+    data_format: str | ChannelDimension | None
+    input_data_format: str | ChannelDimension | None
+    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
+    disable_grouping: bool | None
+    image_seq_length: int | None
 
 
 class VideosKwargs(TypedDict, total=False):
@@ -234,12 +314,14 @@ class VideosKwargs(TypedDict, total=False):
             Scale factor to use if rescaling the video.
         do_normalize (`bool`, *optional*):
             Whether to normalize the video.
-        image_mean (`float` or `list[float]`, *optional*):
+        image_mean (`float` or `list[float] or tuple[float, float, float]`, *optional*):
             Mean to use if normalizing the video.
-        image_std (`float` or `list[float]`, *optional*):
+        image_std (`float` or `list[float] or tuple[float, float, float]`, *optional*):
             Standard deviation to use if normalizing the video.
         do_center_crop (`bool`, *optional*):
             Whether to center crop the video.
+        do_pad (`bool`, *optional*):
+            Whether to pad the images in the batch.
         do_sample_frames (`bool`, *optional*):
             Whether to sample frames from the video before processing or to process the whole video.
         video_metadata (`Union[VideoMetadata, dict]`, *optional*):
@@ -254,30 +336,38 @@ class VideosKwargs(TypedDict, total=False):
             The channel dimension format for the output video.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input video.
-        return_metadata (`ChannelDimension` or `str`, *optional*):
+        device (`Union[str, torch.Tensor]`, *optional*):
+            The device to use for processing (e.g. "cpu", "cuda"), only relevant for fast image processing.
+        return_metadata (`bool`, *optional*):
             Whether to return video metadata or not.
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
+            If set, will return tensors of a particular framework. Acceptable values are:
+            - `'pt'`: Return PyTorch `torch.Tensor` objects.
+            - `'np'`: Return NumPy `np.ndarray` objects.
     """
 
-    do_convert_rgb: Optional[bool]
-    do_resize: Optional[bool]
-    size: Optional[dict[str, int]]
-    default_to_square: Optional[bool]
-    resample: Optional["PILImageResampling"]
-    do_rescale: Optional[bool]
-    rescale_factor: Optional[float]
-    do_normalize: Optional[bool]
-    image_mean: Optional[Union[float, list[float]]]
-    image_std: Optional[Union[float, list[float]]]
-    do_center_crop: Optional[bool]
-    crop_size: Optional[dict[str, int]]
-    data_format: Optional[ChannelDimension]
-    input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Optional[str]
-    do_sample_frames: Optional[bool]
-    video_metadata: Optional[Union[VideoMetadata, dict]]
-    fps: Optional[Union[int, float]]
-    num_frames: Optional[int]
-    return_metadata: Optional[bool]
+    do_convert_rgb: bool | None
+    do_resize: bool | None
+    size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    default_to_square: bool | None
+    resample: Annotated[Union["PILImageResampling", int] | None, resampling_validator()]
+    do_rescale: bool | None
+    rescale_factor: float | None
+    do_normalize: bool | None
+    image_mean: float | list[float] | tuple[float, ...] | None
+    image_std: float | list[float] | tuple[float, ...] | None
+    do_center_crop: bool | None
+    do_pad: bool | None
+    crop_size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    data_format: str | ChannelDimension | None
+    input_data_format: str | ChannelDimension | None
+    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
+    do_sample_frames: bool | None
+    video_metadata: Annotated[VideoMetadataType | None, video_metadata_validator()]
+    fps: Annotated[int | float | None, positive_any_number()]
+    num_frames: Annotated[int | None, positive_int()]
+    return_metadata: bool | None
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
 
 
 class AudioKwargs(TypedDict, total=False):
@@ -308,19 +398,20 @@ class AudioKwargs(TypedDict, total=False):
             If set, will pad the sequence to a multiple of the provided value.
         return_attention_mask (`bool`, *optional*):
             Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
+            If set, will return tensors of a particular framework. Acceptable values are:
+            - `'pt'`: Return PyTorch `torch.Tensor` objects.
+            - `'np'`: Return NumPy `np.ndarray` objects.
     """
 
-    sampling_rate: Optional[int]
-    raw_speech: Optional[Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]]]
-    padding: Optional[Union[bool, str, PaddingStrategy]]
-    max_length: Optional[int]
-    truncation: Optional[bool]
-    pad_to_multiple_of: Optional[int]
-    return_attention_mask: Optional[bool]
-
-
-class CommonKwargs(TypedDict, total=False):
-    return_tensors: Optional[Union[str, TensorType]]
+    sampling_rate: Annotated[int | None, positive_int()]
+    raw_speech: Union["np.ndarray", list[float], list["np.ndarray"], list[list[float]]] | None
+    padding: Annotated[bool | str | PaddingStrategy | None, padding_validator()]
+    max_length: Annotated[int | None, positive_int()]
+    truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator()]
+    pad_to_multiple_of: Annotated[int | None, positive_int()]
+    return_attention_mask: bool | None
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
 
 
 class ProcessingKwargs(TypedDict, total=False):
@@ -364,9 +455,6 @@ class ProcessingKwargs(TypedDict, total=False):
 
     _defaults = {}
 
-    common_kwargs: CommonKwargs = {
-        **CommonKwargs.__annotations__,
-    }
     text_kwargs: TextKwargs = {
         **TextKwargs.__annotations__,
     }
@@ -413,11 +501,11 @@ class TokenizerChatTemplateKwargs(TypedDict, total=False):
         This functionality is only available for chat templates that support it via the `{% generation %}` keyword.
     """
 
-    tools: Optional[list[dict]] = None
-    documents: Optional[list[dict[str, str]]] = None
-    add_generation_prompt: Optional[bool] = False
-    continue_final_message: Optional[bool] = False
-    return_assistant_tokens_mask: Optional[bool] = False
+    tools: list[dict] | None = None
+    documents: list[dict[str, str]] | None = None
+    add_generation_prompt: bool | None = False
+    continue_final_message: bool | None = False
+    return_assistant_tokens_mask: bool | None = False
 
 
 class ChatTemplateLoadKwargs(TypedDict, total=False):
@@ -431,8 +519,8 @@ class ChatTemplateLoadKwargs(TypedDict, total=False):
             processor. This flag has no effect if the model doesn't support audio modality.
     """
 
-    sampling_rate: Optional[int] = 16_000
-    load_audio_from_video: Optional[bool] = False
+    sampling_rate: int | None = 16_000
+    load_audio_from_video: bool | None = False
 
 
 class ProcessorChatTemplateKwargs(ChatTemplateLoadKwargs, TokenizerChatTemplateKwargs, total=False):
@@ -445,8 +533,8 @@ class ProcessorChatTemplateKwargs(ChatTemplateLoadKwargs, TokenizerChatTemplateK
         Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
     """
 
-    tokenize: Optional[bool] = False
-    return_dict: Optional[bool] = False
+    tokenize: bool | None = False
+    return_dict: bool | None = False
 
 
 class AllKwargsForChatTemplate(TypedDict, total=False):
@@ -467,10 +555,10 @@ class MultiModalData:
     and we might change its API in the future.
     """
 
-    num_image_tokens: Optional[list[int]] = None
-    num_video_tokens: Optional[list[int]] = None
-    num_audio_tokens: Optional[list[int]] = None
-    num_image_patches: Optional[list[int]] = None
+    num_image_tokens: list[int] | None = None
+    num_video_tokens: list[int] | None = None
+    num_audio_tokens: list[int] | None = None
+    num_image_patches: list[int] | None = None
 
     def __contains__(self, key):
         return hasattr(self, key) and getattr(self, key) is not None
@@ -486,46 +574,38 @@ class ProcessorMixin(PushToHubMixin):
     This is a mixin used to provide saving/loading functionality for all processor classes.
     """
 
-    attributes = ["feature_extractor", "tokenizer"]
-    optional_attributes = ["chat_template", "audio_tokenizer"]
-    optional_call_args: list[str] = []
     # Names need to be attr_class for attr in attributes
-    feature_extractor_class = None
-    tokenizer_class = None
     _auto_class = None
     valid_processor_kwargs = ProcessingKwargs
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
-        # First, extract optional attributes from kwargs if present
-        # Optional attributes can never be positional arguments
-        for optional_attribute in self.optional_attributes:
-            optional_attribute_value = kwargs.pop(optional_attribute, None)
-            setattr(self, optional_attribute, optional_attribute_value)
+        # First, extract chat template from kwargs. It can never be a positional arg
+        setattr(self, "chat_template", kwargs.pop("chat_template", None))
 
-            # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
-            if optional_attribute == "audio_tokenizer" and optional_attribute_value is not None:
-                proper_class = self.check_argument_for_proper_class(optional_attribute, optional_attribute_value)
-
-                if not (is_torch_available() and isinstance(optional_attribute_value, PreTrainedAudioTokenizerBase)):
-                    raise ValueError(
-                        f"Tried to use `{proper_class}` for audio tokenization. However, this class is not"
-                        " registered for audio tokenization."
-                    )
+        # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
+        if (audio_tokenizer := kwargs.pop("audio_tokenizer", None)) is not None:
+            proper_class = self.check_argument_for_proper_class("audio_tokenizer", audio_tokenizer)
+            if not (is_torch_available() and isinstance(audio_tokenizer, PreTrainedAudioTokenizerBase)):
+                raise ValueError(
+                    f"Tried to use `{proper_class}` for audio tokenization. However, this class is not"
+                    " registered for audio tokenization."
+                )
+            setattr(self, "audio_tokenizer", audio_tokenizer)
 
         # Sanitize args and kwargs
         for key in kwargs:
-            if key not in self.attributes:
+            if key not in self.get_attributes():
                 raise TypeError(f"Unexpected keyword argument {key}.")
-        for arg, attribute_name in zip(args, self.attributes):
+        for arg, attribute_name in zip(args, self.get_attributes()):
             if attribute_name in kwargs:
                 raise TypeError(f"Got multiple values for argument {attribute_name}.")
             else:
                 kwargs[attribute_name] = arg
 
-        if len(kwargs) != len(self.attributes):
+        if len(kwargs) != len(self.get_attributes()):
             raise ValueError(
-                f"This processor requires {len(self.attributes)} arguments: {', '.join(self.attributes)}. Got "
+                f"This processor requires {len(self.get_attributes())} arguments: {', '.join(self.get_attributes())}. Got "
                 f"{len(args)} arguments instead."
             )
 
@@ -536,10 +616,10 @@ class ProcessorMixin(PushToHubMixin):
 
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        videos: Optional[VideoInput] = None,
-        audio: Optional[AudioInput] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        videos: VideoInput | None = None,
+        audio: AudioInput | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
         """
@@ -569,6 +649,9 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] object with processed inputs in a dict format.
         """
+        if "audios" in kwargs and audio is None:
+            raise ValueError("You passed keyword argument `audios` which is deprecated. Please use `audio` instead.")
+
         if images is None and text is None and videos is None and audio is None:
             raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
 
@@ -585,7 +668,7 @@ class ProcessorMixin(PushToHubMixin):
             "feature_extractor": (audio, "audio_kwargs"),
         }
         outputs = {}
-        for attribute_name in self.attributes:
+        for attribute_name in self.get_attributes():
             attribute = getattr(self, attribute_name, None)
             input_data, input_kwargs = attribute_to_kwargs[attribute_name]
             if input_data is not None and attribute is not None:
@@ -600,9 +683,11 @@ class ProcessorMixin(PushToHubMixin):
         mismatch between expected and actual class, an error is raise. Otherwise, the proper retrieved class
         is returned.
         """
-        class_name = getattr(self, f"{argument_name}_class")
-        # Nothing is ever going to be an instance of "AutoXxx", in that case we check the base class.
-        class_name = AUTO_TO_BASE_CLASS_MAPPING.get(class_name, class_name)
+        # If the exact attribute name is not in the mapping, use its canonical modality
+        # (e.g., "encoder_tokenizer" -> "tokenizer")
+        if argument_name not in MODALITY_TO_BASE_CLASS_MAPPING:
+            argument_name = _get_modality_for_attribute(argument_name)
+        class_name = MODALITY_TO_BASE_CLASS_MAPPING.get(argument_name)
         if isinstance(class_name, tuple):
             proper_class = tuple(self.get_possibly_dynamic_module(n) for n in class_name if n is not None)
         else:
@@ -615,7 +700,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return proper_class
 
-    def to_dict(self, legacy_serialization=True) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
@@ -627,20 +712,19 @@ class ProcessorMixin(PushToHubMixin):
         # Get the kwargs in `__init__`.
         sig = inspect.signature(self.__init__)
         # Only save the attributes that are presented in the kwargs of `__init__`.
-        attrs_to_save = list(sig.parameters)
+        # or in the attributes
+        attrs_to_save = list(sig.parameters) + self.__class__.get_attributes()
         # extra attributes to be kept
         attrs_to_save += ["auto_map"]
 
-        if legacy_serialization:
-            # Don't save attributes like `tokenizer`, `image processor` etc. in processor config if `legacy=True`
-            attrs_to_save = [x for x in attrs_to_save if x not in self.__class__.attributes]
+        # Remove tokenizers from output - they have their own vocab files and are saved separately.
+        # All other sub-processors (image_processor, feature_extractor, etc.) are kept in processor_config.json.
+        for attribute in self.__class__.get_attributes():
+            if attribute in output:
+                modality = _get_modality_for_attribute(attribute)
+                if modality == "tokenizer":
+                    del output[attribute]
 
-        if "tokenizer" in output:
-            del output["tokenizer"]
-        if "qformer_tokenizer" in output:
-            del output["qformer_tokenizer"]
-        if "protein_tokenizer" in output:
-            del output["protein_tokenizer"]
         if "chat_template" in output:
             del output["chat_template"]
 
@@ -656,6 +740,14 @@ class ProcessorMixin(PushToHubMixin):
                     dictionary[key] = cast_array_to_list(value)
             return dictionary
 
+        # Special case, add `audio_tokenizer` dict which points to model weights and path
+        if "audio_tokenizer" in output:
+            audio_tokenizer_dict = {
+                "audio_tokenizer_class": self.audio_tokenizer.__class__.__name__,
+                "audio_tokenizer_name_or_path": self.audio_tokenizer.name_or_path,
+            }
+            output["audio_tokenizer"] = audio_tokenizer_dict
+
         # Serialize attributes as a dict
         output = {
             k: v.to_dict() if isinstance(v, PushToHubMixin) else v
@@ -663,38 +755,25 @@ class ProcessorMixin(PushToHubMixin):
             if (
                 k in attrs_to_save  # keep all attributes that have to be serialized
                 and v.__class__.__name__ != "BeamSearchDecoderCTC"  # remove attributes with that are objects
-                and (
-                    (legacy_serialization and not isinstance(v, PushToHubMixin)) or not legacy_serialization
-                )  # remove `PushToHubMixin` objects
             )
         }
         output = cast_array_to_list(output)
-
-        # Special case, add `audio_tokenizer` dict which points to model weights and path
-        if not legacy_serialization and "audio_tokenizer" in output:
-            audio_tokenizer_dict = {
-                "audio_tokenizer_class": self.audio_tokenizer.__class__.__name__,
-                "audio_tokenizer_name_or_path": self.audio_tokenizer.name_or_path,
-            }
-            # Update or overwrite, what do audio tokenizers expect when loading?
-            output["audio_tokenizer"] = audio_tokenizer_dict
-
         output["processor_class"] = self.__class__.__name__
 
         return output
 
-    def to_json_string(self, legacy_serialization=True) -> str:
+    def to_json_string(self) -> str:
         """
         Serializes this instance to a JSON string.
 
         Returns:
             `str`: String containing all the attributes that make up this feature_extractor instance in JSON format.
         """
-        dictionary = self.to_dict(legacy_serialization=legacy_serialization)
+        dictionary = self.to_dict()
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike], legacy_serialization=True):
+    def to_json_file(self, json_file_path: str | os.PathLike):
         """
         Save this instance to a JSON file.
 
@@ -703,14 +782,14 @@ class ProcessorMixin(PushToHubMixin):
                 Path to the JSON file in which this processor instance's parameters will be saved.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
-            writer.write(self.to_json_string(legacy_serialization=legacy_serialization))
+            writer.write(self.to_json_string())
 
     def __repr__(self):
-        attributes_repr = [f"- {name}: {repr(getattr(self, name))}" for name in self.attributes]
+        attributes_repr = [f"- {name}: {repr(getattr(self, name))}" for name in self.get_attributes()]
         attributes_repr = "\n".join(attributes_repr)
         return f"{self.__class__.__name__}:\n{attributes_repr}\n\n{self.to_json_string()}"
 
-    def save_pretrained(self, save_directory, push_to_hub: bool = False, legacy_serialization: bool = True, **kwargs):
+    def save_pretrained(self, save_directory, push_to_hub: bool = False, **kwargs):
         """
         Saves the attributes of this processor (feature extractor, tokenizer...) in the specified directory so that it
         can be reloaded using the [`~ProcessorMixin.from_pretrained`] method.
@@ -731,62 +810,43 @@ class ProcessorMixin(PushToHubMixin):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
-            legacy_serialization (`bool`, *optional*, defaults to `True`):
-                Whether or not to save processor attributes in separate config files (legacy) or in processor's config
-                file as a nested dict. Saving all attributes in a single dict will become the default in future versions.
-                Set to `legacy_serialization=True` until then.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        use_auth_token = kwargs.pop("use_auth_token", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         os.makedirs(save_directory, exist_ok=True)
 
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
         if self._auto_class is not None:
-            attrs = [getattr(self, attribute_name) for attribute_name in self.attributes]
+            attrs = [getattr(self, attribute_name) for attribute_name in self.get_attributes()]
             configs = [(a.init_kwargs if isinstance(a, PreTrainedTokenizerBase) else a) for a in attrs]
             configs.append(self)
             custom_object_save(self, save_directory, config=configs)
 
-        save_jinja_files = kwargs.get("save_jinja_files", True)
+        for attribute_name in self.get_attributes():
+            attribute = getattr(self, attribute_name)
 
-        for attribute_name in self.attributes:
-            # Save the tokenizer in its own vocab file. The other attributes are saved as part of `processor_config.json`
-            if attribute_name == "tokenizer":
-                attribute = getattr(self, attribute_name)
-                if hasattr(attribute, "_set_processor_class"):
-                    attribute._set_processor_class(self.__class__.__name__)
-
-                # Propagate save_jinja_files to tokenizer to ensure we don't get conflicts
-                attribute.save_pretrained(save_directory, save_jinja_files=save_jinja_files)
-            elif legacy_serialization:
-                attribute = getattr(self, attribute_name)
-                # Include the processor class in attribute config so this processor can then be reloaded with `AutoProcessor` API.
-                if hasattr(attribute, "_set_processor_class"):
-                    attribute._set_processor_class(self.__class__.__name__)
-                attribute.save_pretrained(save_directory)
+            modality = _get_modality_for_attribute(attribute_name)
+            is_primary = attribute_name == modality
+            if modality == "tokenizer":
+                attribute._set_processor_class(self.__class__.__name__)
+                # Save the tokenizer in its own vocab file. The other attributes are saved as part of `processor_config.json`
+                if is_primary:
+                    attribute.save_pretrained(save_directory)
+                else:
+                    # if a model has multiple tokenizers, save the additional tokenizers in their own folders.
+                    attribute.save_pretrained(os.path.join(save_directory, attribute_name))
+            elif attribute._auto_class is not None:
+                custom_object_save(attribute, save_directory, config=attribute)
 
         if self._auto_class is not None:
             # We added an attribute to the init_kwargs of the tokenizers, which needs to be cleaned up.
-            for attribute_name in self.attributes:
+            for attribute_name in self.get_attributes():
                 attribute = getattr(self, attribute_name)
                 if isinstance(attribute, PreTrainedTokenizerBase):
                     del attribute.init_kwargs["auto_map"]
@@ -795,84 +855,34 @@ class ProcessorMixin(PushToHubMixin):
         # plus we save chat_template in its own file
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
         output_chat_template_file_jinja = os.path.join(save_directory, CHAT_TEMPLATE_FILE)
-        output_chat_template_file_legacy = os.path.join(
-            save_directory, LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE
-        )  # Legacy filename
         chat_template_dir = os.path.join(save_directory, CHAT_TEMPLATE_DIR)
 
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
-        if self.chat_template is not None:
-            save_jinja_files = kwargs.get("save_jinja_files", True)
-            is_single_template = isinstance(self.chat_template, str)
-            if save_jinja_files and is_single_template:
-                # New format for single templates is to save them as chat_template.jinja
-                with open(output_chat_template_file_jinja, "w", encoding="utf-8") as f:
-                    f.write(self.chat_template)
-                logger.info(f"chat template saved in {output_chat_template_file_jinja}")
-            elif save_jinja_files and not is_single_template:
-                # New format for multiple templates is to save the default as chat_template.jinja
-                # and the other templates in the chat_templates/ directory
-                for template_name, template in self.chat_template.items():
-                    if template_name == "default":
-                        with open(output_chat_template_file_jinja, "w", encoding="utf-8") as f:
-                            f.write(self.chat_template["default"])
-                        logger.info(f"chat template saved in {output_chat_template_file_jinja}")
-                    else:
-                        os.makedirs(chat_template_dir, exist_ok=True)
-                        template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
-                        with open(template_filepath, "w", encoding="utf-8") as f:
-                            f.write(template)
-                        logger.info(f"chat template saved in {template_filepath}")
-            elif is_single_template:
-                # Legacy format for single templates: Put them in chat_template.json
-                chat_template_json_string = (
-                    json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
-                )
-                with open(output_chat_template_file_legacy, "w", encoding="utf-8") as writer:
-                    writer.write(chat_template_json_string)
-                logger.info(f"chat template saved in {output_chat_template_file_legacy}")
-            elif self.chat_template is not None:
-                # At this point we have multiple templates in the legacy format, which is not supported
-                # chat template dicts are saved to chat_template.json as lists of dicts with fixed key names.
-                raise ValueError(
-                    "Multiple chat templates are not supported in the legacy format. Please save them as "
-                    "separate files using the `save_jinja_files` argument."
-                )
-
-        if legacy_serialization:
-            output_audio_tokenizer_file = os.path.join(save_directory, AUDIO_TOKENIZER_NAME)
-            processor_dict = self.to_dict()
-
-            # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
-            # `auto_map` is not specified.
-            if set(processor_dict.keys()) != {"processor_class"}:
-                self.to_json_file(output_processor_file)
-                logger.info(f"processor saved in {output_processor_file}")
-
-            if set(processor_dict.keys()) == {"processor_class"}:
-                return_files = []
-            else:
-                return_files = [output_processor_file]
-
-            if self.audio_tokenizer is not None:
-                audio_tokenizer_class = self.audio_tokenizer.__class__.__name__
-                audio_tokenizer_name_or_path = self.audio_tokenizer.name_or_path
-                audio_tokenizer_dict = {
-                    "audio_tokenizer_class": audio_tokenizer_class,
-                    "audio_tokenizer_name_or_path": audio_tokenizer_name_or_path,
-                }
-                audio_tokenizer_json = json.dumps(audio_tokenizer_dict, indent=2, sort_keys=True) + "\n"
-                with open(output_audio_tokenizer_file, "w", encoding="utf-8") as writer:
-                    writer.write(audio_tokenizer_json)
+        if isinstance(self.chat_template, str):
+            # New format for single templates is to save them as chat_template.jinja
+            with open(output_chat_template_file_jinja, "w", encoding="utf-8") as f:
+                f.write(self.chat_template)
+            logger.info(f"chat template saved in {output_chat_template_file_jinja}")
+        elif isinstance(self.chat_template, dict):
+            # New format for multiple templates is to save the default as chat_template.jinja
+            # and the other templates in the chat_templates/ directory
+            for template_name, template in self.chat_template.items():
+                if template_name == "default":
+                    with open(output_chat_template_file_jinja, "w", encoding="utf-8") as f:
+                        f.write(self.chat_template["default"])
+                    logger.info(f"chat template saved in {output_chat_template_file_jinja}")
+                else:
+                    os.makedirs(chat_template_dir, exist_ok=True)
+                    template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
+                    with open(template_filepath, "w", encoding="utf-8") as f:
+                        f.write(template)
+                    logger.info(f"chat template saved in {template_filepath}")
 
         # Create a unified `preprocessor_config.json` and save all attributes as a composite config, except for tokenizers
-        # NOTE: this will become the default way to save all processor attrbiutes in future versions. Toggled off for now to give
-        # us time for smoother transition
-        else:
-            self.to_json_file(output_processor_file, legacy_serialization=False)
-            logger.info(f"processor saved in {output_processor_file}")
-            return_files = [output_processor_file]
+        self.to_json_file(output_processor_file)
+        logger.info(f"processor saved in {output_processor_file}")
+        return_files = [output_processor_file]
 
         if push_to_hub:
             self._upload_modified_files(
@@ -887,7 +897,7 @@ class ProcessorMixin(PushToHubMixin):
 
     @classmethod
     def get_processor_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
@@ -908,7 +918,6 @@ class ProcessorMixin(PushToHubMixin):
 
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         token = kwargs.pop("token", None)
         local_files_only = kwargs.pop("local_files_only", False)
@@ -940,13 +949,6 @@ class ProcessorMixin(PushToHubMixin):
             resolved_raw_chat_template_file = None
             resolved_audio_tokenizer_file = None
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            processor_file = pretrained_model_name_or_path
-            resolved_processor_file = download_url(pretrained_model_name_or_path)
-            # can't load chat-template and audio tokenizer when given a file url as pretrained_model_name_or_path
-            resolved_chat_template_file = None
-            resolved_raw_chat_template_file = None
-            resolved_audio_tokenizer_file = None
         else:
             if is_local:
                 template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
@@ -963,6 +965,7 @@ class ProcessorMixin(PushToHubMixin):
                         cache_dir=cache_dir,
                         token=token,
                     ):
+                        template = template.removesuffix(".jinja")
                         additional_chat_template_files[template] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
                 except EntryNotFoundError:
                     pass  # No template dir means no template files
@@ -976,7 +979,6 @@ class ProcessorMixin(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -993,7 +995,6 @@ class ProcessorMixin(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -1008,7 +1009,6 @@ class ProcessorMixin(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -1024,7 +1024,6 @@ class ProcessorMixin(PushToHubMixin):
                         cache_dir=cache_dir,
                         force_download=force_download,
                         proxies=proxies,
-                        resume_download=resume_download,
                         local_files_only=local_files_only,
                         token=token,
                         user_agent=user_agent,
@@ -1041,7 +1040,6 @@ class ProcessorMixin(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -1086,9 +1084,6 @@ class ProcessorMixin(PushToHubMixin):
         if isinstance(chat_templates, dict) and "default" in chat_templates and len(chat_templates) == 1:
             chat_templates = chat_templates["default"]  # Flatten when we just have a single template/file
 
-        if chat_templates:
-            kwargs["chat_template"] = chat_templates
-
         # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
         # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
         # (`cached_file` called using `_raise_exceptions_for_missing_entries=False` to avoid exception)
@@ -1113,14 +1108,13 @@ class ProcessorMixin(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {processor_file} from cache at {resolved_processor_file}")
 
-        if "chat_template" in processor_dict and processor_dict["chat_template"] is not None:
+        if processor_dict.get("chat_template") is not None:
             logger.warning_once(
                 "Chat templates should be in a 'chat_template.jinja' file but found key='chat_template' "
                 "in the processor's config. Make sure to move your template to its own file."
             )
-
-        if "chat_template" in kwargs:
-            processor_dict["chat_template"] = kwargs.pop("chat_template")
+        elif chat_templates:
+            processor_dict["chat_template"] = chat_templates
 
         # Audio tokenizer needs to load the model checkpoint first, because the saved
         # json file contains only references to the model path and repo id
@@ -1137,10 +1131,6 @@ class ProcessorMixin(PushToHubMixin):
             processor_dict["audio_tokenizer"] = audio_tokenizer_class.from_pretrained(
                 audio_tokenizer_path, **audio_tokenizer_kwargs
             )
-
-        # Pop attributes if saved in a single processor dict, they are loaded in `_get_arguments_from_pretrained`
-        for attribute in cls.attributes:
-            processor_dict.pop(attribute, None)
 
         return processor_dict, kwargs
 
@@ -1165,12 +1155,9 @@ class ProcessorMixin(PushToHubMixin):
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
         # We have to pop up some unused (but specific) kwargs and then validate that it doesn't contain unused kwargs
-        # If we don't pop, some specific kwargs will raise a warning
-        if "processor_class" in processor_dict:
-            del processor_dict["processor_class"]
-
-        if "auto_map" in processor_dict:
-            del processor_dict["auto_map"]
+        # If we don't pop, some specific kwargs will raise a warning or error
+        for unused_kwarg in cls.get_attributes() + ["auto_map", "processor_class"]:
+            processor_dict.pop(unused_kwarg, None)
 
         # override processor_dict with given kwargs
         processor_dict.update(kwargs)
@@ -1203,7 +1190,7 @@ class ProcessorMixin(PushToHubMixin):
     def _merge_kwargs(
         self,
         ModelProcessorKwargs: ProcessingKwargs,
-        tokenizer_init_kwargs: Optional[dict] = None,
+        tokenizer_init_kwargs: dict | None = None,
         **kwargs,
     ) -> dict[str, dict]:
         """
@@ -1245,13 +1232,15 @@ class ProcessorMixin(PushToHubMixin):
                 Dictionary of per-modality kwargs to be passed to each modality-specific processor.
 
         """
+        # holding a copy to avoid mutating user-provided arguments
+        kwargs = kwargs.copy()
+
         # Initialize dictionaries
         output_kwargs = {
             "text_kwargs": {},
             "images_kwargs": {},
             "audio_kwargs": {},
             "videos_kwargs": {},
-            "common_kwargs": {},
         }
 
         default_kwargs = {
@@ -1259,7 +1248,13 @@ class ProcessorMixin(PushToHubMixin):
             "images_kwargs": {},
             "audio_kwargs": {},
             "videos_kwargs": {},
-            "common_kwargs": {},
+        }
+
+        map_preprocessor_kwargs = {
+            "text_kwargs": "tokenizer",
+            "images_kwargs": "image_processor",
+            "audio_kwargs": "feature_extractor",
+            "videos_kwargs": "video_processor",
         }
 
         possible_modality_keywords = {"text", "audio", "videos", "images"}
@@ -1268,8 +1263,22 @@ class ProcessorMixin(PushToHubMixin):
         # get defaults from set model processor kwargs if they exist
         for modality in default_kwargs:
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
+            # Some preprocessors define a set of accepted "valid_kwargs" (currently only vision).
+            # In those cases, we don’t declare a `ModalityKwargs` attribute in the TypedDict.
+            # Instead, we dynamically obtain the kwargs from the preprocessor and merge them
+            # with the general kwargs set. This ensures consistency between preprocessor and
+            # processor classes, and helps prevent accidental mismatches.
+            modality_valid_kwargs = set(ModelProcessorKwargs.__annotations__[modality].__annotations__)
+            if modality in map_preprocessor_kwargs:
+                preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
+                preprocessor_valid_kwargs = (
+                    getattr(preprocessor, "valid_kwargs", None) if preprocessor is not None else None
+                )
+                modality_valid_kwargs.update(
+                    set(preprocessor_valid_kwargs.__annotations__ if preprocessor_valid_kwargs is not None else [])
+                )
             # update defaults with arguments from tokenizer init
-            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__:
+            for modality_key in modality_valid_kwargs:
                 # init with tokenizer init kwargs if necessary
                 if tokenizer_init_kwargs is not None and modality_key in tokenizer_init_kwargs:
                     value = (
@@ -1282,10 +1291,26 @@ class ProcessorMixin(PushToHubMixin):
         # pass defaults to output dictionary
         output_kwargs.update(default_kwargs)
 
+        # For `common_kwargs` just update all modality-specific kwargs with same key/values
+        common_kwargs = ModelProcessorKwargs._defaults.get("common_kwargs", {})
+        common_kwargs.update(kwargs.get("common_kwargs", {}))
+        if common_kwargs:
+            for kwarg in output_kwargs.values():
+                kwarg.update(common_kwargs)
+
         # update modality kwargs with passed kwargs
         non_modality_kwargs = set(kwargs) - set(output_kwargs)
         for modality, output_kwarg in output_kwargs.items():
-            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__:
+            modality_valid_kwargs = set(ModelProcessorKwargs.__annotations__[modality].__annotations__)
+            if modality in map_preprocessor_kwargs:
+                preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
+                preprocessor_valid_kwargs = (
+                    getattr(preprocessor, "valid_kwargs", None) if preprocessor is not None else None
+                )
+                modality_valid_kwargs.update(
+                    set(preprocessor_valid_kwargs.__annotations__ if preprocessor_valid_kwargs is not None else [])
+                )
+            for modality_key in modality_valid_kwargs:
                 # check if we received a structured kwarg dict or not to handle it correctly
                 if modality in kwargs:
                     kwarg_value = kwargs[modality].pop(modality_key, "__empty__")
@@ -1317,27 +1342,33 @@ class ProcessorMixin(PushToHubMixin):
         else:
             # kwargs is a flat dictionary
             for key, kwarg in kwargs.items():
-                if key not in used_keys:
-                    if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__:
-                        output_kwargs["common_kwargs"][key] = kwarg
-                    elif key not in possible_modality_keywords:
-                        logger.warning_once(
-                            f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
-                        )
+                if key not in used_keys and key not in possible_modality_keywords:
+                    logger.warning_once(
+                        f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
+                    )
 
-        # all modality-specific kwargs are updated with common kwargs
-        for kwarg in output_kwargs.values():
-            kwarg.update(output_kwargs["common_kwargs"])
+        for key, typed_dict_obj in ModelProcessorKwargs.__annotations__.items():
+            if key in map_preprocessor_kwargs:
+                preprocessor = getattr(self, map_preprocessor_kwargs[key], None)
+                if preprocessor is None or getattr(preprocessor, "valid_kwargs", None) is None:
+                    continue
+                preprocessor_typed_dict_obj = getattr(preprocessor, "valid_kwargs")
+                typed_dict_obj = TypedDict(
+                    "merged_typed_dict",
+                    {**preprocessor_typed_dict_obj.__annotations__, **typed_dict_obj.__annotations__},
+                    total=False,
+                )
+            validate_typed_dict(typed_dict_obj, output_kwargs[key])
         return output_kwargs
 
     @classmethod
     def from_pretrained(
         cls: type[SpecificProcessorType],
-        pretrained_model_name_or_path: Union[str, os.PathLike],
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        pretrained_model_name_or_path: str | os.PathLike,
+        cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
+        token: str | bool | None = None,
         revision: str = "main",
         **kwargs,
     ) -> SpecificProcessorType:
@@ -1374,24 +1405,40 @@ class ProcessorMixin(PushToHubMixin):
         kwargs["local_files_only"] = local_files_only
         kwargs["revision"] = revision
 
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
-
         if token is not None:
             kwargs["token"] = token
 
-        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
-        processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-        return cls.from_args_and_dict(args, processor_dict, **kwargs)
+        # Get processor_dict first so we can use it to instantiate non-tokenizer sub-processors
+        processor_dict, instantiation_kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
+        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
+        return cls.from_args_and_dict(args, processor_dict, **instantiation_kwargs)
+
+    @classmethod
+    def get_attributes(cls):
+        args_in_init = inspect.signature(cls.__init__).parameters.keys()
+        attributes = []
+        for sub_processor_type in args_in_init:
+            # don't treat audio_tokenizer as an attribute
+            if sub_processor_type == "audio_tokenizer":
+                continue
+            if any(modality in sub_processor_type for modality in MODALITY_TO_AUTOPROCESSOR_MAPPING.keys()):
+                attributes.append(sub_processor_type)
+
+        # Legacy processors may not override `__init__` and instead expose modality
+        # attributes via `<attribute>_class`. In that case, `args_in_init` only exposes
+        # `*args`/`**kwargs`, so we need to infer the attributes from those class-level
+        # hints to keep backward compatibility (e.g. dynamic processors stored on the Hub).
+        if not attributes:
+            for attribute_name, value in cls.__dict__.items():
+                if value is None or attribute_name == "audio_tokenizer_class" or not attribute_name.endswith("_class"):
+                    continue
+                inferred_attribute = attribute_name[: -len("_class")]
+                if inferred_attribute == "audio_tokenizer":
+                    continue
+                if any(modality in inferred_attribute for modality in MODALITY_TO_AUTOPROCESSOR_MAPPING.keys()):
+                    attributes.append(inferred_attribute)
+
+        return attributes
 
     @classmethod
     def register_for_auto_class(cls, auto_class="AutoProcessor"):
@@ -1416,39 +1463,105 @@ class ProcessorMixin(PushToHubMixin):
         cls._auto_class = auto_class
 
     @classmethod
-    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+    def _load_tokenizer_from_pretrained(
+        cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs
+    ):
+        auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
+        is_primary = sub_processor_type == "tokenizer"
+
+        if is_primary:
+            # Primary tokenizer: load from root
+            tokenizer = auto_processor_class.from_pretrained(
+                pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+            )
+        else:
+            # Additional tokenizer: load from subfolder (e.g., "decoder_tokenizer")
+            tokenizer_subfolder = os.path.join(subfolder, sub_processor_type) if subfolder else sub_processor_type
+            tokenizer = auto_processor_class.from_pretrained(
+                pretrained_model_name_or_path, subfolder=tokenizer_subfolder, **kwargs
+            )
+        return tokenizer
+
+    @classmethod
+    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict=None, **kwargs):
         """
-        Identify and instantiate the subcomponents of Processor classes, like image processors and
-        tokenizers. This method uses the Processor attributes like `tokenizer_class` to figure out what class those
-        subcomponents should be. Note that any subcomponents must either be library classes that are accessible in
-        the `transformers` root, or they must be custom code that has been registered with the relevant autoclass,
-        via methods like `AutoTokenizer.register()`. If neither of these conditions are fulfilled, this method
-        will be unable to find the relevant subcomponent class and will raise an error.
+        Identify and instantiate the subcomponents of Processor classes, such as image processors, tokenizers,
+        and feature extractors. This method inspects the processor's `__init__` signature to identify parameters
+        that correspond to known modality types (image_processor, tokenizer, feature_extractor, etc.) or contain
+        modality names in their attribute name.
+
+        For tokenizers: Uses the appropriate Auto class (AutoTokenizer) to load via `.from_pretrained()`.
+        Additional tokenizers (e.g., "decoder_tokenizer") are loaded from subfolders.
+
+        For other sub-processors (image_processor, feature_extractor, etc.): Primary ones are loaded via
+        Auto class. Additional ones are instantiated from the config stored in processor_config.json
+        (passed as processor_dict).
+
+        Args:
+            pretrained_model_name_or_path: Path or model id to load from.
+            processor_dict: Optional dict containing processor config (from processor_config.json).
+                Required when loading additional non-tokenizer sub-processors.
         """
         args = []
-        for attribute_name in cls.attributes:
-            class_name = getattr(cls, f"{attribute_name}_class")
-            if isinstance(class_name, tuple):
-                classes = tuple(cls.get_possibly_dynamic_module(n) if n is not None else None for n in class_name)
-                if attribute_name == "image_processor":
-                    # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
-                    use_fast = kwargs.get("use_fast")
-                    if use_fast is None:
-                        logger.warning_once(
-                            "Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. "
-                            "`use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. "
-                            "This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`."
-                        )
-                else:
-                    use_fast = kwargs.get("use_fast", True)
-                if use_fast and classes[1] is not None:
-                    attribute_class = classes[1]
-                else:
-                    attribute_class = classes[0]
-            else:
-                attribute_class = cls.get_possibly_dynamic_module(class_name)
+        processor_dict = processor_dict if processor_dict is not None else {}
+        # Remove subfolder from kwargs to avoid duplicate keyword arguments
+        subfolder = kwargs.pop("subfolder", "")
 
-            args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+        # get args from processor init signature
+        sub_processors = cls.get_attributes()
+        for sub_processor_type in sub_processors:
+            modality = _get_modality_for_attribute(sub_processor_type)
+            is_primary = sub_processor_type == modality
+
+            if (
+                "tokenizer" in sub_processor_type
+            ):  # This is only necessary for the checkpoing in test_procesing_mistral3.py which has no config.json and
+                # the tokenizer_config.json references LlamaTokenizerFast. TODO: update the config on the hub.
+                if "PixtralProcessor" in cls.__name__:
+                    from .tokenization_utils_tokenizers import TokenizersBackend
+
+                    tokenizer = TokenizersBackend.from_pretrained(
+                        pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                    )
+                else:
+                    tokenizer = cls._load_tokenizer_from_pretrained(
+                        sub_processor_type, pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                    )
+                args.append(tokenizer)
+            elif is_primary:
+                # Primary non-tokenizer sub-processor: load via Auto class
+                auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
+                sub_processor = auto_processor_class.from_pretrained(
+                    pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                )
+                args.append(sub_processor)
+
+            elif sub_processor_type in processor_dict:
+                # Additional non-tokenizer sub-processor: instantiate from config in processor_dict
+                sub_processor_config = processor_dict[sub_processor_type]
+                if isinstance(sub_processor_config, dict):
+                    # Determine the class to instantiate
+                    # Image processors have 'image_processor_type', feature extractors have 'feature_extractor_type'
+                    type_key = f"{modality}_type"
+                    class_name = sub_processor_config.get(type_key)
+                    if class_name is None:
+                        raise ValueError(
+                            f"Cannot instantiate {sub_processor_type}: missing '{type_key}' in config. "
+                            f"Config keys: {list(sub_processor_config.keys())}"
+                        )
+                    processor_class = cls.get_possibly_dynamic_module(class_name)
+                    sub_processor = processor_class(**sub_processor_config)
+                    args.append(sub_processor)
+                else:
+                    raise ValueError(
+                        f"Expected dict for {sub_processor_type} in processor_config.json, "
+                        f"got {type(sub_processor_config)}"
+                    )
+            else:
+                raise ValueError(
+                    f"Cannot find config for {sub_processor_type} in processor_config.json. "
+                    f"Available keys: {list(processor_dict.keys())}"
+                )
 
         return args
 
@@ -1498,7 +1611,7 @@ class ProcessorMixin(PushToHubMixin):
     @property
     def model_input_names(self):
         model_input_names = []
-        for attribute_name in self.attributes:
+        for attribute_name in self.get_attributes():
             attribute = getattr(self, attribute_name, None)
             attr_input_names = getattr(attribute, "model_input_names")
             model_input_names.extend(attr_input_names)
@@ -1517,16 +1630,10 @@ class ProcessorMixin(PushToHubMixin):
 
         return unused_kwargs, valid_kwargs
 
-    @deprecate_kwarg("video_fps", version="4.58", new_name="fps")
-    @deprecate_kwarg(
-        "video_load_backend",
-        version="4.59",
-        additional_message=". This function will use `torchcodec` by default, or `torchvision` if `torchcodec` is not installed.",
-    )
     def apply_chat_template(
         self,
-        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
-        chat_template: Optional[str] = None,
+        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
+        chat_template: str | None = None,
         **kwargs: Unpack[AllKwargsForChatTemplate],
     ) -> str:
         """
@@ -1577,7 +1684,14 @@ class ProcessorMixin(PushToHubMixin):
                 # It's a template string, render it directly
                 pass
 
-        is_tokenizers_fast = hasattr(self, "tokenizer") and self.tokenizer.__class__.__name__.endswith("Fast")
+        # Check if tokenizer is fast - use backend attribute if available, otherwise fall back to class name
+        is_tokenizers_fast = False
+        if hasattr(self, "tokenizer"):
+            if hasattr(self.tokenizer, "backend"):
+                is_tokenizers_fast = self.tokenizer.backend == "tokenizers"
+            else:
+                # Fallback to class name check
+                is_tokenizers_fast = self.tokenizer.__class__.__name__.endswith("Fast")
 
         if kwargs.get("continue_final_message", False):
             if kwargs.get("add_generation_prompt", False):
@@ -1610,9 +1724,6 @@ class ProcessorMixin(PushToHubMixin):
                 if value is not None and not isinstance(value, dict):
                     processed_kwargs[kwarg_type][key] = value
 
-        # pop unused and deprecated kwarg
-        kwargs.pop("video_load_backend", None)
-
         # Pass unprocessed custom kwargs
         processed_kwargs["template_kwargs"].update(kwargs)
 
@@ -1626,7 +1737,7 @@ class ProcessorMixin(PushToHubMixin):
             conversations = [conversation]
 
         tokenize = processed_kwargs["template_kwargs"].pop("tokenize", False)
-        return_dict = processed_kwargs["template_kwargs"].pop("return_dict", False)
+        return_dict = processed_kwargs["template_kwargs"].pop("return_dict", True)
         mm_load_kwargs = processed_kwargs["mm_load_kwargs"]
 
         if tokenize:
@@ -1670,11 +1781,19 @@ class ProcessorMixin(PushToHubMixin):
                 batch_images.append(images)
                 batch_videos.append(videos)
 
+        special_tokens_map = {}
+        if hasattr(self, "tokenizer") and hasattr(self.tokenizer, "special_tokens_map"):
+            special_tokens = self.tokenizer.special_tokens_map
+            # Filter out tokens that conflict with template kwargs
+            special_tokens_map = {
+                k: v for k, v in special_tokens.items() if k not in processed_kwargs["template_kwargs"]
+            }
+
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
             chat_template=chat_template,
             **processed_kwargs["template_kwargs"],  # different flags such as `return_assistant_mask`
-            **self.tokenizer.special_tokens_map,  # tokenizer special tokens are used by some templates
+            **special_tokens_map,  # tokenizer special tokens are used by some templates
         )
 
         if not is_batched:
@@ -1723,10 +1842,14 @@ class ProcessorMixin(PushToHubMixin):
 
                             if not (
                                 start_pos >= 0
+                                and start_pos < len(offsets)
                                 and offsets[start_pos][0] <= assistant_start_char < offsets[start_pos][1]
                             ):
                                 # start_token is out of bounds maybe due to truncation.
                                 continue
+                            # Ensure end_pos is also within bounds
+                            if end_pos > len(input_ids[i]):
+                                end_pos = len(input_ids[i])
                             for token_id in range(start_pos, end_pos if end_pos else len(input_ids[i])):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
@@ -1737,6 +1860,35 @@ class ProcessorMixin(PushToHubMixin):
                 return out["input_ids"]
         return prompt
 
+    def post_process_multimodal_output(
+        self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
+    ):
+        """
+        Post-process the output of a multimodal model to return the requested modality output.
+        If the model cannot generated the requested modality, an error will be raised.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            generation_mode (`str`, *optional*):
+                Generation mode indicated which modality to output and can be one of `["text", "image", "audio"]`.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `list[str]`: The decoded text.
+        """
+        if generation_mode is not None and generation_mode != "text":
+            raise ValueError(
+                f"{self.__class__.__name__} got an unexpected generation_mode={generation_mode}. Supported options are only [`text`]"
+            )
+        return self.post_process_image_text_to_text(
+            generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs
+        )
+
     def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         """
         Post-process the output of a vlm to decode the text.
@@ -1746,14 +1898,14 @@ class ProcessorMixin(PushToHubMixin):
                 The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
                 or `(sequence_length,)`.
             skip_special_tokens (`bool`, *optional*, defaults to `True`):
-                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `decode` method.
             **kwargs:
-                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+                Additional arguments to be passed to the tokenizer's `decode` method.
 
         Returns:
             `list[str]`: The decoded text.
         """
-        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
+        return self.tokenizer.decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
 
     def _check_special_mm_tokens(self, text: list[str], text_inputs: "BatchFeature", modalities: list[str]):
         """

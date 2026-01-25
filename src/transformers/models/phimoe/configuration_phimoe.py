@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,22 +14,22 @@
 
 """PyTorch Phi-MoE model."""
 
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PhimoeConfig(PretrainedConfig):
+class PhimoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PhimoeModel`]. It is used to instantiate a Phi-moe
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the
     [microsoft/Phi-3.5-MoE-instruct](https://huggingface.co/microsoft/Phi-3.5-MoE-instruct).
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
     Args:
         vocab_size (`int`, *optional*, defaults to 32064):
             Vocabulary size of the Phimoe model. Defines the number of different tokens that can be represented by the
@@ -70,14 +69,10 @@ class PhimoeConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`dict`, *optional*):
-            The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
-            contain the following keys: `type`, `short_factor`, `long_factor`, `short_mscale`, `long_mscale` and
-            `original_max_position_embeddings`. The `type` must be `longrope`, the `short_mscale` and `long_scale` must
-            be numbers, the `short_factor` and `long_factor` must be lists of numbers with the same length as half of
-            the attention head size and the `original_max_position_embeddings` must be an integer.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         sliding_window (`int`, *optional*):
             Sliding window attention window size. If not specified, will default to `262144`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -112,36 +107,36 @@ class PhimoeConfig(PretrainedConfig):
 
     model_type = "phimoe"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
 
     def __init__(
         self,
-        vocab_size=32064,
-        hidden_size=4096,
-        intermediate_size=6400,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=8,
-        hidden_act="silu",
-        max_position_embeddings=4096 * 32,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=False,
-        rope_theta=1e6,
-        rope_scaling=None,
-        sliding_window=None,
-        attention_dropout=0.0,
-        num_experts_per_tok=2,
-        num_local_experts=16,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
-        router_jitter_noise=0.01,
-        input_jitter_noise=0.0,
-        attention_bias=False,
-        lm_head_bias=False,
+        vocab_size: int | None = 32064,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 6400,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 8,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 4096 * 32,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: int | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        sliding_window: int | None = None,
+        attention_dropout: float | None = 0.0,
+        num_experts_per_tok: int | None = 2,
+        num_local_experts: int | None = 16,
+        output_router_logits: bool | None = False,
+        router_aux_loss_coef: float | None = 0.001,
+        router_jitter_noise: float | None = 0.01,
+        input_jitter_noise: float | None = 0.0,
+        attention_bias: bool | None = False,
+        lm_head_bias: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -162,7 +157,6 @@ class PhimoeConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
 
         self.num_experts_per_tok = num_experts_per_tok
@@ -171,31 +165,34 @@ class PhimoeConfig(PretrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
         self.input_jitter_noise = input_jitter_noise
+        self.rope_parameters = rope_parameters
 
-        self.rope_scaling = rope_scaling
-        if isinstance(self.rope_scaling, dict):
-            if "rope_type" not in self.rope_scaling:
-                self.rope_scaling["rope_type"] = self.rope_scaling.get("type", None)
-            if "original_max_position_embeddings" in self.rope_scaling:
-                self.original_max_position_embeddings = self.rope_scaling["original_max_position_embeddings"]
-            rope_scaling_short_mscale = self.rope_scaling.get("short_mscale", None)
-            rope_scaling_long_mscale = self.rope_scaling.get("long_mscale", None)
-            if not isinstance(rope_scaling_short_mscale, (int, float)):
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
+
+    def validate_rope(self, ignore_keys=None):
+        """
+        Validate the `rope_parameters` configuration.
+        """
+        super().validate_rope(ignore_keys=ignore_keys)
+
+        # Run model-specific rope validation
+        if self.rope_parameters["rope_type"] != "default":
+            if "original_max_position_embeddings" in self.rope_parameters:
+                self.original_max_position_embeddings = self.rope_parameters["original_max_position_embeddings"]
+            rope_parameters_short_mscale = self.rope_parameters.get("short_mscale", None)
+            rope_parameters_long_mscale = self.rope_parameters.get("long_mscale", None)
+            if not isinstance(rope_parameters_short_mscale, (int, float)):
                 raise TypeError(
-                    f"`rope_scaling`'s short_mscale field must be a number, got {rope_scaling_short_mscale}"
+                    f"`rope_parameters`'s short_mscale field must be a number, got {rope_parameters_short_mscale}"
                 )
-            if not isinstance(rope_scaling_long_mscale, (int, float)):
-                raise TypeError(f"`rope_scaling`'s long_mscale field must be a number, got {rope_scaling_long_mscale}")
-
-        rope_config_validation(self)
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+            if not isinstance(rope_parameters_long_mscale, (int, float)):
+                raise TypeError(
+                    f"`rope_parameters`'s long_mscale field must be a number, got {rope_parameters_long_mscale}"
+                )
 
 
 __all__ = ["PhimoeConfig"]

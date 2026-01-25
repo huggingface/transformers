@@ -140,7 +140,7 @@ if __name__ == "__main__":
     training_args = parser.parse_args_into_dataclasses()[0]
 
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        f"Process rank: {training_args.local_process_index}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
         f"distributed training: {training_args.parallel_mode != ParallelMode.NOT_DISTRIBUTED}"
     )
 
@@ -152,7 +152,7 @@ if __name__ == "__main__":
         def compute_metrics(p: EvalPrediction) -> dict:
             sequential = list(range(len(dataset)))
             success = p.predictions.tolist() == sequential and p.label_ids.tolist() == sequential
-            if not success and training_args.local_rank == 0:
+            if not success and training_args.local_process_index == 0:
                 logger.warning(
                     "Predictions and/or labels do not match expected results:\n  - predictions: "
                     f"{p.predictions.tolist()}\n  - labels: {p.label_ids.tolist()}\n  - expected: {sequential}"

@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-import json
 import os
 import shutil
 import tempfile
@@ -25,9 +24,7 @@ import numpy as np
 import requests
 
 from transformers import BartTokenizer, T5Tokenizer
-from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.models.dpr.tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer
-from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 from transformers.testing_utils import (
     cleanup,
     get_tests_dir,
@@ -75,7 +72,7 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         msg = f"{a} != {b}"
         if prefix:
@@ -113,8 +110,8 @@ class RagTestMixin:
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        # DPR tok
-        vocab_tokens = [
+        # DPR tokenizer vocab
+        dpr_vocab_tokens = [
             "[UNK]",
             "[CLS]",
             "[SEP]",
@@ -131,13 +128,9 @@ class RagTestMixin:
             "low",
             "lowest",
         ]
-        dpr_tokenizer_path = os.path.join(self.tmpdirname, "dpr_tokenizer")
-        os.makedirs(dpr_tokenizer_path, exist_ok=True)
-        self.vocab_file = os.path.join(dpr_tokenizer_path, DPR_VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
-            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
+        self.dpr_vocab = {token: i for i, token in enumerate(dpr_vocab_tokens)}
 
-        # BART tok
+        # BART tokenizer vocab and merges
         vocab = [
             "l",
             "o",
@@ -160,34 +153,29 @@ class RagTestMixin:
             "\u0120wider",
             "<unk>",
         ]
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}
+        self.bart_vocab = dict(zip(vocab, range(len(vocab))))
+        merges_raw = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
+        self.bart_merges = []
+        for line in merges_raw:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                self.bart_merges.append(tuple(line.split()))
 
-        bart_tokenizer_path = os.path.join(self.tmpdirname, "bart_tokenizer")
-        os.makedirs(bart_tokenizer_path, exist_ok=True)
-        self.vocab_file = os.path.join(bart_tokenizer_path, BART_VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(bart_tokenizer_path, BART_VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
-            fp.write("\n".join(merges))
-
-        t5_tokenizer = T5Tokenizer(T5_SAMPLE_VOCAB)
+        t5_tokenizer = T5Tokenizer(vocab_file=T5_SAMPLE_VOCAB)
         t5_tokenizer_path = os.path.join(self.tmpdirname, "t5_tokenizer")
         t5_tokenizer.save_pretrained(t5_tokenizer_path)
 
     @cached_property
     def dpr_tokenizer(self) -> DPRQuestionEncoderTokenizer:
-        return DPRQuestionEncoderTokenizer.from_pretrained(os.path.join(self.tmpdirname, "dpr_tokenizer"))
+        return DPRQuestionEncoderTokenizer(vocab=self.dpr_vocab)
 
     @cached_property
     def dpr_ctx_encoder_tokenizer(self) -> DPRContextEncoderTokenizer:
-        return DPRContextEncoderTokenizer.from_pretrained(os.path.join(self.tmpdirname, "dpr_tokenizer"))
+        return DPRContextEncoderTokenizer(vocab=self.dpr_vocab)
 
     @cached_property
     def bart_tokenizer(self) -> BartTokenizer:
-        return BartTokenizer.from_pretrained(os.path.join(self.tmpdirname, "bart_tokenizer"))
+        return BartTokenizer(vocab=self.bart_vocab, merges=self.bart_merges, unk_token="<unk>")
 
     @cached_property
     def t5_tokenizer(self) -> BartTokenizer:
@@ -313,7 +301,7 @@ class RagTestMixin:
             out = retriever(
                 input_ids,
                 question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                prefix=config.generator.prefix,
+                prefix=None,
                 return_tensors="pt",
             )
 
@@ -381,7 +369,7 @@ class RagTestMixin:
             out = retriever(
                 input_ids,
                 question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                prefix=config.generator.prefix,
+                prefix=None,
                 return_tensors="pt",
             )
 
@@ -440,7 +428,7 @@ class RagTestMixin:
             out = retriever(
                 input_ids,
                 question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                prefix=config.generator.prefix,
+                prefix=None,
                 return_tensors="pt",
                 n_docs=n_docs,
             )
@@ -509,7 +497,7 @@ class RagTestMixin:
             out = retriever(
                 input_ids,
                 question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                prefix=config.generator.prefix,
+                prefix=None,
                 return_tensors="pt",
                 n_docs=retriever_n_docs,
             )
@@ -680,6 +668,7 @@ class RagDPRT5Test(RagTestMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 @require_torch_non_multi_accelerator
+@slow
 class RagModelIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -751,7 +740,6 @@ class RagModelIntegrationTests(unittest.TestCase):
             dataset_revision="b24a417",
         )
 
-    @slow
     def test_rag_sequence_inference(self):
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
@@ -790,7 +778,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         expected_loss = torch.tensor([36.7368]).to(torch_device)
         _assert_tensors_equal(expected_loss, output.loss, atol=TOLERANCE)
 
-    @slow
     def test_rag_token_inference(self):
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
@@ -829,7 +816,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         expected_loss = torch.tensor([36.3557]).to(torch_device)
         _assert_tensors_equal(expected_loss, output.loss, atol=TOLERANCE)
 
-    @slow
     def test_rag_token_generate_beam(self):
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
@@ -868,7 +854,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
 
-    @slow
     def test_rag_sequence_generate_beam(self):
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
@@ -908,7 +893,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
 
     @property
-    def test_data_questions(self):
+    def questions_data(self):
         return [
             "who got the first nobel prize in physics",
             "when is the next deadpool movie being released",
@@ -920,7 +905,6 @@ class RagModelIntegrationTests(unittest.TestCase):
             "how many episodes are there in dragon ball z",
         ]
 
-    @slow
     def test_rag_sequence_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
         retriever = RagRetriever.from_pretrained(
@@ -934,7 +918,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         )
 
         input_dict = tokenizer(
-            self.test_data_questions,
+            self.questions_data,
             return_tensors="pt",
             padding=True,
             truncation=True,
@@ -948,7 +932,7 @@ class RagModelIntegrationTests(unittest.TestCase):
             attention_mask=attention_mask,
         )
 
-        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        outputs = tokenizer.decode(output_ids, skip_special_tokens=True)
 
         # PR #31938 cause the output being changed from `june 22, 2018` to `june 22 , 2018`.
         EXPECTED_OUTPUTS = [
@@ -963,7 +947,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
 
-    @slow
     def test_rag_sequence_generate_batch_from_context_input_ids(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
         retriever = RagRetriever.from_pretrained(
@@ -977,7 +960,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         )
 
         input_dict = tokenizer(
-            self.test_data_questions,
+            self.questions_data,
             return_tensors="pt",
             padding=True,
             truncation=True,
@@ -1002,7 +985,7 @@ class RagModelIntegrationTests(unittest.TestCase):
             do_deduplication=True,
         )
 
-        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        outputs = tokenizer.decode(output_ids, skip_special_tokens=True)
 
         EXPECTED_OUTPUTS = [
             " albert einstein",
@@ -1016,7 +999,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
 
-    @slow
     def test_rag_token_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
         retriever = RagRetriever.from_pretrained(
@@ -1030,7 +1012,7 @@ class RagModelIntegrationTests(unittest.TestCase):
             rag_token.half()
 
         input_dict = tokenizer(
-            self.test_data_questions,
+            self.questions_data,
             return_tensors="pt",
             padding=True,
             truncation=True,
@@ -1044,7 +1026,7 @@ class RagModelIntegrationTests(unittest.TestCase):
             attention_mask=attention_mask,
         )
 
-        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        outputs = tokenizer.decode(output_ids, skip_special_tokens=True)
 
         EXPECTED_OUTPUTS = [
             " albert einstein",

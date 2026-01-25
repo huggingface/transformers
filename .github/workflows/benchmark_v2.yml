@@ -1,42 +1,14 @@
 name: Benchmark v2 Framework
 
 on:
-  workflow_call:
-    inputs:
-      runner:
-        description: 'GH Actions runner group to use'
-        required: true
-        type: string
-      container_image:
-        description: 'Docker image to use'
-        required: true
-        type: string
-      container_options:
-        description: 'Container options to use'
-        required: true
-        type: string
-      commit_sha:
-        description: 'Commit SHA to benchmark'
-        required: false
-        type: string
-        default: ''
-      run_id:
-        description: 'Custom run ID for organizing results (auto-generated if not provided)'
-        required: false
-        type: string
-        default: ''
-      benchmark_repo_id:
-        description: 'HuggingFace Dataset to upload results to (e.g., "org/benchmark-results")'
-        required: false
-        type: string
-        default: ''
+  workflow_dispatch:
 
 env:
   HF_HOME: /mnt/cache
   TRANSFORMERS_IS_CI: yes
   # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
   # This token is created under the bot `hf-transformers-bot`.
-  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
 
 jobs:
   benchmark-v2:

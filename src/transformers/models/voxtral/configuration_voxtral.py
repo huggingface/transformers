@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class VoxtralEncoderConfig(PretrainedConfig):
+class VoxtralEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VoxtralEncoder`]. It is used to instantiate a
     Voxtral audio encoder according to the specified arguments, defining the model architecture. Instantiating a
@@ -26,8 +25,8 @@ class VoxtralEncoderConfig(PretrainedConfig):
 
     e.g. [mistralai/Voxtral-Mini-3B-2507](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 51866):
@@ -116,7 +115,7 @@ class VoxtralEncoderConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class VoxtralConfig(PretrainedConfig):
+class VoxtralConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VoxtralForConditionalGeneration`]. It is used to instantiate an
     Voxtral model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -124,8 +123,8 @@ class VoxtralConfig(PretrainedConfig):
 
     e.g. [mistralai/Voxtral-Mini-3B-2507](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         audio_config (`Union[AutoConfig, dict]`, *optional*):
@@ -190,7 +189,6 @@ class VoxtralConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["llama"](**self._default_text_config_kwargs)
         self.text_config = text_config
 
-        self.vocab_size = text_config.vocab_size
         self.hidden_size = text_config.hidden_size
         self.audio_token_id = audio_token_id
         self.projector_hidden_act = projector_hidden_act
