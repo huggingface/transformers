@@ -420,11 +420,16 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         """
         Helper method to extract only image-related inputs from the full set of inputs, for testing `get_image_features`.
 
-        GlmImage internally preprocesses the image_grid_thw input by slicing off the last entry,
+        GlmImage internally preprocesses the image_grid_thw input by selecting source grids,
         so we need to prepare inputs accordingly for testing get_image_features. We also discard text-related inputs.
         """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        inputs_dict["image_grid_thw"] = inputs_dict["image_grid_thw"][:-1]
+        # Select only source grids (every other grid starting from index 0)
+        # Grid layout: [s0_source, s0_target, s1_source, s1_target, ...]
+        num_grids_per_sample = 2  # 1 source + 1 target
+        batch_size = self.model_tester.batch_size
+        source_indices = [i * num_grids_per_sample for i in range(batch_size)]
+        inputs_dict["image_grid_thw"] = inputs_dict["image_grid_thw"][source_indices]
         del inputs_dict["input_ids"]
         del inputs_dict["attention_mask"]
         return config, inputs_dict

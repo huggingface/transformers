@@ -925,7 +925,16 @@ class GlmImageModel(Glm4vModel):
             if images_per_sample is not None:
                 grids_per_sample = torch.split(image_grid_thw, images_per_sample.tolist())
                 # Create mask for non-padding tokens (attention_mask=1 means non-padding)
-                non_pad_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids)
+                # Handle 4D attention mask (from static cache) by extracting diagonal
+                if attention_mask is not None and attention_mask.ndim == 4:
+                    non_pad_mask = torch.diagonal(attention_mask[:, 0], dim1=1, dim2=2)
+                    if non_pad_mask.dtype.is_floating_point:
+                        non_pad_mask = non_pad_mask / torch.finfo(non_pad_mask.dtype).min
+                        non_pad_mask = (1.0 - non_pad_mask).int()
+                    # Only keep columns matching input_ids length
+                    non_pad_mask = non_pad_mask[:, -input_ids.shape[1] :]
+                else:
+                    non_pad_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids)
                 source_grids_list = [
                     grids[:num_source]
                     for grids, num_source in (
@@ -947,7 +956,8 @@ class GlmImageModel(Glm4vModel):
                 # Fallback for batch_size=1: all but last grid are source images
                 source_grids = image_grid_thw[:-1]
 
-            image_embeds = self.get_image_features(pixel_values, source_grids)
+            image_features = self.get_image_features(pixel_values, source_grids)
+            image_embeds = image_features.pooler_output if hasattr(image_features, "pooler_output") else image_features
             image_embeds = torch.cat(image_embeds, dim=0)
             image_ids = self.get_image_tokens(image_embeds, source_grids)
             image_ids = image_ids.view(-1).to(input_ids.device)

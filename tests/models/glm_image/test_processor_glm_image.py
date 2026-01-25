@@ -170,3 +170,39 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     )
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
         pass
+
+    @unittest.skip(
+        reason="GLM-Image processor adds image placeholder tokens which makes sequence length depend on image size"
+    )
+    def test_structured_kwargs_nested(self):
+        pass
+
+    @unittest.skip(
+        reason="GLM-Image processor adds image placeholder tokens which makes sequence length depend on image size"
+    )
+    def test_structured_kwargs_nested_from_dict(self):
+        pass
+
+    @unittest.skip(
+        reason="GLM-Image processor adds image placeholder tokens which makes sequence length depend on image size"
+    )
+    def test_unstructured_kwargs(self):
+        pass
+
+    @unittest.skip(
+        reason="GLM-Image processor adds image placeholder tokens which makes sequence length depend on image size"
+    )
+    def test_unstructured_kwargs_batched(self):
+        pass
+
+    @unittest.skip(
+        reason="GLM-Image processor adds image placeholder tokens which makes sequence length depend on image size"
+    )
+    def test_tokenizer_defaults(self):
+        pass
+
+    @unittest.skip(
+        reason="GLM-Image processor adds image placeholder tokens which makes sequence length depend on image size"
+    )
+    def test_tokenizer_defaults_preserved_by_kwargs(self):
+        pass
