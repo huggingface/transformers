@@ -524,3 +524,30 @@ class VideoProcessingTestMixin:
         # check that the modified attributes of the first instance are not affected by the second instance
         self.assertEqual(video_processor_1.size, modified_copied_size_1)
         self.assertEqual(video_processor_1.image_mean, modified_copied_image_mean_1)
+        
+    def test_call_pytorch_batched_tensor(self):
+        for video_processing_class in self.video_processor_list:
+            video_processor = video_processing_class(**self.video_processor_dict)
+            
+            # Prepare a 5D tensor: (batch_size, num_frames, num_channels, height, width)
+            batch_size = self.video_processor_tester.batch_size
+            num_frames = self.video_processor_tester.num_frames
+            num_channels = self.video_processor_tester.num_channels
+            height = width = 32 # small resolution for fast testing
+            
+            batched_tensor = torch.randn(batch_size, num_frames, num_channels, height, width)
+
+            # Preprocess the 5D tensor
+            # We set do_sample_frames=False to avoid errors with random noise
+            encoding = video_processor(batched_tensor, return_tensors="pt", do_sample_frames=False)
+            pixel_values = encoding[self.input_name]
+
+            # The batch dimension should be preserved correctly
+            expected_shape = (batch_size, num_frames, num_channels, video_processor.size["height"], video_processor.size["width"])
+            
+            self.assertEqual(
+                pixel_values.shape, 
+                expected_shape, 
+                f"Expected shape {expected_shape}, but got {pixel_values.shape}. "
+                "This usually happens if a 5D tensor is wrapped in an extra list dimension."
+            )

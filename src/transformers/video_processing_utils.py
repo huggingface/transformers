@@ -293,10 +293,18 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         """
         Decode input videos and sample frames if needed.
         """
-        videos = make_batched_videos(videos)
+        # --- NEW LOGIC START ---
+        # If it's a 5D tensor, it's already a batch of videos (B, T, C, H, W)
+        # We convert it to a list of 4D tensors to satisfy the rest of the pipeline
+        if isinstance(videos, torch.Tensor) and videos.ndim == 5:
+            videos = list(videos) 
+        else:
+            videos = make_batched_videos(videos)
+        # --- NEW LOGIC END ---
+
         video_metadata = make_batched_metadata(videos, video_metadata=video_metadata)
 
-        # Only sample frames if an array video is passed, otherwise first decode -> then sample
+        # Rest of the function remains the same...
         if is_valid_video(videos[0]) and do_sample_frames:
             sampled_videos = []
             sampled_metadata = []
@@ -351,6 +359,8 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
             processed_videos.append(video)
         return processed_videos
+
+    
 
     @add_start_docstrings(
         BASE_VIDEO_PROCESSOR_DOCSTRING,
