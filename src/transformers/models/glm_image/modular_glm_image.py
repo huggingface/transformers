@@ -883,12 +883,18 @@ class GlmImageModel(Glm4vModel):
         if pixel_values is not None:
             # Process source images (image-to-image mode)
             # Source images are identified by counting image_end_token_id in input_ids
+            # Note: We must exclude padding tokens since pad_token_id == image_end_token_id
             if images_per_sample is not None:
                 grids_per_sample = torch.split(image_grid_thw, images_per_sample.tolist())
+                # Create mask for non-padding tokens (attention_mask=1 means non-padding)
+                non_pad_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids)
                 source_grids_list = [
                     grids[:num_source]
                     for grids, num_source in (
-                        (grids_per_sample[i], (input_ids[i] == self.config.image_end_token_id).sum().item())
+                        (
+                            grids_per_sample[i],
+                            ((input_ids[i] == self.config.image_end_token_id) & (non_pad_mask[i] == 1)).sum().item(),
+                        )
                         for i in range(batch_size)
                     )
                     if num_source > 0
