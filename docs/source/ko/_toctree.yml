@@ -394,6 +394,32 @@
       title: Auto Classes
     - local: in_translation
       title: (번역중) Backbones
+    - local: in_translation
+      title: (번역중) Callbacks
+    - local: in_translation
+      title: (번역중) Configuration
+    - local: in_translation
+      title: (번역중) Data Collator
+    - local: in_translation
+      title: (번역중) Keras callbacks
+    - local: in_translation
+      title: (번역중) Logging
+    - local: in_translation
+      title: (번역중) Models
+    - local: in_translation
+      title: (번역중) Text Generation
+    - local: in_translation
+      title: (번역중) ONNX
+    - local: in_translation
+      title: (번역중) Optimization
+    - local: in_translation
+      title: (번역중) Model outputs
+    - local: in_translation
+      title: (번역중) Pipelines
+    - local: main_classes/processors
+      title: 프로세서
+    - local: in_translation
+      title: (번역중) Quantization
     - local: main_classes/callback
       title: Callbacks
     - local: main_classes/configuration
@@ -1235,6 +1261,9 @@
     title: 내부 헬퍼(Internal helpers)
   - sections:
     - local: in_translation
+      title: (번역중) Utilities for Time Series
+    title: (번역중) Internal Helpers
+  title: (번역중) API
       title: (번역중)Environment Variables
     title: Reference
   title: API
