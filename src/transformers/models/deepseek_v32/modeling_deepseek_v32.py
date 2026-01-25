@@ -635,6 +635,7 @@ class DeepseekV32PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["DeepseekV32DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
+    _keys_to_ignore_on_load_unexpected = [r"model.layers.61.*"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

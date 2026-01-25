@@ -138,11 +138,11 @@ class DeepseekV32Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: int | None = 32000,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 11008,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
+        vocab_size: int | None = 129280,
+        hidden_size: int | None = 7168,
+        intermediate_size: int | None = 18432,
+        num_hidden_layers: int | None = 61,
+        num_attention_heads: int | None = 128,
         num_key_value_heads: int | None = None,
         hidden_act: str | None = "silu",
         max_position_embeddings: int | None = 2048,
@@ -224,6 +224,9 @@ class DeepseekV32Config(PreTrainedConfig):
         self.index_head_dim = index_head_dim
         self.index_top_k = index_topk
         self.max_seq_len = 16384
+        self.num_local_experts = num_experts_per_tok
+        self.intermediate_dim = intermediate_size
+
 
 
 __all__ = ["DeepseekV32Config"]
