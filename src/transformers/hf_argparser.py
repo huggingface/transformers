@@ -190,7 +190,7 @@ class HfArgumentParser(ArgumentParser):
         # so that we can init a `no_*` complement argument (see below)
         bool_kwargs = {}
         is_optional_bool_type = (
-            origin_type is Union
+            (origin_type is Union or (hasattr(types, "UnionType") and isinstance(origin_type, types.UnionType)))
             and hasattr(field.type, "__args__")
             and bool in field.type.__args__
             and type(None) in field.type.__args__
