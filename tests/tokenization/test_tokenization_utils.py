@@ -45,7 +45,7 @@ from transformers.testing_utils import (
 if is_tokenizers_available():
     import tokenizers
     from tokenizers import AddedToken, Tokenizer
-    from tokenizers.models import WordPiece
+    from tokenizers.models import Unigram, WordPiece
 
 
 class TokenizerUtilsTest(unittest.TestCase):
@@ -260,7 +260,27 @@ class TokenizerUtilsTest(unittest.TestCase):
         bert_tokenizer = Tokenizer(WordPiece(unk_token="[UNK]"))
         with tempfile.TemporaryDirectory() as tmpdirname:
             bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
-            PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
+            tokenizer = PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
+            self.assertIsInstance(tokenizer._tokenizer.model, WordPiece)
+            self.assertEqual(tokenizer._tokenizer.model.unk_token, "[UNK]")
+
+    @require_tokenizers
+    def test_instantiation_from_tokenizers_json_file_from_pretrained(self):
+        bert_tokenizer = Tokenizer(WordPiece(unk_token="[UNK]"))
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
+            tokenizer = PreTrainedTokenizerFast.from_pretrained(tmpdirname)
+            self.assertIsInstance(tokenizer._tokenizer.model, WordPiece)
+            self.assertEqual(tokenizer._tokenizer.model.unk_token, "[UNK]")
+
+    @require_tokenizers
+    def test_instantiation_from_non_default_tokenizers_json_file_from_pretrained(self):
+        bert_tokenizer = Tokenizer(Unigram([("test", 0.2), ("[UNK]", 0.01), ("token", 0.3)], unk_id=1))
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
+            tokenizer = BertTokenizer.from_pretrained(tmpdirname)
+            self.assertIsInstance(tokenizer._tokenizer.model, Unigram)
+            self.assertEqual(tokenizer._tokenizer.model.token_to_id("token"), 2)
 
     def test_len_tokenizer(self):
         for tokenizer_class in [BertTokenizer, BertTokenizer]:

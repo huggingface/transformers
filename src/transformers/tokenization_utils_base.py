@@ -2019,6 +2019,16 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 "Unable to load vocabulary from file. "
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
+
+        # If tokenizer_file exists and tokenizer has a TokenizersBackend, replace the blank tokenizer with tokenizer.json
+        if tokenizer_file is not None and hasattr(tokenizer, "_tokenizer"):
+            from tokenizers import Tokenizer as TokenizerFast
+
+            tokenizer._tokenizer = TokenizerFast.from_file(tokenizer_file)
+            # Re-run post-initialization if the tokenizer has it
+            if hasattr(tokenizer, "_post_init"):
+                tokenizer._post_init()
+
         return tokenizer
 
     @classmethod
