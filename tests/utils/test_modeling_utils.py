@@ -3097,9 +3097,6 @@ class TestTensorSharing(TestCasePlus):
 
 
 @require_torch
-@unittest.skip(
-    "These tests are currently failing and need to be fixed, but not sure we want to support this/not sure its even used! Fix this line:https://github.com/huggingface/transformers/blob/b750e6b9eeed5fb9adc2f8c7adb46639c8e41963/src/transformers/core_model_loading.py#L512"
-)
 class TestSaveAndLoadModelWithExtraState(TestCasePlus):
     """
     This test checks that a model can be saved and loaded that uses the torch extra state API.
@@ -3131,6 +3128,7 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
             def __init__(self, config: MyConfig):
                 super().__init__(config)
                 self.my_layer = MyModule()
+                self.post_init()
 
             def forward(self, hidden_states, attention_mask):
                 return self.my_layer(hidden_states, attention_mask)
