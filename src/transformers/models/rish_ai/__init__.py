@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING
-
 from transformers.utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_tokenizers_available,
     is_torch_available,
 )
+from typing import TYPE_CHECKING
 
 _import_structure = {
     "configuration_rish_ai": ["RishAIConfig"],

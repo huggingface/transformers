@@ -15,19 +15,9 @@
 """Tokenization class for RishAI."""
 
 import json
-from typing import Dict, List, Optional, Tuple, Union
 
-from transformers.tokenization_utils_base import (
-    BatchEncoding,
-    EncodedInput,
-    PreTokenizedInput,
-    PreTokenizedInputPair,
-    PreTrainedTokenizerBase,
-    TextInput,
-    TextInputPair,
-    TruncatedInput,
-)
-from transformers.utils import PaddingStrategy, TensorType, add_end_docstrings, logging
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+from transformers.utils import add_end_docstrings, logging
 
 from .configuration_rish_ai import RishAIConfig
 
@@ -135,11 +125,11 @@ class RishAITokenizer(PreTrainedTokenizerBase):
         """Returns vocab size."""
         return len(self._vocab)
 
-    def get_vocab(self) -> Dict[str, int]:
+    def get_vocab(self) -> dict[str, int]:
         """Returns vocab as a dict."""
         return dict(self._vocab)
 
-    def _tokenize(self, text: str, **kwargs) -> List[str]:
+    def _tokenize(self, text: str, **kwargs) -> list[str]:
         """Tokenize a string."""
         # Simple whitespace tokenization for now
         # In a real implementation, this would use BPE
@@ -156,12 +146,12 @@ class RishAITokenizer(PreTrainedTokenizerBase):
                 return token
         return self.unk_token
 
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+    def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Converts a sequence of tokens (string) in a single string."""
         # Simple detokenization - join with spaces
         return " ".join(tokens)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str, str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str, str]:
         """Save the vocabulary and merges files to a directory."""
         if not self.can_save_slow_tokenizer:
             raise ValueError(

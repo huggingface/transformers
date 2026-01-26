@@ -18,17 +18,15 @@ import unittest
 
 import torch
 
-from transformers import AutoTokenizer, RishAIConfig, is_torch_available
+from transformers import RishAIConfig, is_torch_available
 from transformers.testing_utils import (
     require_torch,
-    slow,
     torch_device,
 )
 
 from .modeling_rish_ai import (
     RishAICausalLM,
     RishAIModel,
-    RishAIPreTrainedModel,
 )
 
 
