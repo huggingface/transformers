@@ -280,7 +280,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     all_model_classes = (BambaModel, BambaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "text-embedding": BambaModel,
+            "feature-extraction": BambaModel,
             "text-generation": BambaForCausalLM,
         }
         if is_torch_available()

@@ -165,7 +165,7 @@ class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     all_model_classes = (OlmoModel, OlmoForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "text-embedding": OlmoModel,
+            "feature-extraction": OlmoModel,
             "text-generation": OlmoForCausalLM,
         }
         if is_torch_available()

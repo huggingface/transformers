@@ -142,7 +142,7 @@ _import_structure = {
         "DocumentQuestionAnsweringPipeline",
         "FillMaskPipeline",
         "ImageClassificationPipeline",
-        "ImageEmbeddingPipeline",
+        "ImageFeatureExtractionPipeline",
         "ImageSegmentationPipeline",
         "ImageTextToTextPipeline",
         "ImageToImagePipeline",
@@ -156,7 +156,7 @@ _import_structure = {
         "PipelineDataFormat",
         "TableQuestionAnsweringPipeline",
         "TextClassificationPipeline",
-        "TextEmbeddingPipeline",
+        "FeatureExtractionPipeline",
         "TextGenerationPipeline",
         "TextToAudioPipeline",
         "TokenClassificationPipeline",
@@ -648,7 +648,7 @@ if TYPE_CHECKING:
     from .pipelines import DocumentQuestionAnsweringPipeline as DocumentQuestionAnsweringPipeline
     from .pipelines import FillMaskPipeline as FillMaskPipeline
     from .pipelines import ImageClassificationPipeline as ImageClassificationPipeline
-    from .pipelines import ImageEmbeddingPipeline as ImageEmbeddingPipeline
+    from .pipelines import ImageFeatureExtractionPipeline as ImageFeatureExtractionPipeline
     from .pipelines import ImageSegmentationPipeline as ImageSegmentationPipeline
     from .pipelines import ImageTextToTextPipeline as ImageTextToTextPipeline
     from .pipelines import ImageToImagePipeline as ImageToImagePipeline
@@ -662,7 +662,7 @@ if TYPE_CHECKING:
     from .pipelines import PipelineDataFormat as PipelineDataFormat
     from .pipelines import TableQuestionAnsweringPipeline as TableQuestionAnsweringPipeline
     from .pipelines import TextClassificationPipeline as TextClassificationPipeline
-    from .pipelines import TextEmbeddingPipeline as TextEmbeddingPipeline
+    from .pipelines import FeatureExtractionPipeline as FeatureExtractionPipeline
     from .pipelines import TextGenerationPipeline as TextGenerationPipeline
     from .pipelines import TextToAudioPipeline as TextToAudioPipeline
     from .pipelines import TokenClassificationPipeline as TokenClassificationPipeline

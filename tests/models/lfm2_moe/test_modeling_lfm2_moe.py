@@ -60,7 +60,7 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (Lfm2MoeModel, Lfm2MoeForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "text-embedding": Lfm2MoeModel,
+            "feature-extraction": Lfm2MoeModel,
             "text-generation": Lfm2MoeForCausalLM,
         }
         if is_torch_available()

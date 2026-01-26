@@ -373,7 +373,7 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": XLMRobertaXLModel,
+            "feature-extraction": XLMRobertaXLModel,
             "fill-mask": XLMRobertaXLForMaskedLM,
             "text-classification": XLMRobertaXLForSequenceClassification,
             "text-generation": XLMRobertaXLForCausalLM,

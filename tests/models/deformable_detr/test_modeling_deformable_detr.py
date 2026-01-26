@@ -188,7 +188,7 @@ class DeformableDetrModelTester:
 class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DeformableDetrModel, DeformableDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"image-embedding": DeformableDetrModel, "object-detection": DeformableDetrForObjectDetection}
+        {"image-feature-extraction": DeformableDetrModel, "object-detection": DeformableDetrForObjectDetection}
         if is_torch_available()
         else {}
     )

@@ -177,7 +177,7 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_model_classes = (DabDetrModel, DabDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "image-embedding": DabDetrModel,
+            "image-feature-extraction": DabDetrModel,
             "object-detection": DabDetrForObjectDetection,
         }
         if is_torch_available()

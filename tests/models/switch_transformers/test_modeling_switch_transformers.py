@@ -480,7 +480,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": SwitchTransformersModel,
+            "feature-extraction": SwitchTransformersModel,
         }
         if is_torch_available()
         else {}

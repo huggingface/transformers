@@ -154,7 +154,7 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     all_model_classes = (Lfm2VlModel, Lfm2VlForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "text-embedding": Lfm2VlModel,
+            "feature-extraction": Lfm2VlModel,
             "text-generation": Lfm2VlForConditionalGeneration,
         }
         if is_torch_available()

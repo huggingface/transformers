@@ -304,7 +304,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = {"text-embedding": BridgeTowerModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": BridgeTowerModel} if is_torch_available() else {}
 
     is_training = False
 

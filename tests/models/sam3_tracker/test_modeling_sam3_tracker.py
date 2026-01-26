@@ -242,7 +242,7 @@ class Sam3TrackerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     all_model_classes = (Sam3TrackerModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"text-embedding": Sam3TrackerModel, "mask-generation": Sam3TrackerModel} if is_torch_available() else {}
+        {"feature-extraction": Sam3TrackerModel, "mask-generation": Sam3TrackerModel} if is_torch_available() else {}
     )
 
     test_resize_embeddings = False

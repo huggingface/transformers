@@ -164,7 +164,7 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_model_classes = (CohereModel, CohereForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "text-embedding": CohereModel,
+            "feature-extraction": CohereModel,
             "text-generation": CohereForCausalLM,
         }
         if is_torch_available()

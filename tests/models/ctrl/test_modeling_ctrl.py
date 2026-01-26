@@ -181,7 +181,7 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     all_model_classes = (CTRLModel, CTRLLMHeadModel, CTRLForSequenceClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "text-embedding": CTRLModel,
+            "feature-extraction": CTRLModel,
             "text-classification": CTRLForSequenceClassification,
             "text-generation": CTRLLMHeadModel,
             "zero-shot": CTRLForSequenceClassification,

@@ -228,7 +228,7 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": M2M100Model,
+            "feature-extraction": M2M100Model,
         }
         if is_torch_available()
         else {}

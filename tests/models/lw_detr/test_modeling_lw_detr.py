@@ -442,7 +442,7 @@ class LwDetrModelTester:
 class LwDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (LwDetrModel, LwDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"image-embedding": LwDetrModel, "object-detection": LwDetrForObjectDetection} if is_torch_available() else {}
+        {"image-feature-extraction": LwDetrModel, "object-detection": LwDetrForObjectDetection} if is_torch_available() else {}
     )
     is_encoder_decoder = False
     test_missing_keys = False

@@ -149,7 +149,7 @@ class CausalLMModelTester:
     def pipeline_model_mapping(self):
         # This is the default pipeline mapping.
         mapping = {
-            "text-embedding": self.base_model_class,
+            "feature-extraction": self.base_model_class,
             "text-generation": self.causal_lm_class,
         }
         if self.question_answering_class is not None:

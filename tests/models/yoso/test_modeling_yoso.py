@@ -262,7 +262,7 @@ class YosoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     pipeline_model_mapping = (
         {
-            "text-embedding": YosoModel,
+            "feature-extraction": YosoModel,
             "fill-mask": YosoForMaskedLM,
             "text-classification": YosoForSequenceClassification,
             "token-classification": YosoForTokenClassification,

@@ -192,7 +192,7 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     )
     pipeline_model_mapping = (
         {
-            "image-embedding": Data2VecVisionModel,
+            "image-feature-extraction": Data2VecVisionModel,
             "image-classification": Data2VecVisionForImageClassification,
             "image-segmentation": Data2VecVisionForSemanticSegmentation,
         }

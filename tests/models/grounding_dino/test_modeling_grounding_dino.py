@@ -250,7 +250,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     test_missing_keys = False
     pipeline_model_mapping = (
-        {"image-embedding": GroundingDinoModel, "zero-shot-object-detection": GroundingDinoForObjectDetection}
+        {"image-feature-extraction": GroundingDinoModel, "zero-shot-object-detection": GroundingDinoForObjectDetection}
         if is_torch_available()
         else {}
     )

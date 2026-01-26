@@ -437,15 +437,15 @@ Pipelines available for multimodal tasks include the following.
     - __call__
     - all
 
-### TextEmbeddingPipeline
+### FeatureExtractionPipeline
 
-[[autodoc]] TextEmbeddingPipeline
+[[autodoc]] FeatureExtractionPipeline
     - __call__
     - all
 
-### ImageEmbeddingPipeline
+### ImageFeatureExtractionPipeline
 
-[[autodoc]] ImageEmbeddingPipeline
+[[autodoc]] ImageFeatureExtractionPipeline
     - __call__
     - all
 

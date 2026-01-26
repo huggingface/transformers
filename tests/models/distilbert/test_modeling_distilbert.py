@@ -213,7 +213,7 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": DistilBertModel,
+            "feature-extraction": DistilBertModel,
             "fill-mask": DistilBertForMaskedLM,
             "text-classification": DistilBertForSequenceClassification,
             "token-classification": DistilBertForTokenClassification,

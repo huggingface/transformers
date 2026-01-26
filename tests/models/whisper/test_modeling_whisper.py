@@ -353,7 +353,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         {
             "audio-classification": WhisperForAudioClassification,
             "automatic-speech-recognition": WhisperForConditionalGeneration,
-            "text-embedding": WhisperModel,
+            "feature-extraction": WhisperModel,
             "text-generation": WhisperForCausalLM,
         }
         if is_torch_available()

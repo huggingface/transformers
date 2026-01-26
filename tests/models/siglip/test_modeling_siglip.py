@@ -444,7 +444,7 @@ class SiglipModelTester:
 class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     additional_model_inputs = ["pixel_values"]
     all_model_classes = (SiglipModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"text-embedding": SiglipModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": SiglipModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
     test_attention_outputs = False

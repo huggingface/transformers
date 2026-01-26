@@ -292,7 +292,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": ZambaModel,
+            "feature-extraction": ZambaModel,
             "text-classification": ZambaForSequenceClassification,
             "text-generation": ZambaForCausalLM,
             "zero-shot": ZambaForSequenceClassification,

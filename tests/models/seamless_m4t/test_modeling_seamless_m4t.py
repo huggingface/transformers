@@ -542,7 +542,7 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, PipelineTesterMixin, u
     pipeline_model_mapping = (
         {
             "automatic-speech-recognition": SeamlessM4TForSpeechToText,
-            "text-embedding": SeamlessM4TModel,
+            "feature-extraction": SeamlessM4TModel,
             "text-to-audio": SeamlessM4TForTextToSpeech,
         }
         if is_torch_available()

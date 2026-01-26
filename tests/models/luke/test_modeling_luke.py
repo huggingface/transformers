@@ -605,7 +605,7 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": LukeModel,
+            "feature-extraction": LukeModel,
             "fill-mask": LukeForMaskedLM,
             "text-classification": LukeForSequenceClassification,
             "token-classification": LukeForTokenClassification,

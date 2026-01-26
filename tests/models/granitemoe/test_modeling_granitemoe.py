@@ -166,7 +166,7 @@ class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": GraniteMoeModel,
+            "feature-extraction": GraniteMoeModel,
             "text-generation": GraniteMoeForCausalLM,
         }
         if is_torch_available()

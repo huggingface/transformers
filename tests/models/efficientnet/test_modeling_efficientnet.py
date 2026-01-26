@@ -129,7 +129,7 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     all_model_classes = (EfficientNetModel, EfficientNetForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"image-embedding": EfficientNetModel, "image-classification": EfficientNetForImageClassification}
+        {"image-feature-extraction": EfficientNetModel, "image-classification": EfficientNetForImageClassification}
         if is_torch_available()
         else {}
     )

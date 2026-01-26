@@ -182,7 +182,7 @@ class ConditionalDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         else ()
     )
     pipeline_model_mapping = (
-        {"image-embedding": ConditionalDetrModel, "object-detection": ConditionalDetrForObjectDetection}
+        {"image-feature-extraction": ConditionalDetrModel, "object-detection": ConditionalDetrForObjectDetection}
         if is_torch_available()
         else {}
     )

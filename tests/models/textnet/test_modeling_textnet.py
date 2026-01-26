@@ -206,7 +206,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     all_model_classes = (TextNetModel, TextNetForImageClassification, TextNetBackbone) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"text-embedding": TextNetModel, "image-classification": TextNetForImageClassification}
+        {"feature-extraction": TextNetModel, "image-classification": TextNetForImageClassification}
         if is_torch_available()
         else {}
     )

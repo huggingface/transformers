@@ -549,7 +549,7 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
-            "text-embedding": RoCBertModel,
+            "feature-extraction": RoCBertModel,
             "fill-mask": RoCBertForMaskedLM,
             "text-classification": RoCBertForSequenceClassification,
             "text-generation": RoCBertForCausalLM,
@@ -573,7 +573,7 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     ):
         if pipeline_test_case_name in [
             "FillMaskPipelineTests",
-            "TextEmbeddingPipelineTests",
+            "FeatureExtractionPipelineTests",
             "TextClassificationPipelineTests",
             "TokenClassificationPipelineTests",
         ]:

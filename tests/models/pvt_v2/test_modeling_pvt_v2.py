@@ -146,7 +146,7 @@ def prepare_img():
 class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (PvtV2Model, PvtV2ForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"text-embedding": PvtV2Model, "image-classification": PvtV2ForImageClassification}
+        {"feature-extraction": PvtV2Model, "image-classification": PvtV2ForImageClassification}
         if is_torch_available()
         else {}
     )

@@ -138,7 +138,7 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     pipeline_model_mapping = (
         {
             "automatic-speech-recognition": MoonshineForConditionalGeneration,
-            "text-embedding": MoonshineModel,
+            "feature-extraction": MoonshineModel,
         }
         if is_torch_available()
         else {}

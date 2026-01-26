@@ -61,10 +61,10 @@ from .pipelines.test_pipelines_audio_classification import AudioClassificationPi
 from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpeechRecognitionPipelineTests
 from .pipelines.test_pipelines_depth_estimation import DepthEstimationPipelineTests
 from .pipelines.test_pipelines_document_question_answering import DocumentQuestionAnsweringPipelineTests
-from .pipelines.test_pipelines_feature_extraction import TextEmbeddingPipelineTests
+from .pipelines.test_pipelines_feature_extraction import FeatureExtractionPipelineTests
 from .pipelines.test_pipelines_fill_mask import FillMaskPipelineTests
 from .pipelines.test_pipelines_image_classification import ImageClassificationPipelineTests
-from .pipelines.test_pipelines_image_feature_extraction import ImageEmbeddingPipelineTests
+from .pipelines.test_pipelines_image_feature_extraction import ImageFeatureExtractionPipelineTests
 from .pipelines.test_pipelines_image_segmentation import ImageSegmentationPipelineTests
 from .pipelines.test_pipelines_image_text_to_text import ImageTextToTextPipelineTests
 from .pipelines.test_pipelines_image_to_image import ImageToImagePipelineTests
@@ -87,10 +87,10 @@ pipeline_test_mapping = {
     "automatic-speech-recognition": {"test": AutomaticSpeechRecognitionPipelineTests},
     "depth-estimation": {"test": DepthEstimationPipelineTests},
     "document-question-answering": {"test": DocumentQuestionAnsweringPipelineTests},
-    "text-embedding": {"test": TextEmbeddingPipelineTests},
+    "feature-extraction": {"test": FeatureExtractionPipelineTests},
     "fill-mask": {"test": FillMaskPipelineTests},
     "image-classification": {"test": ImageClassificationPipelineTests},
-    "image-embedding": {"test": ImageEmbeddingPipelineTests},
+    "image-feature-extraction": {"test": ImageFeatureExtractionPipelineTests},
     "image-segmentation": {"test": ImageSegmentationPipelineTests},
     "image-text-to-text": {"test": ImageTextToTextPipelineTests},
     "image-to-image": {"test": ImageToImagePipelineTests},
@@ -520,12 +520,12 @@ class PipelineTesterMixin:
 
     @is_pipeline_test
     def test_pipeline_text_embedding(self):
-        self.run_task_tests(task="text-embedding")
+        self.run_task_tests(task="feature-extraction")
 
     @is_pipeline_test
     @require_torch
     def test_pipeline_text_embedding_fp16(self):
-        self.run_task_tests(task="text-embedding", dtype="float16")
+        self.run_task_tests(task="feature-extraction", dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_fill_mask(self):
@@ -591,14 +591,14 @@ class PipelineTesterMixin:
     @require_vision
     @require_torch
     def test_pipeline_image_embedding(self):
-        self.run_task_tests(task="image-embedding")
+        self.run_task_tests(task="image-feature-extraction")
 
     @is_pipeline_test
     @require_timm
     @require_vision
     @require_torch
     def test_pipeline_image_embedding_fp16(self):
-        self.run_task_tests(task="image-embedding", dtype="float16")
+        self.run_task_tests(task="image-feature-extraction", dtype="float16")
 
     @unittest.skip(reason="`run_pipeline_test` is currently not implemented.")
     @is_pipeline_test

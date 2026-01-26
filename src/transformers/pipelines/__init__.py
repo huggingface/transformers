@@ -63,7 +63,7 @@ from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
-from .image_embedding import ImageEmbeddingPipeline
+from .image_embedding import ImageFeatureExtractionPipeline
 from .image_segmentation import ImageSegmentationPipeline
 from .image_text_to_text import ImageTextToTextPipeline
 from .image_to_image import ImageToImagePipeline
@@ -72,7 +72,7 @@ from .mask_generation import MaskGenerationPipeline
 from .object_detection import ObjectDetectionPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text_classification import TextClassificationPipeline
-from .text_embedding import TextEmbeddingPipeline
+from .text_embedding import FeatureExtractionPipeline
 from .text_generation import TextGenerationPipeline
 from .text_to_audio import TextToAudioPipeline
 from .token_classification import (
@@ -134,8 +134,6 @@ TASK_ALIASES = {
     "sentiment-analysis": "text-classification",
     "ner": "token-classification",
     "text-to-speech": "text-to-audio",
-    "feature-extraction": "text-embedding",
-    "image-feature-extraction": "image-embedding",
 }
 SUPPORTED_TASKS = {
     "audio-classification": {
@@ -156,8 +154,8 @@ SUPPORTED_TASKS = {
         "default": {"model": ("suno/bark-small", "1dbd7a1")},
         "type": "text",
     },
-    "text-embedding": {
-        "impl": TextEmbeddingPipeline,
+    "feature-extraction": {
+        "impl": FeatureExtractionPipeline,
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {"model": ("distilbert/distilbert-base-cased", "6ea8117")},
         "type": "text",
@@ -220,7 +218,7 @@ SUPPORTED_TASKS = {
         "type": "image",
     },
     "image-embedding": {
-        "impl": ImageEmbeddingPipeline,
+        "impl": ImageFeatureExtractionPipeline,
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {"model": ("google/vit-base-patch16-224", "3f49326")},
         "type": "image",
@@ -326,10 +324,10 @@ def check_task(task: str) -> tuple[str, dict, Any]:
             - `"conversational"`
             - `"depth-estimation"`
             - `"document-question-answering"`
-            - `"text-embedding"` (alias `"feature-extraction"` available)
+            - `"feature-extraction"`
             - `"fill-mask"`
             - `"image-classification"`
-            - `"image-embedding"` (alias `"image-feature-extraction"` available)
+            - `"image-feature-extraction"`
             - `"image-segmentation"`
             - `"image-to-image"`
             - `"keypoint-matching"`
@@ -392,7 +390,7 @@ def pipeline(task: Literal["fill-mask"], model: str | PreTrainedModel | None = N
 @overload
 def pipeline(task: Literal["image-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | PreTrainedFeatureExtractor | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ImageClassificationPipeline: ...
 @overload
-def pipeline(task: Literal["image-embedding"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | PreTrainedFeatureExtractor | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ImageEmbeddingPipeline: ...
+def pipeline(task: Literal["image-embedding"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | PreTrainedFeatureExtractor | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ImageFeatureExtractionPipeline: ...
 @overload
 def pipeline(task: Literal["image-segmentation"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | PreTrainedFeatureExtractor | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ImageSegmentationPipeline: ...
 @overload
@@ -408,7 +406,7 @@ def pipeline(task: Literal["table-question-answering"], model: str | PreTrainedM
 @overload
 def pipeline(task: Literal["text-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | PreTrainedFeatureExtractor | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> TextClassificationPipeline: ...
 @overload
-def pipeline(task: Literal["text-embedding"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | PreTrainedFeatureExtractor | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> TextEmbeddingPipeline: ...
+def pipeline(task: Literal["feature-extraction"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | PreTrainedFeatureExtractor | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> FeatureExtractionPipeline: ...
 @overload
 def pipeline(task: Literal["text-generation"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | PreTrainedFeatureExtractor | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> TextGenerationPipeline: ...
 @overload
@@ -477,10 +475,10 @@ def pipeline(
             - `"automatic-speech-recognition"`: will return a [`AutomaticSpeechRecognitionPipeline`].
             - `"depth-estimation"`: will return a [`DepthEstimationPipeline`].
             - `"document-question-answering"`: will return a [`DocumentQuestionAnsweringPipeline`].
-            - `"text-embedding"`: will return a [`TextEmbeddingPipeline`].
+            - `"feature-extraction"`: will return a [`FeatureExtractionPipeline`].
             - `"fill-mask"`: will return a [`FillMaskPipeline`]:.
             - `"image-classification"`: will return a [`ImageClassificationPipeline`].
-            - `"image-embedding"`: will return an [`ImageEmbeddingPipeline`].
+            - `"image-embedding"`: will return an [`ImageFeatureExtractionPipeline`].
             - `"image-segmentation"`: will return a [`ImageSegmentationPipeline`].
             - `"image-text-to-text"`: will return a [`ImageTextToTextPipeline`].
             - `"image-to-image"`: will return a [`ImageToImagePipeline`].

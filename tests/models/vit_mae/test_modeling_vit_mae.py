@@ -177,7 +177,7 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (ViTMAEModel, ViTMAEForPreTraining) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-embedding": ViTMAEModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"image-feature-extraction": ViTMAEModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
 

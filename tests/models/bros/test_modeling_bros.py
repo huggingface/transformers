@@ -283,7 +283,7 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"text-embedding": BrosModel, "token-classification": BrosForTokenClassification}
+        {"feature-extraction": BrosModel, "token-classification": BrosForTokenClassification}
         if is_torch_available()
         else {}
     )

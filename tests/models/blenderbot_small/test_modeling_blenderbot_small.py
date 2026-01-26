@@ -206,7 +206,7 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     all_model_classes = (BlenderbotSmallModel, BlenderbotSmallForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "text-embedding": BlenderbotSmallModel,
+            "feature-extraction": BlenderbotSmallModel,
             "text-generation": BlenderbotSmallForCausalLM,
         }
         if is_torch_available()

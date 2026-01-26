@@ -213,7 +213,7 @@ class RwkvModelTester:
 class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (RwkvModel, RwkvForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"text-embedding": RwkvModel, "text-generation": RwkvForCausalLM} if is_torch_available() else {}
+        {"feature-extraction": RwkvModel, "text-generation": RwkvForCausalLM} if is_torch_available() else {}
     )
     test_missing_keys = False
     test_torch_exportable = False  # uses custom kernels by default, not compatible with torch.export

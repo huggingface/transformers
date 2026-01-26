@@ -658,7 +658,6 @@ probably want [🤗 Diffusers](https://huggingface.co/docs/diffusers/index) inst
 
 ### Other changes
 
-- The `feature-extraction` pipeline has now been renamed to `text-embedding` and the `image-feature-extraction` pipeline has been renamed to `image-embedding`. The older names are still usable as aliases, so this should not impact your existing code.
 - Image text to text pipelines will no longer accept images as a separate argument along with conversation chats. Image data has to be embedded in the chat's "content" field. See [#42359](https://github.com/huggingface/transformers/pull/42359)
 
 ## PushToHubMixin

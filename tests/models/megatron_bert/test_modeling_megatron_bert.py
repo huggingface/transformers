@@ -277,7 +277,7 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
-            "text-embedding": MegatronBertModel,
+            "feature-extraction": MegatronBertModel,
             "fill-mask": MegatronBertForMaskedLM,
             "text-classification": MegatronBertForSequenceClassification,
             "text-generation": MegatronBertForCausalLM,

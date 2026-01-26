@@ -167,7 +167,7 @@ class ResNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"image-embedding": ResNetModel, "image-classification": ResNetForImageClassification}
+        {"image-feature-extraction": ResNetModel, "image-classification": ResNetForImageClassification}
         if is_torch_available()
         else {}
     )

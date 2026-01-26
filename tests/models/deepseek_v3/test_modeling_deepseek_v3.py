@@ -222,7 +222,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     all_generative_model_classes = (DeepseekV3ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "text-embedding": DeepseekV3Model,
+            "feature-extraction": DeepseekV3Model,
             "text-classification": DeepseekV3ForSequenceClassification,
             "token-classification": DeepseekV3ForTokenClassification,
             "text-generation": DeepseekV3ForCausalLM,

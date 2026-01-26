@@ -198,7 +198,7 @@ class GPTNeoXJapaneseModelTester:
 class GPTNeoXModelJapaneseTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GPTNeoXJapaneseModel, GPTNeoXJapaneseForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"text-embedding": GPTNeoXJapaneseModel, "text-generation": GPTNeoXJapaneseForCausalLM}
+        {"feature-extraction": GPTNeoXJapaneseModel, "text-generation": GPTNeoXJapaneseForCausalLM}
         if is_torch_available()
         else {}
     )

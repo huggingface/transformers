@@ -268,7 +268,7 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     pipeline_model_mapping = (
         {
-            "text-embedding": MraModel,
+            "feature-extraction": MraModel,
             "fill-mask": MraForMaskedLM,
             "text-classification": MraForSequenceClassification,
             "token-classification": MraForTokenClassification,

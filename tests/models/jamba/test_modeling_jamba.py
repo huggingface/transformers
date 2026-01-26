@@ -332,7 +332,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": JambaModel,
+            "feature-extraction": JambaModel,
             "text-classification": JambaForSequenceClassification,
             "text-generation": JambaForCausalLM,
             "zero-shot": JambaForSequenceClassification,

@@ -146,7 +146,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     is_encoder_decoder = True
 
     test_resize_embeddings = False
-    pipeline_model_mapping = {"text-embedding": EncodecModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": EncodecModel} if is_torch_available() else {}
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not have attention and does not support returning hidden states

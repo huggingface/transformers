@@ -515,7 +515,7 @@ class ChineseCLIPModelTester:
 @require_torch
 class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ChineseCLIPModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"text-embedding": ChineseCLIPModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": ChineseCLIPModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
     test_attention_outputs = False

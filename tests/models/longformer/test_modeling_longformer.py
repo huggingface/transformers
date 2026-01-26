@@ -318,7 +318,7 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": LongformerModel,
+            "feature-extraction": LongformerModel,
             "fill-mask": LongformerForMaskedLM,
             "text-classification": LongformerForSequenceClassification,
             "token-classification": LongformerForTokenClassification,

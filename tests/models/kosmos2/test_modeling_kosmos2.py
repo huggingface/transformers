@@ -261,7 +261,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     additional_model_inputs = ["input_ids", "image_embeds_position_mask"]
     pipeline_model_mapping = (
         {
-            "text-embedding": Kosmos2Model,
+            "feature-extraction": Kosmos2Model,
             "image-to-text": Kosmos2ForConditionalGeneration,
             "image-text-to-text": Kosmos2ForConditionalGeneration,
         }

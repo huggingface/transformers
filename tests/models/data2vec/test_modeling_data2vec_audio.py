@@ -348,7 +348,7 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         {
             "audio-classification": Data2VecAudioForSequenceClassification,
             "automatic-speech-recognition": Data2VecAudioForCTC,
-            "text-embedding": Data2VecAudioModel,
+            "feature-extraction": Data2VecAudioModel,
         }
         if is_torch_available()
         else {}

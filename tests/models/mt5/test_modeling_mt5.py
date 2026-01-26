@@ -465,7 +465,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": MT5Model,
+            "feature-extraction": MT5Model,
             "text-classification": MT5ForSequenceClassification,
             "zero-shot": MT5ForSequenceClassification,
         }

@@ -245,7 +245,7 @@ class BertGenerationEncoderTester:
 class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BertGenerationEncoder, BertGenerationDecoder) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"text-embedding": BertGenerationEncoder, "text-generation": BertGenerationDecoder}
+        {"feature-extraction": BertGenerationEncoder, "text-generation": BertGenerationDecoder}
         if is_torch_available()
         else {}
     )

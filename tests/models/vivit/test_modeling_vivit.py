@@ -166,7 +166,7 @@ class VivitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (VivitModel, VivitForVideoClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"text-embedding": VivitModel, "video-classification": VivitForVideoClassification}
+        {"feature-extraction": VivitModel, "video-classification": VivitForVideoClassification}
         if is_torch_available()
         else {}
     )

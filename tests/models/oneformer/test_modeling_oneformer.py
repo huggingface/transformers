@@ -230,7 +230,7 @@ class OneFormerModelTester:
 @require_torch
 class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (OneFormerModel, OneFormerForUniversalSegmentation) if is_torch_available() else ()
-    pipeline_model_mapping = {"text-embedding": OneFormerModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": OneFormerModel} if is_torch_available() else {}
 
     is_encoder_decoder = False
 
@@ -247,7 +247,7 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         feature_extractor_name,
         processor_name,
     ):
-        if pipeline_test_case_name == "TextEmbeddingPipelineTests":
+        if pipeline_test_case_name == "FeatureExtractionPipelineTests":
             return True
 
         return False

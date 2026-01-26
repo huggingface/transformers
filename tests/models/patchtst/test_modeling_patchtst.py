@@ -158,7 +158,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else ()
     )
 
-    pipeline_model_mapping = {"text-embedding": PatchTSTModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": PatchTSTModel} if is_torch_available() else {}
     is_encoder_decoder = False
 
     test_missing_keys = True

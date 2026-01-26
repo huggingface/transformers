@@ -20,7 +20,7 @@ if is_vision_available():
             Whether or not to return the pooled output. If `False`, the model will return the raw hidden states.
     """,
 )
-class ImageEmbeddingPipeline(Pipeline):
+class ImageFeatureExtractionPipeline(Pipeline):
     """
     Image feature extraction pipeline uses no model head. This pipeline extracts the hidden states from the base
     transformer, which can be used as features in downstream tasks.

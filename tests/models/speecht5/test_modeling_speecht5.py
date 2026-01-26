@@ -154,7 +154,7 @@ class SpeechT5ModelTester:
 class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"automatic-speech-recognition": SpeechT5ForSpeechToText, "text-embedding": SpeechT5Model}
+        {"automatic-speech-recognition": SpeechT5ForSpeechToText, "feature-extraction": SpeechT5Model}
         if is_torch_available()
         else {}
     )

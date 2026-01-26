@@ -72,7 +72,7 @@ class CwmModelTest(CausalLMModelTest, unittest.TestCase):
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": CwmModel,
+            "feature-extraction": CwmModel,
             "text-generation": CwmForCausalLM,
         }
         if is_torch_available()

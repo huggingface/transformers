@@ -160,7 +160,7 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": DeepseekVLHybridModel,
+            "feature-extraction": DeepseekVLHybridModel,
             "image-text-to-text": DeepseekVLHybridForConditionalGeneration,
             "any-to-any": DeepseekVLHybridForConditionalGeneration,
         }

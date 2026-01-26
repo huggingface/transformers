@@ -197,7 +197,7 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
         else ()
     )
     pipeline_model_mapping = (
-        {"image-embedding": TableTransformerModel, "object-detection": TableTransformerForObjectDetection}
+        {"image-feature-extraction": TableTransformerModel, "object-detection": TableTransformerForObjectDetection}
         if is_torch_available()
         else {}
     )

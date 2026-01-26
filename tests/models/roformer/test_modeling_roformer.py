@@ -382,7 +382,7 @@ class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
-            "text-embedding": RoFormerModel,
+            "feature-extraction": RoFormerModel,
             "fill-mask": RoFormerForMaskedLM,
             "text-classification": RoFormerForSequenceClassification,
             "text-generation": RoFormerForCausalLM,

@@ -444,7 +444,7 @@ class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": ErnieModel,
+            "feature-extraction": ErnieModel,
             "fill-mask": ErnieForMaskedLM,
             "text-classification": ErnieForSequenceClassification,
             "text-generation": ErnieForCausalLM,
