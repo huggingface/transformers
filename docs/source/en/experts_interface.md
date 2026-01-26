@@ -27,7 +27,7 @@ The [`ExpertsInterface`] provides optimized experts backends. It decouples the e
 
 On GPU:
 
-- `batched_mm` is fastest for very small inputs and compilation speeds it up further. `grouped_mm` performs.
+- `batched_mm` is fastest for very small inputs and compilation speeds it up further. 
 - `grouped_mm` is best for larger inputs and is more memory efficient as it avoids duplicating expert parameters for each token.
 
 On CPU:
