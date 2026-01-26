@@ -292,7 +292,12 @@ class PagedAttentionCache:
 
     @traced
     def extend_read_and_write_indices(
-        self, request_id: str, past_length: int, query_length: int, read_index: list[list[int]], write_index: list[list[int]]
+        self,
+        request_id: str,
+        past_length: int,
+        query_length: int,
+        read_index: list[list[int]],
+        write_index: list[list[int]],
     ) -> None:
         """Retrieve physical cache indices for reading KV states in the cache across all layer groups. This method
         coordinates with all cache managers to build the complete set of read indices needed for attention computation.
@@ -302,7 +307,6 @@ class PagedAttentionCache:
             read_indices.extend(indices)
             indices = cm.get_write_indices(request_id, past_length, query_length)
             write_indices.extend(indices)
-
 
     @traced
     def get_seqlens_k(self, past_length: int, query_length: int) -> dict[str, int]:

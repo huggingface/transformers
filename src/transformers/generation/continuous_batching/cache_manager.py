@@ -402,6 +402,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
             physical_indices.append(physical_index)
         return physical_indices
 
+
 class SlidingAttentionCacheAllocator(CacheAllocator):
     """Cache manager for sliding window attention layers."""
 

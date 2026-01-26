@@ -324,10 +324,12 @@ class ContinuousBatchProcessor:
 
         # For other kwargs, we need a list of tensors with as many tensors as there are groups
         self.write_index_storage = [
-            torch.empty((self.max_batch_tokens,), dtype=torch.int32, device=self.model_device) for _ in range(num_groups)
+            torch.empty((self.max_batch_tokens,), dtype=torch.int32, device=self.model_device)
+            for _ in range(num_groups)
         ]
         self.read_index_storage = [
-            torch.empty((self.num_pages + self.max_batch_tokens), dtype=torch.int32, device=self.model_device) for _ in range(num_groups)
+            torch.empty((self.num_pages + self.max_batch_tokens), dtype=torch.int32, device=self.model_device)
+            for _ in range(num_groups)
         ]
         # For read index, the +T is because there are -1 for seqlen_q when model uses a sliding window
 
@@ -650,7 +652,7 @@ class ContinuousBatchProcessor:
     @traced
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
-        new_tokens = self.output_ids[:len(self.requests_in_batch)].tolist()
+        new_tokens = self.output_ids[: len(self.requests_in_batch)].tolist()
         current_logits_index = 0
         for state in self.requests_in_batch:
             # If the request has no remaining prompt ids, it means prefill has already ended or just finished
@@ -761,7 +763,9 @@ class ContinuousBatchProcessor:
         else:
             padded_q, padded_read_index_size = 0, 0
         # Retrieve the model kwargs with or without padding
-        batch_data = self.get_model_kwargs(padded_q, padded_read_index_size).asdict()  # TODO: this is imperfect, check if there is no better way to juggle dict / dataclass
+        batch_data = self.get_model_kwargs(
+            padded_q, padded_read_index_size
+        ).asdict()  # TODO: this is imperfect, check if there is no better way to juggle dict / dataclass
 
         # If we are not using cuda graphs, we perform the generation step and return
         if self._graphs is None:
@@ -804,7 +808,9 @@ class ContinuousBatchProcessor:
         return model(**batch_data).logits
 
     @traced(span_name="logit_processing")
-    def _process_logit(self, batch_data: dict, logits: torch.Tensor, logit_processor: LogitsProcessorList) -> torch.Tensor:
+    def _process_logit(
+        self, batch_data: dict, logits: torch.Tensor, logit_processor: LogitsProcessorList
+    ) -> torch.Tensor:
         # Pass continuous batching context to logits processor if it supports it.
         if hasattr(logit_processor, "set_continuous_batching_context"):
             logit_processor.set_continuous_batching_context(batch_data["logits_indices"], batch_data["cu_seq_lens_q"])
@@ -833,6 +839,7 @@ class ContinuousBatchProcessor:
         indices = self.logits_indices[:tokens]
         next_tokens = next_tokens[indices]
         self.output_ids[:tokens].copy_(next_tokens)
+
 
 # Manager Class (User Interface)
 @attach_tracer()
