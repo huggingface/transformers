@@ -872,7 +872,7 @@ class Trainer:
 
         # 1 - Align EOS token. EOS is more complex than the others, as `generation_config` may hold more than one EOS
         # token.
-        tokenizer_has_new_eos = tokenizer.eos_token_id != self.model.config.eos_token_id
+        tokenizer_has_new_eos = tokenizer.eos_token_id != getattr(self.model.config, "eos_token_id", None)
         if model_has_generation_config:
             # `generation_config.eos_token_id` is None: direct comparison
             if self.model.generation_config.eos_token_id is None:
@@ -896,7 +896,7 @@ class Trainer:
                 self.model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
 
         # 2 - Align BOS
-        tokenizer_has_new_bos = tokenizer.bos_token_id != self.model.config.bos_token_id
+        tokenizer_has_new_bos = tokenizer.bos_token_id != getattr(self.model.config, "bos_token_id", None)
         if model_has_generation_config:
             tokenizer_has_new_bos |= tokenizer.bos_token_id != self.model.generation_config.bos_token_id
 
@@ -907,7 +907,7 @@ class Trainer:
                 self.model.generation_config.bos_token_id = tokenizer.bos_token_id
 
         # 3 - Align PAD
-        tokenizer_has_new_pad = tokenizer.pad_token_id != self.model.config.pad_token_id
+        tokenizer_has_new_pad = tokenizer.pad_token_id != getattr(self.model.config, "pad_token_id", None)
         if model_has_generation_config:
             tokenizer_has_new_pad |= tokenizer.pad_token_id != self.model.generation_config.pad_token_id
 
@@ -4008,15 +4008,6 @@ class Trainer:
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
             Path(os.path.join(output_dir, "user_content.pt")).touch()
-        # We are in N-D parallelism if we have parallelism_config set, so we check accelerate if we're on a to_save rank
-        elif getattr(self.accelerator, "parallelism_config", None) is not None:
-            # DeepSpeed SP already handles checkpoint saving below, so skip manual save in that case
-            pc = getattr(self.accelerator, "parallelism_config")
-            if self.accelerator.should_save_model and not (pc.sp_enabled and pc.sp_backend == "deepspeed"):
-                self._save(output_dir)
-        # If we drop to here, we're in 1D parallelism, so all ranks need to go to `save_pretrained`
-        elif (tp_size := getattr(self.model, "_tp_size", 0)) is not None and tp_size > 1:
-            self._save(output_dir)
         elif self.is_fsdp_enabled:
             if "FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type):
                 state_dict = self.accelerator.get_state_dict(self.model)

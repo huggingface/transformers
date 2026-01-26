@@ -111,8 +111,10 @@ class Pix2StructTextConfig(PreTrainedConfig):
         use_cache=False,
         pad_token_id=0,
         eos_token_id=1,
+        bos_token_id=None,
         tie_word_embeddings=False,
         is_decoder=True,
+        add_cross_attention=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -129,19 +131,19 @@ class Pix2StructTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
 
         self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
         self.decoder_start_token_id = decoder_start_token_id
 
         # for backwards compatibility
         self.dense_act_fn = dense_act_fn
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            is_decoder=is_decoder,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
+        super().__init__(**kwargs)
 
 
 class Pix2StructVisionConfig(PreTrainedConfig):
@@ -335,7 +337,8 @@ class Pix2StructConfig(PreTrainedConfig):
         self.vision_config.initializer_range = self.initializer_range
 
         self.is_vqa = is_vqa
-        super().__init__(tie_word_embeddings=tie_word_embeddings, is_encoder_decoder=is_encoder_decoder, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["Pix2StructConfig", "Pix2StructTextConfig", "Pix2StructVisionConfig"]

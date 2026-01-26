@@ -18,7 +18,6 @@ import tempfile
 import unittest
 from functools import reduce
 
-import numpy as np
 import pytest
 import requests
 
@@ -538,7 +537,7 @@ class JanusIntegrationTest(unittest.TestCase):
 
         # Decode generated tokens to pixel values and postprocess them.
         decoded_pixel_values = model.decode_image_tokens(out)
-        images = processor.postprocess(list(decoded_pixel_values.float()), return_tensors="np")
+        images = processor.postprocess(list(decoded_pixel_values.float()), return_tensors="pt")
 
-        self.assertTrue(images["pixel_values"].shape == (1, 384, 384, 3))
-        self.assertTrue(isinstance(images["pixel_values"], np.ndarray))
+        self.assertTrue(images["pixel_values"].shape == (1, 3, 384, 384))
+        self.assertTrue(isinstance(images["pixel_values"], torch.Tensor))

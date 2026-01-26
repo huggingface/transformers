@@ -80,8 +80,12 @@
       title: Experts backends
     - local: continuous_batching
       title: Continuous batching
-    - local: kernel_doc/overview
-      title: Kernels in transformers
+    - sections:
+      - local: kernel_doc/overview
+        title: Kernels
+      - local: kernel_doc/loading_kernels
+        title: Loading kernels
+      title: Kernels
     - local: perf_torch_compile
       title: torch.compile
     - local: perf_infer_gpu_multi
@@ -224,19 +228,35 @@
   title: Quantization
 - isExpanded: false
   sections:
-  - local: community_integrations/sglang
-    title: SGLang
-  - local: community_integrations/tensorrt-llm
-    title: TensorRT-LLM
-  - local: community_integrations/vllm
-    title: vLLM
-  - local: community_integrations/transformers_as_backend
-    title: Building a compatible model backend for inference
+  - sections:
+    - local: community_integrations/sglang
+      title: SGLang
+    - local: community_integrations/tensorrt-llm
+      title: TensorRT-LLM
+    - local: community_integrations/vllm
+      title: vLLM
+    - local: community_integrations/transformers_as_backend
+      title: Building a compatible model backend for inference
+    title: Inference engines
   - sections:
     - local: community_integrations/llama_cpp
       title: llama.cpp
     title: Local deployment
-  title: Community integrations
+  - sections:
+    - local: community_integrations/nanotron
+      title: Nanotron
+    - local: community_integrations/torchtitan
+      title: torchtitan
+    title: Pretraining
+  - sections:
+    - local: community_integrations/axolotl
+      title: Axolotl
+    - local: community_integrations/trl
+      title: TRL
+    - local: community_integrations/unsloth
+      title: Unsloth
+    title: Fine-tuning
+  title: Ecosystem integrations
 - isExpanded: false
   sections:
   - sections:
@@ -263,6 +283,8 @@
         title: Audio classification
       - local: tasks/asr
         title: Automatic speech recognition
+      - local: tasks/text-to-speech
+        title: Text to speech
       title: Audio
     - sections:
       - local: tasks/image_classification
@@ -301,8 +323,6 @@
         title: Document Question Answering
       - local: tasks/visual_question_answering
         title: Visual Question Answering
-      - local: tasks/text-to-speech
-        title: Text to speech
       - local: tasks/idefics
         title: Image tasks with IDEFICS
       - local: tasks/image_text_to_text
@@ -516,13 +536,15 @@
       - local: model_doc/gemma2
         title: Gemma2
       - local: model_doc/glm
-        title: GLM
+        title: GLM-4
       - local: model_doc/glm4
-        title: glm4
+        title: GLM-4-0414
       - local: model_doc/glm4_moe
-        title: glm4_moe
+        title: GLM-4.5, GLM-4.6, GLM-4.7
+      - local: model_doc/glm4_moe_lite
+        title: GLM-4.7-Flash
       - local: model_doc/glm_image
-        title: GlmImage
+        title: GLM-Image
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -703,6 +725,8 @@
         title: RWKV
       - local: model_doc/seed_oss
         title: Seed-Oss
+      - local: model_doc/solar_open
+        title: SolarOpen
       - local: model_doc/splinter
         title: Splinter
       - local: model_doc/squeezebert
@@ -743,8 +767,6 @@
         title: XLNet
       - local: model_doc/xlstm
         title: xLSTM
-      - local: model_doc/glm4_moe_lite
-        title: y
       - local: model_doc/yoso
         title: YOSO
       - local: model_doc/zamba
@@ -919,6 +941,8 @@
         title: EnCodec
       - local: model_doc/fastspeech2_conformer
         title: FastSpeech2Conformer
+      - local: model_doc/glmasr
+        title: GLM-ASR
       - local: model_doc/granite_speech
         title: GraniteSpeech
       - local: model_doc/hubert
@@ -1069,8 +1093,6 @@
         title: Gemma3n
       - local: model_doc/git
         title: GIT
-      - local: model_doc/glmasr
-        title: GLM-ASR
       - local: model_doc/glm46v
         title: Glm46V
       - local: model_doc/glm4v

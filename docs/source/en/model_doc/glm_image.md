@@ -199,8 +199,10 @@ print(f"Output tokens: {output_tokens}")
 
 [[autodoc]] GlmImageModel
     - forward
+    - get_image_features
 
 ## GlmImageForConditionalGeneration
 
 [[autodoc]] GlmImageForConditionalGeneration
     - forward
+    - get_image_features
