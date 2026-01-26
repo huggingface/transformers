@@ -73,6 +73,20 @@ class VibeVoiceProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer, chat_template=None):
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
+        if not hasattr(tokenizer, "audio_bos_token"):
+            self.audio_bos_token = "<|vision_start|>"
+            self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(self.audio_bos_token)
+        else:
+            self.audio_bos_token = tokenizer.audio_bos_token
+            self.audio_bos_token_id = tokenizer.audio_bos_token_id
+
+        if not hasattr(tokenizer, "audio_eos_token"):
+            self.audio_eos_token = "<|vision_end|>"
+            self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(self.audio_eos_token)
+        else:
+            self.audio_eos_token = tokenizer.audio_eos_token
+            self.audio_eos_token_id = tokenizer.audio_eos_token_id
+
         if not hasattr(tokenizer, "audio_diffusion_token"):
             self.audio_diffusion_token = "<|vision_pad|>"
             self.audio_diffusion_token_id = tokenizer.convert_tokens_to_ids(self.audio_diffusion_token)
@@ -82,8 +96,9 @@ class VibeVoiceProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
         audio: AudioInput | None = None,
+        output_labels: bool | None = False,
         **kwargs: Unpack[VibeVoiceProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -97,15 +112,19 @@ class VibeVoiceProcessor(ProcessorMixin):
                 The input text(s) to process, typically prepared by apply_chat_template with audio token placeholders.
             audio (`List[Union[str, np.ndarray]]`, *optional*):
                 Audio samples for speaker voice cloning. Should match the number of audio token placeholders in text.
+            output_labels (bool, *optional*, default=False):
+                Whether to return labels for training.
             **kwargs:
                 Additional keyword arguments passed to the tokenizer and feature extractor.
 
         Returns:
-            `BatchFeature`: A BatchFeature with the following fields:
-                - **input_ids** -- Token ID sequences ready for the model
-                - **attention_mask** -- Attention masks for the sequences
-                - **input_values** -- Processed audio tensors (if audio provided)
-                - **padding_mask** -- Masks for valid audio tokens (if audio provided)
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+            - **input_ids** -- List of token ids to be fed to the model.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True`).
+            - **input_values** -- List of audio values to be fed to the model. Returned when `audio` is not `None`.
+            - **padding_mask** -- List of indices specifying which audio frames should be attended to by the model.
+            - **labels** -- Labels for training language model. Returned when `output_labels=True`.
         """
         output_kwargs = self._merge_kwargs(
             VibeVoiceProcessorKwargs,
@@ -158,6 +177,19 @@ class VibeVoiceProcessor(ProcessorMixin):
 
         encoding = self.tokenizer(text, **text_kwargs)
         data.update(encoding)
+        if output_labels:
+            # for the language model, -100 is ignored
+            labels = data["input_ids"].clone()
+            labels[labels == self.audio_bos_token_id] = -100
+            labels[labels == self.audio_eos_token_id] = -100
+            labels[labels == self.audio_diffusion_token_id] = -100
+            labels[labels == self.tokenizer.pad_token_id] = -100
+            data["labels"] = labels
+
+            # TODO for the audio generation
+            # community repo has example for TTS (no voice cloning): 
+            # https://github.com/vibevoice-community/VibeVoice/blob/main/vibevoice/finetune/data_vibevoice.py#L283-L287
+
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
