@@ -164,6 +164,10 @@ ATTRIBUTES_TO_ALLOW = (
     "pretraining_tp",
     "use_sliding_window",
     "max_window_layers",
+    # vision attributes that may be used indirectly via check_model_inputs
+    "vision_feature_layer",
+    "vision_feature_select_strategy",
+    "vision_aspect_ratio",
 )
 
 
