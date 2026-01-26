@@ -146,7 +146,7 @@ class FP8QuantizerTest(unittest.TestCase):
         ]
     )
     def test_moe_conversion_doesnt_raise(self, model_id):
-        quantization_config = FineGrainedFP8Config()
+        quantization_config = FineGrainedFP8Config(weight_block_size=(32, 32))
         AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
 
     def test_quantized_model_conversion(self):
