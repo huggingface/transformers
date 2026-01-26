@@ -609,6 +609,7 @@ class T5Gemma2Config(PreTrainedConfig):
             "attention_dropout",
             "vocab_size",
             "dtype",
+            "return_dict",
         ]
 
         if key in shared_attr_with_submodules:
