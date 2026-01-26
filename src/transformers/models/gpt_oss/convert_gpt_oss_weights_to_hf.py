@@ -776,8 +776,8 @@ def write_tokenizer(tokenizer_path: str, save_dir: str):
 
     print("Saving chat template...")
     chat_template_path = os.path.join(save_dir, "chat_template.jinja")
-    with open(chat_template_path, "w") as f:
-        json.dump({"chat_template": chat_template}, f, indent=2)
+    with open(chat_template_path, "w", encoding="utf-8") as f:
+        f.write(chat_template)
 
 
 def main():
