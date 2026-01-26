@@ -14,7 +14,7 @@
 
 # /// script
 # dependencies = [
-#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "transformers==5.0.0",
 #     "datasets[audio] >= 1.12.0",
 #     "torch >= 1.5",
 #     "torchaudio",

@@ -14,7 +14,7 @@
 
 # /// script
 # dependencies = [
-#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "transformers==5.0.0",
 #     "datasets >= 2.0.0",
 #     "torch >= 1.3",
 #     "accelerate",
@@ -59,7 +59,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.57.0.dev0")
+check_min_version("5.0.0")
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/semantic-segmentation/requirements.txt")
 

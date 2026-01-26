@@ -14,7 +14,7 @@
 
 # /// script
 # dependencies = [
-#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "transformers==5.0.0",
 #     "datasets >= 2.0.0",
 #     "torch >= 1.3",
 #     "accelerate",
@@ -61,7 +61,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.57.0.dev0")
+check_min_version("5.0.0")
 
 logger = get_logger(__name__)
 

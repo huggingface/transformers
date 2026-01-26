@@ -16,7 +16,7 @@
 
 # /// script
 # dependencies = [
-#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "transformers==5.0.0",
 #     "accelerate >= 0.21.0",
 #     "sentencepiece != 0.1.92",
 #     "protobuf",
