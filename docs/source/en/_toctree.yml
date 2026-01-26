@@ -1117,6 +1117,8 @@
         title: InstructBlipVideo
       - local: model_doc/internvl
         title: InternVL
+      - local: model_doc/internvl_flash
+        title: InternVLFlash
       - local: model_doc/janus
         title: Janus
       - local: model_doc/kosmos-2
