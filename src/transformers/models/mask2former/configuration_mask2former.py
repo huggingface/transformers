@@ -14,6 +14,7 @@
 """Mask2Former model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin
 from ...utils import logging
 from ..auto import AutoConfig
 
@@ -21,7 +22,7 @@ from ..auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class Mask2FormerConfig(PreTrainedConfig):
+class Mask2FormerConfig(PreTrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Mask2FormerModel`]. It is used to instantiate a
     Mask2Former model according to the specified arguments, defining the model architecture. Instantiating a

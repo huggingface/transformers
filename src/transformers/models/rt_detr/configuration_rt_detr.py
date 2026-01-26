@@ -14,6 +14,7 @@
 """RT-DETR model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin
 from ...utils import logging
 from ..auto import AutoConfig
 
@@ -21,7 +22,7 @@ from ..auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class RTDetrConfig(PreTrainedConfig):
+class RTDetrConfig(PreTrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`RTDetrModel`]. It is used to instantiate a
     RT-DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration

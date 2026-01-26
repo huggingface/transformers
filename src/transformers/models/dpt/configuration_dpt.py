@@ -178,21 +178,34 @@ class DPTConfig(PreTrainedConfig, BackboneConfigMixin):
         self.hidden_size = hidden_size
         self.is_hybrid = is_hybrid
 
-        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
-            backbone=backbone,
-            default_config_type="bit",
-            default_config_kwargs={
-                "global_padding": "same",
-                "layer_type": "bottleneck",
-                "depths": [3, 4, 9],
-                "out_features": ["stage1", "stage2", "stage3"],
-                "embedding_dynamic_padding": True,
-            },
-            **kwargs,
-        )
-        if readout_type != "project":
-            raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
+        if readout_type not in ["ignore", "add", "project"]:
+            raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")
+
+        if self.is_hybrid:
+            if isinstance(backbone_config, dict):
+                backbone_config.setdefault("model_type", "bit")
+
+            backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
+                backbone_config=backbone_config,
+                backbone=backbone,
+                default_config_type="bit",
+                default_config_kwargs={
+                    "global_padding": "same",
+                    "layer_type": "bottleneck",
+                    "depths": [3, 4, 9],
+                    "out_features": ["stage1", "stage2", "stage3"],
+                    "embedding_dynamic_padding": True,
+                },
+                **kwargs,
+            )
+            if readout_type != "project":
+                raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
+        elif backbone_config is not None:
+            backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
+                backbone_config=backbone_config,
+                **kwargs,
+            )
+            backbone_out_indices = None
 
         self.backbone_config = backbone_config
 
@@ -207,12 +220,10 @@ class DPTConfig(PreTrainedConfig, BackboneConfigMixin):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
-        self.backbone_out_indices = None if not is_hybrid else backbone_out_indices
-        self.backbone_featmap_shape = None if not is_hybrid else backbone_featmap_shape
-        self.neck_ignore_stages = [] if not is_hybrid else neck_ignore_stages
+        self.backbone_out_indices = backbone_out_indices
+        self.backbone_featmap_shape = backbone_featmap_shape if is_hybrid else None
+        self.neck_ignore_stages = neck_ignore_stages if is_hybrid else []
 
-        if readout_type not in ["ignore", "add", "project"]:
-            raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.readout_type = readout_type

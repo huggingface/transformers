@@ -258,7 +258,7 @@ class BackboneConfigMixin:
         """
         Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
         """
-        self._out_indices = out_indices
+        self._out_indices = list(out_indices)
         self._out_features = None
         self.align_output_features_output_indices()
 

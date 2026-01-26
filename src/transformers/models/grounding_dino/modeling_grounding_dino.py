@@ -381,11 +381,7 @@ class GroundingDinoConvEncoder(nn.Module):
         self.model = backbone
         self.intermediate_channel_sizes = self.model.channels
 
-        if config.backbone_config is not None:
-            backbone_model_type = config.backbone_config.model_type
-        else:
-            raise ValueError("Either `backbone` or `backbone_config` should be provided in the config")
-
+        backbone_model_type = config.backbone_config.model_type
         if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
                 if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
