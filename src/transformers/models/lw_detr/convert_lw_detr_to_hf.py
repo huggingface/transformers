@@ -19,8 +19,9 @@ URL: https://huggingface.co/xbsu/LW-DETR/tree/main/pretrain_weights
 import argparse
 import os
 import re
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -295,12 +296,15 @@ def get_backbone_projector_sampling_key_mapping(config: LwDetrConfig):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
 
-    return im
+    return image
+
 
 def original_preprocess_image(image_url):
-    image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
+    with httpx.stream("GET", image_url) as response:
+        image = Image.open(BytesIO(response.read())).convert("RGB")
     transform = transforms.Compose([
             transforms.Resize([640, 640]),
             transforms.ToTensor(),
@@ -502,7 +506,7 @@ def main():
     )
     parser.add_argument("--checkpoint_path", type=str, help="Path to the checkpoint file (if not using hub download)")
     parser.add_argument("--push_to_hub", action="store_true", help="Push model to the hub")
-    parser.add_argument("--organization", type=str, default="stevenbucaille", help="Organization to push the model to")
+    parser.add_argument("--organization", type=str, default="AnnaZhang", help="Organization to push the model to")
 
     args = parser.parse_args()
 

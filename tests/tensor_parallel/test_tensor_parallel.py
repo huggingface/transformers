@@ -23,6 +23,7 @@ import tempfile
 import warnings
 
 from safetensors import safe_open
+
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
 from transformers.testing_utils import (

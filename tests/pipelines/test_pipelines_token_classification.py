@@ -211,15 +211,6 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             ],
         )
 
-        with self.assertWarns(UserWarning):
-            token_classifier = pipeline(task="ner", model=model, tokenizer=tokenizer, grouped_entities=True)
-        self.assertEqual(token_classifier._postprocess_params["aggregation_strategy"], AggregationStrategy.SIMPLE)
-        with self.assertWarns(UserWarning):
-            token_classifier = pipeline(
-                task="ner", model=model, tokenizer=tokenizer, grouped_entities=True, ignore_subwords=True
-            )
-        self.assertEqual(token_classifier._postprocess_params["aggregation_strategy"], AggregationStrategy.FIRST)
-
     @slow
     @require_torch
     def test_chunking(self):
@@ -925,7 +916,9 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_simple(self):
-        token_classifier = pipeline(task="ner", model="dslim/bert-base-NER", grouped_entities=True)
+        token_classifier = pipeline(
+            task="ner", model="dslim/bert-base-NER", aggregation_strategy=AggregationStrategy.SIMPLE
+        )
         sentence = "Hello Sarah Jessica Parker who Jessica lives in New York"
         sentence2 = "This is a simple test"
         output = token_classifier(sentence)

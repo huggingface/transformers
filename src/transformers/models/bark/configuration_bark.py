@@ -174,7 +174,8 @@ class BarkFineConfig(BarkSubModelConfig):
         self.n_codes_total = n_codes_total
         self.n_codes_given = n_codes_given
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 class BarkConfig(PreTrainedConfig):

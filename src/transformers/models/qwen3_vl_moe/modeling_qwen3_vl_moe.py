@@ -39,12 +39,18 @@ from ...integrations import (
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_grouped_mm_available
-from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_grouped_mm_available,
+    torch_compilable_check,
+)
+from ...utils.generic import OutputRecorder, check_model_inputs, is_flash_attention_requested, maybe_autocast
 from .configuration_qwen3_vl_moe import Qwen3VLMoeConfig, Qwen3VLMoeTextConfig, Qwen3VLMoeVisionConfig
 
 
@@ -409,55 +415,6 @@ class Qwen3VLMoeVisionRotaryEmbedding(nn.Module):
         return freqs
 
 
-class Qwen3VLMoeVisionMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.linear_fc1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
-        self.linear_fc2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_state):
-        return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
-
-
-class Qwen3VLMoeVisionPatchEmbed(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        self.patch_size = config.patch_size
-        self.temporal_patch_size = config.temporal_patch_size
-        self.in_channels = config.in_channels
-        self.embed_dim = config.hidden_size
-
-        kernel_size = [self.temporal_patch_size, self.patch_size, self.patch_size]
-        self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=True)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        target_dtype = self.proj.weight.dtype
-        hidden_states = hidden_states.view(
-            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
-        )
-        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
-        return hidden_states
-
-
-class Qwen3VLMoeVisionPatchMerger(nn.Module):
-    def __init__(self, config: Qwen3VLMoeVisionConfig, use_postshuffle_norm=False) -> None:
-        super().__init__()
-        self.hidden_size = config.hidden_size * (config.spatial_merge_size**2)
-        self.use_postshuffle_norm = use_postshuffle_norm
-        self.norm = nn.LayerNorm(self.hidden_size if use_postshuffle_norm else config.hidden_size, eps=1e-6)
-        self.linear_fc1 = nn.Linear(self.hidden_size, self.hidden_size)
-        self.act_fn = nn.GELU()
-        self.linear_fc2 = nn.Linear(self.hidden_size, config.out_hidden_size)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.norm(x.view(-1, self.hidden_size) if self.use_postshuffle_norm else x).view(-1, self.hidden_size)
-        x = self.linear_fc2(self.act_fn(self.linear_fc1(x)))
-        return x
-
-
 def apply_rotary_pos_emb_vision(
     q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -509,7 +466,7 @@ class Qwen3VLMoeVisionAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        if "flash" in self.config._attn_implementation:
+        if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, _ = attention_interface(
@@ -555,6 +512,19 @@ class Qwen3VLMoeVisionAttention(nn.Module):
         return attn_output
 
 
+class Qwen3VLMoeVisionMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.linear_fc1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.linear_fc2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_state):
+        return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
+
+
 class Qwen3VLMoeVisionBlock(GradientCheckpointingLayer):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
@@ -582,9 +552,61 @@ class Qwen3VLMoeVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+@dataclass
+@auto_docstring
+class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
+    r"""
+    deepstack_features (`List[torch.FloatTensor]`, *optional*):
+        List of hidden-states (feature maps) from deepstack layers.
+    """
+
+    deepstack_features: list[torch.FloatTensor] | None = None
+
+
+class Qwen3VLMoeVisionPatchEmbed(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.patch_size = config.patch_size
+        self.temporal_patch_size = config.temporal_patch_size
+        self.in_channels = config.in_channels
+        self.embed_dim = config.hidden_size
+
+        kernel_size = [self.temporal_patch_size, self.patch_size, self.patch_size]
+        self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=True)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        target_dtype = self.proj.weight.dtype
+        hidden_states = hidden_states.view(
+            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
+        )
+        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
+        return hidden_states
+
+
+class Qwen3VLMoeVisionPatchMerger(nn.Module):
+    def __init__(self, config: Qwen3VLMoeVisionConfig, use_postshuffle_norm=False) -> None:
+        super().__init__()
+        self.hidden_size = config.hidden_size * (config.spatial_merge_size**2)
+        self.use_postshuffle_norm = use_postshuffle_norm
+        self.norm = nn.LayerNorm(self.hidden_size if use_postshuffle_norm else config.hidden_size, eps=1e-6)
+        self.linear_fc1 = nn.Linear(self.hidden_size, self.hidden_size)
+        self.act_fn = nn.GELU()
+        self.linear_fc2 = nn.Linear(self.hidden_size, config.out_hidden_size)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.norm(x.view(-1, self.hidden_size) if self.use_postshuffle_norm else x).view(-1, self.hidden_size)
+        x = self.linear_fc2(self.act_fn(self.linear_fc1(x)))
+        return x
+
+
 class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
     config: Qwen3VLMoeVisionConfig
     _no_split_modules = ["Qwen3VLMoeVisionBlock"]
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name="mlp.gate", index=0),
+        "hidden_states": Qwen3VLMoeVisionBlock,
+        "attentions": Qwen3VLMoeVisionAttention,
+    }
 
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -722,7 +744,10 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
         patch_pos_embeds = torch.cat(patch_pos_embeds_permute)
         return patch_pos_embeds
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+    @check_model_inputs
+    def forward(
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
@@ -770,9 +795,13 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
                 )
                 deepstack_feature_lists.append(deepstack_feature)
 
-        hidden_states = self.merger(hidden_states)
+        merged_hidden_states = self.merger(hidden_states)
 
-        return hidden_states, deepstack_feature_lists
+        return BaseModelOutputWithDeepstackFeatures(
+            last_hidden_state=hidden_states,
+            pooler_output=merged_hidden_states,
+            deepstack_features=deepstack_feature_lists,
+        )
 
 
 class Qwen3VLMoeTextRotaryEmbedding(nn.Module):
@@ -1192,36 +1221,47 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
 
             return position_ids, mrope_position_deltas
 
+    @can_return_tuple
+    @auto_docstring
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: torch.LongTensor | None = None
-    ):
-        """
-        Encodes videos into continuous embeddings that can be forwarded to the language model. The deepstack visual features are also returned.
-
-        Args:
-            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input videos.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
         """
         # Same implementation as for images
-        return self.get_image_features(pixel_values_videos, video_grid_thw)
+        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model. The deepstack visual features are also returned.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        image_embeds, deepstack_image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
+        vision_output: BaseModelOutputWithDeepstackFeatures = self.visual(
+            pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs
+        )
+        image_embeds = vision_output.pooler_output
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(image_embeds, split_sizes)
-        return image_embeds, deepstack_image_embeds
+        vision_output.pooler_output = image_embeds
+
+        return vision_output
 
     def get_placeholder_mask(
         self,
@@ -1249,18 +1289,19 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
+        if image_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
 
         n_video_tokens = special_video_mask.sum()
         special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
-            raise ValueError(
-                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+        if video_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_video_mask].numel() == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
-
         return special_image_mask, special_video_mask
 
     @auto_docstring
@@ -1295,7 +1336,11 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         video_mask = None
 
         if pixel_values is not None:
-            image_embeds, deepstack_image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+            image_outputs: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True
+            )
+            image_embeds = image_outputs.pooler_output
+            deepstack_image_embeds = image_outputs.deepstack_features
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -1303,7 +1348,11 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds, deepstack_video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
+            video_outputs: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True
+            )
+            video_embeds = video_outputs.pooler_output
+            deepstack_video_embeds = video_outputs.deepstack_features
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -1476,13 +1525,37 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @auto_docstring
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: torch.LongTensor | None = None
-    ):
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw)
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        return self.model.get_video_features(
+            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
+        )
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
-        return self.model.get_image_features(pixel_values, image_grid_thw)
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        """
+        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
     @can_return_tuple
     def forward(
@@ -1514,7 +1587,8 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
         Example:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Qwen3VLMoeForConditionalGeneration
 
         >>> model = Qwen3VLMoeForConditionalGeneration.from_pretrained("Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto")

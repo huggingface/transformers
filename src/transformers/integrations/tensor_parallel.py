@@ -1085,6 +1085,7 @@ class RouterParallel(TensorParallelLayer):
             self._prepare_output_fn,
         )
 
+
 class MoeTensorParalellExperts(TensorParallelLayer):
     """
     Note: For tensor parallel, the MoEExpertsParallel TP layer handles gradient sync:
@@ -1140,6 +1141,7 @@ class MoeTensorParalellExperts(TensorParallelLayer):
             self._prepare_input_fn,
             self._prepare_output_fn,
         )
+
 
 class ParallelInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if

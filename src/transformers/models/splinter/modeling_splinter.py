@@ -30,6 +30,7 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     logging,
+    torch_compilable_check,
 )
 from .configuration_splinter import SplinterConfig
 
@@ -782,6 +783,10 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
             self.config.pad_token_id,
             dtype=torch.long,
             device=input_ids.device,
+        )
+        torch_compilable_check(
+            num_questions.size(0) == input_ids.size(0),
+            "All samples in the batch must have at least one question token.",
         )
         cols = torch.cat([torch.arange(n) for n in num_questions])
         positions[rows, cols] = flat_positions

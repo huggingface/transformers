@@ -34,8 +34,8 @@ from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
@@ -98,6 +98,17 @@ from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
 
 
 logger = logging.get_logger(__name__)
+
+
+@dataclass
+@auto_docstring
+class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
+    r"""
+    deepstack_features (`List[torch.FloatTensor]`, *optional*):
+        List of hidden-states (feature maps) from deepstack layers.
+    """
+
+    deepstack_features: list[torch.FloatTensor] | None = None
 
 
 def _get_feat_extract_output_lengths(input_lengths):
@@ -200,8 +211,6 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
@@ -233,6 +242,12 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
             Indicate which layers use Qwen3OmniMoeTextMLP rather than Qwen3OmniMoeTextSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3OmniMoeTextModel, Qwen3OmniMoeTextConfig
@@ -282,7 +297,6 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         initializer_range: float | None = 0.02,
         rms_norm_eps: float | None = 1e-6,
         use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         attention_bias: bool | None = False,
         sliding_window: int | None = None,
@@ -295,6 +309,9 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         output_router_logits: bool | None = False,
         router_aux_loss_coef: float | None = 0.001,
         mlp_only_layers: list[int] | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -323,9 +340,11 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
             ignore_keys_at_rope_validation={"mrope_section", "interleaved", "mrope_interleaved"},
             **kwargs,
         )
@@ -364,6 +383,8 @@ class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
             The user token id to encode the user token.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
 
     Example:
 
@@ -396,6 +417,7 @@ class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
         audio_start_token_id=151647,
         user_token_id=872,
         initializer_range=0.02,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         super().__init__(
@@ -445,8 +467,13 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
         layer_types: list[str] | None = None,
         attention_dropout: int | None = 0,
         num_code_groups: int | None = 32,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
+        self.sliding_window = sliding_window
+        self.num_code_groups = num_code_groups
         super().__init__(
             vocab_size,
             hidden_size,
@@ -468,12 +495,13 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
             None,
             layer_types,
             attention_dropout,
+            pad_token_id,
+            bos_token_id,
+            eos_token_id,
             **kwargs,
         )
         del self.use_sliding_window
         del self.max_window_layers
-        self.sliding_window = sliding_window
-        self.num_code_groups = num_code_groups
 
 
 class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
@@ -503,6 +531,9 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
         output_router_logits: bool | None = False,
         router_aux_loss_coef: float | None = 0.001,
         mlp_only_layers: list[int] | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
         super().__init__(
@@ -531,6 +562,9 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
             output_router_logits,
             router_aux_loss_coef,
             mlp_only_layers,
+            pad_token_id,
+            bos_token_id,
+            eos_token_id,
             **kwargs,
         )
         del self.use_sliding_window
@@ -1229,11 +1263,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         aftercnn_lens = _get_feat_extract_output_lengths(feature_lens)
         chunk_num = torch.ceil(feature_lens / (self.n_window * 2)).long()
 
-        chunk_lengths = torch.tensor(
-            [self.n_window * 2] * chunk_num.sum(),
-            dtype=torch.long,
-            device=feature_lens.device,
-        )
+        chunk_lengths = torch.full((chunk_num.sum(),), self.n_window * 2, dtype=torch.long, device=feature_lens.device)
         tail_chunk_index = F.pad(chunk_num, (1, 0), value=-1).cumsum(0)[1:]
         chunk_lengths[tail_chunk_index] = feature_lens % (self.n_window * 2)
         chunk_lengths[chunk_lengths == 0] = self.n_window * 2
@@ -1285,7 +1315,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         hidden_states = self.proj1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.proj2(hidden_states)
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
 class Qwen3OmniMoeVisionAttention(Qwen3VLMoeVisionAttention):
@@ -1421,22 +1451,22 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
 
+    @can_return_tuple
+    @auto_docstring
     def get_audio_features(
         self,
         input_features: torch.FloatTensor,
         feature_attention_mask: torch.LongTensor | None = None,
         audio_feature_lengths: torch.LongTensor | None = None,
-    ):
-        """
-        Encodes audios into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            input_features (`torch.FloatTensor`):
-                The tensors corresponding to the input audios.
-            feature_attention_mask (`torch.LongTensor`, *optional*):
-                Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
-            audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-                The length of feature shape of each audio in LLM.
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        input_features (`torch.FloatTensor`):
+            The tensors corresponding to the input audios.
+        feature_attention_mask (`torch.LongTensor`, *optional*):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+            The length of feature shape of each audio in LLM.
         """
         if feature_attention_mask is not None:
             audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)
@@ -1448,10 +1478,11 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         audio_outputs = self.audio_tower(
             input_features,
             feature_lens=feature_lens,
+            return_dict=True,
+            **kwargs,
         )
-        audio_features = audio_outputs.last_hidden_state
 
-        return audio_features
+        return audio_outputs
 
     @can_return_tuple
     @auto_docstring
@@ -1495,13 +1526,18 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
                 input_features,
                 feature_attention_mask=feature_attention_mask,
                 audio_feature_lengths=audio_feature_lengths,
-            )
+                return_dict=True,
+            ).last_hidden_state
             audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
 
         if pixel_values is not None:
-            image_embeds, image_embeds_multiscale = self.get_image_features(pixel_values, image_grid_thw)
+            image_outputs: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True
+            )
+            image_embeds = image_outputs.pooler_output
+            image_embeds_multiscale = image_outputs.deepstack_features
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -1509,7 +1545,9 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds, video_embeds_multiscale = self.get_video_features(pixel_values_videos, video_grid_thw)
+            video_embeds, video_embeds_multiscale = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True
+            ).pooler_output
 
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask, _ = self.get_placeholder_mask(

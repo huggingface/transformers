@@ -97,8 +97,6 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         use_sliding_window (`bool`, *optional*, defaults to `False`):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
@@ -167,7 +165,6 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         initializer_range: float | None = 0.02,
         rms_norm_eps: int | None = 1e-05,
         use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
         use_sliding_window: bool | None = False,
         sliding_window: int | None = 4096,
         max_window_layers: int | None = 80,
@@ -211,11 +208,10 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
         super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
             ignore_keys_at_rope_validation={"mrope_section"},
             **kwargs,
         )
@@ -258,6 +254,8 @@ class Qwen2VLConfig(PreTrainedConfig):
             The token index to denote start of vision input.
         vision_end_token_id (`int`, *optional*, defaults to 151653):
             The token index to denote end of vision input.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Qwen2VLForConditionalGeneration, Qwen2VLConfig
@@ -284,6 +282,7 @@ class Qwen2VLConfig(PreTrainedConfig):
         video_token_id=151656,
         vision_start_token_id=151652,
         vision_end_token_id=151653,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -305,9 +304,7 @@ class Qwen2VLConfig(PreTrainedConfig):
         self.video_token_id = video_token_id
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
-
-        # FIXME: arthur/cyril - tying has to be used from the text config
-        kwargs["tie_word_embeddings"] = self.text_config.tie_word_embeddings
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

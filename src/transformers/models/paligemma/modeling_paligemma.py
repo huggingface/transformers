@@ -24,7 +24,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -33,6 +33,7 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     logging,
+    torch_compilable_check,
 )
 from ..auto import AutoModel
 from .configuration_paligemma import PaliGemmaConfig
@@ -246,7 +247,6 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         language_model = AutoModel.from_config(config=config.text_config)
         self.language_model = language_model
 
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.text_config_dtype = self.config.get_text_config().dtype or self.dtype
         self.post_init()
 
@@ -258,21 +258,20 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values: torch.FloatTensor):
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-               The tensors corresponding to the input images.
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
-        """
-        image_outputs = self.vision_tower(pixel_values)
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         selected_image_feature = image_outputs.last_hidden_state
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = image_features / (self.config.text_config.hidden_size**0.5)
-        return image_features
+        image_outputs.pooler_output = image_features
+
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -290,12 +289,12 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
         return special_image_mask
 
     @can_return_tuple
@@ -327,7 +326,8 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 
         >>> model = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma2-3b-mix-224")
@@ -335,7 +335,8 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
         >>> prompt = "Where is the cat standing?"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
 
@@ -376,7 +377,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
         # Merge text and images
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values)
+            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -445,8 +446,9 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values):
-        return self.model.get_image_features(pixel_values)
+    @auto_docstring
+    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+        return self.model.get_image_features(pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -478,7 +480,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 
         >>> model = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma2-3b-mix-224")
@@ -486,7 +489,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
         >>> prompt = "Where is the cat standing?"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
 

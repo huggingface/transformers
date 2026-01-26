@@ -1190,7 +1190,7 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel, GenerationMixin):
         >>> from transformers import AutoTokenizer, BlenderbotForCausalLM
 
         >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
-        >>> model = BlenderbotForCausalLM.from_pretrained("facebook/blenderbot-400M-distill", add_cross_attention=False)
+        >>> model = BlenderbotForCausalLM.from_pretrained("facebook/blenderbot-400M-distill")
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

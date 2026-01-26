@@ -185,7 +185,8 @@ class InstructBlipQFormerConfig(PreTrainedConfig):
         encoder_hidden_size=1408,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
