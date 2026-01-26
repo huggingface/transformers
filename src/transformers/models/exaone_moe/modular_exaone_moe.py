@@ -116,7 +116,7 @@ class ExaoneMoeConfig(Exaone4Config):
             Dimension of the MoE representations.
         num_experts (`int`, *optional*, defaults to 64):
             Number of routed experts.
-        num_experts_per_tok (`int`, *optional*, defaults to None):
+        num_experts_per_tok (`int`, *optional*, defaults to 8):
             Number of selected experts, None means dense model.
         num_shared_experts (`int`, *optional*, defaults to 1):
             Number of shared experts.
@@ -171,7 +171,7 @@ class ExaoneMoeConfig(Exaone4Config):
         num_experts=64,
         num_experts_per_tok=8,
         num_shared_experts=1,
-        norm_topk_prob=False,
+        norm_topk_prob=True,
         routed_scaling_factor=2.5,
         n_group=1,
         topk_group=1,
