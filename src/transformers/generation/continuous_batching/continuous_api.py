@@ -1185,6 +1185,8 @@ class ContinuousBatchingManager:
 class ContinuousMixin:
     """Mixin class for models to add continuous batching capabilities."""
 
+    generation_config: GenerationConfig | None
+
     @contextmanager
     def continuous_batching_context_manager(
         self,
@@ -1250,7 +1252,7 @@ class ContinuousMixin:
 
         # Create and return the manager
         return ContinuousBatchingManager(
-            model=self,
+            model=self,  # type: ignore
             generation_config=gen_config,
             manual_eviction=manual_eviction,
             max_queue_size=max_queue_size,
