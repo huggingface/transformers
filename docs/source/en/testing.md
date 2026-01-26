@@ -327,14 +327,13 @@ There is another plugin `pytest-repeat`, but it doesn't work with `unittest`.
 
 #### Run tests in a random order
 
+The transformers project uses [`pytest-random-order`](https://github.com/jbasko/pytest-random-order) to randomize test execution order. This is included in the dev dependencies:
+
 ```bash
 pip install pytest-random-order
 ```
 
-Important: the presence of `pytest-random-order` will automatically randomize tests, no configuration change or
-command line options is required.
-
-As explained earlier this allows detection of coupled tests - where one test's state affects the state of another. When
+Test randomization allows detection of coupled tests - where one test's state affects the state of another. When
 `pytest-random-order` is installed it will print the random seed it used for that session, e.g:
 
 ```bash
@@ -344,36 +343,41 @@ Using --random-order-bucket=module
 Using --random-order-seed=573663
 ```
 
-So that if the given particular sequence fails, you can reproduce it by adding that exact seed, e.g.:
+**Bucket Modes:** pytest-random-order supports different bucket modes that control the granularity of randomization:
+- `module` (default in this project): Randomizes tests within each file, but keeps files in consistent order. Works well with `--dist=loadfile` for parallel execution.
+- `class`: Randomizes within each test class
+- `package`: Randomizes within each package
+- `global`: Randomizes all tests globally
+
+**In CircleCI:** Tests automatically use a deterministic seed based on the build number (`CIRCLE_BUILD_NUM`), ensuring:
+- Different test order for each build/PR (catches order dependencies over time)
+- Same order across all parallel containers in the same build (reproducible failures)
+- Ability to reproduce failures locally
+- bucket=module mode ensures predictable load balancing with pytest-xdist
+
+**Locally with `make test`:** Tests use `--random-order-bucket=module` with a random seed each run.
+
+**Reproducing a specific test order:** If a particular sequence fails in CI, you can reproduce it locally using the build number:
 
 ```bash
-pytest --random-order-seed=573663
-[...]
-Using --random-order-bucket=module
-Using --random-order-seed=573663
+pytest --random-order-bucket=module --random-order-seed=12345
 ```
 
-It will only reproduce the exact order if you use the exact same list of tests (or no list at all). Once you start to
-manually narrowing down the list you can no longer rely on the seed, but have to list them manually in the exact order
-they failed and tell pytest to not randomize them instead using `--random-order-bucket=none`, e.g.:
+The seed can be found in the CircleCI build environment variables or test output.
 
-```bash
-pytest --random-order-bucket=none tests/test_a.py tests/test_c.py tests/test_b.py
-```
-
-To disable the shuffling for all tests:
+**To disable randomization** for a single run:
 
 ```bash
 pytest --random-order-bucket=none
 ```
 
-By default `--random-order-bucket=module` is implied, which will shuffle the files on the module levels. It can also
-shuffle on `class`, `package`, `global` and `none` levels. For the complete details please see its
-[documentation](https://github.com/jbasko/pytest-random-order).
+Or set a fixed seed:
 
-Another randomization alternative is: [`pytest-randomly`](https://github.com/pytest-dev/pytest-randomly). This
-module has a very similar functionality/interface, but it doesn't have the bucket modes available in
-`pytest-random-order`. It has the same problem of imposing itself once installed.
+```bash
+pytest --random-order-seed=0
+```
+
+**Alternative:** [`pytest-randomly`](https://github.com/pytest-dev/pytest-randomly) is another option that also sets random seeds in test code (random.seed, numpy.random.seed), but lacks bucket modes for controlling randomization granularity.
 
 ### Look and feel variations
 

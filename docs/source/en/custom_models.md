@@ -294,4 +294,4 @@ resnet50d.push_to_hub("custom-resnet50d")
 
 The pretrained weights, configuration, `modeling.py` and `configuration.py` files should all be uploaded to the Hub now in a [repository](https://hf.co/sgugger/custom-resnet50d) under your namespace.
 
-Because a custom model doesn't use the same modeling code as a Transformers' model, you need to add `trust_remode_code=True` in [`~PreTrainedModel.from_pretrained`] to load it. Refer to the load [custom models](./models#custom-models) section for more information.
+Because a custom model doesn't use the same modeling code as a Transformers' model, you need to add `trust_remote_code=True` in [`~PreTrainedModel.from_pretrained`] to load it. Refer to the load [custom models](./models#custom-models) section for more information.

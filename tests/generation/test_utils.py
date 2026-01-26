@@ -2686,6 +2686,46 @@ class GenerationIntegrationTests(unittest.TestCase):
             model.generation_config.use_cache = None
             model.save_pretrained(tmpdirname)
 
+    def test_generation_config_deprecation(self):
+        import logging as pylogging
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        input_ids = tokenizer("Hello", return_tensors="pt").input_ids.to(torch_device)
+
+        logger = pylogging.getLogger("transformers")
+
+        class OnWarningHandler(pylogging.Handler):
+            def __init__(self):
+                super().__init__()
+                self.warnings = []
+
+            def emit(self, record):
+                msg = record.getMessage()
+                if "Passing `generation_config` together with" in msg:
+                    self.warnings.append(msg)
+
+        warningHandler = OnWarningHandler()
+        logger.addHandler(warningHandler)
+
+        try:
+            # Providing generation_config and kwargs is deprecated, so we expect a warning here.
+            #
+            # We're using logging_once, make sure that we emit this warning in any case by clearing the
+            # cache on warning_once
+            logging.warning_once.cache_clear()
+            generation_config = GenerationConfig(temperature=1.0)
+            _ = model.generate(input_ids, generation_config=generation_config, do_sample=False)
+            self.assertTrue(len(warningHandler.warnings) == 1)
+
+            # Providing no generation config, only kwargs is not deprecated. No further deprecation warnings
+            # should have been sent.
+            logging.warning_once.cache_clear()
+            _ = model.generate(input_ids, do_sample=False)
+            self.assertTrue(len(warningHandler.warnings) == 1)
+        finally:
+            logger.removeHandler(warningHandler)
+
     # TODO joao, manuel: remove in v4.62.0
     @slow
     def test_diverse_beam_search(self):

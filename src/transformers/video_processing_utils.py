@@ -68,7 +68,7 @@ if is_torch_available():
     import torch
 
 if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
+    import torchvision.transforms.v2.functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -220,7 +220,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             `torch.Tensor`: The converted video.
         """
 
-        video = F.grayscale_to_rgb(video)
+        video = tvF.grayscale_to_rgb(video)
         if video.shape[-3] == 3 or not (video[..., 3, :, :] < 255).any():
             return video
 
@@ -311,7 +311,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             if isinstance(videos[0], list):
                 # Videos sometimes are passed as a list of image URLs, especially through templates
                 videos = [
-                    torch.stack([F.pil_to_tensor(image) for image in images], dim=0)
+                    torch.stack([tvF.pil_to_tensor(image) for image in images], dim=0)
                     for images in self.fetch_images(videos)
                 ]
                 if do_sample_frames:
@@ -336,7 +336,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         for video in videos:
             # `make_batched_videos` always returns a 4D array per video
             if isinstance(video, np.ndarray):
-                # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
+                # not using tvF.to_tensor as it doesn't handle (C, H, W) numpy arrays
                 video = torch.from_numpy(video).contiguous()
 
             # Infer the channel dimension format if not provided
@@ -405,7 +405,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
