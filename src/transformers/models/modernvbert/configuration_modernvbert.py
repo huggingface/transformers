@@ -28,7 +28,7 @@
 
 from typing import Any, Literal
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
 
 
@@ -345,7 +345,7 @@ class ModernVBertVisionConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
 
 
-class ModernVBertConfig(PreTrainedConfig):
+class ModernVBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ModernVBert`] model. It is used to
     instantiate a ModernVBert model according to the specified arguments and defines the model architecture.
