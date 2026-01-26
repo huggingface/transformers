@@ -484,6 +484,34 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
     def test_segmentation_pipeline(self):
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
+        model = EomtDinov3ForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
+        processor = AutoImageProcessor.from_pretrained(self.model_id)
+
+        inputs = processor(images=image, return_tensors="pt").to(model.device)
+
+        with torch.inference_mode():
+            outputs = model(**inputs)
+
+        # fmt: off
+        expected_class_logits_slice = torch.tensor([
+            [-0.3180, -5.6188, -0.7154],
+            [ 0.0837, -6.8066, -2.1033],
+            [-1.4065, -5.9924, -5.4660]
+        ], device=model.device)
+        expected_masks_logits_slice = torch.tensor([
+            [-1.6251, -1.1417, -1.0285],
+            [ 2.5673,  5.3380,  6.2132],
+            [ 3.7562,  7.1667,  8.1707]
+        ], device=model.device)
+        # fmt: on
+
+        torch.testing.assert_close(
+            outputs.class_queries_logits[0, :3, :3].float(), expected_class_logits_slice, rtol=1e-3, atol=1e-3
+        )
+        torch.testing.assert_close(
+            outputs.masks_queries_logits[0, 0, :3, :3].float(), expected_masks_logits_slice, rtol=1e-3, atol=1e-3
+        )
+
         pipe = pipeline(model=self.model_id, subtask="panoptic", device=torch_device)
         output = pipe(image)
 
