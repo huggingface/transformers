@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Callable
-
 import torch
 import torch.nn.functional as F
+from collections.abc import Callable
 from torch import nn
 
 from transformers.activations import ACT2FN
