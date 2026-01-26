@@ -520,7 +520,9 @@ class MetaClip2ModelTester:
 class MetaClip2ModelTest(MetaClip2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MetaClip2Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": MetaClip2Model, "image-feature-extraction": MetaClip2VisionModel} if is_torch_available() else {}
+        {"feature-extraction": MetaClip2Model, "image-feature-extraction": MetaClip2VisionModel}
+        if is_torch_available()
+        else {}
     )
     additional_model_inputs = ["pixel_values"]
 

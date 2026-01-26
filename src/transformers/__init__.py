@@ -140,6 +140,7 @@ _import_structure = {
         "CsvPipelineDataFormat",
         "DepthEstimationPipeline",
         "DocumentQuestionAnsweringPipeline",
+        "FeatureExtractionPipeline",
         "FillMaskPipeline",
         "ImageClassificationPipeline",
         "ImageFeatureExtractionPipeline",
@@ -156,7 +157,6 @@ _import_structure = {
         "PipelineDataFormat",
         "TableQuestionAnsweringPipeline",
         "TextClassificationPipeline",
-        "FeatureExtractionPipeline",
         "TextGenerationPipeline",
         "TextToAudioPipeline",
         "TokenClassificationPipeline",
@@ -646,6 +646,7 @@ if TYPE_CHECKING:
     from .pipelines import CsvPipelineDataFormat as CsvPipelineDataFormat
     from .pipelines import DepthEstimationPipeline as DepthEstimationPipeline
     from .pipelines import DocumentQuestionAnsweringPipeline as DocumentQuestionAnsweringPipeline
+    from .pipelines import FeatureExtractionPipeline as FeatureExtractionPipeline
     from .pipelines import FillMaskPipeline as FillMaskPipeline
     from .pipelines import ImageClassificationPipeline as ImageClassificationPipeline
     from .pipelines import ImageFeatureExtractionPipeline as ImageFeatureExtractionPipeline
@@ -662,7 +663,6 @@ if TYPE_CHECKING:
     from .pipelines import PipelineDataFormat as PipelineDataFormat
     from .pipelines import TableQuestionAnsweringPipeline as TableQuestionAnsweringPipeline
     from .pipelines import TextClassificationPipeline as TextClassificationPipeline
-    from .pipelines import FeatureExtractionPipeline as FeatureExtractionPipeline
     from .pipelines import TextGenerationPipeline as TextGenerationPipeline
     from .pipelines import TextToAudioPipeline as TextToAudioPipeline
     from .pipelines import TokenClassificationPipeline as TokenClassificationPipeline

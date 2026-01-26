@@ -156,7 +156,9 @@ class VitsModelTester:
 @require_torch
 class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (VitsModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": VitsModel, "text-to-audio": VitsModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": VitsModel, "text-to-audio": VitsModel} if is_torch_available() else {}
+    )
     is_encoder_decoder = False
 
     test_resize_embeddings = False

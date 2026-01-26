@@ -381,7 +381,9 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     additional_model_inputs = ["pixel_values"]
     all_model_classes = (Aimv2Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": Aimv2Model, "image-feature-extraction": Aimv2VisionModel} if is_torch_available() else {}
+        {"feature-extraction": Aimv2Model, "image-feature-extraction": Aimv2VisionModel}
+        if is_torch_available()
+        else {}
     )
 
     test_resize_embeddings = False

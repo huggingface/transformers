@@ -20,8 +20,8 @@ from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
     IMAGE_PROCESSOR_MAPPING,
     MODEL_MAPPING,
-    LxmertConfig,
     FeatureExtractionPipeline,
+    LxmertConfig,
     is_torch_available,
     pipeline,
 )

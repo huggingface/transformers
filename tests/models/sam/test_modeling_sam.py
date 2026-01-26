@@ -503,7 +503,9 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (SamModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": SamModel, "mask-generation": SamModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": SamModel, "mask-generation": SamModel} if is_torch_available() else {}
+    )
 
     test_resize_embeddings = False
     _is_composite = True
