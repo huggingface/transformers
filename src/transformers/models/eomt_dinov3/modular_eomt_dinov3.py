@@ -40,30 +40,6 @@ from ..eomt.modeling_eomt import (
 )
 
 
-class EomtDinov3Attention(DINOv3ViTAttention):
-    pass
-
-
-class EomtDinov3ViTEmbeddings(DINOv3ViTEmbeddings):
-    pass
-
-
-class EomtDinov3Layer(DINOv3ViTLayer):
-    pass
-
-
-class EomtDinov3LayerScale(DINOv3ViTLayerScale):
-    pass
-
-
-class EomtDinov3RopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
-    pass
-
-
-class EomtDinov3Loss(EomtLoss):
-    pass
-
-
 class EomtDinov3Config(EomtConfig):
     r"""
     This is the configuration class to store the configuration of a [`EomtDinov3ForUniversalSegmentation`]. It is used to instantiate an EoMT-DINOv3 model
@@ -240,6 +216,32 @@ class EomtDinov3Config(EomtConfig):
         self.pos_embed_rescale = pos_embed_rescale
 
 
+class EomtDinov3Attention(DINOv3ViTAttention):
+    pass
+
+
+class EomtDinov3ViTEmbeddings(DINOv3ViTEmbeddings):
+    def __init__(self, config: EomtDinov3Config):
+        super().__init__(config)
+        self.num_prefix_tokens = 1 + config.num_register_tokens
+
+
+class EomtDinov3Layer(DINOv3ViTLayer):
+    pass
+
+
+class EomtDinov3LayerScale(DINOv3ViTLayerScale):
+    pass
+
+
+class EomtDinov3RopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
+    pass
+
+
+class EomtDinov3Loss(EomtLoss):
+    pass
+
+
 class EomtDinov3ForUniversalSegmentationOutput(EomtForUniversalSegmentationOutput):
     pass
 
@@ -285,6 +287,8 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel, EomtForUnive
     def __init__(self, config: EomtDinov3Config):
         super().__init__(config)
 
+        self.num_prefix_tokens = 1 + config.num_register_tokens
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.embeddings = EomtDinov3ViTEmbeddings(config)
         self.embeddings.register_parameter("mask_token", None)
 

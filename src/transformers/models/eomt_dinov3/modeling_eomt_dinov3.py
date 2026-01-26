@@ -196,6 +196,7 @@ class EomtDinov3ViTEmbeddings(nn.Module):
         self.patch_embeddings = nn.Conv2d(
             config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
         )
+        self.num_prefix_tokens = 1 + config.num_register_tokens
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
@@ -1141,9 +1142,6 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
         super().__init__(config)
         self.config = config
         self.num_hidden_layers = config.num_hidden_layers
-        self.num_prefix_tokens = 1 + config.num_register_tokens
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
         self.embeddings = EomtDinov3ViTEmbeddings(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -1165,6 +1163,9 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
         self.criterion = EomtDinov3Loss(config=config, weight_dict=self.weight_dict)
 
         self.register_buffer("attn_mask_probs", torch.ones(config.num_blocks))
+
+        self.num_prefix_tokens = 1 + config.num_register_tokens
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.embeddings.register_parameter("mask_token", None)
 
         self.rope_embeddings = EomtDinov3RopePositionEmbedding(config)
@@ -1315,7 +1316,7 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
         query_tokens = logits[:, : self.config.num_queries, :]
         class_logits = self.class_predictor(query_tokens)
 
-        prefix_tokens = logits[:, self.config.num_queries + self.num_prefix_tokens :, :]
+        prefix_tokens = logits[:, self.config.num_queries + self.embeddings.num_prefix_tokens :, :]
         prefix_tokens = prefix_tokens.transpose(1, 2)
 
         prefix_tokens = prefix_tokens.reshape(prefix_tokens.shape[0], -1, *self.grid_size)
