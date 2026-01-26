@@ -25,7 +25,8 @@ The [`ExpertsInterface`] provides optimized experts backends. It decouples the e
 | `"batched_mm"`  | Duplicates selected expert parameters for each token and projects all tokens in a single batched GEMM using [`torch.bmm`](https://docs.pytorch.org/docs/stable/generated/torch.bmm.html).                                    | Fastest for small inputs, especially with compilation. Uses more memory due to parameter duplication.               | Not recommended (significantly slower than other backends). |
 | `"grouped_mm"`  | Orders tokens by selected experts and uses [`torch._grouped_mm`](https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.grouped_mm.html) to project all tokens in a single grouped GEMM (requires PyTorch 2.9+). | Best for larger inputs and more memory efficient as it avoids duplicating expert parameters. Fast with compilation. | Most efficient backend for all input sizes.                 |
 
-Note: When using `experts_implementation="grouped_mm"` on GPU, the model automatically switches to `"batched_mm"` during the decode stage of generation (after prefill). This is because `batched_mm` is significantly faster on lower token count during autoregressive decoding on GPU. On CPU, `grouped_mm` remains active throughout generation as it is more efficient for all input sizes.
+> [!NOTE]
+> When using `experts_implementation="grouped_mm"` on GPU, the model automatically switches to `"batched_mm"` during the decode stage of generation (after prefill). This is because `batched_mm` is significantly faster on lower token count during autoregressive decoding on GPU. On CPU, `grouped_mm` remains active throughout generation as it is more efficient for all input sizes.
 
 ## Set an experts backend
 
