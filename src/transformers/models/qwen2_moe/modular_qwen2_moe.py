@@ -39,11 +39,11 @@ from ..gemma.modeling_gemma import GemmaMLP
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
-    MixtralExperts,
     MixtralForCausalLM,
     MixtralModel,
-    MixtralPreTrainedModel,
 )
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import BatchLinear
 from .configuration_qwen2_moe import Qwen2MoeConfig
 
 
@@ -79,11 +79,37 @@ class Qwen2MoeAttention(LlamaAttention):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
 
-class Qwen2MoeExperts(MixtralExperts):
+class Qwen2MoeExperts(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.num_experts = config.num_experts
+        self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
+
+        self.gate_up_proj = BatchLinear(self.num_experts, self.hidden_dim, 2 * self.intermediate_dim, bias=False)
+        self.down_proj = BatchLinear(self.num_experts, self.intermediate_dim, self.hidden_dim, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,  # Must be named this for modularity
+        top_k_weights: torch.Tensor,  # Must be named this for modularity
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        top_k = top_k_index.shape[1]
+
+        for i in range(top_k):
+            expert_indices = top_k_index[:, i]
+            weights = top_k_weights[:, i].unsqueeze(-1)
+
+            gate_up_output = self.gate_up_proj(hidden_states, expert_indices)
+            gate, up = gate_up_output.chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self.down_proj(current_hidden_states, expert_indices)
+            final_hidden_states += weights * current_hidden_states
+
+        return final_hidden_states
 
 
 class Qwen2MoeTopKRouter(nn.Module):
@@ -145,12 +171,36 @@ class Qwen2MoeDecoderLayer(LlamaDecoderLayer, nn.Module):
 
 
 @auto_docstring
-class Qwen2MoePreTrainedModel(MixtralPreTrainedModel):
+@auto_docstring
+class Qwen2MoePreTrainedModel(PreTrainedModel):
+    config: Qwen2MoeConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Qwen2MoeDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _can_compile_fullgraph = True  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
+    _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(Qwen2MoeTopKRouter, index=0),
         "hidden_states": Qwen2MoeDecoderLayer,
         "attentions": Qwen2MoeAttention,
     }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        # Add BatchLinear here to fix the AssertionError
+        if isinstance(module, (nn.Linear, BatchLinear)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 @auto_docstring
