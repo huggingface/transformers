@@ -31,8 +31,8 @@ import json
 import os.path
 import re
 import string
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from git import Repo
 
@@ -120,7 +120,6 @@ def get_new_python_files(diff_with_last_commit=False) -> list[str]:
     return get_new_python_files_between_commits(repo.head.commit, commits)
 
 
-
 def _extract_models_from_paths(paths: Iterable[str]) -> list[str]:
     # We match either modeling_*.py (classic) or modular_*.py (increasingly used as source-of-truth).
     regs = [
@@ -144,7 +143,9 @@ def _extract_models_from_paths(paths: Iterable[str]) -> list[str]:
     return uniq
 
 
-def get_new_models(diff_with_last_commit: bool = False, base_ref: str | None = None, head_ref: str | None = None) -> list[str]:
+def get_new_models(
+    diff_with_last_commit: bool = False, base_ref: str | None = None, head_ref: str | None = None
+) -> list[str]:
     """
     Return list of newly added models detected via newly added modeling_*.py (or modular_*.py).
 
@@ -160,10 +161,11 @@ def get_new_models(diff_with_last_commit: bool = False, base_ref: str | None = N
     return _extract_models_from_paths(new_files)
 
 
-def get_new_model(diff_with_last_commit: bool = False, base_ref: str | None = None, head_ref: str | None = None) -> str:
+def get_new_model(
+    diff_with_last_commit: bool = False, base_ref: str | None = None, head_ref: str | None = None
+) -> str:
     models = get_new_models(diff_with_last_commit=diff_with_last_commit, base_ref=base_ref, head_ref=head_ref)
     return models[0] if models else ""
-   return new_model
 
 
 def parse_message(message: str) -> str:
