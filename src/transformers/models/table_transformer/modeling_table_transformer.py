@@ -237,6 +237,8 @@ class TableTransformerConvEncoder(nn.Module):
         features = self.model(pixel_values)
         if isinstance(features, dict):
             features = features.feature_maps
+        if isinstance(features, dict):
+            features = features.feature_maps
 
         out = []
         for feature_map in features:
