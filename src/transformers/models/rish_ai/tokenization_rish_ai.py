@@ -150,7 +150,9 @@ class RishAITokenizer(PreTrainedTokenizerBase):
         # Simple detokenization - join with spaces
         return " ".join(tokens)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str, str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: str | None = None
+    ) -> tuple[str, str]:
         """Save the vocabulary and merges files to a directory."""
         if not self.can_save_slow_tokenizer:
             raise ValueError(
