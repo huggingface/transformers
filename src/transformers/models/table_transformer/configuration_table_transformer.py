@@ -14,14 +14,15 @@
 """Table Transformer model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin
 from ...utils import logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class TableTransformerConfig(PreTrainedConfig):
+class TableTransformerConfig(PreTrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`TableTransformerModel`]. It is used to
     instantiate a Table Transformer model according to the specified arguments, defining the model architecture.
@@ -168,37 +169,26 @@ class TableTransformerConfig(PreTrainedConfig):
         eos_coefficient=0.1,
         **kwargs,
     ):
-        # Backwards compatibility, pop attributes and infer backbone config
-        use_timm_backbone = kwargs.pop("use_timm_backbone", True)
-        backbone_kwargs = kwargs.pop("backbone_kwargs", {})
-        kwargs.pop("use_pretrained_backbone", None)
-
-        # Default to values which were hard-coded in `modeling` for BC
-        if use_timm_backbone and backbone is not None and backbone_config is None:
-            backbone_config = CONFIG_MAPPING["timm_backbone"](
-                backbone=backbone,
-                num_channels=backbone_kwargs.get("num_channels", num_channels),
-                features_only=True,
-                use_pretrained_backbone=False,  # backbone weights are already in state dict, no?
-                out_indices=backbone_kwargs.get("out_indices", [1, 2, 3, 4]),
-            )
-            if dilation:
-                backbone_config.output_stride = backbone_kwargs.get("output_stride", 16)
-        elif backbone is not None and backbone_config is None:
-            try:
-                config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
-                config_class = CONFIG_MAPPING[config_dict["model_type"]]
-                config_dict.update(backbone_kwargs)
-                backbone_config = config_class(**config_dict)
-            except Exception:
-                backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
-        elif backbone_config is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-            backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
+        # Init timm backbone with hardcoded values for BC
+        backbone_kwargs = kwargs.get("backbone_kwargs", {})
+        timm_default_kwargs = {
+            "num_channels": backbone_kwargs.get("num_channels", num_channels),
+            "features_only": True,
+            "use_pretrained_backbone": False,  # backbone weights are already in state dict
+            "out_indices": backbone_kwargs.get("out_indices", [1, 2, 3, 4]),
+        }
+        if dilation:
+            timm_default_kwargs["output_stride"] = backbone_kwargs.get("output_stride", 16)
+        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
+            backbone_config=backbone_config,
+            backbone=backbone,
+            default_config_type="resnet",
+            default_config_kwargs={
+                "out_features": ["stage4"],
+            },
+            timm_default_kwargs=timm_default_kwargs,
+            **kwargs,
+        )
 
         self.backbone_config = backbone_config
         self.num_channels = num_channels

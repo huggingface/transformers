@@ -15,7 +15,7 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -161,30 +161,17 @@ class Mask2FormerConfig(PreTrainedConfig):
         backbone: str | None = None,
         **kwargs,
     ):
-        # Backwards compatibility, pop attributes and infer backbone config
-        kwargs.pop("use_timm_backbone", None)
-        backbone_kwargs = kwargs.pop("backbone_kwargs", {})
-        kwargs.pop("use_pretrained_backbone", None)
-
-        if backbone is not None:
-            try:
-                config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
-                config_class = CONFIG_MAPPING[config_dict["model_type"]]
-                config_dict.update(backbone_kwargs)
-                backbone_config = config_class(**config_dict)
-            except Exception:
-                backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
-        elif backbone_config is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
-            backbone_config = CONFIG_MAPPING["swin"](
-                depths=[2, 2, 18, 2],
-                drop_path_rate=0.3,
-                out_features=["stage1", "stage2", "stage3", "stage4"],
-            )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.pop("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
+        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
+            backbone_config=backbone_config,
+            backbone=backbone,
+            default_config_type="swin",
+            default_config_kwargs={
+                "depths": [2, 2, 18, 2],
+                "drop_path_rate": 0.3,
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            },
+            **kwargs,
+        )
 
         # verify that the backbone is supported
         if backbone_config.model_type not in self.backbones_supported:

@@ -14,14 +14,15 @@
 """VitMatte model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin
 from ...utils import logging
-from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
+from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class VitMatteConfig(PreTrainedConfig):
+class VitMatteConfig(PreTrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of [`VitMatteForImageMatting`]. It is used to
     instantiate a ViTMatte model according to the specified arguments, defining the model architecture. Instantiating a
@@ -86,26 +87,15 @@ class VitMatteConfig(PreTrainedConfig):
         fusion_hidden_sizes: list[int] = [256, 128, 64, 32],
         **kwargs,
     ):
-        # Backwards compatibility, pop attributes and infer backbone config
-        kwargs.pop("use_timm_backbone", None)
-        backbone_kwargs = kwargs.pop("backbone_kwargs", {})
-        kwargs.pop("use_pretrained_backbone", None)
-
-        if backbone is not None:
-            try:
-                config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
-                config_class = CONFIG_MAPPING[config_dict["model_type"]]
-                config_dict.update(backbone_kwargs)
-                backbone_config = config_class(**config_dict)
-            except Exception:
-                backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
-        elif backbone_config is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `VitDet` backbone.")
-            backbone_config = CONFIG_MAPPING["vitdet"](out_features=["stage4"])
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
+        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
+            backbone_config=backbone_config,
+            backbone=backbone,
+            default_config_type="vitdet",
+            default_config_kwargs={
+                "out_features": ["stage4"],
+            },
+            **kwargs,
+        )
 
         self.backbone_config = backbone_config
         self.batch_norm_eps = batch_norm_eps

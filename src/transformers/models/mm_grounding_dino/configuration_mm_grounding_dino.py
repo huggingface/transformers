@@ -18,15 +18,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class MMGroundingDinoConfig(PreTrainedConfig):
+class MMGroundingDinoConfig(PreTrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`MMGroundingDinoModel`]. It is used to instantiate a
     MM Grounding DINO model according to the specified arguments, defining the model architecture. Instantiating a
@@ -154,9 +154,6 @@ class MMGroundingDinoConfig(PreTrainedConfig):
         self,
         backbone_config=None,
         backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
-        backbone_kwargs=None,
         text_config=None,
         num_queries=900,
         encoder_layers=6,
@@ -196,38 +193,17 @@ class MMGroundingDinoConfig(PreTrainedConfig):
         layer_norm_eps=1e-5,
         **kwargs,
     ):
-        if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
-            backbone_config = CONFIG_MAPPING["swin"](
-                window_size=7,
-                image_size=224,
-                embed_dim=96,
-                depths=[2, 2, 6, 2],
-                num_heads=[3, 6, 12, 24],
-                out_indices=[2, 3, 4],
-            )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.pop("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
+        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            backbone=backbone,
+            default_config_type="swin",
+            default_config_kwargs={
+                "out_indices": [2, 3, 4],
+            },
+            **kwargs,
         )
 
-        if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the text config with default values (`BertConfig`).")
-
         self.backbone_config = backbone_config
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs
         self.num_queries = num_queries
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -261,6 +237,7 @@ class MMGroundingDinoConfig(PreTrainedConfig):
             text_config["model_type"] = text_config.get("model_type", "bert")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
+            logger.info("text_config is None. Initializing the text config with default values (`BertConfig`).")
             text_config = CONFIG_MAPPING["bert"]()
 
         self.text_config = text_config

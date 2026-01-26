@@ -14,15 +14,15 @@
 """DETR model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class DetrConfig(PreTrainedConfig):
+class DetrConfig(PreTrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`DetrModel`]. It is used to instantiate a DETR
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -135,7 +135,6 @@ class DetrConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        use_timm_backbone=True,
         backbone_config=None,
         num_channels=3,
         num_queries=100,
@@ -158,8 +157,6 @@ class DetrConfig(PreTrainedConfig):
         auxiliary_loss=False,
         position_embedding_type="sine",
         backbone="resnet50",
-        use_pretrained_backbone=True,
-        backbone_kwargs=None,
         dilation=False,
         class_cost=1,
         bbox_cost=5,
@@ -171,36 +168,25 @@ class DetrConfig(PreTrainedConfig):
         eos_coefficient=0.1,
         **kwargs,
     ):
-        # We default to values which were previously hard-coded in the model. This enables configurability of the config
-        # while keeping the default behavior the same.
-        if use_timm_backbone and backbone_kwargs is None:
-            backbone_kwargs = {}
-            if dilation:
-                backbone_kwargs["output_stride"] = 16
-            backbone_kwargs["out_indices"] = [1, 2, 3, 4]
-            backbone_kwargs["in_chans"] = num_channels
-        # Backwards compatibility
-        elif not use_timm_backbone and backbone in (None, "resnet50"):
-            if backbone_config is None:
-                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
-            elif isinstance(backbone_config, dict):
-                backbone_model_type = backbone_config.get("model_type")
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
-            backbone = None
-            # set timm attributes to None
-            dilation = None
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
+        backbone_kwargs = kwargs.get("backbone_kwargs", {})
+        timm_default_kwargs = {
+            "num_channels": backbone_kwargs.get("num_channels", num_channels),
+            "features_only": True,
+            "use_pretrained_backbone": False,  # backbone weights are already in state dict
+            "out_indices": backbone_kwargs.get("out_indices", [1, 2, 3, 4]),
+        }
+        if dilation:
+            # TODO: check if `output_stride` is used anywhere, not in `TimmBackboneConfig`
+            timm_default_kwargs["output_stride"] = backbone_kwargs.get("output_stride", 16)
+        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            backbone=backbone,
+            default_config_type="resnet50",
+            default_config_kwargs={"out_features": ["stage4"]},
+            timm_default_kwargs=timm_default_kwargs,
+            **kwargs,
         )
 
-        self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
         self.num_channels = num_channels
         self.num_queries = num_queries
@@ -222,10 +208,6 @@ class DetrConfig(PreTrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.backbone_kwargs = backbone_kwargs
-        self.dilation = dilation
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost

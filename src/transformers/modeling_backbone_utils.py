@@ -16,11 +16,15 @@
 
 import enum
 import inspect
-from typing import TYPE_CHECKING, Union
+
+from huggingface_hub import repo_exists
+
+from .configuration_utils import PreTrainedConfig
+from .models.auto import CONFIG_MAPPING
+from .utils import logging
 
 
-if TYPE_CHECKING:
-    from ..configuration_utils import PreTrainedConfig
+logger = logging.get_logger(__name__)
 
 
 class BackboneType(enum.Enum):
@@ -53,7 +57,7 @@ class BackboneMixin:
         self.config.stage_names = self.stage_names
 
         # We verify the out indices and out features are valid
-        # self.verify_out_features_out_indices()
+        self.config.verify_out_features_out_indices()
 
     def _init_transformers_backbone(self, config) -> None:
         self.stage_names = config.stage_names
@@ -127,16 +131,6 @@ class BackboneMixin:
         return_dict: bool | None = None,
     ):
         raise NotImplementedError("This method should be implemented by the derived class.")
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PreTrainedConfig` to
-        include the `out_features` and `out_indices` attributes.
-        """
-        output = super().to_dict()
-        output["out_features"] = output.pop("_out_features")
-        output["out_indices"] = output.pop("_out_indices")
-        return output
 
 
 class BackboneConfigMixin:
@@ -262,6 +256,45 @@ class BackboneConfigMixin:
         self._out_features = None
         self.align_output_features_output_indices()
 
+    def consolidate_backbone_kwargs_to_config(
+        self,
+        backbone_config,
+        backbone: str | None = None,
+        default_config_type: str | None = None,
+        default_config_kwargs: dict | None = None,
+        timm_default_kwargs: dict | None = None,
+        **kwargs,
+    ):
+        use_timm_backbone = kwargs.pop("use_timm_backbone", True)  # this is not always `True`
+        backbone_kwargs = kwargs.pop("backbone_kwargs", {})
+        kwargs.pop("use_pretrained_backbone", None)
+
+        # Init timm backbone with hardcoded values for BC
+        if timm_default_kwargs is not None and use_timm_backbone and backbone is not None and backbone_config is None:
+            backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **timm_default_kwargs)
+        elif backbone is not None and backbone_config is None:
+            if repo_exists(backbone):
+                config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
+                config_class = CONFIG_MAPPING[config_dict["model_type"]]
+                config_dict.update(backbone_kwargs)
+                backbone_config = config_class(**config_dict)
+            else:
+                backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
+        elif backbone_config is None and default_config_type is not None:
+            logger.info(
+                f"`backbone_config` is `None`. Initializing the config with the default `{default_config_type}` vision config."
+            )
+            default_config_kwargs = default_config_kwargs or {}
+            backbone_config = CONFIG_MAPPING[default_config_type](**default_config_kwargs)
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.get("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
+
+        if backbone_config is None:
+            raise ValueError(f"Failed to infer `backbone_config` for {self.__class__.__name__}")
+        return backbone_config, kwargs
+
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PreTrainedConfig` to
@@ -292,13 +325,3 @@ def load_backbone(config):
     else:
         backbone = AutoBackbone.from_config(config=backbone_config)
     return backbone
-
-
-def verify_backbone_config_arguments(
-    use_timm_backbone: bool,
-    use_pretrained_backbone: bool,
-    backbone: str | None,
-    backbone_config: Union[dict, "PreTrainedConfig"] | None,
-    backbone_kwargs: dict | None,
-):
-    pass  # TODO delete after removing from config classes

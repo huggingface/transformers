@@ -65,6 +65,7 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
             features_only=config.features_only,
             in_chans=in_chans,
             out_indices=out_indices,
+            output_stride=config.output_stride,
             **kwargs,
         )
 

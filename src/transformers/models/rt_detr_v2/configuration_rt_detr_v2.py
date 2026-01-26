@@ -19,14 +19,14 @@
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ...utils.backbone_utils import BackboneConfigMixin
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class RTDetrV2Config(PreTrainedConfig):
+class RTDetrV2Config(PreTrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`RTDetrV2Model`]. It is used to instantiate a
     RT-DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -260,47 +260,19 @@ class RTDetrV2Config(PreTrainedConfig):
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
-        # backbone
-        if backbone_config is None and backbone is None:
-            logger.info(
-                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `RTDetrV2-ResNet` backbone."
-            )
-            backbone_model_type = "rt_detr_resnet"
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            # this will map it to RTDetrResNetConfig
-            # note: we can instead create RTDetrV2ResNetConfig but it will be exactly the same as V1
-            # and we would need to create RTDetrV2ResNetModel
-            backbone_config = config_class(
-                num_channels=3,
-                embedding_size=64,
-                hidden_sizes=[256, 512, 1024, 2048],
-                depths=[3, 4, 6, 3],
-                layer_type="bottleneck",
-                hidden_act="relu",
-                downsample_in_first_stage=False,
-                downsample_in_bottleneck=False,
-                out_features=None,
-                out_indices=[2, 3, 4],
-            )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.pop("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
 
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
+        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            backbone=backbone,
+            default_config_type="rt_detr_resnet",
+            default_config_kwargs={
+                "out_indices": [2, 3, 4],
+            },
+            **kwargs,
         )
 
         self.backbone_config = backbone_config
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
         self.freeze_backbone_batch_norms = freeze_backbone_batch_norms
-        self.backbone_kwargs = backbone_kwargs
         # encoder
         self.encoder_hidden_dim = encoder_hidden_dim
         self.encoder_in_channels = encoder_in_channels

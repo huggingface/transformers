@@ -30,14 +30,13 @@ from ...utils import (
     auto_docstring,
     is_timm_available,
     logging,
-    requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
 from .configuration_detr import DetrConfig
 
 
 if is_timm_available():
-    from timm import create_model
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -256,35 +255,18 @@ class DetrConvEncoder(nn.Module):
 
         self.config = config
 
-        # For backwards compatibility we have to use the timm library directly instead of the AutoBackbone API
-        if config.use_timm_backbone:
-            # We default to values which were previously hard-coded. This enables configurability from the config
-            # using backbone arguments, while keeping the default behavior the same.
-            requires_backends(self, ["timm"])
-            kwargs = getattr(config, "backbone_kwargs", {})
-            kwargs = {} if kwargs is None else kwargs.copy()
-            out_indices = kwargs.pop("out_indices", (1, 2, 3, 4))
-            num_channels = kwargs.pop("in_chans", config.num_channels)
-            if config.dilation:
-                kwargs["output_stride"] = kwargs.get("output_stride", 16)
-            backbone = create_model(
-                config.backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                out_indices=out_indices,
-                in_chans=num_channels,
-                **kwargs,
-            )
-        else:
-            backbone = load_backbone(config)
+        backbone = load_backbone(config)
+        self.intermediate_channel_sizes = backbone.channels
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
+
+        # We used to load with timm library directly instead of the AutoBackbone API
+        # so we need to unwrap the `backbone._backbone` module to load weights without mismatch
+        if hasattr(backbone, "_backbone"):
+            backbone = backbone._backbone
         self.model = backbone
-        self.intermediate_channel_sizes = (
-            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
-        )
 
         backbone_model_type = None
         if config.backbone is not None:
@@ -296,7 +278,7 @@ class DetrConvEncoder(nn.Module):
 
         if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
-                if config.use_timm_backbone:
+                if hasattr(backbone, "_backbone"):
                     if "layer2" not in name and "layer3" not in name and "layer4" not in name:
                         parameter.requires_grad_(False)
                 else:
@@ -305,7 +287,7 @@ class DetrConvEncoder(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
+        features = self.model(pixel_values)
 
         out = []
         for feature_map in features:

@@ -19,7 +19,7 @@ from collections.abc import Callable
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
+from ...utils.backbone_utils import BackboneConfigMixin
 
 
 logger = logging.get_logger(__name__)
@@ -147,9 +147,9 @@ class PvtV2Config(BackboneConfigMixin, PreTrainedConfig):
         self.qkv_bias = qkv_bias
         self.linear_attention = linear_attention
         self.stage_names = [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
+        out_indices = list(out_indices) if out_indices is not None else None
+        self._out_features, self._out_indices = out_features, out_indices
+        self.align_output_features_output_indices()
 
 
 __all__ = ["PvtV2Config"]

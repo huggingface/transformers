@@ -14,14 +14,15 @@
 """TVP model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin
 from ...utils import logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class TvpConfig(PreTrainedConfig):
+class TvpConfig(PreTrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`TvpModel`]. It is used to instantiate an Tvp
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -126,26 +127,15 @@ class TvpConfig(PreTrainedConfig):
         attention_probs_dropout_prob=0.1,
         **kwargs,
     ):
-        # Backwards compatibility, pop attributes and infer backbone config
-        kwargs.pop("use_timm_backbone", None)
-        backbone_kwargs = kwargs.pop("backbone_kwargs", {})
-        kwargs.pop("use_pretrained_backbone", None)
-
-        if backbone is not None:
-            try:
-                config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
-                config_class = CONFIG_MAPPING[config_dict["model_type"]]
-                config_dict.update(backbone_kwargs)
-                backbone_config = config_class(**config_dict)
-            except Exception:
-                backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
-        elif backbone_config is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-            backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
+        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
+            backbone_config=backbone_config,
+            backbone=backbone,
+            default_config_type="resnet",
+            default_config_kwargs={
+                "out_features": ["stage4"],
+            },
+            **kwargs,
+        )
 
         self.backbone_config = backbone_config
         self.distance_loss_weight = distance_loss_weight

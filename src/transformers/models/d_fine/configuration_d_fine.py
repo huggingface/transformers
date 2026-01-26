@@ -18,8 +18,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin
 from ...utils import logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -27,7 +28,7 @@ logger = logging.get_logger(__name__)
 
 # TODO: Attribute map assignment logic should be fixed in modular
 # as well as super() call parsing because otherwise we cannot re-write args after initialization
-class DFineConfig(PreTrainedConfig):
+class DFineConfig(PreTrainedConfig, BackboneConfigMixin):
     """
     This is the configuration class to store the configuration of a [`DFineModel`]. It is used to instantiate a D-FINE
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -277,26 +278,14 @@ class DFineConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
 
-        # Backwards compatibility, pop attributes and infer backbone config
-        kwargs.pop("use_timm_backbone", None)
-        backbone_kwargs = kwargs.pop("backbone_kwargs", {})
-        kwargs.pop("use_pretrained_backbone", None)
-
-        if backbone is not None:
-            try:
-                config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
-                config_class = CONFIG_MAPPING[config_dict["model_type"]]
-                config_dict.update(backbone_kwargs)
-                backbone_config = config_class(**config_dict)
-            except Exception:
-                backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
-        elif backbone_config is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `HGNet-V2` backbone.")
-            backbone_config = CONFIG_MAPPING["hgnet_v2"](out_indices=[2, 3, 4])
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.pop("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
+        backbone_config, kwargs = BackboneConfigMixin.consolidate_backbone_kwargs_to_config(
+            self,
+            backbone_config=backbone_config,
+            backbone=backbone,
+            default_config_type="hgnet_v2",
+            default_config_kwargs={"out_indices": [2, 3, 4]},
+            **kwargs,
+        )
 
         self.backbone_config = backbone_config
         self.freeze_backbone_batch_norms = freeze_backbone_batch_norms

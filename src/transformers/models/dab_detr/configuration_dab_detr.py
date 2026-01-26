@@ -14,15 +14,15 @@
 """DAB-DETR model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class DabDetrConfig(PreTrainedConfig):
+class DabDetrConfig(PreTrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`DabDetrModel`]. It is used to instantiate
     a DAB-DETR model according to the specified arguments, defining the model architecture. Instantiating a
@@ -143,11 +143,8 @@ class DabDetrConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        use_timm_backbone=True,
         backbone_config=None,
         backbone="resnet50",
-        use_pretrained_backbone=True,
-        backbone_kwargs=None,
         num_queries=300,
         encoder_layers=6,
         encoder_ffn_dim=2048,
@@ -186,36 +183,25 @@ class DabDetrConfig(PreTrainedConfig):
         if query_dim != 4:
             raise ValueError("The query dimensions has to be 4.")
 
-        # We default to values which were previously hard-coded in the model. This enables configurability of the config
-        # while keeping the default behavior the same.
-        if use_timm_backbone and backbone_kwargs is None:
-            backbone_kwargs = {}
-            if dilation:
-                backbone_kwargs["output_stride"] = 16
-            backbone_kwargs["out_indices"] = [1, 2, 3, 4]
-            backbone_kwargs["in_chans"] = 3  # num_channels
-        # Backwards compatibility
-        elif not use_timm_backbone and backbone in (None, "resnet50"):
-            if backbone_config is None:
-                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
-            elif isinstance(backbone_config, dict):
-                backbone_model_type = backbone_config.get("model_type")
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
-            backbone = None
-            # set timm attributes to None
-            dilation = None
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
+        # Init timm backbone with hardcoded values for BC
+        timm_default_kwargs = {
+            "num_channels": 3,
+            "features_only": True,
+            "use_pretrained_backbone": False,  # backbone weights are already in state dict
+            "out_indices": [1, 2, 3, 4],
+        }
+        if dilation:
+            # TODO: check if `output_stride` is used anywhere, not in `TimmBackboneConfig`
+            timm_default_kwargs["output_stride"] = 16
+        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            backbone=backbone,
+            default_config_type="resnet50",
+            default_config_kwargs={"out_features": ["stage4"]},
+            timm_default_kwargs=timm_default_kwargs,
+            **kwargs,
         )
 
-        self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
         self.num_queries = num_queries
         self.hidden_size = hidden_size
@@ -233,9 +219,6 @@ class DabDetrConfig(PreTrainedConfig):
         self.init_xavier_std = init_xavier_std
         self.num_hidden_layers = encoder_layers
         self.auxiliary_loss = auxiliary_loss
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.backbone_kwargs = backbone_kwargs
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost

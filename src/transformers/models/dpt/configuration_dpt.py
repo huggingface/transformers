@@ -14,16 +14,15 @@
 """DPT model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
-from ..bit import BitConfig
+from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class DPTConfig(PreTrainedConfig):
+class DPTConfig(PreTrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`DPTModel`]. It is used to instantiate an DPT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -172,9 +171,6 @@ class DPTConfig(PreTrainedConfig):
         neck_ignore_stages=[0, 1],
         backbone_config=None,
         backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
-        backbone_kwargs=None,
         pooler_output_size=None,
         pooler_act="tanh",
         **kwargs,
@@ -182,59 +178,23 @@ class DPTConfig(PreTrainedConfig):
         self.hidden_size = hidden_size
         self.is_hybrid = is_hybrid
 
-        use_autobackbone = False
-        if self.is_hybrid:
-            if backbone_config is None:
-                backbone_config = {
-                    "global_padding": "same",
-                    "layer_type": "bottleneck",
-                    "depths": [3, 4, 9],
-                    "out_features": ["stage1", "stage2", "stage3"],
-                    "embedding_dynamic_padding": True,
-                }
+        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
+            backbone_config=backbone_config,
+            backbone=backbone,
+            default_config_type="bit",
+            default_config_kwargs={
+                "global_padding": "same",
+                "layer_type": "bottleneck",
+                "depths": [3, 4, 9],
+                "out_features": ["stage1", "stage2", "stage3"],
+                "embedding_dynamic_padding": True,
+            },
+            **kwargs,
+        )
+        if readout_type != "project":
+            raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
 
-            if isinstance(backbone_config, dict):
-                logger.info("Initializing the config with a `BiT` backbone.")
-                backbone_config = BitConfig(**backbone_config)
-            elif not isinstance(backbone_config, PreTrainedConfig):
-                raise ValueError(
-                    f"backbone_config must be a dictionary or a `PreTrainedConfig`, got {backbone_config.__class__}."
-                )
-            self.backbone_config = backbone_config
-            self.backbone_featmap_shape = backbone_featmap_shape
-            self.neck_ignore_stages = neck_ignore_stages
-
-            if readout_type != "project":
-                raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
-
-        elif backbone is not None or backbone_config is not None:
-            use_autobackbone = True
-            if isinstance(backbone_config, dict):
-                backbone_model_type = backbone_config.get("model_type")
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
-
-            self.backbone_config = backbone_config
-            self.backbone_featmap_shape = None
-            self.neck_ignore_stages = []
-
-            # We only use load_backbone when config.is_hydrid is False
-            verify_backbone_config_arguments(
-                use_timm_backbone=use_timm_backbone,
-                use_pretrained_backbone=use_pretrained_backbone,
-                backbone=backbone,
-                backbone_config=backbone_config,
-                backbone_kwargs=backbone_kwargs,
-            )
-        else:
-            self.backbone_config = None
-            self.backbone_featmap_shape = None
-            self.neck_ignore_stages = []
-
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs
+        self.backbone_config = backbone_config
 
         # ViT parameters used if not using a hybrid backbone
         self.num_hidden_layers = num_hidden_layers
@@ -247,8 +207,9 @@ class DPTConfig(PreTrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
-        self.use_autobackbone = use_autobackbone
-        self.backbone_out_indices = None if use_autobackbone else backbone_out_indices
+        self.backbone_out_indices = None if not is_hybrid else backbone_out_indices
+        self.backbone_featmap_shape = None if not is_hybrid else backbone_featmap_shape
+        self.neck_ignore_stages = [] if not is_hybrid else neck_ignore_stages
 
         if readout_type not in ["ignore", "add", "project"]:
             raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")

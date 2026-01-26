@@ -15,7 +15,7 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
+from ...utils.backbone_utils import BackboneConfigMixin
 
 
 logger = logging.get_logger(__name__)
@@ -147,9 +147,9 @@ class Swinv2Config(BackboneConfigMixin, PreTrainedConfig):
         self.initializer_range = initializer_range
         self.encoder_stride = encoder_stride
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
+        out_indices = list(out_indices) if out_indices is not None else None
+        self._out_features, self._out_indices = out_features, out_indices
+        self.align_output_features_output_indices()
         # we set the hidden_size attribute in order to make Swinv2 work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))

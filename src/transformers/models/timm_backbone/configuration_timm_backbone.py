@@ -70,6 +70,7 @@ class TimmBackboneConfig(PreTrainedConfig):
         use_pretrained_backbone=True,
         out_indices=None,
         freeze_batch_norm_2d=False,
+        output_stride=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -79,6 +80,7 @@ class TimmBackboneConfig(PreTrainedConfig):
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = True
         self.out_indices = out_indices if out_indices is not None else [-1]
+        self.output_stride = output_stride
         self.freeze_batch_norm_2d = freeze_batch_norm_2d
 
 

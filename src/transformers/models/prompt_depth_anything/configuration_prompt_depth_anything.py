@@ -19,15 +19,15 @@
 
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
+from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class PromptDepthAnythingConfig(PreTrainedConfig):
+class PromptDepthAnythingConfig(PreTrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`PromptDepthAnythingModel`]. It is used to instantiate a PromptDepthAnything
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -111,34 +111,21 @@ class PromptDepthAnythingConfig(PreTrainedConfig):
         max_depth=None,
         **kwargs,
     ):
-        if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `Dinov2` backbone.")
-            backbone_config = CONFIG_MAPPING["dinov2"](
-                image_size=518,
-                hidden_size=384,
-                num_attention_heads=6,
-                out_indices=[9, 10, 11, 12],
-                apply_layernorm=True,
-                reshape_hidden_states=False,
-            )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
+        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            backbone=backbone,
+            default_config_type="dinov2",
+            default_config_kwargs={
+                "image_size": 518,
+                "hidden_size": 384,
+                "num_attention_heads": 6,
+                "out_indices": [9, 10, 11, 12],
+                "reshape_hidden_states": False,
+            },
+            **kwargs,
         )
 
         self.backbone_config = backbone_config
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs
         self.reassemble_hidden_size = reassemble_hidden_size
         self.patch_size = patch_size
         self.initializer_range = initializer_range
