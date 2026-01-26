@@ -190,8 +190,8 @@ class PagedAttentionCache:
             num_attention_masks=num_attention_masks,
         )
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
-            num_blocks=getattr(generation_config, "num_blocks", None),
-            max_batch_tokens=getattr(generation_config, "max_batch_tokens", None),
+            num_blocks_=getattr(generation_config, "num_blocks", None),
+            max_batch_tokens_=getattr(generation_config, "max_batch_tokens", None),
             max_memory_percent=getattr(
                 generation_config, "max_memory", 0.8
             ),  # FIXME: it seems we overcommit memory, was changed from 0.9 which caused OOMs in our benchmarking CI
@@ -411,10 +411,10 @@ class PagedAttentionCache:
                     prompt_ids=(state.initial_tokens + state.generated_tokens),
                 )
 
-    def copy_cache(self, source_blocks: list[int], forked_blocks: list[int]) -> None:
+    def copy_cache(self, list_source_blocks: list[int], list_forked_blocks: list[int]) -> None:
         """Copy the cache from the source blocks to the forked blocks."""
-        source_blocks = torch.tensor(source_blocks, device=self.device, dtype=torch.int32)
-        forked_blocks = torch.tensor(forked_blocks, device=self.device, dtype=torch.int32)
+        source_blocks = torch.tensor(list_source_blocks, device=self.device, dtype=torch.int32)
+        forked_blocks = torch.tensor(list_forked_blocks, device=self.device, dtype=torch.int32)
         for key_cache, value_cache in zip(self.key_cache, self.value_cache):
             key_cache = key_cache.view(-1, self.block_size, self.num_key_value_heads, self.head_dim)
             value_cache = value_cache.view(-1, self.block_size, self.num_key_value_heads, self.head_dim)
@@ -511,8 +511,8 @@ class PagedAttentionMemoryHandler:
 
     def infer_num_blocks_and_max_batch_tokens(
         self,
-        num_blocks: int | None = None,
-        max_batch_tokens: int | None = None,
+        num_blocks_: int | None = None,  # the underscore helps with the typing
+        max_batch_tokens_: int | None = None,
         max_memory_percent: float = 0.8,  # FIXME: it seems we overcommit memory, was changed from 0.9 which caused OOMs in our benchmarking CI
         cache_dtype: torch.dtype = torch.float16,
     ) -> tuple[int, int]:
@@ -529,23 +529,23 @@ class PagedAttentionMemoryHandler:
         where we already simplified int32_size = 4.
         """
         # If neither num_blocks nor max_batch_tokens are provided, we use a second-order polynomial
-        if num_blocks is None and max_batch_tokens is None:
+        if num_blocks_ is None and max_batch_tokens_ is None:
             num_blocks, max_batch_tokens = self.compute_num_blocks_and_max_batch_tokens(
                 max_memory_percent, cache_dtype
             )
         # If only num_blocks is provided, we infer the max_batch_tokens
-        elif num_blocks is not None and max_batch_tokens is None:
+        elif num_blocks_ is not None and max_batch_tokens_ is None:
+            num_blocks = num_blocks_
             max_batch_tokens = self.compute_max_batch_tokens(num_blocks, max_memory_percent, cache_dtype)
         # If only max_batch_tokens is provided, we infer the num_blocks
-        elif max_batch_tokens is not None and num_blocks is None:
+        elif max_batch_tokens_ is not None and num_blocks_ is None:
+            max_batch_tokens = max_batch_tokens_
             num_blocks = self.compute_num_blocks(max_batch_tokens, max_memory_percent, cache_dtype)
 
         # We check if the memory footprint is too large in all cases
         available_memory = self.get_available_memory(max_memory_percent)
         memory_footprint = self.compute_memory_footprint(
-            max_batch_tokens=max_batch_tokens,
-            num_blocks=num_blocks,
-            cache_dtype=cache_dtype,
+            max_batch_tokens=max_batch_tokens, num_blocks=num_blocks, cache_dtype=cache_dtype
         )
         if memory_footprint > available_memory:
             raise MemoryError(f"Memory footprint {memory_footprint} is more than available memory {available_memory}")
@@ -664,10 +664,10 @@ class PagedAttentionMemoryHandler:
 
     def compute_memory_footprint(
         self,
-        num_blocks: int | None = None,
-        max_batch_tokens: int | None = None,
-        cache_dtype: torch.dtype = torch.float16,
-    ) -> tuple[int, int, int]:
+        num_blocks: int,
+        max_batch_tokens: int,
+        cache_dtype: torch.dtype,
+    ) -> int:
         """Calculate the memory footprint breakdown for a given number of blocks and maximum batch tokens. The memory
         footprint is given by:
 

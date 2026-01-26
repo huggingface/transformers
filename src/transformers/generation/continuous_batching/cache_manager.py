@@ -99,7 +99,8 @@ class BlockManager:
         for _ in range(block_to_uninitialize):
             id_to_uninitialize = self._init_block_ids.popitem()[0]
             block = self._id_to_block[id_to_uninitialize]
-            self._hash_to_id.pop(block.hash)
+            # Since the block is initialized it must have a hash, thus no need to check .hash is not None
+            self._hash_to_id.pop(block.hash)  # ty:ignore[invalid-argument-type]
             self._uninit_block_ids.append(id_to_uninitialize)
         return True
 
@@ -124,7 +125,7 @@ class BlockManager:
 
     def fork_blocks(
         self, parent_blocks: list[int], num_forks: int, shareable: bool, group_id: int
-    ) -> tuple[list[list[int]], list[int], list[int]]:
+    ) -> tuple[list[list[int]] | None, list[int], list[int]]:
         """Fork a given list of (parent_blocks) as many times as (num_forks). If the blocks are (shareable), we use
         reference on the blocks that are complete. Otherwise, we allocate new blocks and keep track of their indices to
         later copy the physical cache. For instance, when forking 4 blocks for 2 children:
