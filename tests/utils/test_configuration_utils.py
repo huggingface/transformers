@@ -402,4 +402,6 @@ class ConfigTestUtils(unittest.TestCase):
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
                     _ = IncompatibleConfig.from_pretrained(tmpdir)
-            self.assertIn("You are using a model of type other_model to instantiate a model of type incompatible_model", cl.out)
+            self.assertIn(
+                "You are using a model of type other_model to instantiate a model of type incompatible_model", cl.out
+            )
