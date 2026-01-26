@@ -2000,6 +2000,7 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
     input_modalities = ("video", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(EdgeTamVideoTwoWayAttentionBlock, index=2)}
+    _tied_weights_keys = {}
     _keys_to_ignore_on_load_unexpected = []
 
     def __init__(self, config: EdgeTamVideoConfig):
@@ -2279,7 +2280,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
             image_batch = inference_session.get_frame(frame_idx).unsqueeze(0)  # Add batch dimension
             image_outputs = self.get_image_features(image_batch, return_dict=True)
             vision_feats = image_outputs.fpn_hidden_states
-            vision_pos_embeds = image_outputs.fpn_position_embeddings
+            vision_pos_embeds = image_outputs.fpn_position_encoding
             # Cache features
             inference_session.cache.cache_vision_features(
                 frame_idx, {"vision_feats": vision_feats, "vision_pos_embeds": vision_pos_embeds}
