@@ -178,6 +178,12 @@ SUPPORTED_TASKS = {
         "default": {"model": ("google/tapas-base-finetuned-wtq", "e3dde19")},
         "type": "text",
     },
+    "document-question-answering": {
+        "impl": DocumentQuestionAnsweringPipeline,
+        "pt": (AutoModelForDocumentQuestionAnswering,) if is_torch_available() else (),
+        "default": {"model": ("impira/layoutlm-document-qa", "beed3c4")},
+        "type": "multimodal",
+    },
     "fill-mask": {
         "impl": FillMaskPipeline,
         "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
@@ -385,6 +391,8 @@ def pipeline(task: Literal["audio-classification"], model: str | PreTrainedModel
 def pipeline(task: Literal["automatic-speech-recognition"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | PreTrainedFeatureExtractor | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> AutomaticSpeechRecognitionPipeline: ...
 @overload
 def pipeline(task: Literal["depth-estimation"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | PreTrainedFeatureExtractor | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> DepthEstimationPipeline: ...
+@overload
+def pipeline(task: Literal["document-question-answering"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | PreTrainedFeatureExtractor | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> DocumentQuestionAnsweringPipeline: ...
 @overload
 def pipeline(task: Literal["feature-extraction"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | PreTrainedFeatureExtractor | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> FeatureExtractionPipeline: ...
 @overload
