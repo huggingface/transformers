@@ -547,7 +547,7 @@ class SamPositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.scale = config.scale
-        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
+        self.positional_embedding = nn.Parameter(self.scale * torch.randn((2, config.num_pos_feats)))
 
     def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
@@ -1106,6 +1106,9 @@ class SamVisionModel(SamPreTrainedModel):
 class SamModel(SamPreTrainedModel):
     input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamTwoWayAttentionBlock, index=2)}
+    _tied_weights_keys = {
+        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
+    }
 
     def __init__(self, config: SamConfig):
         super().__init__(config)
