@@ -39,6 +39,7 @@ from .test_modeling_common import (
 )
 from .test_pipeline_mixin import PipelineTesterMixin
 from .test_training_mixin import TrainingTesterMixin
+from .test_training_distributed_mixin import TrainingDistributedTesterMixin
 
 
 if is_torch_available():
@@ -305,7 +306,7 @@ class CausalLMModelTester:
 
 
 @require_torch
-class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TrainingTesterMixin):
+class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TrainingTesterMixin, TrainingDistributedTesterMixin):
     model_tester_class = None
     all_model_classes = None
     pipeline_model_mapping = None
