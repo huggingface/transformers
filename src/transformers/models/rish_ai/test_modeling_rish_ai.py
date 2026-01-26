@@ -29,7 +29,6 @@ from .modeling_rish_ai import (
     RishAIModel,
 )
 
-
 if is_torch_available():
     import torch
 
@@ -97,27 +96,47 @@ class RishAIModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.ones(self.batch_size, self.seq_length, device=torch_device)
+            input_mask = torch.ones(
+                self.batch_size, self.seq_length, device=torch_device
+            )
 
         token_type_ids = None
         if self.use_token_type_ids:
             token_type_ids = torch.randint(
-                0, self.type_vocab_size, (self.batch_size, self.seq_length), device=torch_device
+                0,
+                self.type_vocab_size,
+                (self.batch_size, self.seq_length),
+                device=torch_device,
             )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = torch.randint(0, self.num_labels, (self.batch_size,), device=torch_device)
-            token_labels = torch.randint(
-                0, self.num_labels, (self.batch_size, self.seq_length), device=torch_device
+            sequence_labels = torch.randint(
+                0, self.num_labels, (self.batch_size,), device=torch_device
             )
-            choice_labels = torch.randint(0, self.num_choices, (self.batch_size,), device=torch_device)
+            token_labels = torch.randint(
+                0,
+                self.num_labels,
+                (self.batch_size, self.seq_length),
+                device=torch_device,
+            )
+            choice_labels = torch.randint(
+                0, self.num_choices, (self.batch_size,), device=torch_device
+            )
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return RishAIConfig(
@@ -140,24 +159,43 @@ class RishAIModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = RishAIModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_causal_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = RishAICausalLM(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         result = model(input_ids)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -170,7 +208,11 @@ class RishAIModelTester:
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+        }
         return config, inputs_dict
 
 
