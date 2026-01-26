@@ -197,6 +197,9 @@ class Sam3TrackerConfig(PreTrainedConfig):
     ```"""
 
     model_type = "sam3_tracker"
+    # sam3_video checkpoints can be loaded with Sam3TrackerModel since they share
+    # the same architecture and weights - only the model_type in config differs
+    compatible_model_types = ("sam3_video",)
     sub_configs = {
         "vision_config": AutoConfig,
         "prompt_encoder_config": Sam3TrackerPromptEncoderConfig,

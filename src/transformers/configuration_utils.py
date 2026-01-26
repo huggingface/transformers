@@ -71,6 +71,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
     - **model_type** (`str`) -- An identifier for the model type, serialized into the JSON file, and used to recreate
       the correct object in [`~transformers.AutoConfig`].
+    - **compatible_model_types** (`tuple[str, ...]`) -- A tuple of model types that are compatible with this config.
+      When loading a config with a different `model_type`, no warning will be raised if the loaded type is in this tuple.
+      This is useful when multiple model architectures share the same checkpoint (e.g., SAM3 family models).
     - **has_no_defaults_at_init** (`bool`) -- Whether the config class can be initialized without providing input arguments.
       Some configurations requires inputs to be defined at init and have no default values, usually these are composite configs,
       (but not necessarily) such as [`~transformers.EncoderDecoderConfig`] or [`~RagConfig`]. They have to be initialized from
@@ -144,6 +147,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     """
 
     model_type: str = ""
+    compatible_model_types: tuple[str, ...] = ()
     base_config_key: str = ""
     sub_configs: dict[str, type["PreTrainedConfig"]] = {}
     has_no_defaults_at_init: bool = False
@@ -540,9 +544,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                     config_dict = v
 
             # raise warning only if we still can't see a match in `model_type`
-            if config_dict["model_type"] != cls.model_type:
+            # and the loaded model_type is not in the compatible_model_types list
+            config_model_type = config_dict["model_type"]
+            is_compatible = config_model_type in getattr(cls, "compatible_model_types", ())
+            if config_model_type != cls.model_type and not is_compatible:
                 logger.warning(
-                    f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                    f"You are using a model of type {config_model_type} to instantiate a model of type "
                     f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
                 )
 

@@ -94,6 +94,10 @@ class Sam3TrackerMaskDecoderConfig(Sam2MaskDecoderConfig):
 
 
 class Sam3TrackerConfig(Sam2Config):
+    # sam3_video checkpoints can be loaded with Sam3TrackerModel since they share
+    # the same architecture and weights - only the model_type in config differs
+    compatible_model_types = ("sam3_video",)
+
     def __init__(
         self,
         vision_config=None,

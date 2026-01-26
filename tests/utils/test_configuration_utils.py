@@ -357,3 +357,49 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertIsInstance(new_config_instance.inf_positive, float)
         self.assertIsInstance(new_config_instance.inf_negative, float)
         self.assertIsInstance(new_config_instance.nan, float)
+
+    def test_compatible_model_types_suppresses_warning(self):
+        """Test that compatible_model_types suppresses the model type mismatch warning."""
+        from transformers import logging
+        from transformers.testing_utils import CaptureLogger, LoggingLevel
+
+        # Create a config class that declares compatible_model_types
+        class CompatibleConfig(PreTrainedConfig):
+            model_type = "compatible_model"
+            compatible_model_types = ("other_model",)
+
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+
+        # Create a config class without compatible_model_types
+        class IncompatibleConfig(PreTrainedConfig):
+            model_type = "incompatible_model"
+
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+
+        # Create a config class to save with a specific model_type
+        class OtherModelConfig(PreTrainedConfig):
+            model_type = "other_model"
+
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Save a config with model_type "other_model"
+            config = OtherModelConfig()
+            config.save_pretrained(tmpdir)
+
+            logger = logging.get_logger("transformers.configuration_utils")
+
+            # Loading with CompatibleConfig should NOT produce a warning
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl:
+                    _ = CompatibleConfig.from_pretrained(tmpdir)
+            self.assertNotIn("You are using a model of type", cl.out)
+
+            # Loading with IncompatibleConfig SHOULD produce a warning
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl:
+                    _ = IncompatibleConfig.from_pretrained(tmpdir)
+            self.assertIn("You are using a model of type other_model to instantiate a model of type incompatible_model", cl.out)
