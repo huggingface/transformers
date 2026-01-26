@@ -32,11 +32,35 @@ import os.path
 import re
 import string
 from pathlib import Path
+from typing import Iterable
 
 from git import Repo
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
+
+
+def get_new_python_files_between_refs(base_ref: str, head_ref: str) -> list[str]:
+    """
+    Get the list of added python files between two refs/commits.
+
+    Args:
+        base_ref (`str`): Base commit/ref (e.g. PR base SHA).
+        head_ref (`str`): Head commit/ref (e.g. PR head SHA).
+
+    Returns:
+        `List[str]`: The list of python files added between base_ref and head_ref.
+    """
+    repo = Repo(PATH_TO_REPO)
+    base = repo.commit(base_ref)
+    head = repo.commit(head_ref)
+
+    code_diff = []
+    # Diff from base -> head, take added files only.
+    for diff_obj in base.diff(head):
+        if diff_obj.change_type == "A" and diff_obj.b_path and diff_obj.b_path.endswith(".py"):
+            code_diff.append(diff_obj.b_path)
+    return code_diff
 
 
 def get_new_python_files_between_commits(base_commit: str, commits: list[str]) -> list[str]:
@@ -96,18 +120,50 @@ def get_new_python_files(diff_with_last_commit=False) -> list[str]:
     return get_new_python_files_between_commits(repo.head.commit, commits)
 
 
-def get_new_model(diff_with_last_commit=False):
-    new_files = get_new_python_files(diff_with_last_commit)
-    reg = re.compile(r"src/transformers/models/(.*)/modeling_.*\.py")
 
-    new_model = ""
-    for x in new_files:
-        find_new_model = reg.findall(x)
-        if len(find_new_model) > 0:
-            new_model = find_new_model[0]
-            # It's unlikely we have 2 new modeling files in a pull request.
-            break
-    return new_model
+def _extract_models_from_paths(paths: Iterable[str]) -> list[str]:
+    # We match either modeling_*.py (classic) or modular_*.py (increasingly used as source-of-truth).
+    regs = [
+        re.compile(r"^src/transformers/models/([^/]+)/modeling_.*\.py$"),
+        re.compile(r"^src/transformers/models/([^/]+)/modular_.*\.py$"),
+    ]
+    models = []
+    for p in paths:
+        for reg in regs:
+            m = reg.findall(p)
+            if m:
+                models.append(m[0])
+                break
+    # Preserve order but unique
+    seen = set()
+    uniq = []
+    for m in models:
+        if m not in seen:
+            uniq.append(m)
+            seen.add(m)
+    return uniq
+
+
+def get_new_models(diff_with_last_commit: bool = False, base_ref: str | None = None, head_ref: str | None = None) -> list[str]:
+    """
+    Return list of newly added models detected via newly added modeling_*.py (or modular_*.py).
+
+    Priority:
+      - If base_ref and head_ref are provided: diff base_ref -> head_ref (PR use-case)
+      - Else: existing behavior using main/merge-base or last-commit mode
+    """
+    if base_ref is not None and head_ref is not None:
+        new_files = get_new_python_files_between_refs(base_ref, head_ref)
+    else:
+        new_files = get_new_python_files(diff_with_last_commit)
+
+    return _extract_models_from_paths(new_files)
+
+
+def get_new_model(diff_with_last_commit: bool = False, base_ref: str | None = None, head_ref: str | None = None) -> str:
+    models = get_new_models(diff_with_last_commit=diff_with_last_commit, base_ref=base_ref, head_ref=head_ref)
+    return models[0] if models else ""
+   return new_model
 
 
 def parse_message(message: str) -> str:
@@ -151,11 +207,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--message", type=str, default="", help="The content of a comment.")
     parser.add_argument("--quantization", action="store_true", help="If we collect quantization tests")
+    parser.add_argument("--base", type=str, default=None, help="Base ref/sha to diff from (PR base).")
+    parser.add_argument("--head", type=str, default=None, help="Head ref/sha to diff to (PR head).")
+    parser.add_argument("--print-new-models", action="store_true", help="Print detected new model names as JSON.")
+
     args = parser.parse_args()
 
-    new_model = get_new_model()
+    new_models = get_new_models(base_ref=args.base, head_ref=args.head)
+    if args.print_new_models:
+        print(json.dumps(new_models))
+        raise SystemExit(0)
+
     specified_models = get_models(args.message)
-    models = ([] if new_model == "" else [new_model]) + specified_models
+    models = new_models + specified_models
     # a guard for strange model names
     models = [model for model in models if check_model_names(model)]
 

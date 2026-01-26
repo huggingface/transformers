@@ -10,22 +10,164 @@ body:
     attributes:
       label: Model description
       description: |
-        Put any and all important information relative to the model
+        Put any and all important information relative to the model.
+        Include what makes it special and why it should be in transformers.
+
+  - type: dropdown
+    id: modality
+    validations:
+      required: true
+    attributes:
+      label: Modality / model family
+      options:
+        - Text (LM)
+        - Mixture-of-Experts (MoE) LM
+        - Vision-Language (VLM)
+        - Audio / Speech (ASR)
+        - Audio / Speech (TTS)
+        - Audio Language Model (ALM)
+        - Multimodal (other)
+        - Other
+
+  - type: dropdown
+    id: primary-task
+    validations:
+      required: true
+    attributes:
+      label: Primary Transformers task / AutoModel class target
+      description: |
+        Choose the main task head expected in transformers.
+        (If multiple, list the rest in the next field.)
+      options:
+        - AutoModel
+        - AutoModelForCausalLM
+        - AutoModelForSeq2SeqLM
+        - AutoModelForImageTextToText
+        - AutoModelForVision2Seq
+        - AutoModelForSpeechSeq2Seq
+        - AutoModelForCTC
+        - AutoModelForAudioClassification
+        - Other / unsure
+
+  - type: textarea
+    id: secondary-tasks
+    attributes:
+      label: Secondary tasks (optional)
+      description: |
+        List any additional heads/tasks expected (e.g. classification, token classification, VQA, etc.).
 
   - type: checkboxes
     id: information-tasks
     attributes:
       label: Open source status
       description: |
-          Please note that if the model implementation isn't available or if the weights aren't open-source, we are less likely to implement it in `transformers`.
+        If the implementation isn't available or the weights aren't open, we are less likely to implement it in transformers.
       options:
         - label: "The model implementation is available"
         - label: "The model weights are available"
 
+  - type: dropdown
+    id: weights-access
+    validations:
+      required: true
+    attributes:
+      label: Weights access
+      options:
+        - Open
+        - Gated (requires approval)
+        - Not available yet
+        - Unsure
+
+  - type: input
+    id: code-license
+    validations:
+      required: true
+    attributes:
+      label: Code license
+      description: |
+        SPDX identifier preferred (e.g. Apache-2.0, MIT). If custom, write “custom”.
+
+  - type: input
+    id: weights-license
+    validations:
+      required: true
+    attributes:
+      label: Weights license
+      description: |
+        SPDX if applicable, otherwise the exact license name / terms.
+
+  - type: checkboxes
+    id: redistribution
+    attributes:
+      label: Redistribution / hosting
+      description: |
+        Confirm what is allowed for weights.
+      options:
+        - label: "Weights can be redistributed and/or hosted on the Hugging Face Hub"
+        - label: "Weights cannot be redistributed (implementation-only is still useful)"
+
   - type: textarea
-    id: additional-info
+    id: useful-links
+    validations:
+      required: true
     attributes:
       label: Provide useful links for the implementation
       description: |
-        Please provide information regarding the implementation, the weights, and the authors.
-        Please mention the authors by @gh-username if you're aware of their usernames.
+        Provide links to: paper/tech report, official repo, weights (HF Hub preferred), reference implementation, configs, and any existing ports.
+        Mention authors by @gh-username if known.
+
+  - type: textarea
+    id: checkpoints
+    validations:
+      required: true
+    attributes:
+      label: Checkpoints / variants to support
+      description: |
+        List checkpoint names and sizes (e.g. base/large, 7B/13B, etc.).
+        Include exact identifiers used upstream and any known differences.
+
+  - type: textarea
+    id: architecture-notes
+    validations:
+      required: true
+    attributes:
+      label: Architecture / config highlights
+      description: |
+        Provide what we need to build a Config:
+        - layers, hidden size, heads, vocab size
+        - rope/pos-enc details
+        - MoE (#experts, top-k, routing)
+        - vision encoder name + image sizes / patching
+        - audio frontend (sample rate, window, features)
+        - any special tokens or chat template requirements
+
+  - type: dropdown
+    id: conversion
+    validations:
+      required: true
+    attributes:
+      label: Weight conversion expected?
+      description: |
+        Do we need a convert_*_to_hf script or can we load directly?
+      options:
+        - Yes, custom conversion needed
+        - No, can load directly (already HF-compatible)
+        - Unsure
+
+  - type: checkboxes
+    id: testing
+    attributes:
+      label: Testing / CI inputs you can provide
+      description: |
+        These make integrations much faster to review and merge.
+      options:
+        - label: "I can provide a tiny config (CI-sized) or random init recipe for tests"
+        - label: "I can provide a minimal inference snippet (inputs + expected behavior)"
+        - label: "I can provide small fixtures (1 image / short audio) with permissive license"
+
+  - type: input
+    id: contact
+    attributes:
+      label: Maintainer / point of contact (optional)
+      description: |
+        GitHub handle(s) of people who can help answer questions during review and after merge.
