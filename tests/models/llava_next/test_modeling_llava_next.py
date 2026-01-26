@@ -200,6 +200,8 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         if is_torch_available()
         else {}
     )
+    # Llava-NeXT merges batch_size and num_patches in the first output dimension
+    skip_test_image_features_output_shape = True
     _is_composite = True
 
     def setUp(self):

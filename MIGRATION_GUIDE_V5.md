@@ -453,6 +453,37 @@ We dropped support for two torch APIs:
 
 Those APIs were deprecated by the PyTorch team, and we're instead focusing on the supported APIs `dynamo` and `export`.
 
+### Feature extraction helpers: `get_*_features`
+
+Many multi-modal models expose convenience methods such as `get_text_features`, `get_image_features`, `get_audio_features`, and `get_video_features` to run inference on a single modality without calling `model(**inputs)` directly.
+
+Starting with v5, these 4 helper methods now return a `BaseModelOutputWithPooling` (or a subclass) instead of only a pooled embedding tensor:
+
+- `last_hidden_state`: unpooled token/patch/frame embeddings for the requested modality.
+- `pooler_output`: pooled representation (what most models previously returned from `get_*_features`).
+- `hidden_states`: full hidden states for all layers when `output_hidden_states=True` is passed.
+- `attentions`: attention maps when `output_attentions=True` is passed.
+
+> [!IMPORTANT]
+> There is **no single universal shape** for `last_hidden_state` or `pooler_output`. It's recommended to inspect a small forward pass before making assumptions about shapes or semantics.
+
+If your code previously did something like this:
+
+```python
+text_embeddings = model.get_text_features(**inputs)
+```
+
+and you used `text_embeddings` as a tensor, you should now explicitly use `return_dict=True` take the `pooler_output` field from the returned `BaseModelOutputWithPooling`:
+
+```python
+outputs = model.get_text_features(**inputs, return_dict=True)
+text_embeddings = outputs.pooler_output
+```
+
+This will match the previous behavior in the large majority of cases. If your model-specific implementation returned a tuple of results before, those values should now be accessible as fields on the corresponding `BaseModelOutputWithPooling` subclass.
+
+Linked PR: https://github.com/huggingface/transformers/pull/42564
+
 ## Quantization changes
 
 We clean up the quantization API in transformers, and significantly refactor the weight loading as highlighted
@@ -558,7 +589,7 @@ Linked PRs:
 - `use_mps_device` -> mps will be used by default if detected
 - `fp16_backend` and `half_precision_backend` -> we will only rely on torch.amp as everything has been upstream to torch
 - `no_cuda` -> `use_cpu`
-- ` include_tokens_per_second` -> `include_num_input_tokens_seen`
+- `include_tokens_per_second` -> `include_num_input_tokens_seen`
 - `use_legacy_prediction_loop` -> we only use `evaluation_loop` function from now on
 
 ### Removing deprecated arguments in `Trainer`
@@ -574,7 +605,7 @@ Linked PRs:
 
 ###  New defaults for `Trainer`
 
-- `use_cache` in the model config will be set to `False`. You can still change the cache value through `TrainingArguments` `usel_cache` argument if needed. 
+- `use_cache` in the model config will be set to `False`. You can still change the cache value through `TrainingArguments` `use_cache` argument if needed. 
 
 ## Pipelines
 

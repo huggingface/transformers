@@ -11,14 +11,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import copy
 import inspect
 import json
 import os
-from typing import Any, Literal
+import re
+from dataclasses import replace
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
-from ..conversion_mapping import get_model_conversion_mapping
-from ..core_model_loading import WeightRenaming, rename_source_key
+from ..conversion_mapping import (
+    _MODEL_TO_CONVERSION_PATTERN,
+    get_checkpoint_conversion_mapping,
+    get_model_conversion_mapping,
+)
+from ..core_model_loading import (
+    Concatenate,
+    ConversionOps,
+    MergeModulelist,
+    Transpose,
+    WeightConverter,
+    WeightRenaming,
+)
 from ..utils import (
     CONFIG_NAME,
     cached_file,
@@ -31,6 +44,7 @@ from ..utils import (
     logging,
 )
 from ..utils.hub import DownloadKwargs
+from ..utils.loading_report import log_state_dict_report
 
 
 if is_torch_available():
@@ -45,6 +59,292 @@ MIN_PEFT_VERSION = "0.18.0"
 
 
 logger = logging.get_logger(__name__)
+
+if TYPE_CHECKING:
+    from ..modeling_utils import LoadStateDictConfig
+
+
+def _block_diag_3d(*tensors):
+    lora_b_block_diag = []
+    for i in range(len(tensors[0])):
+        lora_b_block_diag.append(torch.block_diag(tensors[0][i], tensors[1][i]))
+    out = torch.stack(lora_b_block_diag, dim=0)
+    return out
+
+
+class PeftConcatenate(Concatenate):
+    """Convert per-expert LoRA weights to merged weights.
+
+    When the base weights are fused, e.g. W01 = [W0, W1], the LoRA weights also need to be fused. To achieve this
+    correctly, concatenate the LoRA A weights along the r (rank) dimension. This doesn't require a new Operation. But
+    for LoRA B, the weights need to be merged in a block diagonal fashion to achieve the correct result.
+
+    To illustrate:
+
+    Before
+    W0' = W0 + A0 @ B0
+    W1' = W1 + A1 @ B1
+
+    After
+    W01' = W01 + A01 @ B01_bd
+        where
+        A01 = [A0, A1]
+        B01_bd = [[B0,  0],
+                  [0,  B1]]
+
+    This class is responsible for merging LoRA B in this block-diagonal fashion. Assuming that we fuse N weights, it
+    should look like this:
+
+    1. LoRA B is 2-dim
+    Normal LoRA weight of shape (out_feat, rank), the output shape should be (N * out_feat, N * rank).
+
+    2. LoRA B is 3-dim
+    MoE LoRA weight of shape (experts, out_feat, rank), the output shape should be (experts, N * out_feat, N * rank).
+
+    After this, the experts x rank dimension are flattened, as PEFT expects 2d tensors for LoRA.
+    """
+
+    @torch.no_grad
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        full_layer_name: str,
+        **kwargs,
+    ) -> dict[str, list[torch.Tensor]]:
+        dims = [v.dim() for v in input_dict.values()]
+        if set(dims) not in ({2}, {3}):
+            raise ValueError(
+                f"To convert this LoRA adapter, the LoRA weights all need to have either 2 or 3 dims, got {set(dims)}"
+            )
+
+        if set(dims) == {2}:
+            output_dict = {full_layer_name: torch.block_diag(*input_dict.values())}
+        else:
+            out = _block_diag_3d(*input_dict.values())  # shape = experts, 2*out_feat, 2*r
+            out = torch.permute(out, (2, 0, 1))  # shape = 2*r, experts, 2*out_feat
+            out = out.flatten(0, 1)  # shape = 2*r * experts, 2*out_feat
+            out = out.T
+            output_dict = {full_layer_name: out}
+        return output_dict
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        raise NotImplementedError("Reversing PEFT LoRA MoE conversions is not supported yet.")
+
+
+class FlattenDims(ConversionOps):
+    """
+    Flatten the tensors along the given dimensions
+    """
+
+    def __init__(self, dims: int | tuple[int, ...]):
+        if isinstance(dims, int):
+            dims = (dims,)
+        self.dims = dims
+
+    @torch.no_grad
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config,
+        **kwargs,
+    ) -> dict[str, list[torch.Tensor]]:
+        output_dict = {k: v.flatten(*self.dims) for k, v in input_dict.items()}
+        return output_dict
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        raise NotImplementedError("Reversing flatteing operatio is not supported.")
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(dims={self.dims})"
+
+
+class PermuteDims(ConversionOps):
+    """
+    Permute the tensors along the given dimensions
+    """
+
+    def __init__(self, dims: tuple[int, ...]):
+        self.dims = dims
+
+    @torch.no_grad
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config,
+        **kwargs,
+    ) -> dict[str, list[torch.Tensor]]:
+        output_dict = {k: v.permute(*self.dims) for k, v in input_dict.items()}
+        return output_dict
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        raise NotImplementedError("Reversing flatteing operatio is not supported yet.")
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(dims={self.dims})"
+
+
+def _build_peft_weight_mapping(
+    weight_conversions: list[WeightConverter | WeightRenaming] | None, adapter_name: str, peft_config=None
+) -> list[WeightConverter | WeightRenaming]:
+    # We iterate over all the operations of the original model and simply edit them to apply to the PEFT adapter when
+    # appropriate.
+    if not weight_conversions:
+        return []
+
+    # strip "base_model.model" and add adapter name
+    new_weight_conversions = [WeightRenaming("base_model.model.model.", "model.")]
+
+    prefixes = set()
+    from peft.mapping import PEFT_TYPE_TO_PREFIX_MAPPING
+
+    peft_type = getattr(peft_config, "peft_type", None)
+    if peft_type in PEFT_TYPE_TO_PREFIX_MAPPING:
+        prefixes.add(PEFT_TYPE_TO_PREFIX_MAPPING[peft_type])
+    else:
+        prefixes.update(PEFT_TYPE_TO_PREFIX_MAPPING.values())
+
+    for prefix in sorted(prefixes):
+        escaped_prefix = re.escape(prefix)
+        new_weight_conversions.append(
+            WeightRenaming(
+                source_patterns=rf"({escaped_prefix}[^\.]*)",
+                target_patterns=rf"\1.{adapter_name}",
+            )
+        )
+
+    for orig_conversion in weight_conversions:
+        if isinstance(orig_conversion, WeightRenaming):
+            new_weight_conversions.append(orig_conversion)
+            continue
+
+        if orig_conversion.target_patterns == ["mlp.experts.gate_up_proj"]:
+            # gate_up_proj requires both merging the experts and concatenating for the fusion of w1 and w3
+            for lora in ("lora_A", "lora_B"):  # TODO: lora_embedding_A and lora_embedding_B
+                conversion = copy.deepcopy(orig_conversion)
+                # deal with operations
+                peft_weight_operations = []
+                for i, op in enumerate(conversion.operations):
+                    if isinstance(op, Concatenate):
+                        if lora == "lora_B":  # block diagonal concat
+                            peft_weight_operations.append(PeftConcatenate(dim=op.dim))
+                        else:  # normal concat + flatten
+                            peft_weight_operations.append(op)
+                            peft_weight_operations.append(FlattenDims(dims=(0, 1)))
+                    elif isinstance(op, MergeModulelist):
+                        peft_weight_operations.append(op)
+                conversion.operations = peft_weight_operations
+
+                # TODO: this assumption may not hold for models != mixtral
+                # For source, we capture the orignal weights + the lora weights
+                new_source_patterns = []
+                for pat in list(conversion.source_patterns):
+                    # we replace the weight pattern to colllect loras
+                    pat = pat.rsplit(".", 1)[0]
+                    # note: the source state_dict does *not* contain the adapter name
+                    new_source_patterns.append(f"{pat}.{lora}.*")
+                conversion.source_patterns = new_source_patterns
+
+                # the gate_up_proj is the innner PEFT ParamWrapper, so we need to use base_layer
+                pat = conversion.target_patterns[0]
+                pat = pat.replace("gate_up_proj", "base_layer")
+                # we make sure the target key is correct, add '.weight' because the parameter is targeted directly
+                conversion.target_patterns = [f"{pat}.{lora}.{adapter_name}.weight"]
+                new_weight_conversions.append(conversion)
+
+        elif orig_conversion.target_patterns == ["mlp.experts.down_proj"]:
+            # down_proj only requires merging of experts
+            for lora in ("lora_A", "lora_B"):  # TODO: lora_embedding_A and lora_embedding_B
+                conversion = copy.deepcopy(orig_conversion)
+                peft_weight_operations = []
+                for i, op in enumerate(conversion.operations):
+                    if isinstance(op, MergeModulelist):
+                        peft_weight_operations.append(op)
+                        if lora == "lora_A":
+                            peft_weight_operations.append(FlattenDims(dims=(0, 1)))
+                        else:
+                            peft_weight_operations.append(PermuteDims(dims=(2, 0, 1)))
+                            peft_weight_operations.append(FlattenDims(dims=(0, 1)))
+                            peft_weight_operations.append(Transpose(dim0=0, dim1=1))
+                conversion.operations = peft_weight_operations
+
+                # TODO: this assumption may not hold for models != mixtral
+                # For source, we capture the orignal weights + the lora weights
+                new_source_patterns = []
+                for pat in list(conversion.source_patterns):
+                    # we replace the weight pattern to colllect loras
+                    pat = pat.rsplit(".", 1)[0]
+                    # note: the source state_dict does *not* contain the adapter name
+                    new_source_patterns.append(f"{pat}.{lora}.*")
+                conversion.source_patterns = new_source_patterns
+
+                # the down_proj is the outer PEFT ParamWrapper, so we remove the prefix
+                pat = conversion.target_patterns[0]
+                pat = pat.replace(".down_proj", "")
+                # we make sure the target key is correct, add '.weight' because the parameter is targeted directly
+                conversion.target_patterns = [f"{pat}.{lora}.{adapter_name}.weight"]
+                new_weight_conversions.append(conversion)
+
+    return new_weight_conversions
+
+
+# The main reason we have to explicit this is because the conversion mapping
+# has the full layer name, while the config do not. We coould regex match but
+# this is more explicit and less error prone.
+_MOE_TARGET_MODULE_MAPPING: dict[str, dict[str, str]] = {
+    "mixtral": {
+        "gate": "gate.weight",
+        "w1": "gate_up_proj",
+        "w3": "gate_up_proj",
+        "w2": "down_proj",
+    },
+    "qwen2_moe": {
+        "gate": "gate.weight",
+        "gate_proj": "gate_up_proj",
+        "up_proj": "gate_up_proj",
+        "down_proj": "down_proj",
+    },
+}
+
+_MOE_FUSED_TARGETS: dict[str, dict[str, set[str]]] = {
+    "mixtral": {"gate_up_proj": {"w1", "w3"}},
+    "qwen2_moe": {"gate_up_proj": {"gate_proj", "up_proj"}},
+}
+
+
+def patch_moe_parameter_targeting(model, peft_config):
+    """PEFT currently assumes that expert layers are of shape
+        (expert, in, out)
+    but with Mixtral in transformers v5 this is not true anymore.
+    This will be addressed in PEFT >0.19 until then we need to handle
+    it here for now.
+    """
+    from functools import wraps
+
+    import peft
+
+    model_type = getattr(model.config, "model_type", None)
+    if get_checkpoint_conversion_mapping(model_type) is not None:
+        update_layer = peft.tuners.lora.layer.ParamWrapper.update_layer
+
+        @wraps(update_layer)
+        def new_update_layer(layer, *args, **kwargs):
+            if not hasattr(layer, "_swapped_in_out") and layer.parameter_name in ("down_proj", "gate_up_proj"):
+                tmp_in_features = layer.in_features
+                layer.in_features = layer.out_features
+                layer.out_features = tmp_in_features
+                layer._swapped_in_out = True
+            return update_layer(layer, *args, **kwargs)
+
+        peft.tuners.lora.layer.ParamWrapper.update_layer = new_update_layer
 
 
 class PeftAdapterMixin:
@@ -73,12 +373,6 @@ class PeftAdapterMixin:
         self,
         peft_model_id: str | None = None,
         adapter_name: str | None = None,
-        revision: str | None = None,
-        token: str | None = None,
-        device_map: str = "auto",
-        max_memory: str | None = None,
-        offload_folder: str | None = None,
-        offload_index: int | None = None,
         peft_config: dict[str, Any] | None = None,
         adapter_state_dict: dict[str, "torch.Tensor"] | None = None,
         low_cpu_mem_usage: bool = False,
@@ -86,6 +380,8 @@ class PeftAdapterMixin:
         hotswap: bool | Literal["auto"] = "auto",
         local_files_only: bool = False,
         adapter_kwargs: dict[str, Any] | None = None,
+        load_config: Optional["LoadStateDictConfig"] = None,
+        **kwargs,
     ) -> None:
         """
         Load adapter weights from file or remote Hub folder. If you are not familiar with adapters and PEFT methods, we
@@ -99,35 +395,10 @@ class PeftAdapterMixin:
                 and adapter weights.
             adapter_name (`str`, *optional*):
                 The adapter name to use. If not set, will use the name "default".
-            revision (`str`, *optional*, defaults to `"main"`):
-                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
-                identifier allowed by git.
-
-                > [!TIP]
-                > To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
-
-            token (`str`, `optional`):
-                Whether to use authentication token to load the remote folder. Useful to load private repositories
-                that are on HuggingFace Hub. You might need to call `hf auth login` and paste your tokens to
-                cache it.
-            device_map (`str` or `dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
-                A map that specifies where each submodule should go. It doesn't need to be refined to each
-                parameter/buffer name, once a given module name is inside, every submodule of it will be sent to the
-                same device. If we only pass the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank
-                like `1`) on which the model will be allocated, the device map will map the entire model to this
-                device. Passing `device_map = 0` means put the whole model on GPU 0.
-
-                To have Accelerate compute the most optimized `device_map` automatically, set `device_map="auto"`. For
-                more information about each option see [designing a device
-                map](https://hf.co/docs/accelerate/main/en/usage_guides/big_modeling#designing-a-device-map).
-            max_memory (`Dict`, *optional*):
-                A dictionary device identifier to maximum memory. Will default to the maximum memory available for each
-                GPU and the available CPU RAM if unset.
-            offload_folder (`str` or `os.PathLike`, `optional`):
-                If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
-            offload_index (`int`, `optional`):
-                `offload_index` argument to be passed to `accelerate.dispatch_model` method.
+            load_config (`LoadStateDictConfig`, *optional*):
+                A load configuration to reuse when pulling adapter weights, typically from `from_pretrained`.
+            kwargs (`dict[str, Any]`, *optional*):
+                Additional `LoadStateDictConfig` fields passed as keyword arguments.
             peft_config (`dict[str, Any]`, *optional*):
                 The configuration of the adapter to add, supported adapters are all non-prompt learning configs (LoRA,
                 IA³, etc). This argument is used in case users directly pass PEFT state dicts.
@@ -175,9 +446,17 @@ class PeftAdapterMixin:
                 Additional keyword arguments passed along to the `from_pretrained` method of the adapter config and
                 `find_adapter_config_file` method.
         """
-        check_peft_version(min_version=MIN_PEFT_VERSION)
-
         from peft import PeftType
+
+        from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files
+
+        if local_files_only:
+            kwargs["local_files_only"] = True
+        base_load_config = load_config.__dict__ if load_config is not None else {}
+        base_load_config.update(kwargs)
+        base_load_config.setdefault("pretrained_model_name_or_path", None)
+        load_config = LoadStateDictConfig(**base_load_config)
+        peft_model_id = peft_model_id or load_config.pretrained_model_name_or_path
 
         if hotswap == "auto":
             # if user called model.enable_peft_hotswap and this is not the first adapter, enable hotswap
@@ -193,18 +472,10 @@ class PeftAdapterMixin:
             if any(conf.peft_type != PeftType.LORA for conf in self.peft_config.values()):
                 raise ValueError("Hotswapping is currently only supported for LoRA, please set `hotswap=False`.")
 
-        key_mapping = adapter_kwargs.pop("key_mapping", None) if adapter_kwargs is not None else None
-        weight_conversions = get_model_conversion_mapping(self, key_mapping=key_mapping)
-        # peft only supports low_cpu_mem_usage starting from v0.13.0
-        peft_load_kwargs = {}
-        peft_load_kwargs["low_cpu_mem_usage"] = low_cpu_mem_usage
-
         adapter_name = adapter_name if adapter_name is not None else "default"
-        if adapter_kwargs is None:
-            adapter_kwargs = {}
+        adapter_kwargs = adapter_kwargs or {}
 
-        from peft import PeftConfig, inject_adapter_in_model, load_peft_weights
-        from peft.utils import set_peft_model_state_dict
+        from peft import PeftConfig, inject_adapter_in_model
 
         if self._hf_peft_config_loaded and (not hotswap) and (adapter_name in self.peft_config):
             raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
@@ -218,34 +489,11 @@ class PeftAdapterMixin:
                 "You should either pass a `peft_model_id` or a `peft_config` and `adapter_state_dict` to load an adapter."
             )
 
-        if "device" not in adapter_kwargs:
-            device = self.device if not hasattr(self, "hf_device_map") else list(self.hf_device_map.values())[0]
-        else:
-            device = adapter_kwargs.pop("device")
-
-        # To avoid PEFT errors later on with safetensors.
-        if isinstance(device, torch.device):
-            device = str(device)
-
-        # We keep `revision` in the signature for backward compatibility
-        if revision is not None and "revision" not in adapter_kwargs:
-            adapter_kwargs["revision"] = revision
-        elif revision is not None and "revision" in adapter_kwargs and revision != adapter_kwargs["revision"]:
-            logger.error(
-                "You passed a `revision` argument both in `adapter_kwargs` and as a standalone argument. "
-                "The one in `adapter_kwargs` will be used."
-            )
-
-        # Override token with adapter_kwargs' token
-        if "token" in adapter_kwargs:
-            token = adapter_kwargs.pop("token")
-
         if peft_config is None:
+            load_config.download_kwargs.update(**adapter_kwargs)
             adapter_config_file = find_adapter_config_file(
                 peft_model_id,
-                token=token,
-                local_files_only=local_files_only,
-                **adapter_kwargs,
+                **load_config.download_kwargs,
             )
 
             if adapter_config_file is None:
@@ -256,120 +504,94 @@ class PeftAdapterMixin:
 
             peft_config = PeftConfig.from_pretrained(
                 peft_model_id,
-                token=token,
-                local_files_only=local_files_only,
-                **adapter_kwargs,
+                **load_config.download_kwargs,
             )
+
+        weight_conversions = get_model_conversion_mapping(self)
+        peft_config = convert_peft_config_for_transformers(peft_config, model=self, conversions=weight_conversions)
+
+        if hasattr(peft_config, "inference_mode"):
             peft_config.inference_mode = not is_trainable
 
+        peft_weight_conversions = _build_peft_weight_mapping(weight_conversions, adapter_name, peft_config=peft_config)
+
+        patch_moe_parameter_targeting(model=self, peft_config=peft_config)
+
         if not hotswap:
-            # TODO: WE NEED TOO APPLY OUR DYNAMIC WEIGHT CONVERSION AT SOME POINT HERE!
             # Create and add fresh new adapters into the model, unless the weights are hotswapped
-            inject_adapter_in_model(peft_config, self, adapter_name, **peft_load_kwargs)
+            inject_adapter_in_model(peft_config, self, adapter_name)
 
         if not self._hf_peft_config_loaded:
             self._hf_peft_config_loaded = True
 
-        if peft_model_id is not None:
-            if "local_files_only" not in adapter_kwargs:
-                adapter_kwargs["local_files_only"] = local_files_only
-            adapter_state_dict = load_peft_weights(peft_model_id, token=token, device=device, **adapter_kwargs)
+        if adapter_state_dict is None:
+            adapter_filenames = ["adapter_model.safetensors", "adapter_model.bin"]
+            if load_config.use_safetensors is False:
+                adapter_filenames.reverse()
 
-        # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility
-        renamings = []
-        if weight_conversions:
-            renamings = [entry for entry in weight_conversions if isinstance(entry, WeightRenaming)]
-        processed_adapter_state_dict = {}
-        prefix = "base_model.model."
-        state_dict = self.state_dict()
-        for key, value in adapter_state_dict.items():
-            if key.startswith(prefix):
-                new_key = key[len(prefix) :]
-            else:
-                new_key = key
-
-            new_key = rename_source_key(new_key, renamings, [], self.base_model_prefix, state_dict)[0]
-
-            # For hotswapping, we need the adapter name to be present in the state dict keys
-            if hotswap:
-                if key.endswith("lora_A.weight") or key.endswith("lora_B.weight"):
-                    new_key = new_key[: -len(".weight")] + f".{adapter_name}.weight"
-                elif key.endswith("lora_B.bias"):  # lora_bias=True option
-                    new_key = new_key[: -len(".bias")] + f".{adapter_name}.bias"
-            processed_adapter_state_dict[new_key] = value
-
-        # Load state dict
-        if not hotswap:
-            incompatible_keys = set_peft_model_state_dict(
-                self, processed_adapter_state_dict, adapter_name, **peft_load_kwargs
-            )
-
-            if self._prepare_peft_hotswap_kwargs is not None:
-                # For hotswapping of compiled models or adapters with different ranks.
-                # If the user called enable_peft_hotswap, we need to ensure it is called:
-                # - after the first adapter was loaded
-                # - before the model is compiled and the 2nd adapter is being hotswapped in
-                # Therefore, it needs to be called here
-                from peft.utils.hotswap import prepare_model_for_compiled_hotswap
-
-                prepare_model_for_compiled_hotswap(self, config=peft_config, **self._prepare_peft_hotswap_kwargs)
-                # We only want to call prepare_model_for_compiled_hotswap once
-                self._prepare_peft_hotswap_kwargs = None
-        else:
-            from peft.utils.hotswap import check_hotswap_configs_compatible, hotswap_adapter_from_state_dict
-
-            check_hotswap_configs_compatible(self.peft_config[adapter_name], peft_config)
-            try:
-                hotswap_adapter_from_state_dict(
-                    model=self,
-                    state_dict=processed_adapter_state_dict,
-                    adapter_name=adapter_name,
-                    config=peft_config,
-                )
-            except Exception as e:
-                logger.error(f"Hotswapping {adapter_name} was unsucessful with the following error: \n{e}")
-                raise
-            incompatible_keys = None
-
-        if incompatible_keys is not None:
-            err_msg = ""
-            origin_name = peft_model_id if peft_model_id is not None else "state_dict"
-            # Check for unexpected keys.
-            if hasattr(incompatible_keys, "unexpected_keys") and len(incompatible_keys.unexpected_keys) > 0:
-                err_msg = (
-                    f"Loading adapter weights from {origin_name} led to unexpected keys not found in the model: "
-                    f"{', '.join(incompatible_keys.unexpected_keys)}. "
-                )
-
-            # Check for missing keys.
-            missing_keys = getattr(incompatible_keys, "missing_keys", None)
-            if missing_keys:
-                # Filter missing keys specific to the current adapter, as missing base model keys are expected.
-                lora_missing_keys = [k for k in missing_keys if "lora_" in k and adapter_name in k]
-                if lora_missing_keys:
-                    err_msg += (
-                        f"Loading adapter weights from {origin_name} led to missing keys in the model: "
-                        f"{', '.join(lora_missing_keys)}"
+            checkpoint_files = sharded_metadata = None
+            last_error = None
+            for adapter_filename in adapter_filenames:
+                try:
+                    checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
+                        pretrained_model_name_or_path=peft_model_id,
+                        variant=None,
+                        gguf_file=None,
+                        use_safetensors=(
+                            load_config.use_safetensors if adapter_filename.endswith(".safetensors") else False
+                        ),
+                        user_agent=None,
+                        is_remote_code=False,
+                        transformers_explicit_filename=adapter_filename,
+                        download_kwargs=load_config.download_kwargs,
                     )
+                    break
+                except OSError as error:
+                    last_error = error
 
-            if err_msg:
-                logger.warning(err_msg)
+            if checkpoint_files is None:
+                raise last_error or OSError("Could not download either a .bin or a .safetensors adapter file.")
+        else:
+            checkpoint_files, sharded_metadata = [], {}
 
-        if peft_config.inference_mode:
-            self.eval()
+        load_config = replace(
+            load_config,
+            pretrained_model_name_or_path=peft_model_id,
+            sharded_metadata=sharded_metadata,
+            weight_mapping=peft_weight_conversions,
+        )
+        load_info = self._load_pretrained_model(
+            model=self,
+            state_dict=adapter_state_dict,
+            checkpoint_files=checkpoint_files,
+            load_config=load_config,
+        )
 
-        # Re-dispatch model and hooks in case the model is offloaded to CPU / Disk.
-        if (
-            (getattr(self, "hf_device_map", None) is not None)
-            and (len(set(self.hf_device_map.values()).intersection({"cpu", "disk"})) > 0)
-            and len(self.peft_config) == 1
-        ):
-            self._dispatch_accelerate_model(
-                device_map=device_map,
-                max_memory=max_memory,
-                offload_folder=offload_folder,
-                offload_index=offload_index,
-            )
+        adapter_key_markers = {adapter_name}
+        if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:
+            adapter_key_markers.add(peft_config.peft_type.value.lower())
+
+        def is_adapter_key(key: str) -> bool:
+            return any(marker in key for marker in adapter_key_markers)
+
+        load_info = replace(
+            load_info,
+            missing_keys=[k for k in load_info.missing_keys if is_adapter_key(k)],
+            mismatched_keys=load_info.mismatched_keys,
+        )
+
+        log_state_dict_report(
+            model=self,
+            load_config=load_config,
+            logger=logger,
+            error_msgs=load_info.error_msgs,
+            unexpected_keys=load_info.unexpected_keys,
+            missing_keys=load_info.missing_keys,
+            mismatched_keys=load_info.mismatched_keys,
+            mismatched_shapes=load_info.mismatched_keys,
+            conversion_errors=load_info.conversion_errors,
+        )
+        return load_info
 
     def enable_peft_hotswap(
         self, target_rank: int = 128, check_compiled: Literal["error", "warn", "ignore"] = "error"
@@ -732,3 +954,90 @@ def maybe_load_adapters(
             pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
 
     return _adapter_model_path, pretrained_model_name_or_path, adapter_kwargs
+
+
+#####################
+# weight conversion #
+#####################
+
+# With transformers v5, we need to convert some weights to reflect updated model architectures. If users have trained
+# PEFT adapters for these models, they also need to be updated. This may require updating the PEFT config too. The
+# logic for this is found below. Right now, only LoRA is supported.
+
+# TODO: These functions will be added to PEFT in release 0.19.0. Drop them here once 0.19.0 becomes the min PEFT
+# version.
+
+
+def _convert_peft_config_moe(peft_config, model_type: str):
+    base_model_type = _MODEL_TO_CONVERSION_PATTERN.get(model_type, None)
+    if base_model_type is None:
+        return peft_config
+
+    target_module_mapping = _MOE_TARGET_MODULE_MAPPING[base_model_type]
+    fused_targets = _MOE_FUSED_TARGETS.get(base_model_type, {})
+
+    peft_config.target_parameters = set(peft_config.target_parameters or [])
+    peft_config.target_modules = set(peft_config.target_modules or [])
+    if not hasattr(peft_config, "rank_pattern") or peft_config.rank_pattern is None:
+        peft_config.rank_pattern = {}
+
+    new_target_parameters = peft_config.target_parameters.copy()
+    remaining_target_modules = set()
+    matched_targets: dict[str, set[str]] = {new_name: set() for new_name in fused_targets}
+
+    for target in peft_config.target_modules:
+        mapped_new_name = None
+        mapped_old_name = None
+        for old_name, new_name in target_module_mapping.items():
+            if (target == old_name) or target.endswith(f".{old_name}"):
+                mapped_new_name = new_name
+                mapped_old_name = old_name
+                break
+
+        if mapped_new_name is None:
+            remaining_target_modules.add(target)
+            continue
+
+        new_target_parameters.add(mapped_new_name)
+        if mapped_new_name in fused_targets and mapped_old_name is not None:
+            matched_targets.setdefault(mapped_new_name, set()).add(mapped_old_name)
+
+    for new_name, required_old_targets in fused_targets.items():
+        present_targets = matched_targets.get(new_name, set())
+        if 0 < len(present_targets) < len(required_old_targets):
+            missing = ", ".join(sorted(required_old_targets - present_targets))
+            present = ", ".join(sorted(present_targets))
+            raise ValueError(
+                f"Cannot convert PEFT target(s) {present} without also targeting {missing} because they are fused into {new_name}."
+            )
+
+        if len(present_targets) == len(required_old_targets) and len(required_old_targets) > 1:
+            peft_config.rank_pattern[rf".*\.{re.escape(new_name)}"] = peft_config.r * len(required_old_targets)
+
+    peft_config.target_parameters = new_target_parameters
+    peft_config.target_modules = remaining_target_modules
+
+    return peft_config
+
+
+def convert_peft_config_for_transformers(peft_config, model: torch.nn.Module, conversions: list[Any] | None):
+    # FIXME document this properly
+    # If, for any reason, we cannot apply conversion, we just return the PEFT config as is.
+    from peft import PeftType  # avoid circular import
+
+    if peft_config.peft_type != PeftType.LORA:
+        # weight conversion is currently only supported for LoRA
+        return peft_config
+    if not hasattr(model, "config"):
+        # not a transformer model
+        return peft_config
+    if not hasattr(model.config, "model_type"):
+        # not a transformer model
+        return peft_config
+
+    peft_config = copy.deepcopy(peft_config)  # don't mutate the original config
+    model_type = getattr(model.config, "model_type", None)
+    if get_checkpoint_conversion_mapping(model_type) is not None:
+        peft_config = _convert_peft_config_moe(peft_config, model_type)
+
+    return peft_config
