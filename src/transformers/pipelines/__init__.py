@@ -63,7 +63,7 @@ from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
-from .image_embedding import ImageFeatureExtractionPipeline
+from .image_feature_extraction import ImageFeatureExtractionPipeline
 from .image_segmentation import ImageSegmentationPipeline
 from .image_text_to_text import ImageTextToTextPipeline
 from .image_to_image import ImageToImagePipeline
@@ -72,7 +72,7 @@ from .mask_generation import MaskGenerationPipeline
 from .object_detection import ObjectDetectionPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text_classification import TextClassificationPipeline
-from .text_embedding import FeatureExtractionPipeline
+from .text_feature_extraction import FeatureExtractionPipeline
 from .text_generation import TextGenerationPipeline
 from .text_to_audio import TextToAudioPipeline
 from .token_classification import (

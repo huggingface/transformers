@@ -266,7 +266,9 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     test_missing_keys = False
 
     pipeline_model_mapping = (
-        {"feature-extraction": FalconMambaModel, "text-generation": FalconMambaForCausalLM} if is_torch_available() else {}
+        {"feature-extraction": FalconMambaModel, "text-generation": FalconMambaForCausalLM}
+        if is_torch_available()
+        else {}
     )
 
     def test_enable_input_require_grads(self):
