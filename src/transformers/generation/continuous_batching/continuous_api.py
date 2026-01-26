@@ -600,12 +600,6 @@ class ContinuousBatchProcessor:
             self.actual_index_sizes[i] = (len(group_read_indices), len(group_write_indices))
 
     @traced
-    def _get_new_tokens(self, num_new_tokens: int) -> list[int]:
-        indices = self.logits_indices[:num_new_tokens]
-        new_tokens = self.output_ids[indices]
-        return new_tokens.tolist()
-
-    @traced
     def _maybe_send_output(self, state: RequestState) -> None:
         """Send output to the queue based on streaming mode and request state."""
         if state.streaming or state.status == RequestStatus.FINISHED:
@@ -614,7 +608,7 @@ class ContinuousBatchProcessor:
     @traced
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
-        new_tokens = self._get_new_tokens(len(self.requests_in_batch))
+        new_tokens = self.output_ids[:len(self.requests_in_batch)].tolist()
         current_logits_index = 0
         for state in self.requests_in_batch:
             # If the request has no remaining prompt ids, it means prefill has already ended or just finished
@@ -793,8 +787,10 @@ class ContinuousBatchProcessor:
             next_tokens = torch.argmax(probs, dim=-1)  # shape is [1, seq_len]
             next_tokens = next_tokens.squeeze(0)  # shape is [seq_len]
         tokens = next_tokens.size(0)  # Get seq_len dimension
+        #
+        indices = self.logits_indices[:tokens]
+        next_tokens = next_tokens[indices]
         self.output_ids[:tokens].copy_(next_tokens)
-
 
 # Manager Class (User Interface)
 @attach_tracer()
@@ -1147,14 +1143,6 @@ class ContinuousBatchingManager:
         # Loop body ends if there is no requests in the batch
         if not batch_processor.prepare_next_batch():
             return
-        # Debug logging of the current memory usage -- commented out because it's often not used even in debug
-        # if logger.level < logging.DEBUG:
-        #     device, total, reserved, allocated = get_device_and_memory_breakdown()
-        #     available_memory = total - max(allocated, reserved)
-        #     logger.debug(
-        # f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}, Available: {available_memory}"
-        #     )
-
         self._generation_step()
         batch_processor.update_batch()
 
