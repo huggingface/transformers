@@ -287,6 +287,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("mobilevitv2", "MobileViTV2Config"),
         ("modernbert", "ModernBertConfig"),
         ("modernbert-decoder", "ModernBertDecoderConfig"),
+        ("molmo2", "Molmo2Config"),
         ("moonshine", "MoonshineConfig"),
         ("moshi", "MoshiConfig"),
         ("mpnet", "MPNetConfig"),

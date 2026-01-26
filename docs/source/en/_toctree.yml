@@ -1161,6 +1161,8 @@
         title: mllama
       - local: model_doc/mm-grounding-dino
         title: MM Grounding DINO
+      - local: model_doc/molmo2
+        title: Molmo2
       - local: model_doc/nougat
         title: Nougat
       - local: model_doc/omdet-turbo

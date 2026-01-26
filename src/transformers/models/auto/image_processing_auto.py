@@ -154,6 +154,7 @@ else:
             ("mobilenet_v2", ("MobileNetV2ImageProcessor", "MobileNetV2ImageProcessorFast")),
             ("mobilevit", ("MobileViTImageProcessor", "MobileViTImageProcessorFast")),
             ("mobilevitv2", ("MobileViTImageProcessor", "MobileViTImageProcessorFast")),
+            ("molmo2", ("Molmo2ImageProcessor", None)),
             ("nougat", ("NougatImageProcessor", "NougatImageProcessorFast")),
             ("omdet-turbo", ("DetrImageProcessor", "DetrImageProcessorFast")),
             ("oneformer", ("OneFormerImageProcessor", "OneFormerImageProcessorFast")),
