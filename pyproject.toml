@@ -75,10 +75,6 @@ markers = [
     "generate: marks tests that use the GenerationTesterMixin",
     "is_training_test: marks tests that use the TrainingTesterMixin (deselect with '-m \"not is_training_test\"')",
 ]
-# pytest-random-order randomizes test order to catch test interdependencies
-# Uses bucket=module to randomize tests within each file (works well with --dist=loadfile)
-# In CI: seed is set to CIRCLE_BUILD_NUM for reproducibility across parallel containers
-# Locally: uses random seed by default, or specify with --random-order-seed=<number>
 log_cli = 1
 log_cli_level = "WARNING"
 asyncio_default_fixture_loop_scope = "function"
