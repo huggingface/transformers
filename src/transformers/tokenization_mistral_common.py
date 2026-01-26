@@ -23,6 +23,7 @@ import numpy as np
 from huggingface_hub import create_repo
 
 from transformers.audio_utils import load_audio_as
+from transformers.image_utils import get_image_size
 from transformers.tokenization_utils_base import (
     VERY_LARGE_INTEGER,
     AddedToken,
@@ -38,7 +39,7 @@ from transformers.utils.import_utils import is_mistral_common_available, is_torc
 
 
 if is_mistral_common_available():
-    from mistral_common.protocol.instruct.request import ChatCompletionRequest
+    from mistral_common.protocol.instruct.request import ChatCompletionRequest, ReasoningEffort
     from mistral_common.protocol.instruct.validator import ValidationMode
     from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy, SpecialTokens
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
@@ -1028,6 +1029,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         tools: list[dict | Callable] | None = None,
         add_generation_prompt: bool = False,
         continue_final_message: bool = False,
+        reasoning_effort: ReasoningEffort | None = None,
         tokenize: bool = True,
         padding: bool | str | PaddingStrategy = False,
         truncation: bool = False,
@@ -1080,7 +1082,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
             return_dict (`bool`, defaults to `False`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
-                If at least one conversation contains an image, its pixel values will be returned in the `pixel_values` key.
+                If at least one conversation contains an image, its pixel values will be returned in the `pixel_values` key and image sizes in the `image_sizes` key.
             kwargs (additional keyword arguments, *optional*):
                 Not supported by `MistralCommonBackend.apply_chat_template`.
                 Will raise an error if used.
@@ -1176,6 +1178,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
                 messages=messages,
                 tools=tools,
                 continue_final_message=continue_final_message,
+                reasoning_effort=reasoning_effort,
             )
 
             tokenized_request = self.tokenizer.encode_chat_completion(chat_request)
@@ -1215,6 +1218,8 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
                     else:
                         raise ValueError(f"Unsupported return_tensors type: {return_tensors}")
                     out.data["pixel_values"] = pixel_values
+                if images:
+                    out.data["image_sizes"] = self._get_image_sizes_for_tensor(images, return_tensors)
                 if audios:
                     if return_tensors is not None:
                         raise NotImplementedError(
@@ -1232,6 +1237,31 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
                 " Please consider using `tokenize=True` instead and don't encode the output manually."
             )
             return outputs
+
+    def _get_image_sizes_for_tensor(
+        self, images: list[np.ndarray], return_tensors: str | TensorType | None
+    ) -> list[list[int]] | np.ndarray | torch.Tensor:
+        """
+        Convert image sizes to the appropriate format based on return_tensors.
+
+        Args:
+            images: List of image arrays
+            return_tensors: The tensor type to return
+
+        Returns:
+            Image sizes in the appropriate format
+        """
+        image_sizes = []
+        for image in images:
+            height, width = get_image_size(image)
+            image_sizes.append([height, width])
+
+        if return_tensors == "pt":
+            return torch.tensor(image_sizes, dtype=torch.long)
+        elif return_tensors == "np":
+            return np.array(image_sizes, dtype=np.int64)
+        else:
+            return image_sizes
 
     def build_inputs_with_special_tokens(self, token_ids_0: list[int], token_ids_1: None = None) -> list[int]:
         """
