@@ -72,7 +72,7 @@ from .mask_generation import MaskGenerationPipeline
 from .object_detection import ObjectDetectionPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text_classification import TextClassificationPipeline
-from .text_feature_extraction import FeatureExtractionPipeline
+from .feature_extraction import FeatureExtractionPipeline
 from .text_generation import TextGenerationPipeline
 from .text_to_audio import TextToAudioPipeline
 from .token_classification import (
