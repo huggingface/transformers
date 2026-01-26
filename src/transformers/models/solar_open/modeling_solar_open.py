@@ -566,7 +566,7 @@ class SolarOpenModel(SolarOpenPreTrainedModel):
 @auto_docstring
 class SolarOpenForCausalLM(SolarOpenPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):

@@ -78,10 +78,6 @@ class MixtralExperts(nn.Module):
         top_k_index: torch.Tensor,
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
-        # Note: For tensor parallel, the MoEExpertsParallel TP layer handles gradient sync:
-        # - all_reduce_backward on hidden_states (for colwise gate_up_proj gradient)
-        # - all_reduce_backward on top_k_weights (for router gradient)
-        # - all_reduce_forward on output (for partial expert outputs)
         final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
             expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)

@@ -587,6 +587,7 @@ class TestTensorParallelDense2Proc(TestTensorParallelDenseBase):
 
     nproc_per_node = 2
 
+
 def _test_model_moe_forward_impl(rank, mode, dtype=torch.float32):
     """Implementation for comparing TP and non-TP MoE model outputs."""
     model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
@@ -767,7 +768,6 @@ def _test_model_moe_backward_compile_impl(rank, dtype=torch.float32, experts_imp
         atol, rtol = (1e-5, 1e-5)
 
     config = AutoConfig.from_pretrained(model_id)
-    config.tie_word_embeddings = False
 
     model_tp = AutoModelForCausalLM.from_pretrained(
         model_id, config=config, dtype=dtype, tp_plan="auto", experts_implementation=experts_implementation

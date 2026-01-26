@@ -451,6 +451,7 @@ def _split_along_last_dim(x, world_size):
 #   └────────────────────┴─────────────────────┴─────────────────────┘
 # ===================
 
+
 class _AllReduceBackward(torch.autograd.Function):
     """Identity forward, all-reduce backward. Used before colwise layers (f in Megatron)."""
 
@@ -461,7 +462,7 @@ class _AllReduceBackward(torch.autograd.Function):
 
     @staticmethod
     @torch._dynamo.disable
-    #NOTE(3outeille):
+    # NOTE(3outeille):
     # Newer versions of PyTorch has torch.library.register_autograd in https://github.com/pytorch/pytorch/blob/8bcedd6e6029cce5f3a3731dd59be4941414c731/torch/distributed/_functional_collectives.py#L630
     # that fix the warning "autograd kernel was not registered to the Autograd key(s) but we are trying to backprop through it"
     # but we are forced to disable dynamo for now to make it compile-compatible for now
