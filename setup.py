@@ -111,6 +111,7 @@ _deps = [
     "pydantic>=2",
     "pytest>=7.2.0,<9.0.0",
     "pytest-asyncio>=1.2.0",
+    "pytest-random-order",
     "pytest-rerunfailures<16.0",
     "pytest-timeout",
     "pytest-xdist",
@@ -270,6 +271,7 @@ extras["testing"] = (
     deps_list(
         "pytest",
         "pytest-asyncio",
+        "pytest-random-order",
         "pytest-rich",
         "pytest-xdist",
         "pytest-order",

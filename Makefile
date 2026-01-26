@@ -61,11 +61,11 @@ fix-repo: style
 
 # Run tests for the library
 test:
-	python -m pytest -n auto --dist=loadfile -s -v ./tests/
+	python -m pytest -n auto --dist=loadfile -s -v --random-order-bucket=module ./tests/
 
 # Run tests for examples
 test-examples:
-	python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/
+	python -m pytest -n auto --dist=loadfile -s -v --random-order-bucket=module ./examples/pytorch/
 
 # Run benchmark
 benchmark:

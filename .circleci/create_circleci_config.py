@@ -151,6 +151,13 @@ class CircleCIJob:
         pytest_flags.append(
             f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
         )
+        # Use CIRCLE_BUILD_NUM as seed for pytest-random-order to ensure:
+        # - Different randomization for each build/PR
+        # - Same seed across all parallel containers in a build (reproducible)
+        # - Deterministic test order for debugging failures
+        # - bucket=module randomizes within each file, works well with --dist=loadfile
+        pytest_flags.append("--random-order-bucket=module")
+        pytest_flags.append("--random-order-seed=${CIRCLE_BUILD_NUM:-0}")
                 # Examples special case: we need to download NLTK files in advance to avoid cuncurrency issues
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m '{self.marker}'" if self.marker is not None else ""
