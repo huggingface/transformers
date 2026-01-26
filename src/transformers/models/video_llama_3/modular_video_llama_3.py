@@ -1625,7 +1625,7 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         pixel_values_videos = torch.cat(processed_videos, dim=0)
         video_grid_thw = torch.tensor(processed_grids)
         video_merge_sizes = torch.full(
-            video_grid_thw.size(0), merge_size, dtype=video_grid_thw.dtype, device=video_grid_thw.device
+            (video_grid_thw.size(0),), merge_size, dtype=video_grid_thw.dtype, device=video_grid_thw.device
         )
 
         if use_token_compression:

@@ -829,7 +829,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
             if input_ids is not None:
                 lengths = (input_ids != self.pad_index).sum(dim=1).long()
             else:
-                lengths = torch.full(bs, slen, device=device, dtype=torch.long)
+                lengths = torch.full((bs,), slen, device=device, dtype=torch.long)
         # mask = input_ids != self.pad_index
 
         # check inputs

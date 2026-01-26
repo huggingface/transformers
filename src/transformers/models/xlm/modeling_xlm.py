@@ -798,7 +798,7 @@ class XLMModel(XLMPreTrainedModel):
             if input_ids is not None:
                 lengths = (input_ids != self.pad_index).sum(dim=1).long()
             else:
-                lengths = torch.full(bs, slen, device=device, dtype=torch.long)
+                lengths = torch.full((bs,), slen, device=device, dtype=torch.long)
 
         # check inputs
         assert lengths.size(0) == bs

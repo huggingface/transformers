@@ -616,7 +616,7 @@ class BarkSemanticModel(BarkCausalModel):
             )
         else:
             semantic_history = torch.full(
-                max_input_semantic_length,
+                (max_input_semantic_length,),
                 semantic_generation_config.semantic_pad_token,
                 device=self.device,
                 dtype=torch.long,
