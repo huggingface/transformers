@@ -151,6 +151,8 @@ class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
         reshape_hidden_states=True,
         **kwargs,
     ):
+        if "segmentation_indices" in kwargs and out_indices is None:
+            out_indices = kwargs.pop("segmentation_indices")
         super().__init__(**kwargs)
 
         self.vocab_size = vocab_size
