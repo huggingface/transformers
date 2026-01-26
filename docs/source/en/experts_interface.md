@@ -22,7 +22,7 @@ The [`ExpertsInterface`] provides optimized experts backends. It decouples the e
 | experts backend | description                                                                                                                             |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `"eager"`       | Reference implementation that loops over selected experts and applies projections on their tokens.                                      |
-| `"batched_mm"`  | Duplicates selected expert parameters for each token and projects all tokens in a single batched GEMM using `torch.bmm`.                |
+| `"batched_mm"`  | Duplicates selected expert parameters for each token and projects all tokens in a single batched GEMM using [torch.bmm](https://docs.pytorch.org/docs/stable/generated/torch.bmm.html).                |
 | `"grouped_mm"`  | Orders tokens by selected experts and uses `torch._grouped_mm` to project all tokens in a single grouped GEMMF (Requires PyTorch 2.9+). |
 
 On GPU:
