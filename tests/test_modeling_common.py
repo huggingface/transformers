@@ -3133,7 +3133,6 @@ class ModelTesterMixin:
                     if "image_grid_thw" in inputs_dict:
                         continue
                     first_inputs["pixel_values"] = inputs_dict["pixel_values"][:1].to(torch.bfloat16)
-
                 if model.config.is_encoder_decoder:
                     decoder_input_ids = inputs_dict.get("decoder_input_ids", first_inputs.get("input_ids"))
                     if decoder_input_ids is not None:

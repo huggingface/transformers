@@ -252,10 +252,6 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        # Ensure position_ids has batch dimension for flash attention compatibility
-        if position_ids is not None and position_ids.ndim == 1:
-            position_ids = position_ids.unsqueeze(0)
-
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
