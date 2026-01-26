@@ -19,15 +19,13 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import (
-    GradientCheckpointingLayer,
-)
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import check_model_inputs, is_flash_attention_requested, maybe_autocast
 from .configuration_youtu import YoutuConfig
 
 
@@ -118,11 +116,11 @@ class YoutuRotaryEmbedding(nn.Module):
 
 
 class YoutuMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.intermediate_size = config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
@@ -141,7 +139,7 @@ def rotate_half(x):
 
 
 @use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -149,8 +147,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -251,7 +247,7 @@ def yarn_get_mscale(scale=1, mscale=1):
 
 
 class YoutuAttention(nn.Module):
-    """Multi-latent attention from 'DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model' paper"""
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: YoutuConfig, layer_idx: int):
         super().__init__()
@@ -345,7 +341,7 @@ class YoutuAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
+        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
 
         attention_interface: Callable = eager_attention_forward
@@ -363,7 +359,7 @@ class YoutuAttention(nn.Module):
             **kwargs,
         )
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
+        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
             attn_output = attn_output[:, :, :, : self.v_head_dim]
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
@@ -427,6 +423,8 @@ class YoutuPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": YoutuDecoderLayer,
@@ -564,8 +562,8 @@ class YoutuForCausalLM(YoutuPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, YoutuForCausalLM
 
-        >>> model = YoutuForCausalLM.from_pretrained("tencent/Youtu-LLM-2B")
-        >>> tokenizer = AutoTokenizer.from_pretrained("tencent/Youtu-LLM-2B")
+        >>> model = YoutuForCausalLM.from_pretrained("meta-youtu/Youtu-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-youtu/Youtu-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -573,6 +571,7 @@ class YoutuForCausalLM(YoutuPreTrainedModel, GenerationMixin):
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
@@ -603,8 +602,4 @@ class YoutuForCausalLM(YoutuPreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = [
-    "YoutuPreTrainedModel",
-    "YoutuModel",
-    "YoutuForCausalLM",
-]
+__all__ = ["YoutuPreTrainedModel", "YoutuModel", "YoutuForCausalLM"]
