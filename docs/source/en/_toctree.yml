@@ -301,8 +301,6 @@
         title: Zero-shot image classification
       - local: tasks/monocular_depth_estimation
         title: Depth estimation
-      - local: tasks/image_to_image
-        title: Image-to-Image
       - local: tasks/image_feature_extraction
         title: Image Feature Extraction
       - local: tasks/mask_generation
