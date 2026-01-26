@@ -155,7 +155,7 @@ class EomtDinov3Config(EomtConfig):
         hidden_size=1024,
         num_hidden_layers=24,
         num_attention_heads=16,
-        intermediate_size: int | None = None,
+        intermediate_size=4096,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         initializer_range=0.02,
@@ -211,9 +211,6 @@ class EomtDinov3Config(EomtConfig):
         del self.attention_probs_dropout_prob
         del self.mlp_ratio
         del self.use_swiglu_ffn
-
-        if intermediate_size is None:
-            intermediate_size = hidden_size * 4
 
         self.intermediate_size = intermediate_size
         self.attention_dropout = attention_dropout
