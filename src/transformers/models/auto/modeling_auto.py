@@ -2136,6 +2136,8 @@ AutoModelForAudioTokenization = auto_class_update(
     AutoModelForAudioTokenization, head_doc="audio tokenization through codebooks"
 )
 
+class AutoModelForLogicalReasoning(_BaseAutoModelClass):
+    pass # add this later when all the other models are working with this feature.
 
 __all__ = [
     "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
