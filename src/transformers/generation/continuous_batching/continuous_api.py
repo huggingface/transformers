@@ -177,6 +177,21 @@ class PagedAttentionArgs:
     use_cache: bool = False
 
 
+# We cannot use `PreTrainedModel` for circular import reasons, so this helps keep track of the basic types
+class ProtoPretrainedModel(nn.Module):
+    config: PretrainedConfig
+    dtype: torch.dtype
+    device: torch.device
+
+    def __init__(self) -> None:
+        raise NotImplementedError(
+            "This is strictly a stub class to help type check the code, it should never be instantiated"
+        )
+
+    def set_attn_implementation(self, attn_implementation: str) -> None:
+        pass
+
+
 # Continuous Batch Processor (Internal Logic)
 @attach_tracer()
 class ContinuousBatchProcessor:
@@ -810,7 +825,7 @@ class ContinuousBatchingManager:
 
     def __init__(
         self,
-        model: nn.Module,  # this is really a `PreTrainedModel`, but we keep it as `nn.Module` for importcompatibility
+        model: ProtoPretrainedModel,
         generation_config: GenerationConfig,
         manual_eviction: bool = False,
         max_queue_size: int = 0,
@@ -829,9 +844,8 @@ class ContinuousBatchingManager:
             allow_block_sharing: (optional) Whether to allow block sharing if the model has some full attention layers
         """
         # Reload paged version of the attention implementation if necessary
-        config: PretrainedConfig = model.config  # ty:ignore[invalid-assignment]
-        if "paged|" not in config._attn_implementation:
-            model.set_attn_implementation(f"paged|{config._attn_implementation}")  # type:ignore[attr-defined]
+        if "paged|" not in model.config._attn_implementation:
+            model.set_attn_implementation(f"paged|{model.config._attn_implementation}")
 
         # Internal arguments
         self.model = model.eval()
