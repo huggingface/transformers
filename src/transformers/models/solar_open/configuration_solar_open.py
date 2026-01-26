@@ -180,27 +180,5 @@ class SolarOpenConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
         super().__init__(**kwargs)
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
-        default_rope_params = RopeParameters(
-            rope_type="yarn",
-            factor=2.0,
-            original_max_position_embeddings=65_536,
-        )
-
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or self.rope_parameters
-        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
-
-        # Standardize and validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
-
-        if "partial_rotary_factor" in kwargs:
-            self.rope_parameters.setdefault("partial_rotary_factor", kwargs["partial_rotary_factor"])
-            ignore_keys_at_rope_validation = {"partial_rotary_factor"}
-
-        self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
-        return kwargs
-
 
 __all__ = ["SolarOpenConfig"]

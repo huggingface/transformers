@@ -1,6 +1,6 @@
 import os
 
-import requests
+import httpx
 from huggingface_hub import hf_hub_download, snapshot_download
 
 from transformers.testing_utils import _run_pipeline_tests, _run_staging
@@ -206,11 +206,10 @@ if __name__ == "__main__":
 
         print(f"Downloading {filename}...")
         try:
-            response = requests.get(url, stream=True)
-            response.raise_for_status()
-
             with open(filename, "wb") as f:
-                f.writelines(response.iter_content(chunk_size=8192))
+                with httpx.stream("GET", url) as resp:
+                    resp.raise_for_status()
+                    f.writelines(resp.iter_bytes(chunk_size=8192))
             print(f"Successfully downloaded: {filename}")
-        except requests.exceptions.RequestException as e:
+        except httpx.HTTPError as e:
             print(f"Error downloading {filename}: {e}")

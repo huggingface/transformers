@@ -24,6 +24,7 @@ from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, can_return_tuple, logging
+from ...utils.generic import OutputRecorder
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
     Qwen3MoeExperts,
@@ -39,6 +40,8 @@ from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLModel,
     Qwen3VLTextAttention,
     Qwen3VLTextModel,
+    Qwen3VLVisionAttention,
+    Qwen3VLVisionBlock,
     Qwen3VLVisionModel,
     Qwen3VLVisionRotaryEmbedding,
 )
@@ -314,8 +317,20 @@ class Qwen3VLMoeVisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
     pass
 
 
-class Qwen3VLMoeVisionModel(Qwen3VLVisionModel):
+class Qwen3VLMoeVisionAttention(Qwen3VLVisionAttention):
     pass
+
+
+class Qwen3VLMoeVisionBlock(Qwen3VLVisionBlock):
+    pass
+
+
+class Qwen3VLMoeVisionModel(Qwen3VLVisionModel):
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name="mlp.gate", index=0),
+        "hidden_states": Qwen3VLMoeVisionBlock,
+        "attentions": Qwen3VLMoeVisionAttention,
+    }
 
 
 class Qwen3VLMoeTextModel(Qwen3VLTextModel):
@@ -361,7 +376,8 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
         Example:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Qwen3VLMoeForConditionalGeneration
 
         >>> model = Qwen3VLMoeForConditionalGeneration.from_pretrained("Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto")
