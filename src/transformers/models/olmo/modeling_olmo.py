@@ -508,5 +508,7 @@ class OlmoForCausalLM(OlmoPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
+class OlmoForLogicalReasoning(OlmoPretrainedModel):
+    pass # add LBNet functionality for AllenAI's Olmo base model -experiment with this first before moving on to Olmo2, 3
 
 __all__ = ["OlmoForCausalLM", "OlmoModel", "OlmoPreTrainedModel"]
