@@ -118,7 +118,7 @@ class NomicBertConfig(PreTrainedConfig):
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        use_cache=True,
+        use_cache=False,
         classifier_dropout=None,
         rotary_emb_fraction=0.0,
         rotary_emb_base=10_000,

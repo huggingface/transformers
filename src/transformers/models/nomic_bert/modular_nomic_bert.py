@@ -156,7 +156,7 @@ class NomicBertConfig(BertConfig):
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        use_cache=True,
+        use_cache=False,
         classifier_dropout=None,
         rotary_emb_fraction=0.0,
         rotary_emb_base=10_000,
@@ -377,9 +377,6 @@ class NomicBertSelfAttention(nn.Module):
         self.v_proj = nn.Linear(
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
 
     def forward(
         self,
@@ -441,7 +438,6 @@ class NomicBertSelfAttention(nn.Module):
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
 
         return attn_output, attn_weights
 
