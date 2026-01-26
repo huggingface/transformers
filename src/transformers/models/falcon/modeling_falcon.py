@@ -1383,6 +1383,8 @@ class FalconForQuestionAnswering(FalconPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+class FalconForLogicalReasoning(FalconPretrainedModel):
+    pass
 
 __all__ = [
     "FalconForCausalLM",
