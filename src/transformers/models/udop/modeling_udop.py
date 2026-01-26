@@ -196,9 +196,10 @@ def combine_image_text_embeddings(
         visual_bbox = visual_bbox.to(image_embeddings.device)
 
     visual_bbox = [visual_bbox[i][patch_inds[i]] for i in range(len(patch_inds))]
+
     if attention_mask is not None:
         visual_attention_mask = [
-            torch.ones(len(item), dtype=attention_mask.dtype, device=attention_mask.device) for item in visual_bbox
+            torch.ones(item.size(0), dtype=attention_mask.dtype, device=attention_mask.device) for item in visual_bbox
         ]
 
     if max_len == 0:

@@ -829,6 +829,7 @@ class EvollaModel(EvollaPreTrainedModel):
                 device=protein_input_ids.device,
                 dtype=torch.bool,
             )
+
         causal_mask = create_causal_mask(
             config=self.config,
             input_embeds=inputs_embeds,
