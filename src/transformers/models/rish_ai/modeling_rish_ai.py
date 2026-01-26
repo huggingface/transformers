@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
+
 import torch
 import torch.nn.functional as F
-from collections.abc import Callable
 from torch import nn
 
 from transformers.activations import ACT2FN
@@ -32,6 +33,7 @@ from transformers.utils.deprecation import deprecate_kwarg
 from transformers.utils.generic import OutputRecorder, check_model_inputs
 
 from .configuration_rish_ai import RishAIConfig
+
 
 logger = logging.get_logger(__name__)
 
