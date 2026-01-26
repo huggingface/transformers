@@ -21,6 +21,7 @@ from functools import partial
 from itertools import count
 from math import ceil
 from time import perf_counter
+from typing import Any
 
 import torch
 from torch import nn
@@ -164,17 +165,33 @@ def build_attention_mask(
 @dataclass
 class PagedAttentionArgs:
     input_ids: torch.Tensor
-    attention_mask: torch.Tensor | None
+    attention_mask: torch.Tensor | dict[str, torch.Tensor] | None
     position_ids: torch.Tensor
-    cumulative_seqlens_q: torch.Tensor
-    cumulative_seqlens_k: torch.Tensor
+    cu_seq_lens_q: torch.Tensor
+    cu_seq_lens_k: torch.Tensor | dict[str, torch.Tensor]
     max_seqlen_q: int
-    max_seqlen_k: int
+    max_seqlen_k: int | dict[str, int]
     write_index: list[torch.Tensor]
     read_index: list[torch.Tensor]
     logits_indices: torch.Tensor
     cache: PagedAttentionCache
     use_cache: bool = False
+
+    def asdict(self) -> dict[str, Any]:
+        return {
+            "input_ids": self.input_ids,
+            "attention_mask": self.attention_mask,
+            "position_ids": self.position_ids,
+            "cu_seq_lens_q": self.cu_seq_lens_q,
+            "cu_seq_lens_k": self.cu_seq_lens_k,
+            "max_seqlen_q": self.max_seqlen_q,
+            "max_seqlen_k": self.max_seqlen_k,
+            "write_index": self.write_index,
+            "read_index": self.read_index,
+            "logits_indices": self.logits_indices,
+            "cache": self.cache,
+            "use_cache": self.use_cache,
+        }
 
 
 # We cannot use `PreTrainedModel` for circular import reasons, so this helps keep track of the basic types
@@ -359,20 +376,20 @@ class ContinuousBatchProcessor:
         padded_kv_size = padded_q_size + padded_kv_cache_size
 
         # Prepare the kwargs, the attributes that are either tensors or dict of tensors are initialized to empty dicts
-        kwargs = {
-            "input_ids": self.input_ids[:, :q_len],
-            "position_ids": self.position_ids[:, :q_len],
-            "cu_seq_lens_q": self.cumulative_seqlens_q[: b_size + 1],
-            "max_seqlen_q": self.max_seqlen_q,
-            "logits_indices": self.logits_indices[:q_len],
-            "cu_seq_lens_k": {},
-            "max_seqlen_k": {},
-            "attention_mask": {},
-            "read_index": [],
-            "write_index": [],
-            "cache": self.cache,
-            "use_cache": False,
-        }
+        kwargs = PagedAttentionArgs(
+            input_ids=self.input_ids[:, :q_len],
+            position_ids=self.position_ids[:, :q_len],
+            cu_seq_lens_q=self.cumulative_seqlens_q[: b_size + 1],
+            max_seqlen_q=self.max_seqlen_q,
+            logits_indices=self.logits_indices[:q_len],
+            cu_seq_lens_k={},
+            max_seqlen_k={},
+            attention_mask={},
+            read_index=[],
+            write_index=[],
+            cache=self.cache,
+            use_cache=False,
+        )
 
         # If we use constant-sized slicing, there are some "padding" queries tokens which FA has some issues with. In
         # some models like Qwen3-4B-Instruct-2507, if we don't include these tokens in cumulative_seqlens_q, there are
@@ -386,28 +403,31 @@ class ContinuousBatchProcessor:
         for i, (read_index_size, write_index_size) in enumerate(self.actual_index_sizes):
             read_index_size = padded_kv_size if use_padding else read_index_size
             write_index_size = padded_q_size if use_padding else write_index_size
-            kwargs["read_index"].append(self.read_index_storage[i][:read_index_size])
-            kwargs["write_index"].append(self.write_index_storage[i][:write_index_size])
+            kwargs.read_index.append(self.read_index_storage[i][:read_index_size])
+            kwargs.write_index.append(self.write_index_storage[i][:write_index_size])
 
         # For the attributes that are dict of tensors, we replace the dict with a tensor if there is only one entry
         layer_types = list(self.cumulative_seqlens_k.keys())
         if len(layer_types) > 1:
+            kwargs.max_seqlen_k: dict[str, int] = {}
+            kwargs.cu_seq_lens_k: dict[str, torch.Tensor] = {}
+            kwargs.attention_mask: dict[str, torch.Tensor] = {}
             for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
-                kwargs["cu_seq_lens_k"][layer_type] = seqlens_k[: b_size + 1]
-                kwargs["max_seqlen_k"][layer_type] = self.max_seqlen_k[layer_type]
+                kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: b_size + 1]
+                kwargs.max_seqlen_k[layer_type] = self.max_seqlen_k[layer_type]
                 if self.attention_mask is not None:
                     k_len = padded_kv_size if use_padding else seqlens_k[b_size]
-                    kwargs["attention_mask"][layer_type] = self.attention_mask[layer_type][..., :q_len, :k_len]
+                    kwargs.attention_mask[layer_type] = self.attention_mask[layer_type][..., :q_len, :k_len]
         else:
             layer_type = layer_types[0]
-            kwargs["cu_seq_lens_k"] = self.cumulative_seqlens_k[layer_type][: b_size + 1]
-            kwargs["max_seqlen_k"] = self.max_seqlen_k[layer_type]
+            kwargs.cu_seq_lens_k = self.cumulative_seqlens_k[layer_type][: b_size + 1]
+            kwargs.max_seqlen_k = self.max_seqlen_k[layer_type]
             if self.attention_mask is not None:
                 k_len = padded_kv_size if use_padding else self.cumulative_seqlens_k[layer_type][b_size]
-                kwargs["attention_mask"] = self.attention_mask[layer_type][..., :q_len, :k_len]
+                kwargs.attention_mask = self.attention_mask[layer_type][..., :q_len, :k_len]
 
         if self.attention_mask is None:
-            kwargs["attention_mask"] = None
+            kwargs.attention_mask = None
         return kwargs
 
     def __repr__(self) -> str:
@@ -431,7 +451,7 @@ class ContinuousBatchProcessor:
                 break
             except Exception as e:
                 logger.error(f"Error processing new request: {e}", exc_info=True)
-                state: RequestState = locals().get("state")
+                state: RequestState = locals().get("state")  # type:ignore
                 if state is not None:
                     self._handle_request_error(e, state)
 
@@ -741,7 +761,7 @@ class ContinuousBatchProcessor:
         else:
             padded_q, padded_read_index_size = 0, 0
         # Retrieve the model kwargs with or without padding
-        batch_data = self.get_model_kwargs(padded_q, padded_read_index_size)
+        batch_data = self.get_model_kwargs(padded_q, padded_read_index_size).asdict()  # TODO: this is imperfect, check if there is no better way to juggle dict / dataclass
 
         # If we are not using cuda graphs, we perform the generation step and return
         if self._graphs is None:
