@@ -202,6 +202,7 @@ class PeVideoConfig(PretrainedConfig):
 
         self.text_config = text_config
         self.video_config = video_config
+        self.tie_word_embeddings = True
 
         super().__init__(**kwargs)
 
