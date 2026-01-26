@@ -82,7 +82,7 @@ class EomtDinov3Config(EomtConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads in each attention layer.
-        intermediate_size (`int`, *optional*):
+        intermediate_size (`int`, *optional*, defaults to 4096):
             The intermediate size of the MLP. If not provided, defaults to `hidden_size * 4`.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder.

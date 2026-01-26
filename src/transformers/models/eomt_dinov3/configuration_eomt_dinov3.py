@@ -32,76 +32,76 @@ class EomtDinov3Config(PreTrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-            hidden_size (`int`, *optional*, defaults to 1024):
-                Dimensionality of the hidden representations.
-            num_hidden_layers (`int`, *optional*, defaults to 24):
-                Number of hidden layers in the Transformer encoder.
-            num_attention_heads (`int`, *optional*, defaults to 16):
-                Number of attention heads in each attention layer.
-            intermediate_size (`int`, *optional*, defaults to 4096):
-                The intermediate size of the MLP. If not provided, defaults to `hidden_size * 4`.
-            hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-                The non-linear activation function (function or string) in the encoder.
-            hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-                The dropout probability for all fully connected layers in the embeddings and encoder.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-                The epsilon used by the layer normalization layers.
-            image_size (`int`, *optional*, defaults to 640):
-                The size (resolution) of each input image.
-            patch_size (`int`, *optional*, defaults to 16):
-                The size (resolution) of each patch.
-            num_channels (`int`, *optional*, defaults to 3):
-                The number of input channels.
-            layerscale_value (`float`, *optional*, defaults to 1.0):
-                Initial value for the LayerScale parameter.
-            drop_path_rate (`float`, *optional*, defaults to 0.0):
-                The stochastic depth rate (drop path) used during training.
-            num_upscale_blocks (`int`, *optional*, defaults to 2):
-                Number of upsampling blocks used in the decoder or segmentation head.
-            attention_dropout (`float`, *optional*, defaults to 0.0):
-                Dropout probability applied after attention projection.
-            num_blocks (`int`, *optional*, defaults to 4):
-                Number of feature blocks or stages in the architecture.
-            no_object_weight (`float`, *optional*, defaults to 0.1):
-                Loss weight for the "no object" class in panoptic/instance segmentation.
-            class_weight (`float`, *optional*, defaults to 2.0):
-                Loss weight for classification targets.
-            mask_weight (`float`, *optional*, defaults to 5.0):
-                Loss weight for mask prediction.
-            dice_weight (`float`, *optional*, defaults to 5.0):
-                Loss weight for the dice loss component.
-            train_num_points (`int`, *optional*, defaults to 12544):
-                Number of points to sample for mask loss computation during training.
-            oversample_ratio (`float`, *optional*, defaults to 3.0):
-                Oversampling ratio used in point sampling for mask training.
-            importance_sample_ratio (`float`, *optional*, defaults to 0.75):
-                Ratio of points to sample based on importance during training.
-            num_queries (`int`, *optional*, defaults to 200):
-                Number of object queries in the Transformer.
-            num_register_tokens (`int`, *optional*, defaults to 4):
-                Number of learnable register tokens added to the transformer input.
-            rope_theta (`float`, *optional*, defaults to 100.0):
-                The base frequency for RoPE (Rotary Position Embedding).
-            query_bias (`bool`, *optional*, defaults to `True`):
-                Whether to use bias in query projection.
-            key_bias (`bool`, *optional*, defaults to `False`):
-                Whether to use bias in key projection.
-            value_bias (`bool`, *optional*, defaults to `True`):
-                Whether to use bias in value projection.
-            proj_bias (`bool`, *optional*, defaults to `True`):
-                Whether to use bias in output projection.
-            mlp_bias (`bool`, *optional*, defaults to `True`):
-                Whether to use bias in MLP layers.
-            use_gated_mlp (`bool`, *optional*, defaults to `False`):
-                Whether to use gated MLP layers.
-            pos_embed_shift (`float`, *optional*):
-                Shift value for position embeddings.
-            pos_embed_jitter (`float`, *optional*):
-                Jitter value for position embeddings.
-            pos_embed_rescale (`float`, *optional*, defaults to 2.0):
-                Rescale value for position embeddings.
+        hidden_size (`int`, *optional*, defaults to 1024):
+            Dimensionality of the hidden representations.
+        num_hidden_layers (`int`, *optional*, defaults to 24):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads in each attention layer.
+        intermediate_size (`int`, *optional*, defaults to 4096):
+            The intermediate size of the MLP. If not provided, defaults to `hidden_size * 4`.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings and encoder.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        image_size (`int`, *optional*, defaults to 640):
+            The size (resolution) of each input image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
+        layerscale_value (`float`, *optional*, defaults to 1.0):
+            Initial value for the LayerScale parameter.
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            The stochastic depth rate (drop path) used during training.
+        num_upscale_blocks (`int`, *optional*, defaults to 2):
+            Number of upsampling blocks used in the decoder or segmentation head.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability applied after attention projection.
+        num_blocks (`int`, *optional*, defaults to 4):
+            Number of feature blocks or stages in the architecture.
+        no_object_weight (`float`, *optional*, defaults to 0.1):
+            Loss weight for the "no object" class in panoptic/instance segmentation.
+        class_weight (`float`, *optional*, defaults to 2.0):
+            Loss weight for classification targets.
+        mask_weight (`float`, *optional*, defaults to 5.0):
+            Loss weight for mask prediction.
+        dice_weight (`float`, *optional*, defaults to 5.0):
+            Loss weight for the dice loss component.
+        train_num_points (`int`, *optional*, defaults to 12544):
+            Number of points to sample for mask loss computation during training.
+        oversample_ratio (`float`, *optional*, defaults to 3.0):
+            Oversampling ratio used in point sampling for mask training.
+        importance_sample_ratio (`float`, *optional*, defaults to 0.75):
+            Ratio of points to sample based on importance during training.
+        num_queries (`int`, *optional*, defaults to 200):
+            Number of object queries in the Transformer.
+        num_register_tokens (`int`, *optional*, defaults to 4):
+            Number of learnable register tokens added to the transformer input.
+        rope_theta (`float`, *optional*, defaults to 100.0):
+            The base frequency for RoPE (Rotary Position Embedding).
+        query_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in query projection.
+        key_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in key projection.
+        value_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in value projection.
+        proj_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in output projection.
+        mlp_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in MLP layers.
+        use_gated_mlp (`bool`, *optional*, defaults to `False`):
+            Whether to use gated MLP layers.
+        pos_embed_shift (`float`, *optional*):
+            Shift value for position embeddings.
+        pos_embed_jitter (`float`, *optional*):
+            Jitter value for position embeddings.
+        pos_embed_rescale (`float`, *optional*, defaults to 2.0):
+            Rescale value for position embeddings.
     """
 
     model_type = "eomt_dinov3"
