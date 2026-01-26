@@ -217,30 +217,42 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    scaling: float | None = None,
     dropout: float = 0.0,
+    scaling: float | None = None,
     **kwargs: Unpack[TransformersKwargs],
 ):
-    if scaling is None:
-        scaling = query.size(-1) ** -0.5
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
 
-    # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if scaling is not None:
+        query = query * scaling
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3))
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
+    attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
@@ -280,12 +292,19 @@ class NomicBertSelfAttention(nn.Module):
         cache_position=None,
         **kwargs,
     ):
-        bsz, seq_len, _ = hidden_states.shape
+        batch_size, seq_len, _ = hidden_states.size()
 
-        # Let BERT do QKV projection
-        query_layer = self.q_proj(hidden_states).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_layer = self.k_proj(hidden_states).view(bsz, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
-        value_layer = self.v_proj(hidden_states).view(bsz, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        # get all proj
+        query_layer = (
+            self.q_proj(hidden_states).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        )
+
+        key_layer = (
+            self.k_proj(hidden_states).view(batch_size, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        )
+        value_layer = (
+            self.v_proj(hidden_states).view(batch_size, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        )
 
         # Apply Rotary Position Embeddings
         if position_embeddings is not None:
@@ -299,44 +318,117 @@ class NomicBertSelfAttention(nn.Module):
 
         # Handle KV Cache
         if past_key_values is not None:
-            if not isinstance(past_key_values, Cache):
-                key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx)
-            else:
-                # Update DynamicCache
-                cache_kwargs = {}
+            cache_kwargs = {}
+            if isinstance(past_key_values, Cache):
                 if position_embeddings is not None:
                     cos, sin = position_embeddings
                     cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx, cache_kwargs)
 
-                key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx, cache_kwargs)
+        # Handle SDPA vs Eager differences
+        if self.config._attn_implementation == "sdpa":
+            # SDPA does not return weights
+            attn_output, attn_weights = ALL_ATTENTION_FUNCTIONS["sdpa"](
+                self,
+                query_layer,
+                key_layer,
+                value_layer,
+                attention_mask,
+                dropout=0.0 if not self.training else self.dropout.p,
+                scaling=self.scaling,
+                **kwargs,
+            )
+            attn_weights = None
+        else:
+            attn_output, attn_weights = eager_attention_forward(
+                self,
+                query_layer,
+                key_layer,
+                value_layer,
+                attention_mask,
+                dropout=0.0 if not self.training else self.dropout.p,
+                scaling=self.scaling,
+                **kwargs,
+            )
 
-        if self.num_key_value_groups > 1:
-            key_layer = key_layer.repeat_interleave(self.num_key_value_groups, dim=1)
-            value_layer = value_layer.repeat_interleave(self.num_key_value_groups, dim=1)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        query_layer = query_layer.contiguous()
-        key_layer = key_layer.contiguous()
-        value_layer = value_layer.contiguous()
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_layer,
-            key_layer,
-            value_layer,
-            attention_mask,
-            dropout=0.0 if not self.training else self.dropout.p,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, seq_len, -1)
-
+        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_len, -1)
         return attn_output, attn_weights
+
+    # def forward(
+    #     self,
+    #     hidden_states,
+    #     attention_mask=None,
+    #     past_key_values=None,
+    #     position_ids=None,
+    #     position_embeddings=None,
+    #     cache_position=None,
+    #     **kwargs,
+    # ):
+    #     batch_size, seq_len, _ = hidden_states.size()
+
+    #     # get all proj
+    #     query_layer = (
+    #         self.q_proj(hidden_states).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+    #     )
+    #     query_layer = query_layer * self.scaling
+
+    #     key_layer = (
+    #         self.k_proj(hidden_states).view(batch_size, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
+    #     )
+    #     value_layer = (
+    #         self.v_proj(hidden_states).view(batch_size, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
+    #     )
+
+    #     # Apply Rotary Position Embeddings
+    #     if position_embeddings is not None:
+    #         cos, sin = position_embeddings
+    #         query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
+
+    #     # Fallback
+    #     elif position_ids is not None and isinstance(position_ids, tuple):
+    #         cos, sin = position_ids
+    #         query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
+
+    #     # Handle KV Cache
+    #     if past_key_values is not None:
+    #         cache_kwargs = {}
+    #         if isinstance(past_key_values, Cache):
+    #             if position_embeddings is not None:
+    #                 cos, sin = position_embeddings
+    #                 cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+    #         key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx, cache_kwargs)
+
+    #     attention_interface: Callable = eager_attention_forward
+    #     if self.config._attn_implementation != "eager":
+    #         attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+    #     if self.config._attn_implementation == "sdpa" and attention_mask is None:
+    #         prepared_attention_mask = None
+    #     elif attention_mask is None:
+    #         # Eager mode needs the 4D mask to function correctly in your current setup
+    #         attention_mask_2d = torch.ones(batch_size, seq_len, device=hidden_states.device, dtype=hidden_states.dtype)
+    #         prepared_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+    #             attention_mask_2d, dtype=query_layer.dtype, tgt_len=seq_len
+    #         )
+    #     else:
+    #         prepared_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+    #             attention_mask, dtype=query_layer.dtype, tgt_len=seq_len
+    #         )
+
+    #     attn_output, attn_weights = attention_interface(
+    #         self,
+    #         query_layer,
+    #         key_layer,
+    #         value_layer,
+    #         prepared_attention_mask,
+    #         dropout=0.0 if not self.training else self.dropout.p,
+    #         scaling=1.0,
+    #         **kwargs,
+    #     )
+
+    #     attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_len, -1)
+
+    #     return attn_output, attn_weights
 
 
 class NomicBertSelfOutput(nn.Module):
@@ -503,8 +595,10 @@ class NomicBertLayer(GradientCheckpointingLayer):
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]
 
+        hidden_states = self.attention.output(attention_output, hidden_states)
+
         layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, hidden_states
         )
 
         return (layer_output,) + outputs
@@ -893,6 +987,16 @@ class NomicBertModel(NomicBertPreTrainedModel):
             batch_size, seq_length = inputs_embeds.shape[:-1]
             device = inputs_embeds.device
 
+        if attention_mask is None:
+            if input_ids is not None:
+                # Standard BERT padding mask: 1 for valid, 0 for pad
+                attention_mask = (input_ids != self.config.pad_token_id).long()
+            else:
+                # Cannot infer padding from embeddings alone, defaulting to all ones
+                attention_mask = torch.ones((batch_size, seq_length), device=device, dtype=torch.long)
+
+        binary_mask = attention_mask
+
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         if position_ids is None:
@@ -914,8 +1018,8 @@ class NomicBertModel(NomicBertPreTrainedModel):
 
         position_embeddings = self.rotary_emb(embedding_output, position_ids)
 
-        attention_mask, encoder_attention_mask = self._create_attention_masks(
-            attention_mask=attention_mask,
+        extended_attention_mask, encoder_attention_mask = self._create_attention_masks(
+            attention_mask=binary_mask,
             encoder_attention_mask=encoder_attention_mask,
             embedding_output=embedding_output,
             encoder_hidden_states=encoder_hidden_states,
@@ -925,7 +1029,7 @@ class NomicBertModel(NomicBertPreTrainedModel):
 
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=attention_mask,
+            attention_mask=extended_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -934,6 +1038,16 @@ class NomicBertModel(NomicBertPreTrainedModel):
             **kwargs,
         )
         sequence_output = encoder_outputs.last_hidden_state
+
+        if binary_mask is not None:
+            mask_expanded = binary_mask.unsqueeze(-1).to(sequence_output.dtype)
+
+            sequence_output = sequence_output * mask_expanded
+
+            if encoder_outputs.hidden_states is not None:
+                new_hidden_states = tuple(h * mask_expanded for h in encoder_outputs.hidden_states)
+                encoder_outputs.hidden_states = new_hidden_states
+
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         return BaseModelOutputWithPoolingAndCrossAttentions(

@@ -18,8 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
 
 
 class NomicBertConfig(PreTrainedConfig):
@@ -122,7 +122,7 @@ class NomicBertConfig(PreTrainedConfig):
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
-        num_key_value_heads: int | None = None,
+        num_key_value_heads=None,
         intermediate_size=3072,
         is_decoder=False,
         hidden_act="gelu",
@@ -142,11 +142,11 @@ class NomicBertConfig(PreTrainedConfig):
         bos_token_id=None,
         eos_token_id=None,
         tie_word_embeddings=True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        rope_parameters=None,
         max_position_embeddings=2048,
         pad_token_id=0,
-        head_dim: int | None = None,
-        attention_bias: bool | None = False,
+        head_dim=None,
+        attention_bias=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
