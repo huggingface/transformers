@@ -48,7 +48,6 @@ from unittest import mock
 from unittest.mock import patch
 
 import httpx
-import urllib3
 from huggingface_hub import create_repo, delete_repo
 from packaging import version
 
@@ -2514,6 +2513,8 @@ class RequestCounter:
                 return func(*args, **kwargs)
 
             return wrap
+
+        import urllib3
 
         self.patcher = patch.object(
             urllib3.connectionpool.log, "debug", side_effect=patched_with_thread_info(urllib3.connectionpool.log.debug)

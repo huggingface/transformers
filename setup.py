@@ -293,6 +293,7 @@ extras["testing"] = (
         "sentencepiece",
         "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
         "libcst",
+        "urllib3",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
