@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-04-20 and added to Hugging Face Transformers on 2026-01-24.*
+*This model was released on 2021-04-20 and added to Hugging Face Transformers on 2026-01-26.*
 
 
 # NomicBERT

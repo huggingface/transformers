@@ -56,7 +56,6 @@ from ..bert.modeling_bert import (
     BertPredictionHeadTransform,
     BertPreTrainedModel,
     BertPreTrainingHeads,
-    BertSelfAttention,
     BertSelfOutput,
 )
 
@@ -149,6 +148,7 @@ class NomicBertConfig(BertConfig):
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
+        num_key_value_heads: int | None = None,
         intermediate_size=3072,
         is_decoder=False,
         hidden_act="gelu",
@@ -171,6 +171,8 @@ class NomicBertConfig(BertConfig):
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         max_position_embeddings=2048,
         pad_token_id=0,
+        head_dim: int | None = None,
+        attention_bias: bool | None = False,
         **kwargs,
     ):
         super().__init__(
@@ -204,6 +206,12 @@ class NomicBertConfig(BertConfig):
         self.rotary_emb_interleaved = rotary_emb_interleaved
         self.pad_vocab_size_multiple = pad_vocab_size_multiple
         self.rope_parameters = rope_parameters
+        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
+        self.attention_bias = attention_bias
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
 
         if rope_parameters is None:
             self.rope_parameters = {
@@ -345,20 +353,33 @@ def eager_attention_forward(
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class NomicBertSelfAttention(BertSelfAttention):
+class NomicBertSelfAttention(nn.Module):
     """
     Custom Self-Attention mechanism for NomicBERT.
     Key Difference: Replaces standard BERT absolute position embeddings with
     Rotary Positional Embeddings (RoPE) applied directly to Q and K.
     """
 
-    def __init__(self, config, position_embedding_type=None, is_causal=False, layer_idx=None):
-        super().__init__(config, position_embedding_type=position_embedding_type)
-
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
+    def __init__(self, config, layer_idx=None):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
 
     def forward(
         self,
@@ -372,11 +393,12 @@ class NomicBertSelfAttention(BertSelfAttention):
     ):
 
         input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         # Let BERT do QKV projection
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = self.q_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+        key_layer = self.k_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+        value_layer = self.v_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
 
         # Apply Rotary Position Embeddings
         if position_embeddings is not None:
@@ -414,10 +436,12 @@ class NomicBertSelfAttention(BertSelfAttention):
             value_layer,
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
+            scaling=self.scaling,
             **kwargs,
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
 
         return attn_output, attn_weights
 
@@ -432,7 +456,7 @@ class NomicBertAttention(BertAttention):
         super().__init__(config, position_embedding_type=position_embedding_type)
 
         self.self = NomicBertSelfAttention(
-            config, position_embedding_type=position_embedding_type, layer_idx=layer_idx
+            config, layer_idx=layer_idx
         )
 
         self.output = NomicBertSelfOutput(config)
@@ -441,11 +465,7 @@ class NomicBertAttention(BertAttention):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         past_key_values=None,
-        output_attentions=False,
         position_embeddings=None,
         position_ids=None,
         cache_position=None,
@@ -489,10 +509,6 @@ class NomicBertAttention(BertAttention):
             position_ids=position_ids,
             position_embeddings=position_embeddings,
             cache_position=cache_position,
-            output_attentions=output_attentions,
-            head_mask=head_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             **kwargs,
         )
         # Process context layer (always index 0)

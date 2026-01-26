@@ -110,6 +110,7 @@ class NomicBertConfig(PreTrainedConfig):
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
+        num_key_value_heads: int | None = None,
         intermediate_size=3072,
         is_decoder=False,
         hidden_act="gelu",
@@ -132,6 +133,8 @@ class NomicBertConfig(PreTrainedConfig):
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         max_position_embeddings=2048,
         pad_token_id=0,
+        head_dim: int | None = None,
+        attention_bias: bool | None = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -164,6 +167,12 @@ class NomicBertConfig(PreTrainedConfig):
         self.rotary_emb_interleaved = rotary_emb_interleaved
         self.pad_vocab_size_multiple = pad_vocab_size_multiple
         self.rope_parameters = rope_parameters
+        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
+        self.attention_bias = attention_bias
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
 
         if rope_parameters is None:
             self.rope_parameters = {
