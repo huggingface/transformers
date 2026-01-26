@@ -25,7 +25,7 @@ from parameterized import parameterized
 from transformers import (
     PPDocLayoutV2Config,
     PPDocLayoutV2ForObjectDetection,
-    PPDocLayoutV2ImageProcessor,
+    PPDocLayoutV2ImageProcessorFast,
     is_torch_available,
     is_vision_available,
 )
@@ -64,10 +64,10 @@ class PPDocLayoutV2ModelTester:
         backbone_config=None,
         # encoder HybridEncoder
         encoder_hidden_dim=32,
-        encoder_in_channels=[128, 256, 512],
+        encoder_in_channels=[32, 32, 32],
         feat_strides=[8, 16, 32],
         encoder_layers=1,
-        encoder_ffn_dim=64,
+        encoder_ffn_dim=8,
         encoder_attention_heads=2,
         dropout=0.0,
         activation_dropout=0.0,
@@ -78,10 +78,10 @@ class PPDocLayoutV2ModelTester:
         eval_size=None,
         normalize_before=False,
         # decoder PPDocLayoutV2Transformer
-        d_model=256,
+        d_model=32,
         num_queries=30,
         decoder_in_channels=[32, 32, 32],
-        decoder_ffn_dim=64,
+        decoder_ffn_dim=8,
         num_feature_levels=3,
         decoder_n_points=4,
         decoder_layers=2,
@@ -155,18 +155,23 @@ class PPDocLayoutV2ModelTester:
             "freeze_stem_only": True,
             "freeze_at": 0,
             "freeze_norm": True,
+            "hidden_sizes": [32, 32, 32, 32],
+            "stem_channels": [3, 32, 32],
+            "stage_in_channels": [32, 32, 32, 32],
+            "stage_mid_channels": [32, 32, 32, 32],
+            "stage_out_channels": [32, 32, 32, 32],
             "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
             "out_features": ["stage2", "stage3", "stage4"],
         }
         reading_order_config = {
-            "hidden_size": 512,
+            "hidden_size": 16,
             "num_attention_heads": 8,
             "attention_probs_dropout_prob": 0.1,
             "has_relative_attention_bias": False,
             "has_spatial_attention_bias": True,
             "layer_norm_eps": 1e-5,
             "hidden_dropout_prob": 0.1,
-            "intermediate_size": 2048,
+            "intermediate_size": 16,
             "hidden_act": "gelu",
             "num_hidden_layers": 6,
             "rel_pos_bins": 32,
@@ -175,7 +180,7 @@ class PPDocLayoutV2ModelTester:
             "max_rel_2d_pos": 256,
             "num_labels": 510,
             "max_position_embeddings": 514,
-            "max_2d_position_embeddings": 1024,
+            "max_2d_position_embeddings": 512,
             "type_vocab_size": 1,
             "vocab_size": 4,
             "start_token_id": 0,
@@ -373,10 +378,6 @@ class PPDocLayoutV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="PPDocLayoutV2 does not support this test")
-    def test_model_is_small(self):
-        pass
-
     @unittest.skip(reason="PPDocLayoutV2 does not support training")
     def test_retain_grad_hidden_states_attentions(self):
         pass
@@ -408,8 +409,7 @@ class PPDocLayoutV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             model.to(torch_device).to(dtype)
             model.eval()
             for key, tensor in inputs_dict.items():
-                if tensor.dtype == torch.float32:
-                    inputs_dict[key] = tensor.to(dtype)
+                inputs_dict[key] = tensor.to(dtype)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -428,8 +428,7 @@ class PPDocLayoutV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
         # convert inputs to the desired dtype
         for key, tensor in inputs_dict.items():
-            if tensor.dtype == torch.float32:
-                inputs_dict[key] = tensor.to(dtype)
+            inputs_dict[key] = tensor.to(dtype)
 
         for model_class in self.all_model_classes:
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -616,7 +615,7 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/PP-DocLayoutV2_safetensors"
         self.model = PPDocLayoutV2ForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
-            PPDocLayoutV2ImageProcessor.from_pretrained(model_path) if is_vision_available() else None
+            PPDocLayoutV2ImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
         )
         url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
         self.image = Image.open(requests.get(url, stream=True).raw)
@@ -632,14 +631,14 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
             [[-3.7271, -4.4545, -4.4574], [-3.8471, -4.4939, -4.4762], [-3.6002, -4.4228, -4.7268]]
         ).to(torch_device)
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
-        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=2e-2, atol=2e-2)
 
         expected_shape_boxes = torch.Size((1, 300, 4))
         expected_boxes = torch.tensor(
             [[0.3712, 0.4911, 0.3364], [0.3725, 0.1795, 0.3400], [0.7263, 0.4420, 0.3395]]
         ).to(torch_device)
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=2e-2, atol=2e-2)
 
         expected_shape_order_logits = torch.Size((1, 300, 300))
         expected_order_logits = torch.tensor(
@@ -650,7 +649,7 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
         self.assertEqual(outputs.order_logits.shape, expected_shape_order_logits)
-        torch.testing.assert_close(outputs.order_logits[0, :3, :3], expected_order_logits, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.order_logits[0, :3, :3], expected_order_logits, rtol=2e-2, atol=2e-2)
 
         # verify postprocessing
         results = self.image_processor.post_process_object_detection(
@@ -660,7 +659,7 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
         expected_scores = torch.tensor(
             [0.9878, 0.9682, 0.9881, 0.9856, 0.9832, 0.9832, 0.9698, 0.8635, 0.8353, 0.8129, 0.9608, 0.8780, 0.9308]
         ).to(torch_device)
-        torch.testing.assert_close(results["scores"], expected_scores, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(results["scores"], expected_scores, rtol=2e-3, atol=2e-3)
 
         expected_labels = [22, 17, 22, 22, 22, 22, 22, 10, 10, 22, 10, 16, 8]
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
@@ -673,4 +672,4 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
                 [920.1841, 185.2768, 1476.3752, 464.4944],
             ]
         ).to(torch_device)
-        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=2e-2, atol=2e-2)

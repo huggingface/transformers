@@ -1,4 +1,4 @@
-# Copyright 2025 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -34,7 +33,7 @@ from ...utils import (
     logging,
 )
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ...utils.generic import OutputRecorder, TensorType, check_model_inputs
+from ...utils.generic import TensorType, check_model_inputs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..layoutlmv3.modeling_layoutlmv3 import (
     LayoutLMv3Attention,
@@ -469,7 +468,7 @@ class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
         self,
         outputs,
         threshold: float = 0.5,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
     ):
         """
         Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -772,17 +771,6 @@ class LayoutLMv3TextEmbeddingsCustom(LayoutLMv3TextEmbeddings):
 
 @auto_docstring
 class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
-    _can_record_outputs = {
-        "hidden_states": [
-            OutputRecorder(PPDocLayoutV2DecoderLayer, index=0),  # noqa
-            OutputRecorder(PPDocLayoutV2HybridEncoder, index=0),  # noqa
-        ],
-        "attentions": [
-            OutputRecorder(PPDocLayoutV2MultiheadAttention, index=1),  # noqa
-            OutputRecorder(PPDocLayoutV2MultiscaleDeformableAttention, index=1),  # noqa
-        ],
-    }
-
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -891,27 +879,27 @@ class PPDocLayoutV2ForObjectDetectionOutput(ModelOutput):
         Extra dictionary for the denoising related values
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    pred_boxes: Optional[torch.FloatTensor] = None
-    order_logits: Optional[tuple[torch.FloatTensor]] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_logits: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
-    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
-    initial_reference_points: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    init_reference_points: Optional[tuple[torch.FloatTensor]] = None
-    enc_topk_logits: Optional[torch.FloatTensor] = None
-    enc_topk_bboxes: Optional[torch.FloatTensor] = None
-    enc_outputs_class: Optional[torch.FloatTensor] = None
-    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
-    denoising_meta_values: Optional[dict] = None
+    logits: torch.FloatTensor | None = None
+    pred_boxes: torch.FloatTensor | None = None
+    order_logits: tuple[torch.FloatTensor] | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_logits: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
+    intermediate_predicted_corners: torch.FloatTensor | None = None
+    initial_reference_points: torch.FloatTensor | None = None
+    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    decoder_attentions: tuple[torch.FloatTensor] | None = None
+    cross_attentions: tuple[torch.FloatTensor] | None = None
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    encoder_attentions: tuple[torch.FloatTensor] | None = None
+    init_reference_points: tuple[torch.FloatTensor] | None = None
+    enc_topk_logits: torch.FloatTensor | None = None
+    enc_topk_bboxes: torch.FloatTensor | None = None
+    enc_outputs_class: torch.FloatTensor | None = None
+    enc_outputs_coord_logits: torch.FloatTensor | None = None
+    denoising_meta_values: dict | None = None
 
 
 class PPDocLayoutV2MLPPredictionHead(RTDetrMLPPredictionHead):
@@ -942,13 +930,16 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[list[dict]] = None,
+        pixel_mask: torch.LongTensor | None = None,
+        encoder_outputs: torch.FloatTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: list[dict] | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.FloatTensor], PPDocLayoutV2ForObjectDetectionOutput]:
+    ) -> tuple[torch.FloatTensor] | PPDocLayoutV2ForObjectDetectionOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
@@ -1006,6 +997,12 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
         Order 12: number: 0.88 [106.0, 2257.5, 135.84, 2282.18]
         Order 13: footer: 0.93 [338.4, 2255.52, 986.15, 2284.37]
         ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         outputs = self.model(
             pixel_values,
             pixel_mask=pixel_mask,
@@ -1013,10 +1010,13 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             labels=labels,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
-        intermediate_reference_points = outputs.intermediate_reference_points
-        intermediate_logits = outputs.intermediate_logits
+        intermediate_reference_points = outputs.intermediate_reference_points if return_dict else outputs[3]
+        intermediate_logits = outputs.intermediate_logits if return_dict else outputs[2]
         raw_bboxes = intermediate_reference_points[:, -1]
         logits = intermediate_logits[:, -1]
 
@@ -1055,6 +1055,9 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
 
         if labels is not None:
             raise ValueError("PPDocLayoutV2ForObjectDetection does not support training")
+
+        if not return_dict:
+            return (logits, pred_boxes, order_logits) + outputs
 
         return PPDocLayoutV2ForObjectDetectionOutput(
             logits=logits,
