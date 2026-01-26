@@ -20,7 +20,7 @@ from functools import cached_property
 import numpy as np
 
 from tests.test_modeling_common import floats_tensor
-from transformers import AutoModelForImageClassification, OneFormerConfig, is_torch_available, is_vision_available
+from transformers import OneFormerConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     Expectations,
     is_flaky,
@@ -351,38 +351,6 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             model = model_class(config).to(torch_device)
             outputs = model(**inputs, output_attentions=True)
             self.assertTrue(outputs.attentions is not None)
-
-    def test_initialization_pretrained_backbone(self):
-        backbone_name = "microsoft/resnet-18"
-
-        # load OneFormerConfig config with a pretrained backbone
-        config = OneFormerConfig(
-            backbone=backbone_name,
-            use_pretrained_backbone=True,
-        )
-
-        # load pretrained backbone
-        backbone_model = AutoModelForImageClassification.from_pretrained(backbone_name, device_map=torch_device)
-
-        def params_match(params1, params2):
-            return all((p1 == p2).all() for p1, p2 in zip(params1, params2))
-
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device).eval()
-            if model.__class__.__name__ == "OneFormerModel":
-                self.assertTrue(
-                    params_match(
-                        backbone_model.base_model.encoder.parameters(),
-                        model.pixel_level_module.encoder.encoder.parameters(),
-                    )
-                )
-            elif model.__class__.__name__ == "OneFormerForUniversalSegmentation":
-                self.assertTrue(
-                    params_match(
-                        backbone_model.base_model.encoder.parameters(),
-                        model.model.pixel_level_module.encoder.encoder.parameters(),
-                    )
-                )
 
     def test_training(self):
         if not self.model_tester.is_training:

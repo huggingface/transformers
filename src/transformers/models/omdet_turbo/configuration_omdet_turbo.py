@@ -195,12 +195,11 @@ class OmDetTurboConfig(PreTrainedConfig):
         **kwargs,
     ):
         # Backwards compatibility, pop attributes and infer backbone config
-        kwargs.pop("use_timm_backbone", None)
+        use_timm_backbone = kwargs.pop("use_timm_backbone", True)
         backbone_kwargs = kwargs.pop("backbone_kwargs", {})
         kwargs.pop("use_pretrained_backbone", None)
 
         # Init timm backbone with hardcoded values for BC
-        use_timm_backbone = kwargs.pop("use_timm_backbone", True)
         if use_timm_backbone and backbone_config is None:
             backbone_kwargs = {
                 "out_indices": [1, 2, 3],
@@ -216,7 +215,7 @@ class OmDetTurboConfig(PreTrainedConfig):
                 backbone_config = config_class(**config_dict)
             except Exception:
                 backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
-        if backbone_config is None:
+        elif backbone_config is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `swin` vision config.")
             backbone_config = CONFIG_MAPPING["swin"](
                 image_size=image_size,

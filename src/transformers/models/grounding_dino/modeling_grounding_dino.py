@@ -381,10 +381,7 @@ class GroundingDinoConvEncoder(nn.Module):
         self.model = backbone
         self.intermediate_channel_sizes = self.model.channels
 
-        backbone_model_type = None
-        if config.backbone is not None:
-            backbone_model_type = config.backbone
-        elif config.backbone_config is not None:
+        if config.backbone_config is not None:
             backbone_model_type = config.backbone_config.model_type
         else:
             raise ValueError("Either `backbone` or `backbone_config` should be provided in the config")
