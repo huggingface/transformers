@@ -1607,6 +1607,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         vocab_files = {}
+        additional_files_names = {}
         init_configuration = {}
 
         is_local = os.path.isdir(pretrained_model_name_or_path)

@@ -91,7 +91,6 @@ class GlmImageVisionText2TextModelTester:
             "depth": 2,
             "hidden_act": "gelu",
             "hidden_size": 32,
-            "out_hidden_size": 16,
             "intermediate_size": 22,
             "patch_size": 16,
             "spatial_merge_size": 1,
@@ -396,6 +395,19 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     )
     def test_flash_attn_2_from_config(self):
         pass
+
+    def _image_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only image-related inputs from the full set of inputs, for testing `get_image_features`.
+
+        GlmImage internally preprocesses the image_grid_thw input by slicing off the last entry,
+        so we need to prepare inputs accordingly for testing get_image_features. We also discard text-related inputs.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict["image_grid_thw"] = inputs_dict["image_grid_thw"][:-1]
+        del inputs_dict["input_ids"]
+        del inputs_dict["attention_mask"]
+        return config, inputs_dict
 
 
 @require_torch

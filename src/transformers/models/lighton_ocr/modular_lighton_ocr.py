@@ -21,6 +21,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import (
     MultiModalData,
@@ -305,27 +306,22 @@ class LightOnOcrModel(Mistral3Model):
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
-    def get_image_features(self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list):
-        """
-        Obtains image features from the vision encoder and projection.
-
-        Args:
-            pixel_values: Image tensors
-            image_sizes: Tensor or list of (height, width) pairs for each image
-
-        Returns:
-            List of image feature tensors, one per image
-        """
-        visual_features = self.vision_encoder(pixel_values, image_sizes=image_sizes).last_hidden_state
-
-        image_features = self.vision_projection(visual_features.squeeze(0), image_sizes)
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        image_outputs = self.vision_encoder(pixel_values, image_sizes=image_sizes, return_dict=True, **kwargs)
+        image_features = image_outputs.last_hidden_state
+        image_features = self.vision_projection(image_features.squeeze(0), image_sizes)
 
         # Split features per image based on the effective patch size
         downsample_ratio = self.config.vision_config.patch_size * self.config.spatial_merge_size
         split_sizes = [(height // downsample_ratio) * (width // downsample_ratio) for height, width in image_sizes]
         image_features = torch.split(image_features, split_sizes)
+        image_outputs.pooler_output = image_features
 
-        return image_features
+        return image_outputs
 
     @can_return_tuple
     @auto_docstring
@@ -358,7 +354,9 @@ class LightOnOcrModel(Mistral3Model):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes)
+            image_features = self.get_image_features(
+                pixel_values=pixel_values, image_sizes=image_sizes, return_dict=True
+            ).pooler_output
             image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -394,8 +392,11 @@ class LightOnOcrModel(Mistral3Model):
 class LightOnOcrForConditionalGeneration(Mistral3ForConditionalGeneration):
     _checkpoint_conversion_mapping = {}
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor, **kwargs):
-        return self.model.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes)
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes, **kwargs)
 
 
 __all__ = [
