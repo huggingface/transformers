@@ -200,14 +200,14 @@ class OmDetTurboConfig(PreTrainedConfig):
         kwargs.pop("use_pretrained_backbone", None)
 
         # Init timm backbone with hardcoded values for BC
-        if use_timm_backbone and backbone_config is None:
+        if use_timm_backbone and backbone is not None and backbone_config is None:
             backbone_kwargs = {
                 "out_indices": [1, 2, 3],
                 "img_size": image_size,
                 "always_partition": True,
             }
             backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
-        elif backbone is not None:
+        elif backbone is not None and backbone_config is None:
             try:
                 config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
                 config_class = CONFIG_MAPPING[config_dict["model_type"]]
@@ -278,6 +278,7 @@ class OmDetTurboConfig(PreTrainedConfig):
         self.learn_initial_query = learn_initial_query
         self.cache_size = cache_size
         self.is_encoder_decoder = is_encoder_decoder
+        print(self.backbone_config.__class__)
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 

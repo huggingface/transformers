@@ -194,14 +194,13 @@ class ConditionalDetrConfig(PreTrainedConfig):
             except Exception:
                 backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
             backbone = None
-        else:
-            if backbone_config is None:
-                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
-            elif isinstance(backbone_config, dict):
-                backbone_model_type = backbone_config.get("model_type")
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
+        elif backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+            backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.get("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
 
         self.backbone_config = backbone_config
         self.num_channels = num_channels

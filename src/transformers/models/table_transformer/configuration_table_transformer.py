@@ -174,7 +174,7 @@ class TableTransformerConfig(PreTrainedConfig):
         kwargs.pop("use_pretrained_backbone", None)
 
         # Default to values which were hard-coded in `modeling` for BC
-        if use_timm_backbone and backbone is not None:
+        if use_timm_backbone and backbone is not None and backbone_config is None:
             backbone_config = CONFIG_MAPPING["timm_backbone"](
                 backbone=backbone,
                 num_channels=backbone_kwargs.get("num_channels", num_channels),
@@ -184,7 +184,7 @@ class TableTransformerConfig(PreTrainedConfig):
             )
             if dilation:
                 backbone_config.output_stride = backbone_kwargs.get("output_stride", 16)
-        elif backbone is not None:
+        elif backbone is not None and backbone_config is None:
             try:
                 config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
                 config_class = CONFIG_MAPPING[config_dict["model_type"]]
