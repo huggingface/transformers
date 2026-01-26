@@ -34,97 +34,41 @@ jobs:
 
       - name: Detect new model(s) in this PR
         id: detect
-        shell: bash
+        shell: python
         run: |
-          set -euo pipefail
+          import json
+          import os
+          import subprocess
+          import sys
 
-          base="${{ github.event.pull_request.base.sha }}"
-          head="${{ github.event.pull_request.head.sha }}"
+          base = "${{ github.event.pull_request.base.sha }}"
+          head = "${{ github.event.pull_request.head.sha }}"
 
-          models_json="$(python utils/pr_slow_ci_models.py \
-            --base "$base" \
-            --head "$head" \
-            --print-new-models)"
+          # Run pr_slow_ci_models.py to detect new models
+          result = subprocess.run(
+              ["python", "utils/pr_slow_ci_models.py", "--base", base, "--head", head, "--print-new-models"],
+              capture_output=True,
+              text=True,
+              check=True,
+          )
+          models_json = result.stdout.strip()
+          models = json.loads(models_json)
 
-          echo "models_json=$models_json" >> "$GITHUB_OUTPUT"
+          # Set outputs
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"models_json={models_json}\n")
+              f.write(f"models={' '.join(models)}\n")
+              f.write(f"run={'true' if models else 'false'}\n")
 
-          models="$(python - <<'PY'
-import json, os
-models = json.loads(os.environ["MODELS_JSON"])
-print(" ".join(models))
-PY
-)"
-          echo "models=$models" >> "$GITHUB_OUTPUT"
-
-          if [ -z "$models" ]; then
-            echo "No new models detected in this PR."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Detected new model(s): $models"
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          fi
-        env:
-          MODELS_JSON: ""
+          if models:
+              print(f"Detected new model(s): {', '.join(models)}")
+          else:
+              print("No new models detected in this PR.")
 
       - name: Validate required artifacts for new model(s)
         if: steps.detect.outputs.run == 'true'
-        shell: bash
         run: |
-          set -euo pipefail
-
-          base="${{ github.event.pull_request.base.sha }}"
-          head="${{ github.event.pull_request.head.sha }}"
-          changed="$(git diff --name-only "$base" "$head")"
-
-          fail=0
-          err() { echo "::error::$1"; fail=1; }
-          warn() { echo "::warning::$1"; }
-
-          # Docs toctree update is mandatory
-          if ! echo "$changed" | grep -q '^docs/source/en/_toctree\.yml$'; then
-            err "Missing docs/source/en/_toctree.yml update (new models must be added to the docs toctree)."
-          fi
-
-          # Auto mappings are strongly recommended (warning for now)
-          if ! echo "$changed" | grep -q '^src/transformers/models/auto/'; then
-            warn "No changes detected under src/transformers/models/auto/. Ensure Auto mappings are updated (configuration_auto.py, modeling_auto.py, and modality-specific autos)."
-          fi
-
-          for model in ${{ steps.detect.outputs.models }}; do
-            model_dir="src/transformers/models/$model"
-            test_dir="tests/models/$model"
-            doc_file="docs/source/en/model_doc/$model.md"
-
-            [ -d "$model_dir" ] || err "[$model] Missing directory: $model_dir"
-
-            # Require configuration or modular file
-            if ! ls "$model_dir"/configuration_*.py >/dev/null 2>&1 && \
-               ! ls "$model_dir"/modular_*.py >/dev/null 2>&1; then
-              err "[$model] Missing configuration_*.py (or modular_*.py) in $model_dir"
-            fi
-
-            # Require modeling or modular file
-            if ! ls "$model_dir"/modeling_*.py >/dev/null 2>&1 && \
-               ! ls "$model_dir"/modular_*.py >/dev/null 2>&1; then
-              err "[$model] Missing modeling_*.py (or modular_*.py) in $model_dir"
-            fi
-
-            # Require tests
-            if [ ! -d "$test_dir" ]; then
-              err "[$model] Missing tests directory: $test_dir"
-            else
-              if ! ls "$test_dir"/*.py >/dev/null 2>&1; then
-                err "[$model] Tests directory exists but contains no .py test files: $test_dir"
-              fi
-            fi
-
-            # Require docs page
-            [ -f "$doc_file" ] || err "[$model] Missing docs page: $doc_file"
-          done
-
-          if [ "$fail" -ne 0 ]; then
-            echo "New model PR is missing required items. See errors above."
-            exit 1
-          fi
-
-          echo "New model PR completeness checks passed."
+          python utils/check_new_model_pr.py \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}" \
+            --models ${{ steps.detect.outputs.models }}

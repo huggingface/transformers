@@ -137,9 +137,10 @@ body:
         - layers, hidden size, heads, vocab size
         - rope/pos-enc details
         - MoE (#experts, top-k, routing)
-        - vision encoder name + image sizes / patching
-        - audio frontend (sample rate, window, features)
+        - vision encoder name + image sizes / patching (for VLMs)
+        - audio frontend (sample rate, window, features) (for ASR/TTS)
         - any special tokens or chat template requirements
+        - generation defaults (temperature, top_p, etc.) if applicable
 
   - type: dropdown
     id: conversion
@@ -164,6 +165,28 @@ body:
         - label: "I can provide a tiny config (CI-sized) or random init recipe for tests"
         - label: "I can provide a minimal inference snippet (inputs + expected behavior)"
         - label: "I can provide small fixtures (1 image / short audio) with permissive license"
+
+  - type: checkboxes
+    id: expected-files
+    attributes:
+      label: Expected file structure (for reference)
+      description: |
+        Your PR will be expected to include these files (auto-checked by CI).
+        This is informational only - you don't need to check boxes here.
+      options:
+        - label: "configuration_<model>.py (required)"
+        - label: "modeling_<model>.py (required)"
+        - label: "__init__.py (required)"
+        - label: "processing_<model>.py (if multimodal - VLM, ASR, TTS)"
+        - label: "image_processing_<model>.py + image_processing_<model>_fast.py (for vision models)"
+        - label: "feature_extraction_<model>.py (for audio models - note: NOT image_processing)"
+        - label: "tokenization_<model>.py (if custom tokenization needed)"
+        - label: "generation_configuration_<model>.py (if generative model with special defaults)"
+        - label: "tests/models/<model>/ directory with test_modeling_<model>.py (required)"
+        - label: "docs/source/en/model_doc/<model>.md (required)"
+        - label: "Update to docs/source/en/_toctree.yml (required)"
+        - label: "Auto-class registration in src/transformers/models/auto/*.py (required)"
+        - label: "modular_<model>.py (optional - only ~40% of models use this)"
 
   - type: input
     id: contact
