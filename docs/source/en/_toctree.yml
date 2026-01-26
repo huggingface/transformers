@@ -283,6 +283,8 @@
         title: Audio classification
       - local: tasks/asr
         title: Automatic speech recognition
+      - local: tasks/audio_text_to_text
+        title: Audio-text-to-text
       - local: tasks/text-to-speech
         title: Text to speech
       title: Audio
