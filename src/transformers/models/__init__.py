@@ -327,9 +327,9 @@ if TYPE_CHECKING:
     from .regnet import *
     from .rembert import *
     from .resnet import *
+    from .rish_ai import *
     from .roberta import *
     from .roberta_prelayernorm import *
-    from .rish_ai import *
     from .roc_bert import *
     from .roformer import *
     from .rt_detr import *
