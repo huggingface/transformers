@@ -15,7 +15,7 @@
 """Tokenization class for RishAI."""
 
 import json
-import pathlib
+from pathlib import Path
 
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.utils import add_end_docstrings, logging
@@ -109,13 +109,11 @@ class RishAITokenizer(PreTrainedTokenizerBase):
     def _load_vocab_and_merges(self, vocab_file, merges_file):
         """Load vocabulary and merges from files."""
         # Load vocabulary
-        with open(vocab_file, "r", encoding="utf-8") as f:
-            self._vocab = json.load(f)
+        self._vocab = json.loads(Path(vocab_file).read_text(encoding="utf-8"))
 
         # Load merges
-        with open(merges_file, "r", encoding="utf-8") as f:
-            self._merges = f.read().split("\n")
-            self._merges = [merge for merge in self._merges if merge.strip()]
+        self._merges = Path(merges_file).read_text(encoding="utf-8").split("\n")
+        self._merges = [merge for merge in self._merges if merge.strip()]
 
         # Build BPE ranks
         self._bpe_ranks = {merge: i for i, merge in enumerate(self._merges)}
