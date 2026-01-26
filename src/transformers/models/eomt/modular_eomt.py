@@ -443,7 +443,6 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         self.embeddings = EomtEmbeddings(config)
-        self.embeddings.num_prefix_tokens = self.num_prefix_tokens
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.query = nn.Embedding(config.num_queries, config.hidden_size)
