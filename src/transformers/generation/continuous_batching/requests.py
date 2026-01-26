@@ -195,18 +195,23 @@ class RequestState:
         if self.record_timestamps:
             self._timestamps.append(time.perf_counter())
 
+        # Stop if we reached an EOS token
         is_eos = token_id == self.eos_token_id and self.eos_token_id != -1
-        is_max_len = self.generated_len() >= self.max_new_tokens
+        current_len = self.generated_len() - 1  # do not count the temporary token
 
-        # Only add the token if we're not finishing due to max length
+        # Replace the temporary token if we're not finishing due to max length
         # (EOS tokens should still be added to the output)
-        if not (is_max_len and not is_eos):
-            self.generated_tokens.extend([token_id])
+        if is_eos or (current_len < self.max_new_tokens):
+            self.generated_tokens[-1] = token_id
+            current_len += 1
+        else:
+            logger.warning(f"Request {self.request_id} generated a useless token: {token_id}")
+            self.generated_tokens.pop()
 
-        if is_eos or is_max_len:
+        if is_eos or current_len >= self.max_new_tokens:
             self.status = RequestStatus.FINISHED
             return True
-        return False
+        return False  # We still need to process more tokens
 
     def __repr__(self):
         msg = [

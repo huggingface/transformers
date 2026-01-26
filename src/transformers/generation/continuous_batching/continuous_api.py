@@ -59,6 +59,9 @@ padding in the case of cuda graphs AND torch.compile.
 NUM_Q_PADDING_INTERVALS = 4
 NUM_KV_PADDING_INTERVALS = 8
 
+# This is a temporary token ID used to represent a token that is not yet generated
+TMP_TOKEN_ID = 0
+
 
 def pad_by_intervals(size: int, max_value: int, nb_intervals: int) -> int:
     """Return the smallest multiple of (max_value) // (nb_intervals) greater than (size)."""
@@ -520,14 +523,20 @@ class ContinuousBatchProcessor:
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
             self.max_seqlen_q = max(self.max_seqlen_q, query_length)
 
-            if not state.remaining_prefill_tokens:
-                logits_indices.append(cumulative_seqlens_q[-1] - 1)
-
+            # Accumulate the key sequence lengths for the current request
             for layer_type, layer_type_seqlen_k in seqlens_k.items():
                 cumulative_seqlens_k[layer_type].append(cumulative_seqlens_k[layer_type][-1] + layer_type_seqlen_k)
                 self.max_seqlen_k[layer_type] = max(self.max_seqlen_k[layer_type], layer_type_seqlen_k)
 
-            self.cache.extend_read_and_write_indices(state.request_id, past_length, query_length, read_index, write_index)
+            # We extend the read and write indices for the cache
+            self.cache.extend_read_and_write_indices(
+                state.request_id, past_length, query_length, read_index, write_index
+            )
+
+            # If the request has no remaining prefill tokens, it means the next token prediction is relevant
+            if not state.remaining_prefill_tokens:
+                logits_indices.append(cumulative_seqlens_q[-1] - 1)
+                state.generated_tokens.append(TMP_TOKEN_ID)
 
         # When looping over request is done, we can build the actual tensors
         self._build_tensors(
@@ -610,8 +619,8 @@ class ContinuousBatchProcessor:
         for state in self.requests_in_batch:
             # If the request has no remaining prompt ids, it means prefill has already ended or just finished
             if len(state.remaining_prefill_tokens) == 0:
-                # If there are no generated tokens yet, it means prefill just ended
-                if state.generated_len() == 0:
+                # If there is just one temporary token, it means prefill just ended
+                if state.generated_len() == 1:
                     self.metrics.record_ttft_metric(state.created_time, state.request_id)
                     state.status = RequestStatus.DECODING
 
