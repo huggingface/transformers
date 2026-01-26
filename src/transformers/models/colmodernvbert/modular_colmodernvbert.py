@@ -23,7 +23,7 @@
 import re
 from dataclasses import dataclass
 from itertools import accumulate
-from typing import Any, Union
+from typing import Union
 
 import numpy as np
 
@@ -36,26 +36,12 @@ from ..auto.modeling_auto import AutoModel
 from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
 from ..colqwen2.configuration_colqwen2 import ColQwen2Config
 from ..colqwen2.processing_colqwen2 import ColQwen2Processor
-from ..modernvbert.configuration_modernvbert import ModernVBertConfig, ModernVBertTextConfig, ModernVBertVisionConfig
 
 
 if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
-
-
-class ModernVBertTextConfig(ModernVBertTextConfig):
-    pass
-
-
-class ModernVBertVisionConfig(ModernVBertVisionConfig):
-    pass
-
-
-class ModernVBertConfig(ModernVBertConfig):
-    model_type = "modernvbert"
-    sub_configs: dict[str, Any] = {"text_config": ModernVBertTextConfig, "vision_config": ModernVBertVisionConfig}
 
 
 class ColModernVBertConfig(ColQwen2Config):
@@ -88,7 +74,7 @@ class ColModernVBertConfig(ColQwen2Config):
     """
 
     model_type = "colmodernvbert"
-    default_vlm_config_class = ModernVBertConfig
+    default_vlm_type = "modernvbert"
 
 
 class ColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
@@ -259,8 +245,8 @@ class ColModernVBertProcessor(ColQwen2Processor):
 
     def _process_elements(
         self,
-        images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
-        text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
+        images: ImageInput | list[ImageInput] | list[list[ImageInput]] | None = None,
+        text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] | None = None,
         image_seq_len: int | None = None,
         **kwargs: Unpack[ColModernVBertProcessorKwargs],
     ) -> BatchEncoding:

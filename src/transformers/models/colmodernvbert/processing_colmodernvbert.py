@@ -458,8 +458,8 @@ class ColModernVBertProcessor(ProcessorMixin):
 
     def _process_elements(
         self,
-        images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
-        text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
+        images: ImageInput | list[ImageInput] | list[list[ImageInput]] | None = None,
+        text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] | None = None,
         image_seq_len: int | None = None,
         **kwargs: Unpack[ColModernVBertProcessorKwargs],
     ) -> BatchEncoding:
