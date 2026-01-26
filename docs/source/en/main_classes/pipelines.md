@@ -352,12 +352,6 @@ Pipelines available for computer vision tasks include the following.
     - __call__
     - all
 
-### ImageToImagePipeline
-
-[[autodoc]] ImageToImagePipeline
-    - __call__
-    - all
-
 ### KeypointMatchingPipeline
 
 [[autodoc]] KeypointMatchingPipeline

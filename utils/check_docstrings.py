@@ -290,7 +290,6 @@ OBJECTS_TO_IGNORE = {
     "ImageSegmentationPipeline",
     "ImageTextToTextPipeline",
     "AnyToAnyPipeline",
-    "ImageToImagePipeline",
     "InformerConfig",
     "JukeboxPriorConfig",
     "JukeboxTokenizer",
