@@ -118,7 +118,7 @@ class PhimoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.model = PhimoeForCausalLM.from_pretrained(
-                "microsoft/Phi-3.5-MoE-instruct", dtype="auto", device_map="auto"
+                "microsoft/Phi-3.5-MoE-instruct", experts_implementation="eager", dtype="auto", device_map="auto"
             )
         return cls.model
 
@@ -144,8 +144,8 @@ class PhimoeIntegrationTest(unittest.TestCase):
 
         EXPECTED_OUTPUT = torch.tensor(
             [
-                [-3.4844, -2.4688, -1.1719, 0.5703, -0.4902, -0.0942, 0.7773, -0.2539, 0.3223, -1.0234],
-                [-0.9805, 0.0811, -0.5273, 2.3438, 0.6914, 3.0781, 0.3164, 0.2197, 0.5312, -2.1094],
+                    [-3.4844, -2.4531, -1.1719, 0.6055, -0.4922, -0.1001, 0.8086, -0.2422, 0.3477, -1.0078],
+                    [-0.9766, 0.1631, -0.5508, 2.3594, 0.7031, 3.1719, 0.4141, 0.2305, 0.6055, -2.1250],
             ]
         ).to(device=torch_device, dtype=output.dtype)  # fmt: skip
 
