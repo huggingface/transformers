@@ -354,7 +354,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
             # remove one image but leave the image token in text
             curr_input_dict["pixel_values_images"] = curr_input_dict["pixel_values_images"][-1:, ...]
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
@@ -363,7 +363,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(input_ids=input_ids, pixel_values_images=pixel_values)
 
             # two images and two image tokens don't raise an error
