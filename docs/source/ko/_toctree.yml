@@ -1116,6 +1116,12 @@
       - local: in_translation
         title: Mistral3
       - local: in_translation
+        title: (번역중) X-CLIP
+      title: (번역중) 멀티모달 모델
+    - isExpanded: false
+      sections:
+      - local: model_doc/decision_transformer
+        title: 결정 트랜스포머 (Decision Transformer)
         title: mllama
       - local: in_translation
         title: Nougat
@@ -1235,6 +1241,9 @@
     title: 내부 헬퍼(Internal helpers)
   - sections:
     - local: in_translation
+      title: (번역중) Utilities for Time Series
+    title: (번역중) Internal Helpers
+  title: (번역중) API
       title: (번역중)Environment Variables
     title: Reference
   title: API
