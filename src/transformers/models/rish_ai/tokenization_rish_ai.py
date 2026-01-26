@@ -13,7 +13,6 @@
 # limitations under the License.
 
 """Tokenization class for RishAI."""
-
 import json
 
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
