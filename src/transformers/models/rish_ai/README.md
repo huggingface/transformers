@@ -140,12 +140,13 @@ model = RishAIModel(config)
 ## Citation
 
 ```bibtex
-@misc{rish_ai_2024,
-  title={Rish AI: Sparse Mixture of Experts Transformer},
-  author={Rish AI Team},
-  year={2024},
-  publisher={Hugging Face},
-  url={https://huggingface.co/your-org/RishAI-1B-7B}
+@misc{rishailabs_2026,
+    author       = { RishAILabs },
+    title        = { RLLM-Base (Revision 552ee30) },
+    year         = 2026,
+    url          = { https://huggingface.co/RishAILabs/RLLM-Base },
+    doi          = { 10.57967/hf/7560 },
+    publisher    = { Hugging Face }
 }
 ```
 
