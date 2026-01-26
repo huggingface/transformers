@@ -225,7 +225,6 @@ jobs:
           python setup.py deps_table_update
           python utils/check_doc_toc.py --fix_and_overwrite
           python utils/check_docstrings.py --fix_and_overwrite
-          python utils/add_dates.py
           
           # Check if there are changes
           if [ -n "$(git status --porcelain)" ]; then
