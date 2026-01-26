@@ -17,7 +17,6 @@ import unittest
 
 import pytest
 from packaging import version
-from parameterized import parameterized
 
 from transformers import AutoTokenizer, YoutuConfig, is_torch_available
 from transformers.testing_utils import (
@@ -234,31 +233,6 @@ class YoutuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             self.assertEqual(layer.keys.shape, expected_key_shape)
             self.assertEqual(layer.values.shape, expected_value_shape)
 
-    @parameterized.expand([("random",), ("same",)])
-    @unittest.skip("Youtu-LLM is not compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @unittest.skip("Youtu-LLM is not compatible with assisted decoding")
-    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @unittest.skip("Youtu-LLM is not compatible with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("Youtu-LLM uses MLA so it is not compatible with the standard cache format")
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Youtu-LLM uses MLA so it is not compatible with the standard cache format")
-    def test_greedy_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
     @unittest.skip(reason="Youtu-LLM is not suitable for testing with extreme small vocabulary")
     def test_resize_tokens_embeddings(self):
         pass
@@ -318,7 +292,6 @@ class YoutuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 @slow
 class YoutuIntegrationTest(unittest.TestCase):
     def tearDown(self):
-        # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
         cleanup(torch_device, gc_collect=False)
 
     @require_torch_accelerator

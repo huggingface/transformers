@@ -250,7 +250,7 @@ def yarn_get_mscale(scale=1, mscale=1):
     return 0.1 * mscale * math.log(scale) + 1.0
 
 
-class YoutuMLAttention(nn.Module):
+class YoutuAttention(nn.Module):
     """Multi-latent attention from 'DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model' paper"""
 
     def __init__(self, config: YoutuConfig, layer_idx: int):
@@ -376,7 +376,7 @@ class YoutuDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = YoutuMLAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = YoutuAttention(config=config, layer_idx=layer_idx)
 
         self.mlp = YoutuMLP(config)
 
@@ -430,7 +430,7 @@ class YoutuPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": YoutuDecoderLayer,
-        "attentions": YoutuMLAttention,
+        "attentions": YoutuAttention,
     }
 
     @torch.no_grad()

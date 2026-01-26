@@ -2,17 +2,18 @@ import torch
 from torch import nn
 
 from ... import initialization as init
+from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
-    LlamaMLP,
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
 )
+from ..qwen3.modeling_qwen3 import Qwen3MLP
 from .configuration_youtu import YoutuConfig
 
 
@@ -27,15 +28,11 @@ class YoutuRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class YoutuMLP(LlamaMLP):
-    def __init__(self, config):
-        super().__init__(config)
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+class YoutuMLP(Qwen3MLP):
+    pass
 
 
-class YoutuMLAttention(DeepseekV3Attention):
+class YoutuAttention(DeepseekV3Attention):
     pass
 
 
@@ -44,7 +41,7 @@ class YoutuDecoderLayer(LlamaDecoderLayer):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
-        self.self_attn = YoutuMLAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = YoutuAttention(config=config, layer_idx=layer_idx)
 
         self.mlp = YoutuMLP(config)
 
@@ -52,10 +49,10 @@ class YoutuDecoderLayer(LlamaDecoderLayer):
         self.post_attention_layernorm = YoutuRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
-class YoutuPreTrainedModel(LlamaPreTrainedModel):
+class YoutuPreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         std = getattr(self.config, "initializer_range", 0.02)
         embed_std = getattr(self.config, "embedding_initializer_range", 2 * std)
         if isinstance(module, nn.Linear):
