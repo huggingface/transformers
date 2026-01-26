@@ -29,7 +29,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import CompileConfig, GenerationConfig
-from ...generation.logits_process import LogitsProcessor
+from ...generation.logits_process import LogitsProcessorList
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
@@ -256,12 +256,14 @@ class ContinuousBatchProcessor:
         self.tensor_metadata = {"dtype": torch.int32, "device": self.model_device}
 
         # Some tensors always have the same shape regardless of the model
-        self.input_ids = torch.empty((1, self.max_batch_tokens), **self.tensor_metadata)
-        self.position_ids = torch.empty((1, self.max_batch_tokens), **self.tensor_metadata)
-        self.cumulative_seqlens_q = torch.empty((self.max_batch_tokens + 1,), **self.tensor_metadata)
+        self.input_ids = torch.empty((1, self.max_batch_tokens), dtype=torch.int32, device=self.model_device)
+        self.position_ids = torch.empty((1, self.max_batch_tokens), dtype=torch.int32, device=self.model_device)
+        self.cumulative_seqlens_q = torch.empty(
+            (self.max_batch_tokens + 1,), dtype=torch.int32, device=self.model_device
+        )
         self.max_seqlen_q = 0
-        self.logits_indices = torch.empty((self.max_batch_tokens,), **self.tensor_metadata)
-        self.output_ids = torch.empty((self.max_batch_tokens,), **self.tensor_metadata)
+        self.logits_indices = torch.empty((self.max_batch_tokens,), dtype=torch.int32, device=self.model_device)
+        self.output_ids = torch.empty((self.max_batch_tokens,), dtype=torch.int32, device=self.model_device)
 
         # For some kwargs, we have a dict of tensors with as many items as there are attention types
         layer_types = getattr(self.config, "layer_types", None)
@@ -270,27 +272,30 @@ class ContinuousBatchProcessor:
             layer_types = ["full_attention"] if sliding_window in [1, None] else ["sliding_attention"]
         layer_types = list(set(layer_types))
 
-        self.cumulative_seqlens_k = {
-            l_type: torch.empty((self.max_batch_tokens + 1), **self.tensor_metadata) for l_type in layer_types
-        }
+        self.cumulative_seqlens_k = {}
+        for l_type in layer_types:
+            self.cumulative_seqlens_k[l_type] = torch.empty(
+                (self.max_batch_tokens + 1), dtype=torch.int32, device=self.model_device
+            )
         self.max_seqlen_k = dict.fromkeys(layer_types, 0)
 
         if attn_mask_is_needed(self.config):
-            attn_mask_kwargs = {
-                "size": (1, 1, self.max_batch_tokens, self.num_pages + self.max_batch_tokens),
-                "dtype": self.model_dtype,
-                "device": self.model_device,
-            }
-            self.attention_mask = {layer_type: torch.empty(**attn_mask_kwargs) for layer_type in layer_types}
+            self.attention_mask = {}
+            for layer_type in layer_types:
+                self.attention_mask[layer_type] = torch.empty(
+                    size=(1, 1, self.max_batch_tokens, self.num_pages + self.max_batch_tokens),
+                    dtype=self.model_dtype,
+                    device=self.model_device,
+                )
         else:
             self.attention_mask = None
 
         # For other kwargs, we need a list of tensors with as many tensors as there are groups
         self.write_index_storage = [
-            torch.empty((self.max_batch_tokens,), **self.tensor_metadata) for _ in range(num_groups)
+            torch.empty((self.max_batch_tokens,), dtype=torch.int32, device=self.model_device) for _ in range(num_groups)
         ]
         self.read_index_storage = [
-            torch.empty((self.num_pages + self.max_batch_tokens), **self.tensor_metadata) for _ in range(num_groups)
+            torch.empty((self.num_pages + self.max_batch_tokens), dtype=torch.int32, device=self.model_device) for _ in range(num_groups)
         ]
         # For read index, the +T is because there are -1 for seqlen_q when model uses a sliding window
 
@@ -470,14 +475,16 @@ class ContinuousBatchProcessor:
         self.metrics.record_queue_metrics(len(self.scheduler.active_requests), len(self.scheduler.waiting_requests))
 
         # Schedule the next batch of requests, stop if there are no requests in the batch
-        self.requests_in_batch = self.scheduler.schedule_batch(self.max_batch_tokens, self.num_pages)
+        requests_in_batch = self.scheduler.schedule_batch(self.max_batch_tokens, self.num_pages)
 
         # If requests_in_batch is None, it means we need to offload some requests if possible
-        if self.requests_in_batch is None:
+        if requests_in_batch is None:
             if len(self.scheduler.active_requests) > 1:
                 self.soft_reset_one_request()
+                return False
             else:
                 raise RuntimeError("No requests can be scheduled and no request can be offloaded.")
+        self.requests_in_batch = requests_in_batch
         # If it's an empty list, it means we have no requests to process
         if not self.requests_in_batch:
             return False
@@ -694,8 +701,8 @@ class ContinuousBatchProcessor:
         self.scheduler.waiting_requests_order.clear()
 
     @traced
-    @torch.no_grad
-    def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessor, do_sample: bool) -> None:
+    @torch.no_grad()
+    def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessorList, do_sample: bool) -> None:
         """Perform a single generation step."""
 
         # If a compile config is specified, we compile the forward pass once in a wrapper
@@ -748,7 +755,7 @@ class ContinuousBatchProcessor:
 
     @traced
     def _forward_process_and_sample(
-        self, model: nn.Module, batch_data: dict, logit_processor: LogitsProcessor, do_sample: bool
+        self, model: nn.Module, batch_data: dict, logit_processor: LogitsProcessorList, do_sample: bool
     ) -> None:
         """This function performs the forward pass, logits processing, and sampling; which are broken down into smaller
         function to be easier to trace with OpenTelemetry."""
@@ -762,7 +769,7 @@ class ContinuousBatchProcessor:
         return model(**batch_data).logits
 
     @traced(span_name="logit_processing")
-    def _process_logit(self, batch_data: dict, logits: torch.Tensor, logit_processor: LogitsProcessor) -> torch.Tensor:
+    def _process_logit(self, batch_data: dict, logits: torch.Tensor, logit_processor: LogitsProcessorList) -> torch.Tensor:
         # Pass continuous batching context to logits processor if it supports it.
         if hasattr(logit_processor, "set_continuous_batching_context"):
             logit_processor.set_continuous_batching_context(batch_data["logits_indices"], batch_data["cu_seq_lens_q"])
@@ -803,7 +810,7 @@ class ContinuousBatchingManager:
 
     def __init__(
         self,
-        model: nn.Module,
+        model: nn.Module,  # this is really a `PreTrainedModel`, but we keep it as `nn.Module` for importcompatibility
         generation_config: GenerationConfig,
         manual_eviction: bool = False,
         max_queue_size: int = 0,
@@ -822,8 +829,9 @@ class ContinuousBatchingManager:
             allow_block_sharing: (optional) Whether to allow block sharing if the model has some full attention layers
         """
         # Reload paged version of the attention implementation if necessary
-        if "paged|" not in model.config._attn_implementation:
-            model.set_attn_implementation(f"paged|{model.config._attn_implementation}")
+        config: PretrainedConfig = model.config  # ty:ignore[invalid-assignment]
+        if "paged|" not in config._attn_implementation:
+            model.set_attn_implementation(f"paged|{config._attn_implementation}")  # type:ignore[attr-defined]
 
         # Internal arguments
         self.model = model.eval()
@@ -844,7 +852,7 @@ class ContinuousBatchingManager:
         self.generation_config = generation_config
         self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
         self.do_sample = getattr(generation_config, "do_sample", True)
-        self.logit_processor = self.model._get_logits_processor(generation_config)
+        self.logit_processor: LogitsProcessorList = self.model._get_logits_processor(generation_config)  # type:ignore[assignment]
         num_return_sequences = getattr(generation_config, "num_return_sequences", None)
         self.num_return_sequences = num_return_sequences if num_return_sequences is not None else 1
 
