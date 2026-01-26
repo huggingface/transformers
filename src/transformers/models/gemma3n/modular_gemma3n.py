@@ -639,7 +639,7 @@ class Gemma3nConfig(PreTrainedConfig):
 @dataclass
 @auto_docstring
 class Gemma3nAudioEncoderModelOutput(BaseModelOutputWithPooling):
-    """
+    r"""
     audio_mel_mask (`torch.FloatTensor`, *optional*):
         A torch.BoolTensor of shape `(batch_size, num_frames)`
     """

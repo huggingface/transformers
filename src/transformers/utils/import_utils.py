@@ -1421,16 +1421,18 @@ def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: 
 
     if not callable(msg):
         # torch._check requires msg to be a callable but we want to keep the API simple for users
-        def msg():
+        def msg_callable():
             return msg
+    else:
+        msg_callable = msg
 
     if callable(cond):
         cond = cond()
 
     if isinstance(cond, torch.Tensor):
-        torch._check_tensor_all_with(error_type, cond, msg)
+        torch._check_tensor_all_with(error_type, cond, msg_callable)
     else:
-        torch._check_with(error_type, cond, msg)
+        torch._check_with(error_type, cond, msg_callable)
 
 
 @lru_cache
