@@ -270,7 +270,7 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else ()
     )
     pipeline_model_mapping = (
-        {"text-embedding": UdopModel, "image-text-to-text": UdopForConditionalGeneration}
+        {"feature-extraction": UdopModel, "image-text-to-text": UdopForConditionalGeneration}
         if is_torch_available()
         else {}
     )

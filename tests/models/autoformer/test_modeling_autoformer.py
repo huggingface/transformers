@@ -206,7 +206,7 @@ class AutoformerModelTester:
 @require_torch
 class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AutoformerModel, AutoformerForPrediction) if is_torch_available() else ()
-    pipeline_model_mapping = {"text-embedding": AutoformerModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": AutoformerModel} if is_torch_available() else {}
 
     test_missing_keys = False
     test_inputs_embeds = False

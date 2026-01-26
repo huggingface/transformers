@@ -301,7 +301,7 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "audio-classification": HubertForSequenceClassification,
             "automatic-speech-recognition": HubertForCTC,
-            "text-embedding": HubertModel,
+            "feature-extraction": HubertModel,
         }
         if is_torch_available()
         else {}

@@ -233,7 +233,7 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     all_model_classes = (NllbMoeModel, NllbMoeForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "text-embedding": NllbMoeModel,
+            "feature-extraction": NllbMoeModel,
         }
         if is_torch_available()
         else {}

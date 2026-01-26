@@ -167,7 +167,7 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     )
     pipeline_model_mapping = (
         {
-            "image-embedding": SegformerModel,
+            "image-feature-extraction": SegformerModel,
             "image-classification": SegformerForImageClassification,
             "image-segmentation": SegformerForSemanticSegmentation,
         }

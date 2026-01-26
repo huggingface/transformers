@@ -410,7 +410,7 @@ class CLIPSegModelTester:
 @require_torch
 class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CLIPSegModel, CLIPSegForImageSegmentation) if is_torch_available() else ()
-    pipeline_model_mapping = {"text-embedding": CLIPSegModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": CLIPSegModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
     test_attention_outputs = False

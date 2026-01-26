@@ -20,7 +20,7 @@ import pytest
 from transformers import (
     MODEL_MAPPING,
     TOKENIZER_MAPPING,
-    ImageEmbeddingPipeline,
+    ImageFeatureExtractionPipeline,
     is_torch_available,
     is_vision_available,
     pipeline,
@@ -42,7 +42,7 @@ def prepare_img():
 
 
 @is_pipeline_test
-class ImageEmbeddingPipelineTests(unittest.TestCase):
+class ImageFeatureExtractionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_MAPPING
 
     @require_torch
@@ -118,7 +118,7 @@ class ImageEmbeddingPipelineTests(unittest.TestCase):
                 """
             )
 
-        feature_extractor_pipeline = ImageEmbeddingPipeline(
+        feature_extractor_pipeline = ImageFeatureExtractionPipeline(
             model=model,
             tokenizer=tokenizer,
             feature_extractor=feature_extractor,

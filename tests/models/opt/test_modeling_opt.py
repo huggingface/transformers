@@ -205,7 +205,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": OPTModel,
+            "feature-extraction": OPTModel,
             "text-classification": OPTForSequenceClassification,
             "text-generation": OPTForCausalLM,
             "zero-shot": OPTForSequenceClassification,

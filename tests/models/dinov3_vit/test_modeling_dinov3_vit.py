@@ -190,7 +190,7 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DINOv3ViTModel, DINOv3ViTBackbone) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "image-embedding": DINOv3ViTModel,
+            "image-feature-extraction": DINOv3ViTModel,
         }
         if is_torch_available()
         else {}

@@ -485,7 +485,7 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         {
             "audio-classification": Wav2Vec2ForSequenceClassification,
             "automatic-speech-recognition": Wav2Vec2ForCTC,
-            "text-embedding": Wav2Vec2Model,
+            "feature-extraction": Wav2Vec2Model,
         }
         if is_torch_available()
         else {}

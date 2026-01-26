@@ -97,7 +97,7 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": GraniteMoeHybridModel,
+            "feature-extraction": GraniteMoeHybridModel,
             "text-generation": GraniteMoeHybridForCausalLM,
         }
         if is_torch_available()

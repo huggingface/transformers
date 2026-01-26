@@ -258,7 +258,7 @@ class RTDetrV2ModelTester:
 class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (RTDetrV2Model, RTDetrV2ForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"image-embedding": RTDetrV2Model, "object-detection": RTDetrV2ForObjectDetection}
+        {"image-feature-extraction": RTDetrV2Model, "object-detection": RTDetrV2ForObjectDetection}
         if is_torch_available()
         else {}
     )

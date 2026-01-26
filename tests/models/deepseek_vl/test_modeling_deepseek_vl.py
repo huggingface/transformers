@@ -131,7 +131,7 @@ class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     all_model_classes = (DeepseekVLModel, DeepseekVLForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "text-embedding": DeepseekVLModel,
+            "feature-extraction": DeepseekVLModel,
             "image-text-to-text": DeepseekVLForConditionalGeneration,
             "any-to-any": DeepseekVLForConditionalGeneration,
         }

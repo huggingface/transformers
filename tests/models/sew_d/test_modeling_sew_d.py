@@ -298,7 +298,7 @@ class SEWDModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "audio-classification": SEWDForSequenceClassification,
             "automatic-speech-recognition": SEWDForCTC,
-            "text-embedding": SEWDModel,
+            "feature-extraction": SEWDModel,
         }
         if is_torch_available()
         else {}

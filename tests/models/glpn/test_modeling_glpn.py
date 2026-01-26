@@ -143,7 +143,7 @@ class GLPNModelTester:
 class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GLPNModel, GLPNForDepthEstimation) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"depth-estimation": GLPNForDepthEstimation, "image-embedding": GLPNModel} if is_torch_available() else {}
+        {"depth-estimation": GLPNForDepthEstimation, "image-feature-extraction": GLPNModel} if is_torch_available() else {}
     )
 
     test_resize_embeddings = False

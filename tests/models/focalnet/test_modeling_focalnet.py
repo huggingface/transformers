@@ -237,7 +237,7 @@ class FocalNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else ()
     )
     pipeline_model_mapping = (
-        {"image-embedding": FocalNetModel, "image-classification": FocalNetForImageClassification}
+        {"image-feature-extraction": FocalNetModel, "image-classification": FocalNetForImageClassification}
         if is_torch_available()
         else {}
     )

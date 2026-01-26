@@ -277,7 +277,7 @@ class XGLMModelTester:
 class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (XGLMModel, XGLMForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"text-embedding": XGLMModel, "text-generation": XGLMForCausalLM} if is_torch_available() else {}
+        {"feature-extraction": XGLMModel, "text-generation": XGLMForCausalLM} if is_torch_available() else {}
     )
     test_missing_keys = False
 

@@ -162,7 +162,7 @@ class DonutSwinModelTester:
 class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DonutSwinModel, DonutSwinForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"image-embedding": DonutSwinModel, "image-classification": DonutSwinForImageClassification}
+        {"image-feature-extraction": DonutSwinModel, "image-classification": DonutSwinForImageClassification}
         if is_torch_available()
         else {}
     )

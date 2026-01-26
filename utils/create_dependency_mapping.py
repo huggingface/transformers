@@ -51,7 +51,7 @@ ALL_FILE_TYPES = (
     "processing",
     "image_processing",
     "video_processing",
-    "feature_extraction",
+    "feature-extraction",
 )
 
 

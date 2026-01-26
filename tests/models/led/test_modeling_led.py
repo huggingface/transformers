@@ -267,7 +267,7 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": LEDModel,
+            "feature-extraction": LEDModel,
         }
         if is_torch_available()
         else {}

@@ -396,7 +396,7 @@ def prepare_img():
 @require_torch
 class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AltCLIPModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"text-embedding": AltCLIPModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": AltCLIPModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
     test_attention_outputs = False
@@ -412,7 +412,7 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         feature_extractor_name,
         processor_name,
     ):
-        if pipeline_test_case_name == "TextEmbeddingPipelineTests":
+        if pipeline_test_case_name == "FeatureExtractionPipelineTests":
             return True
 
         return False

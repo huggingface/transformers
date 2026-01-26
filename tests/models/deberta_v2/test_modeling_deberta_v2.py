@@ -240,7 +240,7 @@ class DebertaV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": DebertaV2Model,
+            "feature-extraction": DebertaV2Model,
             "fill-mask": DebertaV2ForMaskedLM,
             "text-classification": DebertaV2ForSequenceClassification,
             "token-classification": DebertaV2ForTokenClassification,

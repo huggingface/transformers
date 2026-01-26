@@ -388,7 +388,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": GPTBigCodeModel,
+            "feature-extraction": GPTBigCodeModel,
             "text-classification": GPTBigCodeForSequenceClassification,
             "text-generation": GPTBigCodeForCausalLM,
             "token-classification": GPTBigCodeForTokenClassification,

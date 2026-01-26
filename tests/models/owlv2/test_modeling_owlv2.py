@@ -405,7 +405,7 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Owlv2Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "text-embedding": Owlv2Model,
+            "feature-extraction": Owlv2Model,
             "zero-shot-object-detection": Owlv2ForObjectDetection,
         }
         if is_torch_available()

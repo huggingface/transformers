@@ -180,7 +180,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
     all_model_classes = (
         (TimeSeriesTransformerModel, TimeSeriesTransformerForPrediction) if is_torch_available() else ()
     )
-    pipeline_model_mapping = {"text-embedding": TimeSeriesTransformerModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": TimeSeriesTransformerModel} if is_torch_available() else {}
     is_encoder_decoder = True
 
     test_missing_keys = False

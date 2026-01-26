@@ -53,7 +53,7 @@ class PersimmonModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = PersimmonModelTester
     pipeline_model_mapping = (
         {
-            "text-embedding": PersimmonModel,
+            "feature-extraction": PersimmonModel,
             "text-classification": PersimmonForSequenceClassification,
             "token-classification": PersimmonForTokenClassification,
             # TODO (ydshieh): check why these two fail. Fix them or skip them in a better way.

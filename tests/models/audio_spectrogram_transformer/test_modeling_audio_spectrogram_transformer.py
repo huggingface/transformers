@@ -156,7 +156,7 @@ class ASTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"audio-classification": ASTForAudioClassification, "text-embedding": ASTModel} if is_torch_available() else {}
+        {"audio-classification": ASTForAudioClassification, "feature-extraction": ASTModel} if is_torch_available() else {}
     )
 
     test_resize_embeddings = False

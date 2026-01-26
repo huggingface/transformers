@@ -378,7 +378,7 @@ class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
-            "text-embedding": FlaubertModel,
+            "feature-extraction": FlaubertModel,
             "fill-mask": FlaubertWithLMHeadModel,
             "text-classification": FlaubertForSequenceClassification,
             "token-classification": FlaubertForTokenClassification,

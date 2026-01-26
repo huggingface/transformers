@@ -244,7 +244,7 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     pipeline_model_mapping = (
         {
-            "text-embedding": FNetModel,
+            "feature-extraction": FNetModel,
             "fill-mask": FNetForMaskedLM,
             "text-classification": FNetForSequenceClassification,
             "token-classification": FNetForTokenClassification,

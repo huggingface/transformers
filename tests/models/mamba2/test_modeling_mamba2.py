@@ -240,7 +240,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_missing_keys = False
 
     pipeline_model_mapping = (
-        {"text-embedding": Mamba2Model, "text-generation": Mamba2ForCausalLM} if is_torch_available() else {}
+        {"feature-extraction": Mamba2Model, "text-generation": Mamba2ForCausalLM} if is_torch_available() else {}
     )
 
     def setUp(self):

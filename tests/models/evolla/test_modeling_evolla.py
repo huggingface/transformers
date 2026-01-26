@@ -197,7 +197,7 @@ class EvollaModelTester:
 @require_torch
 class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (EvollaModel, EvollaForProteinText2Text) if is_torch_available() else ()
-    pipeline_model_mapping = {"text-embedding": EvollaModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": EvollaModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
     maxDiff = None

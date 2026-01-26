@@ -228,7 +228,7 @@ class Dinov2WithRegistersModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     )
     pipeline_model_mapping = (
         {
-            "image-embedding": Dinov2WithRegistersModel,
+            "image-feature-extraction": Dinov2WithRegistersModel,
             "image-classification": Dinov2WithRegistersForImageClassification,
         }
         if is_torch_available()

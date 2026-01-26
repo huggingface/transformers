@@ -306,7 +306,7 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         {
             "audio-classification": UniSpeechForSequenceClassification,
             "automatic-speech-recognition": UniSpeechForCTC,
-            "text-embedding": UniSpeechModel,
+            "feature-extraction": UniSpeechModel,
         }
         if is_torch_available()
         else {}

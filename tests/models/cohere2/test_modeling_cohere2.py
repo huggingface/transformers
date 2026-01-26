@@ -62,7 +62,7 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     all_model_classes = (Cohere2Model, Cohere2ForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "text-embedding": Cohere2Model,
+            "feature-extraction": Cohere2Model,
             "text-generation": Cohere2ForCausalLM,
         }
         if is_torch_available()

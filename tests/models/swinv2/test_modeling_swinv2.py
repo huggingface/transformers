@@ -217,7 +217,7 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"image-embedding": Swinv2Model, "image-classification": Swinv2ForImageClassification}
+        {"image-feature-extraction": Swinv2Model, "image-classification": Swinv2ForImageClassification}
         if is_torch_available()
         else {}
     )

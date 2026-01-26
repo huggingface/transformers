@@ -175,7 +175,7 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     pipeline_model_mapping = (
         {
-            "image-embedding": LevitModel,
+            "image-feature-extraction": LevitModel,
             "image-classification": (LevitForImageClassification, LevitForImageClassificationWithTeacher),
         }
         if is_torch_available()
