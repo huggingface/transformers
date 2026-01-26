@@ -17,7 +17,6 @@ import unittest
 
 from transformers import (
     AutoTokenizer,
-    BitsAndBytesConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -69,7 +68,7 @@ class ExaoneMoeIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
-    
+
     @classmethod
     def get_model(cls):
         if cls.model is None:
@@ -80,7 +79,7 @@ class ExaoneMoeIntegrationTest(unittest.TestCase):
             )
 
         return cls.model
-    
+
     @slow
     @require_torch_large_accelerator
     def test_model_logits(self):
@@ -90,8 +89,12 @@ class ExaoneMoeIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
 
-        EXPECTED_MEAN = torch.tensor([[80.0818, 51.8579, 94.5935, 94.4710, 95.2955, 104.5337, 104.0203, 108.6814, 105.7278, 113.6849]])
-        EXPECTED_SLICE = torch.tensor([86.0000, 80.5000, 88.0000, 81.5000, 90.5000, 89.0000, 87.5000, 88.5000, 87.0000, 89.0000])
+        EXPECTED_MEAN = torch.tensor(
+            [[80.0818, 51.8579, 94.5935, 94.4710, 95.2955, 104.5337, 104.0203, 108.6814, 105.7278, 113.6849]]
+        )
+        EXPECTED_SLICE = torch.tensor(
+            [86.0000, 80.5000, 88.0000, 81.5000, 90.5000, 89.0000, 87.5000, 88.5000, 87.0000, 89.0000]
+        )
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         torch.testing.assert_close(out[0, 0, :10], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
 
@@ -101,9 +104,11 @@ class ExaoneMoeIntegrationTest(unittest.TestCase):
         prompt = "Tell me about the Miracle on the Han river."
         tokenizer = AutoTokenizer.from_pretrained(self.TEST_MODEL_ID)
         model = self.get_model()
-        
+
         messages = [{"role": "user", "content": prompt}]
-        input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_tensors="pt", enable_thinking=False)
+        input_ids = tokenizer.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_tensors="pt", enable_thinking=False
+        )
         input_ids = input_ids.to(model.model.embed_tokens.weight.device)
 
         with torch.no_grad():
@@ -115,7 +120,6 @@ class ExaoneMoeIntegrationTest(unittest.TestCase):
     @require_torch_large_accelerator
     def test_model_generation_beyond_sliding_window_flash(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [21605, 2711]
-        tokenizer = AutoTokenizer.from_pretrained(self.TEST_MODEL_ID)
         input_ids = [72861, 2711] * 2048
         model = self.get_model()
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)

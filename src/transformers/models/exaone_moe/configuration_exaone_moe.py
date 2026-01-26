@@ -25,15 +25,15 @@ from ...configuration_utils import PreTrainedConfig, layer_type_validation
 class ExaoneMoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ExaoneMoeModel`]. It is used to
-    instantiate a EXAONE 4.0 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the EXAONE-4.0-32B [LGAI-EXAONE/EXAONE-4.0-32B](https://huggingface.co/LGAI-EXAONE/EXAONE-4.0-32B)
+    instantiate a EXAONE MoE model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the K-EXAONE-236B-A23B [LGAI-EXAONE/K-EXAONE-236B-A23B](https://huggingface.co/LGAI-EXAONE/K-EXAONE-236B-A23B)
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model
     outputs. Read the documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 102400):
-            Vocabulary size of the EXAONE 4.0 model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the EXAONE MoE model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`ExaoneMoeModel`].
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
