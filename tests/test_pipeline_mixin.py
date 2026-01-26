@@ -519,12 +519,12 @@ class PipelineTesterMixin:
         self.run_task_tests(task="document-question-answering", dtype="float16")
 
     @is_pipeline_test
-    def test_pipeline_text_embedding(self):
+    def test_pipeline_feature_extraction(self):
         self.run_task_tests(task="feature-extraction")
 
     @is_pipeline_test
     @require_torch
-    def test_pipeline_text_embedding_fp16(self):
+    def test_pipeline_feature_extraction_fp16(self):
         self.run_task_tests(task="feature-extraction", dtype="float16")
 
     @is_pipeline_test
@@ -590,14 +590,14 @@ class PipelineTesterMixin:
     @require_timm
     @require_vision
     @require_torch
-    def test_pipeline_image_embedding(self):
+    def test_pipeline_image_feature_extraction(self):
         self.run_task_tests(task="image-feature-extraction")
 
     @is_pipeline_test
     @require_timm
     @require_vision
     @require_torch
-    def test_pipeline_image_embedding_fp16(self):
+    def test_pipeline_image_feature_extraction_fp16(self):
         self.run_task_tests(task="image-feature-extraction", dtype="float16")
 
     @unittest.skip(reason="`run_pipeline_test` is currently not implemented.")

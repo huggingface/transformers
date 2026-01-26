@@ -30,7 +30,7 @@ class FeatureExtractionPipeline(Pipeline):
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
-    This text embedding pipeline can currently be loaded from [`pipeline`] using the task identifier:
+    This feature extraction pipeline can currently be loaded from [`pipeline`] using the task identifier:
     `"feature-extraction"`.
 
     All models may be used for this pipeline. See a list of all models, including community-contributed models on

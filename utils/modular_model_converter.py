@@ -1084,7 +1084,7 @@ TYPE_TO_FILE_TYPE = {
     "VideoProcessorInitKwargs": "video_processing",
     "FastImageProcessorKwargs": "image_processing.*_fast",
     "ImageProcessorKwargs": "image_processing",
-    "FeatureExtractor": "feature-extraction",
+    "FeatureExtractor": "feature_extraction",
     "ProcessorKwargs": "processing",
     "VideosKwargs": "processing",
     "ImagesKwargs": "processing",

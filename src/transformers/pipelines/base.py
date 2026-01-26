@@ -752,7 +752,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
 
     Pipeline supports running on CPU or GPU through the device argument (see below).
 
-    Some pipeline, like for instance [`FeatureExtractionPipeline`] (`'feature_extraction'`) output large tensor object
+    Some pipeline, like for instance [`FeatureExtractionPipeline`] (`'feature-extraction'`) output large tensor object
     as nested-lists. In order to avoid dumping such large structure as textual data we provide the `binary_output`
     constructor argument. If set to `True`, the output will be stored in the pickle format.
     """
