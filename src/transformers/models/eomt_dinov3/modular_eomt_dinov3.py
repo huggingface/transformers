@@ -260,19 +260,9 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module: nn.Module) -> None:
+        super()._init_weights(module)
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear | nn.Conv2d | nn.ConvTranspose2d):
-            init.trunc_normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=1)
-            if module.padding_idx is not None:
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, EomtDinov3LayerScale):
+        if isinstance(module, EomtDinov3LayerScale):
             if hasattr(module, "lambda1"):
                 init.constant_(module.lambda1, self.config.layerscale_value)
         elif isinstance(module, EomtDinov3ViTEmbeddings):
