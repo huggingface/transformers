@@ -237,6 +237,16 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "pe_audio_video_encoder": [
+            WeightRenaming(
+                source_patterns=r"audio_model\.audio_encoder\.(.+)",
+                target_patterns=r"embedder.audio_encoder.\1",
+            ),
+            WeightRenaming(
+                source_patterns=r"video_model\.video_encoder\.(.+)",
+                target_patterns=r"embedder.video_encoder.\1",
+            ),
+        ],
         "timm_wrapper": [
             # Simply add the prefix `timm_model`
             # TODO: Would be probably much cleaner with a `add_prefix` argument in WeightRenaming
