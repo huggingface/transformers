@@ -36,7 +36,6 @@ from transformers.utils.generic import OutputRecorder, check_model_inputs
 
 from .configuration_rish_ai import RishAIConfig
 
-
 logger = logging.get_logger(__name__)
 
 

@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule
 from ...utils.import_utils import define_import_structure
 
-
 if TYPE_CHECKING:
     from .configuration_rish_ai import *  # noqa: F401, F403
     from .modeling_rish_ai import *  # noqa: F401, F403
