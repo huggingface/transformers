@@ -15,9 +15,11 @@
 """Tokenization class for RishAI."""
 
 import json
+import pathlib
 
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.utils import add_end_docstrings, logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -168,8 +170,7 @@ class RishAITokenizer(PreTrainedTokenizerBase):
         with open(vocab_file_path, "w", encoding="utf-8") as f:
             json.dump(self._vocab, f, ensure_ascii=False, indent=2)
 
-        with open(merges_file_path, "w", encoding="utf-8") as f:
-            f.write("\n".join(self._merges))
+        pathlib.Path(merges_file_path).write_text("\n".join(self._merges), encoding="utf-8")
 
         return vocab_file_path, merges_file_path
 
