@@ -575,11 +575,13 @@ class ViltModel(ViltPreTrainedModel):
         ```python
         >>> from transformers import ViltProcessor, ViltModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> # prepare image and text
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> text = "hello world"
 
         >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
@@ -729,13 +731,15 @@ class ViltForMaskedLM(ViltPreTrainedModel):
 
         ```python
         >>> from transformers import ViltProcessor, ViltForMaskedLM
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> import re
         >>> import torch
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> text = "a bunch of [MASK] laying on a [MASK]."
 
         >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
@@ -897,11 +901,13 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
 
         ```python
         >>> from transformers import ViltProcessor, ViltForQuestionAnswering
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> text = "How many cats are there?"
 
         >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
@@ -1000,11 +1006,13 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
 
         ```python
         >>> from transformers import ViltProcessor, ViltForImageAndTextRetrieval
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
 
         >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-coco")
@@ -1104,18 +1112,25 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
 
         ```python
         >>> from transformers import ViltProcessor, ViltForImagesAndTextClassification
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
-        >>> image1 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg", stream=True).raw)
-        >>> image2 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_1.jpg", stream=True).raw)
+        >>> url_1 = "https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg"
+        >>> with httpx.stream("GET", url_1) as response:
+        ...     image_1 = Image.open(BytesIO(response.read()))
+
+        >>> url_2 = "https://lil.nlp.cornell.edu/nlvr/exs/ex0_1.jpg"
+        >>> with httpx.stream("GET", url_2) as response:
+        ...     image_2 = Image.open(BytesIO(response.read()))
+
         >>> text = "The left image contains twice the number of dogs as the right image."
 
         >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-nlvr2")
         >>> model = ViltForImagesAndTextClassification.from_pretrained("dandelin/vilt-b32-finetuned-nlvr2")
 
         >>> # prepare inputs
-        >>> encoding = processor([image1, image2], text, return_tensors="pt")
+        >>> encoding = processor([image_1, image_2], text, return_tensors="pt")
 
         >>> # forward pass
         >>> outputs = model(input_ids=encoding.input_ids, pixel_values=encoding.pixel_values.unsqueeze(0))

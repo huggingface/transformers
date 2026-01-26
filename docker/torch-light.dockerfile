@@ -5,7 +5,7 @@ USER root
 RUN apt-get update &&  apt-get install -y --no-install-recommends libsndfile1-dev espeak-ng time git g++ cmake pkg-config openssh-client git-lfs ffmpeg curl
 ENV UV_PYTHON=/usr/local/bin/python
 RUN pip --no-cache-dir install uv && uv pip install --no-cache-dir -U pip setuptools
-RUN uv pip install --no-cache-dir 'torch==2.9.1' 'torchaudio' 'torchvision' 'torchcodec' --index-url https://download.pytorch.org/whl/cpu
+RUN uv pip install --no-cache-dir 'torch==2.9.1' 'torchaudio' 'torchvision' 'torchcodec==0.9.1' --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --no-deps timm accelerate --extra-index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --no-cache-dir librosa "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]"
 
