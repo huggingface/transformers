@@ -160,6 +160,7 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 ## SiglipProcessor
 
 [[autodoc]] SiglipProcessor
+    - __call__
 
 ## SiglipModel
 

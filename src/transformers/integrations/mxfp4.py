@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_torch_available, is_torch_xpu_available, logging
+from ..utils import is_torch_available, logging
 
 
 if is_torch_available():
     import torch
     from torch import nn
 from contextlib import contextmanager
-from typing import Optional
 
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
@@ -76,8 +75,8 @@ class Mxfp4Quantize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
-        model: Optional[torch.nn.Module] = None,
-        missing_keys: Optional[list[str]] = None,
+        model: torch.nn.Module | None = None,
+        missing_keys: list[str] | None = None,
         full_layer_name: str | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
@@ -124,25 +123,24 @@ class Mxfp4Dequantize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
         missing_keys=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        param_data = {}
         if "_blocks" in input_dict.keys():
             if isinstance(input_dict["_blocks"], list):
-                param_data["_blocks"] = input_dict["_blocks"][0]
+                blocks = input_dict["_blocks"][0]
             else:
-                param_data["_blocks"] = input_dict["_blocks"]
+                blocks = input_dict["_blocks"]
         if "_scales" in input_dict.keys():
             if isinstance(input_dict["_scales"], list):
-                param_data["_scales"] = input_dict["_scales"][0]
+                scales = input_dict["_scales"][0]
             else:
-                param_data["_scales"] = input_dict["_scales"]
+                scales = input_dict["_scales"]
 
         # Here we are dequantizing the weights
-        dequantized = dequantize_convertops(param_data["_blocks"], param_data["_scales"], param_data["_blocks"].device)
+        dequantized = dequantize_convertops(blocks, scales)
         return {full_layer_name: dequantized}
 
 
@@ -153,9 +151,9 @@ class Mxfp4Deserialize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
-        missing_keys: Optional[list[str]] = None,
+        missing_keys: list[str] | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         param_data = {}
@@ -214,9 +212,9 @@ def swizzle_mxfp4(w, w_scale, triton_kernels_hub):
     return w, w_scale
 
 
-# Copied from GPT_OSS repo
+# Mostly copied from GPT_OSS repo
 # TODO: Add absolute link when the repo is public
-def convert_moe_packed_tensors(
+def _convert_moe_packed_tensors(
     blocks,
     scales,
     *,
@@ -230,14 +228,6 @@ def convert_moe_packed_tensors(
     import math
 
     blocks = blocks.to(torch.uint8)
-    # Check if blocks and scales are on CPU, and move to GPU if so
-    if not blocks.is_cuda and torch.cuda.is_available():
-        blocks = blocks.cuda()
-        scales = scales.cuda()
-    elif (blocks.device.type != "xpu") and is_torch_xpu_available():
-        blocks = blocks.to("xpu")
-        scales = scales.to("xpu")
-
     scales = scales.to(torch.int32) - 127  # TODO that's because 128=2**7
 
     assert blocks.shape[:-1] == scales.shape, f"{blocks.shape[:-1]=} does not match {scales.shape=}"
@@ -257,21 +247,50 @@ def convert_moe_packed_tensors(
 
         blk = blocks[r0:r1]
         exp = scales[r0:r1]
-
-        # nibble indices -> int64
-        idx_lo = (blk & 0x0F).to(torch.long)
-        idx_hi = (blk >> 4).to(torch.long)
-
         sub = out[r0:r1]
-        sub[:, 0::2] = lut[idx_lo]
-        sub[:, 1::2] = lut[idx_hi]
 
+        # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
+        idx_lo = (blk & 0x0F).to(torch.int)
+        sub[:, 0::2] = lut[idx_lo]
+        del idx_lo
+
+        # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
+        idx_hi = (blk >> 4).to(torch.int)
+        sub[:, 1::2] = lut[idx_hi]
+        del idx_hi
+
+        # Perform op
         torch.ldexp(sub, exp, out=sub)
-        del idx_lo, idx_hi, blk, exp, sub
+        del blk, exp, sub
 
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
-    del blocks, scales, lut
+
     return out.transpose(1, 2).contiguous()
+
+
+def convert_moe_packed_tensors(
+    blocks,
+    scales,
+    *,
+    dtype: torch.dtype = torch.bfloat16,
+    rows_per_chunk: int = 32768 * 1024,  # TODO these values are not here by mistake ;)
+) -> torch.Tensor:
+    """
+    Convert the mxfp4 weights again, dequantizing and makes them compatible with the forward
+    pass of GPT_OSS.
+    """
+    # Since the intermediate ops requite A LOT of memory, in very constrained device_map="auto" settings
+    # it may OOM, hence this wrapper and move back to cpu if needed
+    # torch statistics are not accurate enough to estimate if we will have enough memory due to fragmentation and
+    # in-place operation on non-contiguous tensors (may sometimes require more temporary copies)
+    try:
+        return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
+    # In the case of OOM due to very tight device_map, we convert and return on cpu - it will then be put back on correct
+    # devide with the accelerate dispatch (doing it right away may still lead to OOM, but more memory is available later)
+    except torch.OutOfMemoryError:
+        blocks = blocks.to("cpu")
+        scales = scales.to("cpu")
+        return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
 
 
 class Mxfp4GptOssExperts(nn.Module):
@@ -457,21 +476,14 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
             setattr(module, param_name.rsplit(".", 1)[1], param_value)
             if hasattr(module, blocks_attr) and hasattr(module, scales_attr):
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
-                if target_device == "cpu" and torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                elif target_device == "cpu" and is_torch_xpu_available():
-                    torch.xpu.empty_cache()
                 setattr(module, proj, torch.nn.Parameter(dequantized.to(target_device)))
                 delattr(module, blocks_attr)
                 delattr(module, scales_attr)
 
 
-def dequantize_convertops(blocks, scales, target_device):
+def dequantize_convertops(blocks, scales):
     dequantized = convert_moe_packed_tensors(blocks, scales)
-    if target_device == "cpu" and torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    dequantized = torch.nn.Parameter(dequantized.to(target_device))
-    return dequantized
+    return torch.nn.Parameter(dequantized)
 
 
 def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, triton_kernels_hub, **kwargs):

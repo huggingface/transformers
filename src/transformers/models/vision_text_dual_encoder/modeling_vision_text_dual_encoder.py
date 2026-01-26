@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,14 +13,13 @@
 # limitations under the License.
 """PyTorch VisionTextDualEncoder model."""
 
-from typing import Optional, Union
-
 import torch
 from torch import nn
 
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, filter_out_non_signature_kwargs, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..clip.modeling_clip import CLIPOutput, CLIPVisionConfig, CLIPVisionModel
@@ -53,9 +51,9 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
     def __init__(
         self,
-        config: Optional[VisionTextDualEncoderConfig] = None,
-        vision_model: Optional[PreTrainedModel] = None,
-        text_model: Optional[PreTrainedModel] = None,
+        config: VisionTextDualEncoderConfig | None = None,
+        vision_model: PreTrainedModel | None = None,
+        text_model: PreTrainedModel | None = None,
     ):
         r"""
         vision_model (`PreTrainedModel`):
@@ -104,20 +102,17 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         self.post_init()
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`CLIPTextModel`].
-
         Examples:
 
         ```python
@@ -136,19 +131,20 @@ class VisionTextDualEncoderModel(PreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
+            return_dict=True,
+            **kwargs,
         )
-        text_features = self.text_projection(text_outputs.pooler_output)
+        pooled_output = text_outputs.pooler_output
+        text_outputs.pooler_output = self.text_projection(pooled_output)
 
-        return text_features
+        return text_outputs
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
-    def get_image_features(self, pixel_values: torch.Tensor) -> torch.FloatTensor:
+    def get_image_features(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`CLIPVisionModel`].
-
         Examples:
 
         ```python
@@ -167,25 +163,25 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         >>> with torch.inference_mode():
         ...     image_features = model.get_image_features(**inputs)
         ```"""
-        vision_outputs = self.vision_model(pixel_values=pixel_values)
-        image_features = self.visual_projection(vision_outputs.pooler_output)
+        vision_outputs = self.vision_model(pixel_values=pixel_values, return_dict=True, **kwargs)
+        vision_outputs.pooler_output = self.visual_projection(vision_outputs.pooler_output)
 
-        return image_features
+        return vision_outputs
 
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        return_loss: Optional[bool] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        return_loss: bool | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], CLIPOutput]:
+    ) -> tuple[torch.Tensor] | CLIPOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
@@ -194,7 +190,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import (
         ...     VisionTextDualEncoderModel,
         ...     VisionTextDualEncoderProcessor,
@@ -214,7 +211,14 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         ...     "http://images.cocodataset.org/val2017/000000039769.jpg",
         ...     "https://farm3.staticflickr.com/2674/5850229113_4fe05d5265_z.jpg",
         ... ]
-        >>> images = [Image.open(requests.get(url, stream=True).raw) for url in urls]
+        >>> with httpx.stream("GET", urls[0]) as response:
+        ...     image1 = Image.open(BytesIO(response.read()))
+
+        >>> with httpx.stream("GET", urls[1]) as response:
+        ...     image2 = Image.open(BytesIO(response.read()))
+
+        >>> images = [image1, image2]
+
         >>> inputs = processor(
         ...     text=["a photo of a cat", "a photo of a dog"], images=images, return_tensors="pt", padding=True
         ... )
@@ -290,8 +294,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
     @classmethod
     def from_vision_text_pretrained(
         cls,
-        vision_model_name_or_path: Optional[str] = None,
-        text_model_name_or_path: Optional[str] = None,
+        vision_model_name_or_path: str | None = None,
+        text_model_name_or_path: str | None = None,
         *model_args,
         **kwargs,
     ) -> PreTrainedModel:

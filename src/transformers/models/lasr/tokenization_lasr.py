@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_lasr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team and Google LLC. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +20,6 @@
 
 import itertools
 import re
-from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -161,9 +159,9 @@ class LasrTokenizer(TokenizersBackend):
 
     def _decode(
         self,
-        token_ids: Union[int, list[int]],
+        token_ids: int | list[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         group_tokens: bool = True,
         **kwargs,
     ) -> str:

@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Literal, Optional
+from typing import Literal
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
@@ -76,10 +76,9 @@ class ModernBertConfig(PreTrainedConfig):
             The dropout ratio for the attention probabilities.
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
+        rope_parameters (`dict`, *optional*):
+            Dictionary mapping attention patterns (`"full_attention"`, `"sliding_attention"`) to `RopeParameters`.
+            Each value should be a dictionary containing `rope_type` and optional scaling parameters.
         local_attention (`int`, *optional*, defaults to 128):
             The window size for local attention.
         embedding_dropout (`float`, *optional*, defaults to 0.0):
@@ -113,6 +112,8 @@ class ModernBertConfig(PreTrainedConfig):
         repad_logits_with_grad (`bool`, *optional*, defaults to `False`):
             When True, ModernBertForMaskedLM keeps track of the logits' gradient when repadding for output. This only
             applies when using Flash Attention 2 with passed labels. Otherwise output logits always have a gradient.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -135,42 +136,49 @@ class ModernBertConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 50368,
-        hidden_size: Optional[int] = 768,
-        intermediate_size: Optional[int] = 1152,
-        num_hidden_layers: Optional[int] = 22,
-        num_attention_heads: Optional[int] = 12,
-        hidden_activation: Optional[str] = "gelu",
-        max_position_embeddings: Optional[int] = 8192,
-        initializer_range: Optional[float] = 0.02,
-        initializer_cutoff_factor: Optional[float] = 2.0,
-        norm_eps: Optional[int] = 1e-5,
-        norm_bias: Optional[bool] = False,
-        pad_token_id: Optional[int] = 50283,
-        eos_token_id: Optional[int] = 50282,
-        bos_token_id: Optional[int] = 50281,
-        cls_token_id: Optional[int] = 50281,
-        sep_token_id: Optional[int] = 50282,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        layer_types: Optional[list[str]] = None,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        local_attention: Optional[int] = 128,
-        embedding_dropout: Optional[float] = 0.0,
-        mlp_bias: Optional[bool] = False,
-        mlp_dropout: Optional[float] = 0.0,
-        decoder_bias: Optional[bool] = True,
+        vocab_size: int | None = 50368,
+        hidden_size: int | None = 768,
+        intermediate_size: int | None = 1152,
+        num_hidden_layers: int | None = 22,
+        num_attention_heads: int | None = 12,
+        hidden_activation: str | None = "gelu",
+        max_position_embeddings: int | None = 8192,
+        initializer_range: float | None = 0.02,
+        initializer_cutoff_factor: float | None = 2.0,
+        norm_eps: int | None = 1e-5,
+        norm_bias: bool | None = False,
+        pad_token_id: int | None = 50283,
+        eos_token_id: int | None = 50282,
+        bos_token_id: int | None = 50281,
+        cls_token_id: int | None = 50281,
+        sep_token_id: int | None = 50282,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        layer_types: list[str] | None = None,
+        rope_parameters: dict[Literal["full_attention", "sliding_attention"], RopeParameters] | None = None,
+        local_attention: int | None = 128,
+        embedding_dropout: float | None = 0.0,
+        mlp_bias: bool | None = False,
+        mlp_dropout: float | None = 0.0,
+        decoder_bias: bool | None = True,
         classifier_pooling: Literal["cls", "mean"] = "cls",
-        classifier_dropout: Optional[float] = 0.0,
-        classifier_bias: Optional[bool] = False,
-        classifier_activation: Optional[str] = "gelu",
-        deterministic_flash_attn: Optional[bool] = False,
-        sparse_prediction: Optional[bool] = False,
-        sparse_pred_ignore_index: Optional[int] = -100,
-        reference_compile: Optional[bool] = None,
-        repad_logits_with_grad: Optional[bool] = False,
+        classifier_dropout: float | None = 0.0,
+        classifier_bias: bool | None = False,
+        classifier_activation: str | None = "gelu",
+        deterministic_flash_attn: bool | None = False,
+        sparse_prediction: bool | None = False,
+        sparse_pred_ignore_index: int | None = -100,
+        reference_compile: bool | None = None,
+        repad_logits_with_grad: bool | None = False,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.cls_token_id = cls_token_id
+        self.sep_token_id = sep_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -217,14 +225,7 @@ class ModernBertConfig(PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            cls_token_id=cls_token_id,
-            sep_token_id=sep_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
@@ -239,9 +240,15 @@ class ModernBertConfig(PreTrainedConfig):
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
             self.rope_parameters["sliding_attention"].update(rope_scaling)
+
+        # Set default values if not present
+        if self.rope_parameters.get("full_attention") is None:
+            self.rope_parameters["full_attention"] = {"rope_type": "default"}
         self.rope_parameters["full_attention"].setdefault(
             "rope_theta", kwargs.pop("global_rope_theta", self.default_theta["global"])
         )
+        if self.rope_parameters.get("sliding_attention") is None:
+            self.rope_parameters["sliding_attention"] = {"rope_type": "default"}
         self.rope_parameters["sliding_attention"].setdefault(
             "rope_theta", kwargs.pop("local_rope_theta", self.default_theta["local"])
         )

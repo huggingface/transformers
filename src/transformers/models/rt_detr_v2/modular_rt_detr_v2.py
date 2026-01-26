@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Baidu Inc and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -21,7 +19,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
-from ...utils import is_torchdynamo_compiling, logging
+from ...utils import logging, torch_compilable_check
 from ...utils.backbone_utils import (
     verify_backbone_config_arguments,
 )
@@ -178,6 +176,8 @@ class RTDetrV2Config(PreTrainedConfig):
             Scaling factor applied to the attention offsets in the decoder.
         decoder_method (`str`, *optional*, defaults to `"default"`):
             The method to use for the decoder: `"default"` or `"discrete"`.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -267,6 +267,7 @@ class RTDetrV2Config(PreTrainedConfig):
         decoder_n_levels=3,  # default value
         decoder_offset_scale=0.5,  # default value
         decoder_method="default",
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.initializer_range = initializer_range
@@ -368,6 +369,7 @@ class RTDetrV2Config(PreTrainedConfig):
         self.decoder_n_levels = decoder_n_levels
         self.decoder_offset_scale = decoder_offset_scale
         self.decoder_method = decoder_method
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
@@ -497,10 +499,10 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
@@ -513,10 +515,10 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
-        if not is_torchdynamo_compiling() and (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
+        torch_compilable_check(
+            (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:

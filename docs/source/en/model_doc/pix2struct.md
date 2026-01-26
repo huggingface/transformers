@@ -59,6 +59,7 @@ The original code can be found [here](https://github.com/google-research/pix2str
 ## Pix2StructProcessor
 
 [[autodoc]] Pix2StructProcessor
+    - __call__
 
 ## Pix2StructImageProcessor
 

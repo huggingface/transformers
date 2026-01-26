@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Meta AI Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@
 import collections
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -52,10 +50,10 @@ class SamVisionEncoderOutput(ModelOutput):
         The image embeddings obtained by applying the projection layer to the pooler_output.
     """
 
-    image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    image_embeds: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -89,11 +87,11 @@ class SamImageSegmentationOutput(ModelOutput):
         heads.
     """
 
-    iou_scores: Optional[torch.FloatTensor] = None
-    pred_masks: Optional[torch.FloatTensor] = None
-    vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    mask_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    iou_scores: torch.FloatTensor | None = None
+    pred_masks: torch.FloatTensor | None = None
+    vision_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    vision_attentions: tuple[torch.FloatTensor, ...] | None = None
+    mask_decoder_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class SamPatchEmbeddings(nn.Module):
@@ -177,7 +175,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
@@ -235,7 +233,7 @@ class SamAttention(nn.Module):
         query: Tensor,
         key: Tensor,
         value: Tensor,
-        attention_similarity: Optional[Tensor] = None,
+        attention_similarity: Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Tensor:
         # Input projections
@@ -372,7 +370,7 @@ class SamTwoWayTransformer(nn.Module):
         attention_similarity: Tensor,
         target_embedding=None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
 
@@ -467,8 +465,8 @@ class SamMaskDecoder(nn.Module):
         sparse_prompt_embeddings: torch.Tensor,
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
-        attention_similarity: Optional[torch.Tensor] = None,
-        target_embedding: Optional[torch.Tensor] = None,
+        attention_similarity: torch.Tensor | None = None,
+        target_embedding: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Predict masks given image and prompt embeddings.
@@ -549,7 +547,7 @@ class SamPositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.scale = config.scale
-        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
+        self.positional_embedding = nn.Parameter(self.scale * torch.randn((2, config.num_pos_feats)))
 
     def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
@@ -659,10 +657,10 @@ class SamPromptEncoder(nn.Module):
 
     def forward(
         self,
-        input_points: Optional[tuple[torch.Tensor, torch.Tensor]],
-        input_labels: Optional[torch.Tensor],
-        input_boxes: Optional[torch.Tensor],
-        input_masks: Optional[torch.Tensor],
+        input_points: tuple[torch.Tensor, torch.Tensor] | None,
+        input_labels: torch.Tensor | None,
+        input_boxes: torch.Tensor | None,
+        input_masks: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Embeds different types of prompts, returning both sparse and dense embeddings.
@@ -1057,8 +1055,8 @@ class SamVisionEncoder(SamPreTrainedModel):
 
     @check_model_inputs(tie_last_hidden_states=False)
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
-    ) -> SamVisionEncoderOutput:
+        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | SamVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -1093,9 +1091,9 @@ class SamVisionModel(SamPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, SamVisionEncoderOutput]:
+    ) -> tuple | SamVisionEncoderOutput:
         return self.vision_encoder(pixel_values, **kwargs)
 
 
@@ -1108,6 +1106,9 @@ class SamVisionModel(SamPreTrainedModel):
 class SamModel(SamPreTrainedModel):
     input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamTwoWayAttentionBlock, index=2)}
+    _tied_weights_keys = {
+        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
+    }
 
     def __init__(self, config: SamConfig):
         super().__init__(config)
@@ -1155,10 +1156,10 @@ class SamModel(SamPreTrainedModel):
     @torch.no_grad()
     def get_prompt_embeddings(
         self,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
+        input_points: torch.FloatTensor | None = None,
+        input_labels: torch.LongTensor | None = None,
+        input_boxes: torch.FloatTensor | None = None,
+        input_masks: torch.LongTensor | None = None,
     ):
         r"""
         Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
@@ -1189,15 +1190,15 @@ class SamModel(SamPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
-        image_embeddings: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        input_points: torch.FloatTensor | None = None,
+        input_labels: torch.LongTensor | None = None,
+        input_boxes: torch.FloatTensor | None = None,
+        input_masks: torch.LongTensor | None = None,
+        image_embeddings: torch.FloatTensor | None = None,
         multimask_output: bool = True,
-        attention_similarity: Optional[torch.FloatTensor] = None,
-        target_embedding: Optional[torch.FloatTensor] = None,
+        attention_similarity: torch.FloatTensor | None = None,
+        target_embedding: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SamImageSegmentationOutput:
         r"""
@@ -1258,14 +1259,16 @@ class SamModel(SamPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("facebook/sam-vit-base")
         >>> processor = AutoProcessor.from_pretrained("facebook/sam-vit-base")
 
-        >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
+        >>> with httpx.stream("GET", url) as response:
+        ...     raw_image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> input_points = [[[400, 650]]]  # 2D location of a window on the car
         >>> inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt")
 

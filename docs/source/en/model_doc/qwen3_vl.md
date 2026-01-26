@@ -92,6 +92,7 @@ print(output_text)
 ## Qwen3VLProcessor
 
 [[autodoc]] Qwen3VLProcessor
+    - __call__
 
 ## Qwen3VLVideoProcessor
 
@@ -111,8 +112,12 @@ print(output_text)
 
 [[autodoc]] Qwen3VLModel
     - forward
+    - get_video_features
+    - get_image_features
 
 ## Qwen3VLForConditionalGeneration
 
 [[autodoc]] Qwen3VLForConditionalGeneration
     - forward
+    - get_video_features
+    - get_image_features

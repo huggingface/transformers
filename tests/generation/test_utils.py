@@ -44,7 +44,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_flash_attn_3,
     require_optimum_quanto,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -55,7 +54,8 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_ipex_available, is_torchdynamo_exporting
+from transformers.utils import is_ipex_available, is_sklearn_available, is_torchdynamo_exporting
+from transformers.utils.generic import is_flash_attention_requested
 
 
 if is_torch_available():
@@ -107,8 +107,6 @@ if is_torch_available():
     from transformers.generation.utils import _speculative_sampling
 
 from unittest.mock import patch
-
-from transformers.utils import is_sklearn_available
 
 
 class GenerationTesterMixin:
@@ -618,12 +616,12 @@ class GenerationTesterMixin:
         config, _ = self.prepare_config_and_inputs_for_generate()
 
         # if no bos token id => cannot generate from None
-        if config.bos_token_id is None:
+        if config.get_text_config(decoder=True).bos_token_id is None:
             self.skipTest(reason="bos_token_id is None")
 
         # hack in case they are equal, otherwise the attn mask will be [0]
-        if config.bos_token_id == config.pad_token_id:
-            config.pad_token_id = None
+        if config.get_text_config(decoder=True).bos_token_id == config.get_text_config(decoder=True).pad_token_id:
+            config.get_text_config(decoder=True).pad_token_id = None
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config).to(torch_device)
@@ -1207,7 +1205,7 @@ class GenerationTesterMixin:
 
             input_ids = inputs_dict.pop("input_ids")
 
-            model.config.use_cache = True
+            model.generation_config.use_cache = True
             model.config.is_decoder = True
             batch_size = input_ids.shape[0]
             max_new_tokens = 10
@@ -1220,27 +1218,15 @@ class GenerationTesterMixin:
                 "return_dict_in_generate": True,  # Required to return `past_key_values`
             }
 
-            text_config = model.config.get_text_config()
-            head_dim = (
-                getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
-            )
-            num_key_value_heads = (
-                text_config.num_attention_heads
-                if getattr(text_config, "num_key_value_heads", None) is None
-                else text_config.num_key_value_heads
-            )
-            num_hidden_layers = text_config.num_hidden_layers
-
             inputs_embeds = model.get_input_embeddings()(input_ids)
             outputs = model.generate(inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict)
 
             # we should get `max_length - 1` in shape, not `max_length - embeds_length`.
             # -1 because the last generated token isn't yet in the cache.
+            text_config = model.config.get_text_config()
             max_length = max_new_tokens + inputs_embeds.shape[1] - 1
-            cache_shape = [batch_size, num_key_value_heads, max_length, head_dim]
             self.assertIsInstance(outputs.past_key_values, StaticCache)
-            self.assertEqual(len(outputs.past_key_values), num_hidden_layers)
-            self.assertListEqual(list(outputs.past_key_values.layers[0].keys.shape), cache_shape)
+            self._check_past_key_values_for_generate(batch_size, outputs.past_key_values, max_length, text_config)
 
     @pytest.mark.generate
     def test_generate_continue_from_past_key_values(self):
@@ -1445,22 +1431,12 @@ class GenerationTesterMixin:
                 )
 
                 # Check 1: The cache shapes must match the expected shapes
+                text_config = model.config.get_text_config()
                 max_cache_len = seq_length + max_new_tokens - 1  # cache len = gen len - 1, the last token has no cache
-                text_config = config.text_config if hasattr(config, "text_config") else config
-                head_dim = (
-                    getattr(text_config, "head_dim", None)
-                    or text_config.hidden_size // text_config.num_attention_heads
-                )
-                num_key_value_heads = (
-                    text_config.num_attention_heads
-                    if getattr(text_config, "num_key_value_heads", None) is None
-                    else text_config.num_key_value_heads
-                )
-                num_hidden_layers = text_config.num_hidden_layers
-                cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
                 self.assertTrue(isinstance(static_cache_generation.past_key_values, StaticCache))
-                self.assertTrue(len(static_cache_generation.past_key_values) == num_hidden_layers)
-                self.assertTrue(static_cache_generation.past_key_values.layers[0].keys.shape == cache_shape)
+                self._check_past_key_values_for_generate(
+                    batch_size, static_cache_generation.past_key_values, max_cache_len, text_config
+                )
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
@@ -1698,10 +1674,10 @@ class GenerationTesterMixin:
                 self.skipTest(reason="This model does not support `logits_to_keep` argument.")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            config.use_cache = True
             config.is_decoder = True
 
             model = model_class(config).to(torch_device).eval()
+            model.generation_config.use_cache = True
             # All generation methods (except assisted decoding) rely on always extracting the last token logits of the
             # full logits matrix, so testing out only greedy search and assisted decoding is enough (if it works,
             # other methods will work as well)
@@ -1786,10 +1762,10 @@ class GenerationTesterMixin:
                     inputs_dict[input_name] = input_data
             main_input = inputs_dict[model_class.main_input_name]
 
-            # FA2 doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
+            # FA doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
             # attention masks at test time and, with generate, the mask will be appended with 1s on the right,
-            # resulting in a mask with holes (not supported properly by FA2).
-            if attn_implementation == "flash_attention_2":
+            # resulting in a mask with holes (not supported properly by FA).
+            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
                 for input_name in ("attention_mask", "decoder_attention_mask", "encoder_attention_mask"):
                     if input_name in inputs_dict:
                         inputs_dict[input_name] = torch.ones_like(inputs_dict[input_name])
@@ -2707,6 +2683,53 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         out = model.generate(input_ids, generation_config=generation_config)
         self.assertTrue(len(out[0]) == 20)  # generated max_length=20 tokens, not 50!
+
+        # Lastly try saving to make sure no errors are raised about
+        # "generation params in config" or during config validation (#43175)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.generation_config.cache_implementation = "dynamic"
+            model.generation_config.use_cache = None
+            model.save_pretrained(tmpdirname)
+
+    def test_generation_config_deprecation(self):
+        import logging as pylogging
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        input_ids = tokenizer("Hello", return_tensors="pt").input_ids.to(torch_device)
+
+        logger = pylogging.getLogger("transformers")
+
+        class OnWarningHandler(pylogging.Handler):
+            def __init__(self):
+                super().__init__()
+                self.warnings = []
+
+            def emit(self, record):
+                msg = record.getMessage()
+                if "Passing `generation_config` together with" in msg:
+                    self.warnings.append(msg)
+
+        warningHandler = OnWarningHandler()
+        logger.addHandler(warningHandler)
+
+        try:
+            # Providing generation_config and kwargs is deprecated, so we expect a warning here.
+            #
+            # We're using logging_once, make sure that we emit this warning in any case by clearing the
+            # cache on warning_once
+            logging.warning_once.cache_clear()
+            generation_config = GenerationConfig(temperature=1.0)
+            _ = model.generate(input_ids, generation_config=generation_config, do_sample=False)
+            self.assertTrue(len(warningHandler.warnings) == 1)
+
+            # Providing no generation config, only kwargs is not deprecated. No further deprecation warnings
+            # should have been sent.
+            logging.warning_once.cache_clear()
+            _ = model.generate(input_ids, do_sample=False)
+            self.assertTrue(len(warningHandler.warnings) == 1)
+        finally:
+            logger.removeHandler(warningHandler)
 
     # TODO joao, manuel: remove in v4.62.0
     @slow
@@ -3958,7 +3981,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         gen_out = compiled_generate(**model_inputs, generation_config=generation_config)
         self.assertTrue(gen_out.shape[1] > model_inputs["input_ids"].shape[1])  # some text was generated
 
-    @require_read_token
     @slow
     def test_assisted_generation_early_exit(self):
         """
@@ -4486,7 +4508,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         # test that we can generate without inputs, i.e. from BOS
         _ = model.generate()
 
-    @require_read_token
     @slow
     @require_torch_accelerator
     def test_cache_device_map_with_vision_layer_device_map(self):

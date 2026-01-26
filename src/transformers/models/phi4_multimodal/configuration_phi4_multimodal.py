@@ -19,7 +19,6 @@
 # limitations under the License.
 
 import math
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -349,40 +348,40 @@ class Phi4MultimodalConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 200064,
-        hidden_size: Optional[int] = 3072,
-        intermediate_size: Optional[int] = 8192,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = 8,
-        resid_pdrop: Optional[float] = 0.0,
-        embd_pdrop: Optional[float] = 0.0,
-        attention_dropout: Optional[float] = 0.0,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 131072,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-5,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        bos_token_id: Optional[int] = 199999,
-        eos_token_id: Optional[list[int]] = [199999, 200020],
-        pad_token_id: Optional[int] = 199999,
-        original_max_position_embeddings: Optional[int] = 4096,
-        sliding_window: Optional[int] = None,
-        vision_config: Optional[dict] = None,
-        audio_config: Optional[dict] = None,
+        vocab_size: int | None = 200064,
+        hidden_size: int | None = 3072,
+        intermediate_size: int | None = 8192,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 8,
+        resid_pdrop: float | None = 0.0,
+        embd_pdrop: float | None = 0.0,
+        attention_dropout: float | None = 0.0,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 131072,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        bos_token_id: int | None = 199999,
+        eos_token_id: list[int] | None = [199999, 200020],
+        pad_token_id: int | None = 199999,
+        original_max_position_embeddings: int | None = 4096,
+        sliding_window: int | None = None,
+        vision_config: dict | None = None,
+        audio_config: dict | None = None,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
             vision_config = Phi4MultimodalVisionConfig(**vision_config)
         elif vision_config is None:
-            Phi4MultimodalVisionConfig()
+            vision_config = Phi4MultimodalVisionConfig()
         self.vision_config = vision_config
 
         if isinstance(audio_config, dict):
             audio_config = Phi4MultimodalAudioConfig(**audio_config)
-        elif vision_config is None:
+        elif audio_config is None:
             audio_config = Phi4MultimodalAudioConfig()
         self.audio_config = audio_config
         self.vocab_size = vocab_size
@@ -408,16 +407,14 @@ class Phi4MultimodalConfig(PreTrainedConfig):
         kwargs.setdefault("partial_rotary_factor", 1.0)  # assign default for BC
         self.sliding_window = sliding_window
 
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
     def convert_rope_params_to_dict(
-        self, default_theta: int | float = 10_000.0, ignore_keys: Optional[set] = None, **kwargs
+        self, default_theta: int | float = 10_000.0, ignore_keys: set | None = None, **kwargs
     ):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
@@ -435,7 +432,7 @@ class Phi4MultimodalConfig(PreTrainedConfig):
         self.validate_rope(ignore_keys=ignore_keys)
         return kwargs
 
-    def validate_rope(self, ignore_keys: Optional[set] = None):
+    def validate_rope(self, ignore_keys: set | None = None):
         """
         Validate the `rope_parameters` configuration.
         """

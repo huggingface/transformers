@@ -145,6 +145,7 @@ from .import_utils import (
     is_gguf_available,
     is_gptqmodel_available,
     is_grokadamw_available,
+    is_grouped_mm_available,
     is_habana_gaudi1,
     is_hadamard_available,
     is_hqq_available,
@@ -184,6 +185,7 @@ from .import_utils import (
     is_pyctcdecode_available,
     is_pytesseract_available,
     is_pytest_available,
+    is_pytest_order_available,
     is_pytorch_quantization_available,
     is_quanto_greater,
     is_quark_available,
@@ -246,6 +248,7 @@ from .import_utils import (
     is_xlstm_available,
     is_yt_dlp_available,
     requires_backends,
+    torch_compilable_check,
     torch_only_method,
 )
 from .kernel_config import KernelConfig

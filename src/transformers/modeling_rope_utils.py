@@ -132,8 +132,8 @@ def dynamic_rope_update(rope_forward):
 def _compute_linear_scaling_rope_parameters(
     config: Optional["PreTrainedConfig"] = None,
     device: Optional["torch.device"] = None,
-    seq_len: Optional[int] = None,
-    layer_type: Optional[str] = None,
+    seq_len: int | None = None,
+    layer_type: str | None = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with linear scaling. Credits to the Reddit user /u/kaiokendev
@@ -186,8 +186,8 @@ def _compute_linear_scaling_rope_parameters(
 def _compute_dynamic_ntk_parameters(
     config: Optional["PreTrainedConfig"] = None,
     device: Optional["torch.device"] = None,
-    seq_len: Optional[int] = None,
-    layer_type: Optional[str] = None,
+    seq_len: int | None = None,
+    layer_type: str | None = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla
@@ -256,8 +256,8 @@ def _compute_dynamic_ntk_parameters(
 def _compute_yarn_parameters(
     config: "PreTrainedConfig",
     device: Optional["torch.device"] = None,
-    seq_len: Optional[int] = None,
-    layer_type: Optional[str] = None,
+    seq_len: int | None = None,
+    layer_type: str | None = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with NTK scaling. Please refer to the
@@ -391,8 +391,8 @@ def _compute_yarn_parameters(
 def _compute_longrope_parameters(
     config: "PreTrainedConfig",
     device: Optional["torch.device"] = None,
-    seq_len: Optional[int] = None,
-    layer_type: Optional[str] = None,
+    seq_len: int | None = None,
+    layer_type: str | None = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with LongRoPE scaling. Please refer to the
@@ -479,8 +479,8 @@ def _compute_longrope_parameters(
 def _compute_llama3_parameters(
     config: "PreTrainedConfig",
     device: Optional["torch.device"] = None,
-    seq_len: Optional[int] = None,
-    layer_type: Optional[str] = None,
+    seq_len: int | None = None,
+    layer_type: str | None = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies for llama 3.1.
@@ -609,17 +609,17 @@ class RopeParameters(TypedDict, total=False):
     """
 
     rope_theta: float
-    rope_type: Optional[str]
-    partial_rotary_factor: Optional[float]
-    factor: Optional[float]
-    original_max_position_embeddings: Optional[int]
-    attention_factor: Optional[float]
-    beta_fast: Optional[float]
-    beta_slow: Optional[float]
-    short_factor: Optional[list[float]]
-    long_factor: Optional[list[float]]
-    low_freq_factor: Optional[float]
-    high_freq_factor: Optional[float]
+    rope_type: str | None
+    partial_rotary_factor: float | None
+    factor: float | None
+    original_max_position_embeddings: int | None
+    attention_factor: float | None
+    beta_fast: float | None
+    beta_slow: float | None
+    short_factor: list[float] | None
+    long_factor: list[float] | None
+    low_freq_factor: float | None
+    high_freq_factor: float | None
 
 
 class RotaryEmbeddingConfigMixin:
@@ -629,7 +629,7 @@ class RotaryEmbeddingConfigMixin:
 
     default_theta = 10_000.0
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: Optional[set] = None, **kwargs):
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
@@ -693,7 +693,7 @@ class RotaryEmbeddingConfigMixin:
 
         self.rope_parameters = rope_parameters
 
-    def validate_rope(self: "PreTrainedConfig", ignore_keys: Optional[set] = None):
+    def validate_rope(self: "PreTrainedConfig", ignore_keys: set | None = None):
         """
         Validate the RoPE config arguments, given a `"PreTrainedConfig"` object
         """
@@ -720,13 +720,13 @@ class RotaryEmbeddingConfigMixin:
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
                 )
 
-    def _validate_default_rope_parameters(self, rope_parameters: dict, ignore_keys: Optional[set] = None):
+    def _validate_default_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type", "rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
         self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
-    def _validate_linear_rope_parameters(self, rope_parameters: dict, ignore_keys: Optional[set] = None):
+    def _validate_linear_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type", "factor", "rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
@@ -736,7 +736,7 @@ class RotaryEmbeddingConfigMixin:
         if factor is None or not isinstance(factor, float) or factor < 1.0:
             logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
 
-    def _validate_dynamic_rope_parameters(self, rope_parameters: dict, ignore_keys: Optional[set] = None):
+    def _validate_dynamic_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type", "factor"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
@@ -746,7 +746,7 @@ class RotaryEmbeddingConfigMixin:
         if factor is None or not isinstance(factor, float) or factor < 1.0:
             logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
 
-    def _validate_yarn_rope_parameters(self, rope_parameters: dict, ignore_keys: Optional[set] = None):
+    def _validate_yarn_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type", "factor", "rope_theta", "original_max_position_embeddings"}
         optional_keys = {
             "attention_factor",
@@ -797,7 +797,7 @@ class RotaryEmbeddingConfigMixin:
                 "behaviour in model usage, please correct the 'original_max_position_embeddings' fields in the model config."
             )
 
-    def _validate_longrope_rope_parameters(self, rope_parameters: dict, ignore_keys: Optional[set] = None):
+    def _validate_longrope_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type", "short_factor", "long_factor", "rope_theta", "original_max_position_embeddings"}
         optional_keys = {"attention_factor", "factor"}
         received_keys = set(rope_parameters.keys())
@@ -847,7 +847,7 @@ class RotaryEmbeddingConfigMixin:
                 f"`rope_parameters`'s attention_factor field must be a float greater than 0, got {attention_factor}"
             )
 
-    def _validate_llama3_rope_parameters(self, rope_parameters: dict, ignore_keys: Optional[set] = None):
+    def _validate_llama3_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {
             "rope_type",
             "factor",
@@ -893,8 +893,8 @@ class RotaryEmbeddingConfigMixin:
         rope_type: str,
         received_keys: set,
         required_keys: set,
-        optional_keys: Optional[set] = None,
-        ignore_keys: Optional[set] = None,
+        optional_keys: set | None = None,
+        ignore_keys: set | None = None,
     ):
         """Compare the received keys in `config.rope_parameters` against the expected and optional keys"""
         # BC: "rope_type" was originally "type" -- let's check for "rope_type" when "type" is present
@@ -919,7 +919,7 @@ class RotaryEmbeddingConfigMixin:
             logger.warning(f"Unrecognized keys in `rope_parameters` for 'rope_type'='{rope_type}': {unused_keys}")
 
 
-def rope_config_validation(config: RotaryEmbeddingConfigMixin, ignore_keys: Optional[set] = None):
+def rope_config_validation(config: RotaryEmbeddingConfigMixin, ignore_keys: set | None = None):
     """
     This is a deprecated function.
     It has been kept for backward compatibility with custom code models.

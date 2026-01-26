@@ -93,7 +93,7 @@ class Ernie4_5_VL_MoeVisionText2TextModelTester:
             self.text_config = {
                 "vocab_size": 99,
                 "hidden_size": 16,
-                "intermediate_size": 22,
+                "intermediate_size": 32,
                 "num_hidden_layers": 2,
                 "num_attention_heads": 2,
                 "num_key_value_heads": 1,
@@ -102,7 +102,7 @@ class Ernie4_5_VL_MoeVisionText2TextModelTester:
                 "tie_word_embeddings": True,
                 "rope_parameters": {"type": "default", "rope_theta": 500_000.0, "mrope_section": [1, 1, 2]},
                 "mlp_layer_types": ["dense", "sparse"],
-                "moe_intermediate_size": [22, 22],
+                "moe_intermediate_size": [32, 32],
                 "moe_k": 2,
                 "moe_num_experts": 8,
                 "moe_num_shared_experts": 2,
@@ -115,7 +115,7 @@ class Ernie4_5_VL_MoeVisionText2TextModelTester:
                 "depth": 2,
                 "hidden_size": 32,
                 "hidden_act": "silu",
-                "intermediate_size": 22,
+                "intermediate_size": 32,
                 "num_heads": 2,
                 "spatial_merge_size": 1,
             }
@@ -266,6 +266,34 @@ class Ernie4_5_VL_MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
+    def _video_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only video-related inputs from the full set of inputs, for testing `get_video_features`.
+
+        The superclass method simply calls the model_tester.prepare_config_and_inputs_for_common(),
+        but that method only prepared image inputs, i.e. where the temporal dimension in grid_thw is 1.
+        This override prepares proper video inputs with 12 frames.
+        """
+        config = self.model_tester.get_config()
+        patch_size = config.vision_config.patch_size
+        batch_size = self.model_tester.batch_size
+        image_size = self.model_tester.image_size
+        num_channels = self.model_tester.num_channels
+        num_frames = 12
+        pixel_values_videos = floats_tensor(
+            [num_frames * batch_size * (image_size**2) // (patch_size**2), num_channels * (patch_size**2)]
+        )
+
+        patches_per_side = image_size // patch_size
+        video_grid_thw = torch.tensor(
+            [[num_frames, patches_per_side, patches_per_side]] * batch_size, device=torch_device
+        )
+        inputs_dict = {
+            "pixel_values_videos": pixel_values_videos,
+            "video_grid_thw": video_grid_thw,
+        }
+        return config, inputs_dict
+
 
 @slow
 @require_torch_large_accelerator(memory=64)  # Tested on A100
@@ -313,6 +341,7 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
             device_map="auto",
             dtype=dtype,
             attn_implementation=attn_implementation,
+            experts_implementation="eager",
             revision="refs/pr/10",
         )
 
@@ -549,6 +578,7 @@ class Ernie4_5_VL_MoeSmallIntegrationTest(unittest.TestCase):
             device_map="auto",
             dtype=dtype,
             attn_implementation=attn_implementation,
+            experts_implementation="eager",
         )
 
     def test_small_model_integration_test(self):

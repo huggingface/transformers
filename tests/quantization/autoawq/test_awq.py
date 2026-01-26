@@ -278,7 +278,7 @@ class AwqTest(unittest.TestCase):
         )
 
         output = quantized_model.generate(dummy_input, max_new_tokens=10)
-        self.assertTrue((EXPECTED_OUTPUT == output).all())
+        self.assertTrue((output == EXPECTED_OUTPUT).all())
 
 
 @slow

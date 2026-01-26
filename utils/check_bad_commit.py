@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
@@ -21,7 +20,7 @@ import re
 import subprocess
 
 import git
-import requests
+import httpx
 
 
 def create_script(target_test):
@@ -195,19 +194,19 @@ def get_commit_info(commit):
     merged_author = None
 
     url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}/pulls"
-    pr_info_for_commit = requests.get(url).json()
+    pr_info_for_commit = httpx.get(url).json()
 
     if len(pr_info_for_commit) > 0:
         pr_number = pr_info_for_commit[0]["number"]
 
         url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
-        pr_for_commit = requests.get(url).json()
+        pr_for_commit = httpx.get(url).json()
         author = pr_for_commit["user"]["login"]
         if pr_for_commit["merged_by"] is not None:
             merged_author = pr_for_commit["merged_by"]["login"]
 
     url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}"
-    commit_info = requests.get(url).json()
+    commit_info = httpx.get(url).json()
     parent = commit_info["parents"][0]["sha"]
     if author is None:
         author = commit_info["author"]["login"]
@@ -227,7 +226,7 @@ if __name__ == "__main__":
     print(f"start_commit: {args.start_commit}")
     print(f"end_commit: {args.end_commit}")
 
-    # `get_commit_info` uses `requests.get()` to request info. via `api.github.com` without using token.
+    # `get_commit_info` uses `httpx.get()` to request info. via `api.github.com` without using token.
     # If there are many new failed tests in a workflow run, this script may fail at some point with `KeyError` at
     # `pr_number = pr_info_for_commit[0]["number"]` due to the rate limit.
     # Let's cache the commit info. and reuse them whenever possible.

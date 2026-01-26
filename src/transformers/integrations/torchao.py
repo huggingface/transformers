@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 import importlib.metadata
 import re
 import types
-from typing import Optional
 
 import torch
 from packaging import version
@@ -41,7 +39,7 @@ if is_torchao_available():
 logger = logging.get_logger(__name__)
 
 
-def fuzzy_match_size(config_name: str) -> Optional[str]:
+def fuzzy_match_size(config_name: str) -> str | None:
     """
     Extract the size digit from strings like "4weight", "8weight".
     Returns the digit as an integer if found, otherwise None.
@@ -82,7 +80,7 @@ class TorchAoQuantize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
         missing_keys=None,
         **kwargs,
@@ -211,7 +209,7 @@ class TorchAoDeserialize(ConversionOps):
         self,
         input_dict: dict[str, torch.Tensor],
         source_patterns: list[str] | None = None,
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
         missing_keys=None,
         **kwargs,
@@ -251,7 +249,7 @@ class TorchAoDeserialize(ConversionOps):
         if is_unsafe_serialization:
             return {full_layer_name: weight}
         # Sanity check for the new serialization format
-        elif not (TORCHAO_VERSION >= version.parse("0.15.0") and is_metadata_torchao(self.hf_quantizer.metadata)):
+        elif not (version.parse("0.15.0") <= TORCHAO_VERSION and is_metadata_torchao(self.hf_quantizer.metadata)):
             raise ValueError("To use `safetensors` serialization, you should have `torchao>=0.15.0` installed")
 
         unflattened_state_dict, leftover_state_dict = unflatten_tensor_state_dict(

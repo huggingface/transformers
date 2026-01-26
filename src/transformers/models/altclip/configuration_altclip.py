@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 WenXiang ZhongzhiCheng LedellWu LiuGuang BoWenZhang and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -67,9 +66,6 @@ class AltCLIPTextConfig(PreTrainedConfig):
         bos_token_id (`int`, *optional*, defaults to 0): The id of the *beginning-of-sequence* token.
         eos_token_id (`Union[int, list[int]]`, *optional*, defaults to 2):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
         project_dim (`int`, *optional*, defaults to 768):
             The dimensions of the teacher model before the mapping layer.
 
@@ -108,11 +104,13 @@ class AltCLIPTextConfig(PreTrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        use_cache=True,
         project_dim=768,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -127,7 +125,6 @@ class AltCLIPTextConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
         self.project_dim = project_dim
 
 

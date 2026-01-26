@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch Pixio model."""
-
-from typing import Optional
 
 import torch
 from torch import nn
@@ -316,8 +313,8 @@ class PixioModel(PixioPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         if output_hidden_states is None:
@@ -349,7 +346,7 @@ class PixioBackbone(Dinov2Backbone):
     @check_model_inputs
     @auto_docstring
     def forward(
-        self, pixel_values: torch.Tensor, output_hidden_states: Optional[bool] = None, **kwargs
+        self, pixel_values: torch.Tensor, output_hidden_states: bool | None = None, **kwargs
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -358,10 +355,12 @@ class PixioBackbone(Dinov2Backbone):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("facebook/pixio-huge")
         >>> model = AutoBackbone.from_pretrained(

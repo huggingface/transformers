@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Cohere team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,6 +48,8 @@ class AyaVisionConfig(PreTrainedConfig):
             The epsilon value used for layer normalization in the adapter.
         image_token_index (`int`, *optional*, defaults to 255036):
             The image token index to encode the image prompt.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings.
     """
 
     model_type = "aya_vision"
@@ -66,11 +67,13 @@ class AyaVisionConfig(PreTrainedConfig):
         downsample_factor=2,
         adapter_layer_norm_eps=1e-6,
         image_token_index=255036,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.image_token_index = image_token_index
         self.downsample_factor = downsample_factor
         self.adapter_layer_norm_eps = adapter_layer_norm_eps
+        self.tie_word_embeddings = tie_word_embeddings
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(
                 "vision_feature_select_strategy should be one of 'default', 'full'."
