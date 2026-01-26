@@ -258,19 +258,17 @@ class NomicBertSelfAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.num_heads = config.num_attention_heads
+        self.num_kv_heads = (
+            config.num_key_value_heads if config.num_key_value_heads is not None else config.num_attention_heads
+        )
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // self.num_heads)
+        self.num_key_value_groups = self.num_heads // self.num_kv_heads
         self.scaling = self.head_dim**-0.5
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
+        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=config.attention_bias)
 
     def forward(
         self,
@@ -282,13 +280,12 @@ class NomicBertSelfAttention(nn.Module):
         cache_position=None,
         **kwargs,
     ):
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
+        bsz, seq_len, _ = hidden_states.shape
 
         # Let BERT do QKV projection
-        query_layer = self.q_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
-        key_layer = self.k_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
-        value_layer = self.v_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+        query_layer = self.q_proj(hidden_states).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_layer = self.k_proj(hidden_states).view(bsz, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        value_layer = self.v_proj(hidden_states).view(bsz, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
 
         # Apply Rotary Position Embeddings
         if position_embeddings is not None:
@@ -296,7 +293,7 @@ class NomicBertSelfAttention(nn.Module):
             query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
 
         # Fallback
-        elif position_ids is not None and isinstance(position_ids, tuple) and len(position_ids) == 2:
+        elif position_ids is not None and isinstance(position_ids, tuple):
             cos, sin = position_ids
             query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
 
@@ -313,9 +310,17 @@ class NomicBertSelfAttention(nn.Module):
 
                 key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx, cache_kwargs)
 
+        if self.num_key_value_groups > 1:
+            key_layer = key_layer.repeat_interleave(self.num_key_value_groups, dim=1)
+            value_layer = value_layer.repeat_interleave(self.num_key_value_groups, dim=1)
+
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        query_layer = query_layer.contiguous()
+        key_layer = key_layer.contiguous()
+        value_layer = value_layer.contiguous()
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -328,7 +333,8 @@ class NomicBertSelfAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(bsz, seq_len, -1)
 
         return attn_output, attn_weights
 
@@ -347,91 +353,9 @@ class NomicBertSelfOutput(nn.Module):
         return hidden_states
 
 
-class NomicBertCrossAttention(nn.Module):
-    def __init__(self, config, is_causal=False, layer_idx=None):
-        super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({config.num_attention_heads})"
-            )
-        self.config = config
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.scaling = self.attention_head_size**-0.5
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-
-        self.is_causal = is_causal
-        self.layer_idx = layer_idx
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
-        past_key_values: EncoderDecoderCache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
-        # determine input shapes
-        bsz, tgt_len = hidden_states.shape[:-1]
-        src_len = encoder_hidden_states.shape[1]
-
-        q_input_shape = (bsz, tgt_len, -1, self.attention_head_size)
-        kv_input_shape = (bsz, src_len, -1, self.attention_head_size)
-
-        # get query proj
-        query_layer = self.query(hidden_states).view(*q_input_shape).transpose(1, 2)
-
-        is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
-        if past_key_values is not None and is_updated:
-            # reuse k,v, cross_attentions
-            key_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].keys
-            value_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].values
-        else:
-            key_layer = self.key(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
-            value_layer = self.value(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
-
-            if past_key_values is not None:
-                # save all states to the cache
-                key_layer, value_layer = past_key_values.cross_attention_cache.update(
-                    key_layer, value_layer, self.layer_idx
-                )
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                past_key_values.is_updated[self.layer_idx] = True
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_layer,
-            key_layer,
-            value_layer,
-            attention_mask,
-            dropout=0.0 if not self.training else self.dropout.p,
-            scaling=self.scaling,
-            **kwargs,
-        )
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
-        return attn_output, attn_weights
-
-
 class NomicBertAttention(nn.Module):
-    def __init__(
-        self, config, position_embedding_type=None, layer_idx=None, is_causal=False, is_cross_attention=False
-    ):
+    def __init__(self, config, layer_idx=None):
         super().__init__()
-        self.is_cross_attention = is_cross_attention
-        attention_class = NomicBertCrossAttention if is_cross_attention else NomicBertSelfAttention
-
         self.self = NomicBertSelfAttention(config, layer_idx=layer_idx)
 
         self.output = NomicBertSelfOutput(config)
@@ -445,7 +369,7 @@ class NomicBertAttention(nn.Module):
         position_ids=None,
         cache_position=None,
         **kwargs,
-    ) -> tuple[torch.Tensor]:
+    ):
         """
         Forward pass for the NomicBERT Attention layer.
 
@@ -505,26 +429,21 @@ class NomicBertIntermediate(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
         # Add the Gate Layer
         # SiLU needs a second parallel layer for the gate.
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
+
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
+
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         gate_output = self.act_fn(self.gate_proj(hidden_states))
         up_output = self.up_proj(hidden_states)
-        down_proj = self.down_proj(gate_output * up_output)
 
-        return down_proj
+        return gate_output * up_output
 
 
 class NomicBertOutput(nn.Module):
@@ -720,6 +639,83 @@ class NomicBertPreTrainingHeads(nn.Module):
         prediction_scores = self.predictions(sequence_output)
         seq_relationship_score = self.seq_relationship(pooled_output)
         return prediction_scores, seq_relationship_score
+
+
+class NomicBertCrossAttention(nn.Module):
+    def __init__(self, config, is_causal=False, layer_idx=None):
+        super().__init__()
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
+            )
+        self.config = config
+
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.scaling = self.attention_head_size**-0.5
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+
+        self.is_causal = is_causal
+        self.layer_idx = layer_idx
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor]:
+        # determine input shapes
+        bsz, tgt_len = hidden_states.shape[:-1]
+        src_len = encoder_hidden_states.shape[1]
+
+        q_input_shape = (bsz, tgt_len, -1, self.attention_head_size)
+        kv_input_shape = (bsz, src_len, -1, self.attention_head_size)
+
+        # get query proj
+        query_layer = self.query(hidden_states).view(*q_input_shape).transpose(1, 2)
+
+        is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
+        if past_key_values is not None and is_updated:
+            # reuse k,v, cross_attentions
+            key_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].keys
+            value_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].values
+        else:
+            key_layer = self.key(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
+            value_layer = self.value(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
+
+            if past_key_values is not None:
+                # save all states to the cache
+                key_layer, value_layer = past_key_values.cross_attention_cache.update(
+                    key_layer, value_layer, self.layer_idx
+                )
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                past_key_values.is_updated[self.layer_idx] = True
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout.p,
+            scaling=self.scaling,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        return attn_output, attn_weights
 
 
 @auto_docstring

@@ -42,6 +42,8 @@ class NomicBertConfig(PreTrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
+        num_key_value_heads (`int`, *optional*):
+            Number of key-value attention heads for each attention layer in the Transformer encoder.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         is_decoder (`bool`, *optional*, defaults to `False`):
@@ -75,6 +77,12 @@ class NomicBertConfig(PreTrainedConfig):
             such as sentence A and sentence B in pairwise classification tasks.
         pad_vocab_size_multiple (`int`, *optional*, defaults to 1):
             pads the vocabulary size to a multiple (e.g. 8, 64, 128)
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether to add cross-attention layers.
+        bos_token_id (`int`, *optional*):
+            The token ID used for the beginning-of-sequence token.
+        eos_token_id (`int`, *optional*):
+            The token ID used for the end-of-sequence token.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie the input and output word embeddings. If set to `True`, the same embedding matrix
             is used for both input embeddings and output logits.
@@ -87,6 +95,10 @@ class NomicBertConfig(PreTrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         pad_token_id (`int`, *optional*, defaults to 0):
             The token ID used for padding.
+        head_dim (`int`, *optional*):
+            The dimension of the attention heads.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in the attention layer.
 
     ```python
     >>> from transformers import NomicBertModel, NomicBertConfig

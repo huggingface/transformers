@@ -33,7 +33,6 @@ from ...utils import TransformersKwargs
 from ...utils.generic import maybe_autocast
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
-    BertAttention,
     BertEmbeddings,
     BertEncoder,
     BertForMaskedLM,
@@ -44,7 +43,6 @@ from ..bert.modeling_bert import (
     BertForQuestionAnswering,
     BertForSequenceClassification,
     BertForTokenClassification,
-    BertIntermediate,
     BertLayer,
     BertLMHeadModel,
     BertLMPredictionHead,
@@ -80,6 +78,8 @@ class NomicBertConfig(BertConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
+        num_key_value_heads (`int`, *optional*):
+            Number of key-value attention heads for each attention layer in the Transformer encoder.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         is_decoder (`bool`, *optional*, defaults to `False`):
@@ -113,6 +113,12 @@ class NomicBertConfig(BertConfig):
             such as sentence A and sentence B in pairwise classification tasks.
         pad_vocab_size_multiple (`int`, *optional*, defaults to 1):
             pads the vocabulary size to a multiple (e.g. 8, 64, 128)
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether to add cross-attention layers.
+        bos_token_id (`int`, *optional*):
+            The token ID used for the beginning-of-sequence token.
+        eos_token_id (`int`, *optional*):
+            The token ID used for the end-of-sequence token.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie the input and output word embeddings. If set to `True`, the same embedding matrix
             is used for both input embeddings and output logits.
@@ -125,6 +131,10 @@ class NomicBertConfig(BertConfig):
             just in case (e.g., 512 or 1024 or 2048).
         pad_token_id (`int`, *optional*, defaults to 0):
             The token ID used for padding.
+        head_dim (`int`, *optional*):
+            The dimension of the attention heads.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in the attention layer.
 
     ```python
     >>> from transformers import NomicBertModel, NomicBertConfig
@@ -224,6 +234,7 @@ class NomicBertConfig(BertConfig):
 
 class NomicBertEmbeddings(BertEmbeddings):
     pass
+
 
 class NomicBertRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor
@@ -364,19 +375,17 @@ class NomicBertSelfAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.num_heads = config.num_attention_heads
+        self.num_kv_heads = (
+            config.num_key_value_heads if config.num_key_value_heads is not None else config.num_attention_heads
+        )
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // self.num_heads)
+        self.num_key_value_groups = self.num_heads // self.num_kv_heads
         self.scaling = self.head_dim**-0.5
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
+        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=config.attention_bias)
 
     def forward(
         self,
@@ -385,17 +394,15 @@ class NomicBertSelfAttention(nn.Module):
         past_key_values=None,
         position_ids=None,
         position_embeddings=None,
-        cache_position = None,
+        cache_position=None,
         **kwargs,
     ):
-
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
+        bsz, seq_len, _ = hidden_states.shape
 
         # Let BERT do QKV projection
-        query_layer = self.q_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
-        key_layer = self.k_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
-        value_layer = self.v_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+        query_layer = self.q_proj(hidden_states).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_layer = self.k_proj(hidden_states).view(bsz, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        value_layer = self.v_proj(hidden_states).view(bsz, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
 
         # Apply Rotary Position Embeddings
         if position_embeddings is not None:
@@ -403,7 +410,7 @@ class NomicBertSelfAttention(nn.Module):
             query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
 
         # Fallback
-        elif position_ids is not None and isinstance(position_ids, tuple) and len(position_ids) == 2:
+        elif position_ids is not None and isinstance(position_ids, tuple):
             cos, sin = position_ids
             query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
 
@@ -418,13 +425,19 @@ class NomicBertSelfAttention(nn.Module):
                     cos, sin = position_embeddings
                     cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
 
-                key_layer, value_layer = past_key_values.update(
-                    key_layer, value_layer, self.layer_idx, cache_kwargs
-                )
+                key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx, cache_kwargs)
+
+        if self.num_key_value_groups > 1:
+            key_layer = key_layer.repeat_interleave(self.num_key_value_groups, dim=1)
+            value_layer = value_layer.repeat_interleave(self.num_key_value_groups, dim=1)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        query_layer = query_layer.contiguous()
+        key_layer = key_layer.contiguous()
+        value_layer = value_layer.contiguous()
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -437,23 +450,107 @@ class NomicBertSelfAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(bsz, seq_len, -1)
 
         return attn_output, attn_weights
+
+
+# @use_kernelized_func(apply_rotary_pos_emb)
+# class NomicBertSelfAttention(nn.Module):
+#     """
+#     Custom Self-Attention mechanism for NomicBERT.
+#     Key Difference: Replaces standard BERT absolute position embeddings with
+#     Rotary Positional Embeddings (RoPE) applied directly to Q and K.
+#     """
+
+#     def __init__(self, config, layer_idx=None):
+#         super().__init__()
+#         self.config = config
+#         self.layer_idx = layer_idx
+#         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+#         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+#         self.scaling = self.head_dim**-0.5
+#         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+#         self.q_proj = nn.Linear(
+#             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+#         )
+#         self.k_proj = nn.Linear(
+#             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+#         )
+#         self.v_proj = nn.Linear(
+#             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+#         )
+
+#     def forward(
+#         self,
+#         hidden_states,
+#         attention_mask=None,
+#         past_key_values=None,
+#         position_ids=None,
+#         position_embeddings=None,
+#         cache_position=None,
+#         **kwargs,
+#     ):
+#         input_shape = hidden_states.shape[:-1]
+#         hidden_shape = (*input_shape, -1, self.head_dim)
+
+#         # Let BERT do QKV projection
+#         query_layer = self.q_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+#         key_layer = self.k_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+#         value_layer = self.v_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+
+#         # Apply Rotary Position Embeddings
+#         if position_embeddings is not None:
+#             cos, sin = position_embeddings
+#             query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
+
+#         # Fallback
+#         elif position_ids is not None and isinstance(position_ids, tuple) and len(position_ids) == 2:
+#             cos, sin = position_ids
+#             query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
+
+#         # Handle KV Cache
+#         if past_key_values is not None:
+#             if not isinstance(past_key_values, Cache):
+#                 key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx)
+#             else:
+#                 # Update DynamicCache
+#                 cache_kwargs = {}
+#                 if position_embeddings is not None:
+#                     cos, sin = position_embeddings
+#                     cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+
+#                 key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx, cache_kwargs)
+
+#         attention_interface: Callable = eager_attention_forward
+#         if self.config._attn_implementation != "eager":
+#             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+#         attn_output, attn_weights = attention_interface(
+#             self,
+#             query_layer,
+#             key_layer,
+#             value_layer,
+#             attention_mask,
+#             dropout=0.0 if not self.training else self.dropout.p,
+#             scaling=self.scaling,
+#             **kwargs,
+#         )
+
+#         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+
+#         return attn_output, attn_weights
+
 
 class NomicBertSelfOutput(BertSelfOutput):
     pass
 
 
-class NomicBertAttention(BertAttention):
-    def __init__(
-        self, config, position_embedding_type=None, layer_idx=None, is_causal = False, is_cross_attention=False
-    ):
-        super().__init__(config, position_embedding_type=position_embedding_type)
-
-        self.self = NomicBertSelfAttention(
-            config, layer_idx=layer_idx
-        )
+class NomicBertAttention(nn.Module):
+    def __init__(self, config, layer_idx=None):
+        super().__init__()
+        self.self = NomicBertSelfAttention(config, layer_idx=layer_idx)
 
         self.output = NomicBertSelfOutput(config)
 
@@ -515,7 +612,7 @@ class NomicBertAttention(BertAttention):
         return outputs
 
 
-class NomicBertIntermediate(BertIntermediate):
+class NomicBertIntermediate(nn.Module):
     """
     NomicBERT Intermediate layer.
     Replaces standard BERT GELU with SiLU (Swish).
@@ -525,22 +622,22 @@ class NomicBertIntermediate(BertIntermediate):
     """
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         # Add the Gate Layer
         # SiLU needs a second parallel layer for the gate.
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
+
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
+
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         gate_output = self.act_fn(self.gate_proj(hidden_states))
         up_output = self.up_proj(hidden_states)
-        down_proj = self.down_proj(gate_output * up_output)
 
-        return down_proj
+        return gate_output * up_output
 
 
 class NomicBertOutput(BertOutput):
@@ -609,7 +706,6 @@ class NomicBertEncoder(BertEncoder):
         position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-
         for i, layer_module in enumerate(self.layer):
             layer_outputs = layer_module(
                 hidden_states,
@@ -624,9 +720,10 @@ class NomicBertEncoder(BertEncoder):
             hidden_states = layer_outputs[0]
 
         return BaseModelOutputWithPast(
-            last_hidden_state = hidden_states,
+            last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
+
 
 class NomicBertPooler(BertPooler):
     pass
