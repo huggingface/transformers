@@ -200,7 +200,9 @@ def make_batched_videos(videos) -> list[Union[np.ndarray, "torch.Tensor", "URL",
     except (IndexError, TypeError):
         pass
 
-    if isinstance(videos, str) or is_valid_video(videos):
+    if is_batched_video(videos):
+        return convert_pil_frames_to_video(videos)
+    elif isinstance(videos, str) or is_valid_video(videos):
         return convert_pil_frames_to_video([videos])
     # only one frame passed, thus we unsqueeze time dim
     elif is_valid_image(videos):
