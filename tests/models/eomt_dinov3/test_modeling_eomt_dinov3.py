@@ -1,4 +1,4 @@
-# Copyright 2025 the HuggingFace Team. All rights reserved.
+# Copyright 2026 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -105,8 +105,6 @@ class EomtDinov3ForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMix
     all_model_classes = (EomtDinov3ForUniversalSegmentation,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-segmentation": EomtDinov3ForUniversalSegmentation} if is_torch_available() else {}
     is_encoder_decoder = False
-    test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
     test_torch_exportable = False
 
