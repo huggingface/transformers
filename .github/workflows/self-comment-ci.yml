@@ -67,7 +67,7 @@ jobs:
       models: ${{ steps.models_to_run.outputs.models }}
       quantizations: ${{ steps.models_to_run.outputs.quantizations }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: "0"
           ref: "refs/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge"

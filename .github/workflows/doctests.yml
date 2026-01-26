@@ -69,8 +69,8 @@ jobs:
     if: always()
     needs: [call_doctest_job]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
       - name: Send message to Slack
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
@@ -83,7 +83,7 @@ jobs:
 
       - name: "Upload results"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: doc_test_results
           path: doc_test_results

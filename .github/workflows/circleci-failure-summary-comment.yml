@@ -15,10 +15,10 @@ jobs:
       PR_NUMBER: ${{ github.event.pull_request.number }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
@@ -177,7 +177,7 @@ jobs:
         if: steps.circleci.outputs.artifact_found == 'true'
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);

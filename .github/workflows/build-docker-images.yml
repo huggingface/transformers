@@ -29,7 +29,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -65,7 +65,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -104,7 +104,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -140,7 +140,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -174,7 +174,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -241,7 +241,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -277,7 +277,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       -
         name: Login to DockerHub
         uses: docker/login-action@v3

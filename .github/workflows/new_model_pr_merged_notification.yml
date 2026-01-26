@@ -13,7 +13,7 @@ jobs:
     name: Notify new model
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Check new model

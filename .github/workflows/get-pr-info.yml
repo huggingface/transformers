@@ -89,7 +89,7 @@ jobs:
     steps:
       - name: Extract PR details
         id: pr_info
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         with:
           script: |            
             const { data: pr } = await github.rest.pulls.get({
