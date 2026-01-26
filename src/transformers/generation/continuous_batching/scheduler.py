@@ -64,7 +64,7 @@ class Scheduler(ABC):
     @traced
     def has_pending_requests(self) -> bool:
         """Checks if there are requests ready to be processed."""
-        return len(self.active_requests) or len(self.waiting_requests)
+        return bool(len(self.active_requests) or len(self.waiting_requests))
 
     @traced
     def finish_request(self, request_id: str, evict_from_cache: bool = True) -> None:

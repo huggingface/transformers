@@ -49,7 +49,7 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         reserved_memory = 0  # MPS does not track reserved separately
     else:
         device = torch.device("cpu")
-        total_memory = None
+        total_memory = 0
         reserved_memory = 0
         allocated_memory = 0
     return device, total_memory, reserved_memory, allocated_memory
@@ -126,7 +126,7 @@ class RequestState:
     record_timestamps: bool = False  # Whether to record timestamps for the generated tokens
     num_children: int = 0  # Number of children requests
     # Internal fields
-    tokens_to_process: list[int] | None = None  # Tokens IDs currently being processed
+    tokens_to_process: list[int] = field(default_factory=list)  # Tokens IDs currently being processed
     remaining_prefill_tokens: list[int] = field(default_factory=list)  # For split requests, prefill left to process
     generated_tokens: list[int] = field(default_factory=list)  # Generated tokens
     allocated_blocks: int = 0  # Number of blocks allocated to the request
@@ -262,7 +262,7 @@ class RequestState:
             streaming=self.streaming,
             created_time=t,
             lifespan=(t, -1),
-            _timestamps=None if self.timestamps is None else self.timestamps[:],
+            _timestamps=[],
             error=self.error,
             record_timestamps=self.record_timestamps,
         )
