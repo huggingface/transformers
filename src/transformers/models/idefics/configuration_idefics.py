@@ -306,13 +306,11 @@ class IdeficsConfig(PreTrainedConfig):
         elif isinstance(vision_config, IdeficsVisionConfig):
             self.vision_config = vision_config
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
         # IMPORTANT: Do not do any __init__ args-based checks in the constructor, since
         # PreTrainedConfig.from_dict first instantiates the class with the config dict and only then

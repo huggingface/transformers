@@ -118,7 +118,6 @@ _deps = [
     "python>=3.10.0",
     "ray[tune]>=2.7.0",
     "regex!=2019.12.17",
-    "requests",
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
@@ -353,7 +352,6 @@ extras["torchhub"] = deps_list(
     "packaging",
     "protobuf",
     "regex",
-    "requests",
     "sentencepiece",
     "torch",
     "tokenizers",
@@ -374,7 +372,6 @@ install_requires = [
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
     deps["pyyaml"],  # used for the model cards metadata
     deps["regex"],  # for OpenAI GPT
-    deps["requests"],  # for downloading models over HTTPS
     deps["tokenizers"],
     deps["typer-slim"],  # CLI utilities. In practice, already a dependency of huggingface_hub
     deps["safetensors"],

@@ -147,7 +147,6 @@ _import_structure = {
         "ImageSegmentationPipeline",
         "ImageTextToTextPipeline",
         "ImageToImagePipeline",
-        "ImageToTextPipeline",
         "JsonPipelineDataFormat",
         "KeypointMatchingPipeline",
         "MaskGenerationPipeline",
@@ -157,14 +156,11 @@ _import_structure = {
         "Pipeline",
         "PipelineDataFormat",
         "QuestionAnsweringPipeline",
-        "SummarizationPipeline",
         "TableQuestionAnsweringPipeline",
-        "Text2TextGenerationPipeline",
         "TextClassificationPipeline",
         "TextGenerationPipeline",
         "TextToAudioPipeline",
         "TokenClassificationPipeline",
-        "TranslationPipeline",
         "VideoClassificationPipeline",
         "VisualQuestionAnsweringPipeline",
         "ZeroShotAudioClassificationPipeline",
@@ -659,7 +655,6 @@ if TYPE_CHECKING:
     from .pipelines import ImageSegmentationPipeline as ImageSegmentationPipeline
     from .pipelines import ImageTextToTextPipeline as ImageTextToTextPipeline
     from .pipelines import ImageToImagePipeline as ImageToImagePipeline
-    from .pipelines import ImageToTextPipeline as ImageToTextPipeline
     from .pipelines import JsonPipelineDataFormat as JsonPipelineDataFormat
     from .pipelines import KeypointMatchingPipeline as KeypointMatchingPipeline
     from .pipelines import MaskGenerationPipeline as MaskGenerationPipeline
@@ -669,14 +664,11 @@ if TYPE_CHECKING:
     from .pipelines import Pipeline as Pipeline
     from .pipelines import PipelineDataFormat as PipelineDataFormat
     from .pipelines import QuestionAnsweringPipeline as QuestionAnsweringPipeline
-    from .pipelines import SummarizationPipeline as SummarizationPipeline
     from .pipelines import TableQuestionAnsweringPipeline as TableQuestionAnsweringPipeline
-    from .pipelines import Text2TextGenerationPipeline as Text2TextGenerationPipeline
     from .pipelines import TextClassificationPipeline as TextClassificationPipeline
     from .pipelines import TextGenerationPipeline as TextGenerationPipeline
     from .pipelines import TextToAudioPipeline as TextToAudioPipeline
     from .pipelines import TokenClassificationPipeline as TokenClassificationPipeline
-    from .pipelines import TranslationPipeline as TranslationPipeline
     from .pipelines import VideoClassificationPipeline as VideoClassificationPipeline
     from .pipelines import VisualQuestionAnsweringPipeline as VisualQuestionAnsweringPipeline
     from .pipelines import ZeroShotAudioClassificationPipeline as ZeroShotAudioClassificationPipeline
