@@ -330,7 +330,14 @@ class PhimoeSparseMoeBlock(nn.Module):
 
 
 class PhimoeDecoderLayer(MixtralDecoderLayer):
-    pass
+    def __init__(self, config: PhimoeConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        # Phimoe uses nn.LayerNorm
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)
+        self.post_attention_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True
+        )
 
 
 class PhimoePreTrainedModel(MixtralPreTrainedModel):
