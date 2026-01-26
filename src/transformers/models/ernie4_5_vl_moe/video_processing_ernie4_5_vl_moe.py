@@ -22,8 +22,7 @@ import numpy as np
 import torch
 from huggingface_hub import is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
-from PIL import ImageDraw, ImageFont
-from torchvision.transforms.functional import pil_to_tensor, to_pil_image
+from PIL import Image, ImageDraw, ImageFont
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
@@ -59,6 +58,66 @@ from .image_processing_ernie4_5_vl_moe import smart_resize
 
 
 logger = logging.get_logger(__name__)
+
+
+class _TimestampOverlayCache:
+    """Cache for timestamp overlays to avoid slow torch->PIL->torch conversion."""
+
+    def __init__(self, font_path: str, max_cache_size: int = 512):
+        self.font_path = font_path
+        self.max_cache_size = max_cache_size
+        self._font_cache: dict[int, ImageFont.FreeTypeFont] = {}
+        self._overlay_cache: dict[tuple, tuple[torch.Tensor, int, int]] = {}
+
+    def _get_font(self, font_size: int) -> ImageFont.FreeTypeFont:
+        if font_size not in self._font_cache:
+            self._font_cache[font_size] = ImageFont.truetype(self.font_path, font_size)
+        return self._font_cache[font_size]
+
+    def _render_overlay(self, timestamp: str, font_size: int, outline_size: int):
+        cache_key = (timestamp, font_size, outline_size)
+        if cache_key in self._overlay_cache:
+            return self._overlay_cache[cache_key]
+
+        font = self._get_font(font_size)
+        dummy_img = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+        dummy_draw = ImageDraw.Draw(dummy_img)
+        bbox = dummy_draw.textbbox((0, 0), timestamp, font=font, stroke_width=outline_size)
+
+        text_width = bbox[2] + outline_size + 2
+        text_height = bbox[3] + outline_size + 2
+
+        overlay = Image.new("RGBA", (text_width, text_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+        draw.text((0, 0), timestamp, font=font, fill=(0, 0, 0, 255),
+                  stroke_width=outline_size, stroke_fill=(255, 255, 255))
+
+        overlay_tensor = torch.from_numpy(np.array(overlay)).permute(2, 0, 1).contiguous()
+        result = (overlay_tensor, text_width, text_height)
+
+        if len(self._overlay_cache) >= self.max_cache_size:
+            oldest_key = next(iter(self._overlay_cache))
+            del self._overlay_cache[oldest_key]
+
+        self._overlay_cache[cache_key] = result
+        return result
+
+    def apply(self, image: torch.Tensor, timestamp: str, size_factor: float = 0.1) -> torch.Tensor:
+        C, H, W = image.shape
+        font_size = int(min(H, W) * size_factor)
+        outline_size = int(font_size * size_factor)
+
+        overlay, ow, oh = self._render_overlay(timestamp, font_size, outline_size)
+        paste_h, paste_w = min(oh, H), min(ow, W)
+
+        result = image.clone()
+        alpha = overlay[3:4, :paste_h, :paste_w].float() / 255.0
+        rgb_overlay = overlay[:3, :paste_h, :paste_w].float()
+        original_region = result[:, :paste_h, :paste_w].float()
+        blended = alpha * rgb_overlay + (1.0 - alpha) * original_region
+        result[:, :paste_h, :paste_w] = blended.to(result.dtype)
+
+        return result
 
 
 class Ernie4_5_VL_MoeVideoProcessorInitKwargs(VideosKwargs, total=False):
@@ -356,33 +415,19 @@ class Ernie4_5_VL_MoeVideoProcessor(BaseVideoProcessor):
         time_stamp_in_seconds = time_stamp_in_seconds % 60
         return f"time: {int(hours):02d}:{int(mins):02d}:{time_stamp_in_seconds:05.02f}"
 
+    _timestamp_cache: _TimestampOverlayCache = None
+
+    @property
+    def timestamp_cache(self) -> _TimestampOverlayCache:
+        if self._timestamp_cache is None:
+            self._timestamp_cache = _TimestampOverlayCache(font_path=self.font)
+        return self._timestamp_cache
+
     def _render_image_with_timestamp(self, image: torch.Tensor, timestamp: str, size_factor: float = 0.1):
         """Draws a black timestamp with a white border on the corner of the frame"""
         if self.font is None:
             raise AttributeError("To draw on frames with Ernie 4.5 VL, you need an associated font; found nothing")
-
-        # FIXME: conversion `torch->PIL->torch` is inefficient ~6ms per frame
-        # Left for optimization if anyone want to pick it up
-        #
-        # This can take up to ~1s in preprocessing (if default sampling is used):
-        #   180 (frames) x 6ms = 1080ms = ~1,1s
-        image = to_pil_image(image)
-
-        font_size = int(min(*image.size) * size_factor)
-        outline_size = int(font_size * size_factor)
-        font = ImageFont.truetype(self.font, font_size)
-
-        # Draw a black text with a white border
-        draw = ImageDraw.Draw(image)
-        draw.text(
-            (0, 0),
-            timestamp,
-            font=font,
-            fill=(0, 0, 0),
-            stroke_width=outline_size,
-            stroke_fill=(255, 255, 255),
-        )
-        return pil_to_tensor(image)
+        return self.timestamp_cache.apply(image, timestamp, size_factor)
 
     def _prepare_input_videos(
         self,
