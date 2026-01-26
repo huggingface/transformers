@@ -432,9 +432,24 @@ def _split_along_last_dim(x, world_size):
 
 
 # =============================================================================
-# Distributed Communication
+# Distributed Communication Primitives
 # =============================================================================
-
+#
+# Naming convention:
+#   - Functions describe their FORWARD behavior
+#   - Backward behavior is the "conjugate" operation for gradient flow
+#
+# Available operations:
+#   ┌────────────────────┬─────────────────────┬─────────────────────┐
+#   │ Function           │ Forward             │ Backward            │
+#   ├────────────────────┼─────────────────────┼─────────────────────┤
+#   │ all_reduce         │ all-reduce (sum)    │ identity            │
+#   │ all_reduce_backward│ identity            │ all-reduce (sum)    │
+#   │ all_gather         │ all-gather          │ split (local chunk) │
+#   │ split              │ split (local chunk) │ all-gather          │
+#   │ reduce_scatter     │ reduce-scatter      │ all-gather          │
+#   └────────────────────┴─────────────────────┴─────────────────────┘
+# ===================
 
 class _AllReduceBackward(torch.autograd.Function):
     """Identity forward, all-reduce backward. Used before colwise layers (f in Megatron)."""
@@ -445,12 +460,15 @@ class _AllReduceBackward(torch.autograd.Function):
         return x
 
     @staticmethod
+    @torch._dynamo.disable
+    #NOTE(3outeille):
+    # Newer versions of PyTorch has torch.library.register_autograd in https://github.com/pytorch/pytorch/blob/8bcedd6e6029cce5f3a3731dd59be4941414c731/torch/distributed/_functional_collectives.py#L630
+    # that fix the warning "autograd kernel was not registered to the Autograd key(s) but we are trying to backprop through it"
+    # but we are forced to disable dynamo for now to make it compile-compatible for now
     def backward(ctx, grad_output):
         device_mesh = ctx.device_mesh
         if device_mesh.size() == 1:
             return grad_output, None
-        #TODO(3outeille): do it for other reduce ops as well
-        grad_output = grad_output.clone()  # Clone to avoid in-place mutation (compile-compatible)
         dist.all_reduce(grad_output, op=dist.ReduceOp.SUM, group=device_mesh.get_group())
         return grad_output, None
 
@@ -462,7 +480,6 @@ class _AllReduceForward(torch.autograd.Function):
     def forward(ctx, x, device_mesh):
         if device_mesh.size() == 1:
             return x
-        x = x.clone()  # Clone to avoid in-place mutation (compile-compatible)
         dist.all_reduce(x, op=dist.ReduceOp.SUM, group=device_mesh.get_group())
         return x
 
@@ -1233,10 +1250,15 @@ def gather_state_dict_for_save(
         param_name = key.rsplit(".", 1)[0] if "." in key else key
         param_type = key.rsplit(".", 1)[1] if "." in key else None
         generic_param_name = re.sub(r"\d+", "*", param_name)
+        # Also check the full key for nn.Parameter (e.g., MoE experts without .weight suffix)
+        generic_full_key = re.sub(r"\d+", "*", key)
 
         # Check if this parameter has a TP plan
         current_plan = None
-        if generic_param_name in tp_plan:
+        if generic_full_key in tp_plan:
+            # Full key match (e.g., "model.layers.*.mlp.experts.gate_up_proj" for MoE experts)
+            current_plan = tp_plan[generic_full_key]
+        elif generic_param_name in tp_plan:
             current_plan = tp_plan[generic_param_name]
         elif "." in generic_param_name:
             parent_param_name = generic_param_name.rsplit(".", 1)[0]
