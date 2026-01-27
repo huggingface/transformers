@@ -468,9 +468,9 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
                     # Calculate the new point based on the direction of two vectors.
                     dir_vec = vector_1 / np.linalg.norm(vector_1) + vector_2 / np.linalg.norm(vector_2)
                     dir_vec = dir_vec / np.linalg.norm(dir_vec)
-                    d = (np.linalg.norm(vector_1) + np.linalg.norm(vector_2)) / 2
-                    p_new = current_point + dir_vec * d
-                    res.append(tuple(p_new))
+                    step_size = (np.linalg.norm(vector_1) + np.linalg.norm(vector_2)) / 2
+                    new_point = current_point + dir_vec * step_size
+                    res.append(tuple(new_point))
                 else:
                     res.append(tuple(current_point))
             i += 1
@@ -490,10 +490,10 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         if not contours:
             return None
 
-        cnt = max(contours, key=cv2.contourArea)
-        epsilon = epsilon_ratio * cv2.arcLength(cnt, True)
-        approx_cnt = cv2.approxPolyDP(cnt, epsilon, True)
-        polygon_points = approx_cnt.squeeze()
+        contours = max(contours, key=cv2.contourArea)
+        epsilon = epsilon_ratio * cv2.arcLength(contours, True)
+        approx_contours = cv2.approxPolyDP(contours, epsilon, True)
+        polygon_points = approx_contours.squeeze()
         polygon_points = np.atleast_2d(polygon_points)
 
         polygon_points = self.extract_custom_vertices(polygon_points)
@@ -501,7 +501,7 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         return polygon_points
 
     def _extract_polygon_points_by_masks(self, boxes, masks, scale_ratio):
-        scale_w, scale_h = scale_ratio[0] / 4, scale_ratio[1] / 4
+        scale_width, scale_height = scale_ratio[0] / 4, scale_ratio[1] / 4
         mask_height, mask_width = masks.shape[1:]
         polygon_points = []
 
@@ -520,9 +520,9 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
                 continue
 
             # crop mask
-            x_coordinates = [int(round((x_min * scale_w).item())), int(round((x_max * scale_w).item()))]
+            x_coordinates = [int(round((x_min * scale_width).item())), int(round((x_max * scale_width).item()))]
             x_start, x_end = np.clip(x_coordinates, 0, mask_width)
-            y_coordinates = [int(round((y_min * scale_h).item())), int(round((y_max * scale_h).item()))]
+            y_coordinates = [int(round((y_min * scale_height).item())), int(round((y_max * scale_height).item()))]
             y_start, y_end = np.clip(y_coordinates, 0, mask_height)
             cropped_mask = masks[i, y_start:y_end, x_start:x_end]
 
@@ -576,11 +576,11 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
             if isinstance(target_sizes, list):
-                img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
+                img_height, img_width = torch.as_tensor(target_sizes).unbind(1)
             else:
-                img_h, img_w = target_sizes.unbind(1)
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-            boxes = boxes * scale_fct[:, None, :]
+                img_height, img_width = target_sizes.unbind(1)
+            scale_factor = torch.stack([img_width, img_height, img_width, img_height], dim=1).to(boxes.device)
+            boxes = boxes * scale_factor[:, None, :]
 
         num_top_queries = logits.shape[1]
         num_classes = logits.shape[2]
@@ -905,7 +905,7 @@ class PPDocLayoutV3MaskFeatFPN(nn.Module):
         return output
 
 
-class EncoderMaskOutput(nn.Module):
+class PPDocLayoutV3EncoderMaskOutput(nn.Module):
     def __init__(self, in_channels, num_prototypes):
         super().__init__()
         self.base_conv = PPDocLayoutV3ConvLayer(in_channels, in_channels, 3, 1, "silu")
@@ -936,7 +936,7 @@ class PPDocLayoutV3HybridEncoder(RTDetrHybridEncoder):
             out_channels=mask_feature_channels[1],
         )
         self.encoder_mask_lateral = PPDocLayoutV3ConvLayer(config.x4_feat_dim, mask_feature_channels[1], 3, 1, "silu")
-        self.encoder_mask_output = EncoderMaskOutput(
+        self.encoder_mask_output = PPDocLayoutV3EncoderMaskOutput(
             in_channels=mask_feature_channels[1], num_prototypes=config.num_prototypes
         )
 

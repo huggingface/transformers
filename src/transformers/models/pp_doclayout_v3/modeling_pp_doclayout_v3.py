@@ -510,7 +510,7 @@ class PPDocLayoutV3MaskFeatFPN(nn.Module):
         return output
 
 
-class EncoderMaskOutput(nn.Module):
+class PPDocLayoutV3EncoderMaskOutput(nn.Module):
     def __init__(self, in_channels, num_prototypes):
         super().__init__()
         self.base_conv = PPDocLayoutV3ConvLayer(in_channels, in_channels, 3, 1, "silu")
@@ -879,7 +879,7 @@ class PPDocLayoutV3HybridEncoder(nn.Module):
             out_channels=mask_feature_channels[1],
         )
         self.encoder_mask_lateral = PPDocLayoutV3ConvLayer(config.x4_feat_dim, mask_feature_channels[1], 3, 1, "silu")
-        self.encoder_mask_output = EncoderMaskOutput(
+        self.encoder_mask_output = PPDocLayoutV3EncoderMaskOutput(
             in_channels=mask_feature_channels[1], num_prototypes=config.num_prototypes
         )
 
