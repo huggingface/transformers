@@ -163,9 +163,7 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
             expected_mask[i, :] = torch.tensor([minus_inf if c == "0" else 0 for c in line])
         # Build actual mask
         actual_mask = torch.full_like(expected_mask, minus_inf)  # function modifies in place
-        build_attention_mask(
-            actual_mask, cumulative_seqlens_q, cumulative_seqlens_k, sliding_window
-        )
+        build_attention_mask(actual_mask, cumulative_seqlens_q, cumulative_seqlens_k, sliding_window)
         # Check that the actual mask matches the expected mask
         matches = (expected_mask == actual_mask).all()
         # If it doesn't match, print the masks in a readable form and fail the test
