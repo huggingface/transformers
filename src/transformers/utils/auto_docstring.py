@@ -14,12 +14,11 @@
 
 import inspect
 import os
+import re
 import textwrap
 from pathlib import Path
 from types import UnionType
 from typing import Union, get_args, get_origin
-
-import regex as re
 
 from .doc import (
     MODELS_TO_PIPELINE,

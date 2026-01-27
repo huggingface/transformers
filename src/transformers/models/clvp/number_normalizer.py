@@ -14,14 +14,7 @@
 
 """English Normalizer class for CLVP."""
 
-import sys
-
-
-if sys.version_info >= (3, 11):
-    # Atomic grouping support was only added to the core RE in Python 3.11
-    import re
-else:
-    import regex as re
+import re
 
 
 class EnglishNormalizer:
@@ -208,8 +201,8 @@ class EnglishNormalizer:
         text = re.sub(r"([0-9][0-9,]+[0-9])", self._remove_commas, text)
         text = re.sub(r"£([0-9,]*[0-9])", r"\1 pounds", text)
         text = re.sub(r"\$([0-9.,]*[0-9])", self._expand_dollars, text)
-        text = re.sub(r"([0-9]++\.[0-9]+)", self._expand_decimal_point, text)
-        text = re.sub(r"[0-9]++(st|nd|rd|th)", self._expand_ordinal, text)
+        text = re.sub(r"([0-9]+\.[0-9]+)", self._expand_decimal_point, text)
+        text = re.sub(r"[0-9]+(st|nd|rd|th)", self._expand_ordinal, text)
         text = re.sub(r"[0-9]+", self._expand_number, text)
         return text
 
