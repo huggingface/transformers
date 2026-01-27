@@ -225,22 +225,16 @@ extras = {}
 extras["torch"] = deps_list("torch", "accelerate")
 extras["sklearn"] = deps_list("scikit-learn")
 extras["accelerate"] = deps_list("accelerate")
+extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich")
 extras["retrieval"] = deps_list("faiss-cpu", "datasets")
 extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
 extras["hub-kernels"] = deps_list("kernels")
-
 extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"]
-
 extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"]
-extras["audio"] = deps_list(
-    "librosa",
-    "pyctcdecode",
-    "phonemizer",
-    "kenlm",
-)
+extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
@@ -253,7 +247,9 @@ extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["mistral-common"] = deps_list("mistral-common[image]")
 extras["chat_template"] = deps_list("jinja2", "jmespath")
+extras["benchmark"] = deps_list("optimum-benchmark")
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
+
 extras["testing"] = (
     deps_list(
         "pytest",
@@ -287,19 +283,15 @@ extras["testing"] = (
     + extras["mistral-common"]
     + extras["serving"]
 )
-
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
-extras["ruff"] = deps_list("ruff")
-extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich")
 
 extras["all"] = (
     extras["torch"]
-    + extras["sentencepiece"]
     + extras["torch-speech"]
-    + extras["vision"]
+    + extras["torch-vision"]
+    + extras["sentencepiece"]
     + extras["integrations"]
     + extras["timm"]
-    + extras["torch-vision"]
     + extras["codecarbon"]
     + extras["accelerate"]
     + extras["video"]
@@ -307,13 +299,11 @@ extras["all"] = (
     + extras["mistral-common"]
     + extras["chat_template"]
 )
-
 extras["dev-torch"] = (
     extras["testing"]
     + extras["torch"]
     + extras["sentencepiece"]
     + extras["torch-speech"]
-    + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
     + extras["torch-vision"]
@@ -323,17 +313,13 @@ extras["dev-torch"] = (
     + extras["sklearn"]
     + extras["num2words"]
 )
-
 extras["dev"] = extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["sklearn"]
-
-
-extras["benchmark"] = deps_list("optimum-benchmark")
 
 # OpenTelemetry dependencies for metrics collection in continuous batching
 # TODO: refactor this to split API and SDK; SDK and exporter should only be needed to run code that collects metrics whereas API is what people will need to instrument their code and handle exporter themselves
 extras["open-telemetry"] = deps_list("opentelemetry-api") + ["opentelemetry-exporter-otlp", "opentelemetry-sdk"]
 
-# when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
+
 install_requires = [
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
     deps["huggingface-hub"],
@@ -381,11 +367,3 @@ setup(
     ],
     cmdclass={"deps_table_update": DepsTableUpdateCommand},
 )
-
-extras["tests_torch"] = deps_list()
-extras["tests_hub"] = deps_list()
-extras["tests_pipelines_torch"] = deps_list()
-extras["tests_examples_torch"] = deps_list()
-extras["tests_custom_tokenizers"] = deps_list()
-extras["tests_exotic_models"] = deps_list()
-extras["consistency"] = deps_list()
