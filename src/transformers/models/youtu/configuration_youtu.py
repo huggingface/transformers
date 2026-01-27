@@ -26,31 +26,60 @@ class YoutuConfig(DeepseekV3Config):
     Configuration objects inherit from [`DeepseekV3Config`] and can be used to control the model outputs. Read the
     documentation from [`DeepseekV3Config`] for more information.
     Args:
-            vocab_size (`int | None`, *optional*, defaults to 128256): <fill_docstring>
-            hidden_size (`int | None`, *optional*, defaults to 2048): <fill_docstring>
-            intermediate_size (`int | None`, *optional*, defaults to 6144): <fill_docstring>
-            num_hidden_layers (`int | None`, *optional*, defaults to 32): <fill_docstring>
-            num_attention_heads (`int | None`, *optional*, defaults to 16): <fill_docstring>
-            num_key_value_heads (`int | None`, *optional*, defaults to 16): <fill_docstring>
-            kv_lora_rank (`int | None`, *optional*, defaults to 512): <fill_docstring>
-            q_lora_rank (`int | None`, *optional*, defaults to 1536): <fill_docstring>
-            qk_rope_head_dim (`int | None`, *optional*, defaults to 64): <fill_docstring>
-            v_head_dim (`int | None`, *optional*, defaults to 128): <fill_docstring>
-            qk_nope_head_dim (`int | None`, *optional*, defaults to 128): <fill_docstring>
-            hidden_act (`str | None`, *optional*, defaults to `"silu"`): <fill_docstring>
-            max_position_embeddings (`int | None`, *optional*, defaults to 131072): <fill_docstring>
-            initializer_range (`float | None`, *optional*): <fill_docstring>
-            embedding_initializer_range (`float | None`, *optional*): <fill_docstring>
-            rms_norm_eps (`int | None`, *optional*, defaults to 1e-06): <fill_docstring>
-            use_cache (`bool | None`, *optional*, defaults to `True`): <fill_docstring>
-            pad_token_id (`int | None`, *optional*): <fill_docstring>
-            bos_token_id (`int | None`, *optional*, defaults to 128000): <fill_docstring>
-            eos_token_id (`int | None`, *optional*, defaults to 128001): <fill_docstring>
-            tie_word_embeddings (`bool | None`, *optional*, defaults to `True`): <fill_docstring>
-            rope_parameters (`transformers.modeling_rope_utils.RopeParameters | dict[str, transformers.modeling_rope_utils.RopeParameters]`, *optional*): <fill_docstring>
-            rope_interleave (`bool | None`, *optional*, defaults to `True`): <fill_docstring>
-            attention_bias (`bool | None`, *optional*, defaults to `False`): <fill_docstring>
-            attention_dropout (`float | None`, *optional*, defaults to 0.0): <fill_docstring>
+            vocab_size (`int`, *optional*, defaults to 128256):
+                Vocabulary size of the Deep model. Defines the number of different tokens that can be represented by the
+                `inputs_ids` passed when calling [`YoutuModel`]
+            hidden_size (`int`, *optional*, defaults to 2048):
+                Dimension of the hidden representations.
+            intermediate_size (`int`, *optional*, defaults to 6144):
+                Dimension of the MLP representations.
+            num_hidden_layers (`int`, *optional*, defaults to 32):
+                Number of hidden layers in the Transformer decoder.
+            num_attention_heads (`int`, *optional*, defaults to 16):
+                Number of attention heads for each attention layer in the Transformer decoder.
+            num_key_value_heads (`int`, *optional*, defaults to 16):
+                In MLA, num_key_value_heads=num_attention_heads.
+            kv_lora_rank (`int`, *optional*, defaults to 512):
+                Rank of the LoRA matrices for key and value projections.
+            q_lora_rank (`int`, *optional*, defaults to 1536):
+                Rank of the LoRA matrices for query projections.
+            qk_rope_head_dim (`int`, *optional*, defaults to 64):
+                Dimension of the query/key heads that use rotary position embeddings.
+            v_head_dim (`int`, *optional*, defaults to 128):
+                Dimension of the value heads.
+            qk_nope_head_dim (`int`, *optional*, defaults to 128):
+                Dimension of the query/key heads that don't use rotary position embeddings.
+            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+                The non-linear activation function (function or string) in the decoder.
+            max_position_embeddings (`int`, *optional*, defaults to 131072):
+                The maximum sequence length that this model might ever be used with.
+            initializer_range (`float`, *optional*):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices, except embedding matrices.
+            embedding_initializer_range (`float`, *optional*):
+                The standard deviation of the truncated_normal_initializer for initializing all embedding matrices.
+            rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+                The epsilon used by the rms normalization layers.
+            use_cache (`bool`, *optional*, defaults to `True`):
+                Whether or not the model should return the last key/values attentions (not used by all models). Only
+                relevant if `config.is_decoder=True`.
+            pad_token_id (`int`, *optional*):
+                Padding token id.
+            bos_token_id (`int`, *optional*, defaults to 128000):
+                Beginning of stream token id.
+            eos_token_id (`int`, *optional*, defaults to 128001):
+                End of stream token id.
+            tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+                Whether to tie weight embeddings
+            rope_parameters (`RopeParameters`, *optional*):
+                Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+                a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+                with longer `max_position_embeddings`.
+            rope_interleave (`bool`, *optional*, defaults to `True`):
+                Whether to interleave the rotary position embeddings.
+            attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
+                Whether to use a bias in the query, key, value and output projection layers during self-attention.
+            attention_dropout (`float`, *optional*, defaults to 0.0):
+                The dropout ratio for the attention probabilities.
     ```python
     >>> from transformers import YoutuModel, YoutuConfig
     >>> # Initializing a Youtu-LLM-2B style configuration
