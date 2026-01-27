@@ -14,6 +14,7 @@
 # limitations under the License.
 import queue
 import threading
+from abc import abstractmethod
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -200,12 +201,12 @@ class ProtoPretrainedModel(nn.Module):
     dtype: torch.dtype
     device: torch.device
 
-    def __init__(self) -> None:
-        raise NotImplementedError(
-            "This is strictly a stub class to help type check the code, it should never be instantiated"
-        )
-
+    @abstractmethod
     def set_attn_implementation(self, attn_implementation: str) -> None:
+        pass
+
+    @abstractmethod
+    def _get_logits_processor(self, generation_config: GenerationConfig) -> LogitsProcessorList:
         pass
 
 
@@ -820,8 +821,8 @@ class ContinuousBatchProcessor:
         # NOTE: to be an exact match with generate, we should also convert logits2d to float32 here, but it's not needed in practice
         logits_2d = logits.view(batch_size * seq_len, vocab_size)
         input_ids_2d = batch_data["input_ids"].view(batch_size * seq_len)
-        # Process with 2D tensors
-        processed_logits_2d = logit_processor(input_ids_2d, logits_2d)
+        # Process with 2D tensors#
+        processed_logits_2d = logit_processor(input_ids_2d, logits_2d)  # type: ignore[arg-type]
         # Reshape back to 3D
         return processed_logits_2d.view(batch_size, seq_len, vocab_size)
 
@@ -893,7 +894,7 @@ class ContinuousBatchingManager:
         self.generation_config = generation_config
         self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
         self.do_sample = getattr(generation_config, "do_sample", True)
-        self.logit_processor: LogitsProcessorList = self.model._get_logits_processor(generation_config)  # type:ignore[assignment]
+        self.logit_processor: LogitsProcessorList = self.model._get_logits_processor(generation_config)
         num_return_sequences = getattr(generation_config, "num_return_sequences", None)
         self.num_return_sequences = num_return_sequences if num_return_sequences is not None else 1
 
@@ -1126,7 +1127,9 @@ class ContinuousBatchingManager:
 
     @traced
     def _generation_step(self) -> None:
-        """Perform a single generation step. This is cuda graphed"""
+        """Perform a single generation step. This is mostly cuda graphed"""
+        if self.batch_processor is None:
+            raise RuntimeError("Tried to perform a generation step before the batch processor was initialized.")
         self.batch_processor._generation_step(self.model, self.logit_processor, self.do_sample)
 
     def _run_generation_loop(self) -> None:
@@ -1226,7 +1229,7 @@ class ContinuousBatchingManager:
 class ContinuousMixin:
     """Mixin class for models to add continuous batching capabilities."""
 
-    generation_config: GenerationConfig | None
+    generation_config: GenerationConfig
 
     @contextmanager
     def continuous_batching_context_manager(
