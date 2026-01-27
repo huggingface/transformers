@@ -1034,10 +1034,17 @@ class EomtDinov3ForUniversalSegmentationOutput(ModelOutput):
     patch_offsets: list[torch.Tensor] | None = None
 
 
+@auto_docstring
 class EomtDinov3PreTrainedModel(PreTrainedModel):
-    config_class = EomtDinov3Config
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config: EomtDinov3Config
     base_model_prefix = "eomt"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = False
     _no_split_modules = ["EomtDinov3Layer"]
     _supports_sdpa = True
@@ -1045,7 +1052,9 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
         "hidden_states": EomtDinov3Layer,
         "attentions": EomtDinov3Attention,
     }
+    config_class = EomtDinov3Config
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         super()._init_weights(module)
         std = self.config.initializer_range

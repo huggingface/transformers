@@ -38,6 +38,7 @@ from ..eomt.modeling_eomt import (
     EomtForUniversalSegmentation,
     EomtForUniversalSegmentationOutput,
     EomtLoss,
+    EomtPreTrainedModel,
 )
 
 
@@ -264,7 +265,7 @@ class EomtDinov3ForUniversalSegmentationOutput(EomtForUniversalSegmentationOutpu
     pass
 
 
-class EomtDinov3PreTrainedModel(PreTrainedModel):
+class EomtDinov3PreTrainedModel(EomtPreTrainedModel):
     config_class = EomtDinov3Config
     base_model_prefix = "eomt"
     main_input_name = "pixel_values"
@@ -277,7 +278,7 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module: nn.Module) -> None:
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, EomtDinov3LayerScale):
             if hasattr(module, "lambda1"):
