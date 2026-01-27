@@ -36,12 +36,12 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.generic import OutputRecorder, TransformersKwargs, is_flash_attention_requested
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import OutputRecorder, is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_sam3_tracker_video import (
     Sam3TrackerVideoConfig,
@@ -1136,16 +1136,10 @@ class Sam3TrackerVideoMemoryEncoder(nn.Module):
 
 @dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
-class Sam3TrackerVideoVisionEncoderOutput(ModelOutput):
+class Sam3TrackerVideoVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    fpn_hidden_states (`tuple(torch.FloatTensor)`):
-        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
-        `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
-    fpn_position_encoding (`tuple(torch.FloatTensor)`):
-        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
-        `(batch_size, hidden_size, height, width)`. Positional encodings corresponding to the `fpn_hidden_states`.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`. Hidden-states of the
@@ -1154,13 +1148,16 @@ class Sam3TrackerVideoVisionEncoderOutput(ModelOutput):
         Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
         the self-attention heads.
+    fpn_hidden_states (`tuple(torch.FloatTensor)`):
+        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
+        `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
+    fpn_position_encoding (`tuple(torch.FloatTensor)`):
+        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
+        `(batch_size, hidden_size, height, width)`. Positional encodings corresponding to the `fpn_hidden_states`.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
     fpn_hidden_states: torch.FloatTensor | None = None
     fpn_position_encoding: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class Sam3TrackerVideoPositionalEmbedding(nn.Module):
@@ -1591,6 +1588,7 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
     input_modalities = ("video", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerVideoTwoWayAttentionBlock, index=2)}
+    _tied_weights_keys = {}
     _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
     _checkpoint_conversion_mapping = {
         r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
@@ -1687,7 +1685,8 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
                 Input pixel values
         """
         batch_size = pixel_values.shape[0]
-        feature_maps, _, _, _ = self.get_image_features(pixel_values, **kwargs)
+        image_outputs = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+        feature_maps = image_outputs.fpn_hidden_states
 
         # add no memory embedding to the last feature map
         feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -1858,33 +1857,19 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             frame_idx=frame_idx,
         )
 
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[
-        list[torch.Tensor],
-        list[torch.Tensor],
-        tuple[torch.FloatTensor, ...] | None,
-        tuple[torch.FloatTensor, ...] | None,
-    ]:
+    ) -> tuple | Sam3TrackerVideoVisionEncoderOutput:
         r"""
-        Extract and preprocess image features using the vision encoder.
-
-        Args:
-            pixel_values (`torch.FloatTensor`):
-                Input pixel values of shape `(batch_size, num_channels, height, width)`.
-
-        Returns:
-            `tuple`: A tuple containing:
-                - feature_maps (`list[torch.Tensor]`): List of feature maps from different levels.
-                - feature_maps_position_embeddings (`list[torch.Tensor]`): List of positional embeddings for each feature level.
-                - vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*): Hidden states from the vision encoder.
-                - vision_attentions (`tuple[torch.FloatTensor]`, *optional*): Attention weights from the vision encoder.
+        pixel_values (`torch.FloatTensor`):
+            Input pixel values of shape `(batch_size, num_channels, height, width)`.
         """
         vision_outputs: Sam3TrackerVideoVisionEncoderOutput = self.vision_encoder(
-            pixel_values,
-            **kwargs,
+            pixel_values, return_dict=True, **kwargs
         )
 
         feature_maps = vision_outputs.fpn_hidden_states
@@ -1902,8 +1887,10 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             feature_map_position_embedding.flatten(2).permute(2, 0, 1)
             for feature_map_position_embedding in feature_maps_position_embeddings[:-1]
         ]
+        vision_outputs.fpn_hidden_states = feature_maps
+        vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 
-        return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
+        return vision_outputs
 
     def _prepare_vision_features(
         self,
@@ -1920,7 +1907,9 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         else:
             # Compute features using image encoder
             image_batch = inference_session.get_frame(frame_idx).unsqueeze(0)  # Add batch dimension
-            vision_feats, vision_pos_embeds, _, _ = self.get_image_features(image_batch)
+            image_outputs = self.get_image_features(image_batch, return_dict=True)
+            vision_feats = image_outputs.fpn_hidden_states
+            vision_pos_embeds = image_outputs.fpn_position_encoding
             # Cache features
             inference_session.cache.cache_vision_features(
                 frame_idx, {"vision_feats": vision_feats, "vision_pos_embeds": vision_pos_embeds}
@@ -2025,10 +2014,10 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            feature_maps, _, vision_hidden_states, vision_attentions = self.get_image_features(
-                pixel_values,
-                **kwargs,
-            )
+            image_outputs = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+            feature_maps = image_outputs.fpn_hidden_states
+            vision_hidden_states = image_outputs.hidden_states
+            vision_attentions = image_outputs.attentions
 
             # add no memory embedding to the last feature map
             feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -2518,7 +2507,7 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
                 num_object_pointer_tokens = object_pointers.shape[0]
 
         # Step 4: Concatenate all retrieved memories and their positional embeddings
-        combined_memory = torch.cat(memories_to_concatenate, dim=0)
+        combined_memory = torch.cat(memories_to_concatenate, dim=0).to(dtype=inference_session.dtype)
         combined_memory_positional_embeddings = torch.cat(memory_positional_embeddings_to_concatenate, dim=0)
 
         # Step 5: Forward through the memory attention mechanism

@@ -58,16 +58,16 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.language_model.get_input_embeddings()
+        return self.model.get_decoder().get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.model.language_model.set_input_embeddings(value)
+        self.model.get_decoder().set_input_embeddings(value)
 
     def get_output_embeddings(self):
-        return self.model.language_model.get_output_embeddings()
+        return self.model.get_decoder().get_output_embeddings()
 
     def set_output_embeddings(self, new_embeddings):
-        self.model.language_model.set_output_embeddings(new_embeddings)
+        self.model.get_decoder().set_output_embeddings(new_embeddings)
 
     @auto_docstring
     def forward(
