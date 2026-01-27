@@ -118,9 +118,27 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         if hasattr(module, "init_non_persistent_buffers"):
             module.init_non_persistent_buffers()
         elif isinstance(module, nn.BatchNorm2d):
+            # PyTorch's BatchNorm2d always registers all three buffers together, so we only check one
             running_mean = getattr(module, "running_mean", None)
-            if running_mean is not None and running_mean.device.type == "meta":
-                # Only initialize if on meta device (uninitialized), not if already loaded from pretrained
+
+            # Determine if buffers need initialization based on two cases:
+            # 1. Meta device case: Model created with `with torch.device("meta"):`
+            #    - Buffers are on meta device and uninitialized
+            # 2. to_empty() case: Model moved from meta to real device via `model.to_empty(device="cpu")`
+            #    - Buffers are moved to real device but contain invalid values (zeros)
+            #    - running_var with zeros is invalid (should be ones for proper normalization)
+            #    - This is tested by test_init_weights_can_init_buffers
+            # We do NOT reinitialize if buffers are already loaded from pretrained (running_var will have positive values)
+            needs_init = False
+            if running_mean is not None:
+                if running_mean.device.type == "meta":
+                    needs_init = True
+                elif module.running_var is not None and module.running_var.device.type != "meta":
+                    # After to_empty(), buffers are on real device but have invalid values
+                    # Only check for <= 0 (valid running_var must be positive)
+                    needs_init = (module.running_var <= 0).any()
+
+            if needs_init:
                 init.zeros_(module.running_mean)
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
