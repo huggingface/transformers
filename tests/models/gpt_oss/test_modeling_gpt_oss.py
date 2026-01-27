@@ -120,6 +120,9 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     def test_generate_compile_model_forward_fullgraph(self):
         return super().test_generate_compile_model_forward_fullgraph()
 
+    def test_reverse_loading_mapping(self, check_keys_were_modified=False):
+        super().test_reverse_loading_mapping(check_keys_were_modified)
+
 
 RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/gpt_oss/integration_tests.json"
 

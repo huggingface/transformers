@@ -184,26 +184,5 @@ class MiniMaxM2Config(PreTrainedConfig):
 
         super().__init__(**kwargs)
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or self.rope_parameters
-        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
-
-        # Standardize and validate the correctness of rotary position embeddings parameters
-        # Model uses non-standard naming for rope params, overwrite!
-        self.rope_parameters.setdefault("rope_theta", self.default_theta)
-        self.rope_parameters["partial_rotary_factor"] = (
-            kwargs.pop("rotary_dim", self.head_dim // 2) / self.head_dim
-        )  # Default to `0.5`
-        self.standardize_rope_params()
-
-        if ignore_keys_at_rope_validation is None:
-            ignore_keys_at_rope_validation = {"partial_rotary_factor"}
-        else:
-            ignore_keys_at_rope_validation |= {"partial_rotary_factor"}
-
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
-        return kwargs
-
 
 __all__ = ["MiniMaxM2Config"]
