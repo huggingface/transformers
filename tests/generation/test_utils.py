@@ -1496,6 +1496,11 @@ class GenerationTesterMixin:
             set_model_for_less_flaky_test(model)
             model.eval()  # otherwise `self.training` is `True` -- this flag is used at attn mask creation time
 
+            # On CPU, we don't switch to batched_mm during decoding, so the grouped_mm is what gets compiled.
+            # But since grouped_mm only supports bf16 when compiled, we need to switch to bf16 here.
+            if model.device.type == "cpu" and model.config._experts_implementation == "grouped_mm":
+                model = model.to(torch.bfloat16)
+
             # Some composite models have a custom generate and will call an inner model's generate -> that inner model
             # is the one that gets compiled.
             # (Note for the future: if BLIP starts causing problems, let's stop testing it)
@@ -1615,6 +1620,11 @@ class GenerationTesterMixin:
             if self.has_attentions:
                 config._attn_implementation = "eager"  # can't output attentions otherwise
             model = model_class(config).to(torch_device).eval()
+
+            # On CPU, we don't switch to batched_mm during decoding, so the grouped_mm is what gets compiled.
+            # But since grouped_mm only supports bf16 when compiled, we need to switch to bf16 here.
+            if model.device.type == "cpu" and model.config._experts_implementation == "grouped_mm":
+                model = model.to(torch.bfloat16)
 
             # compilation-specific setup
             torch.compiler.reset()  # prevent cached compilation from being used in the test
