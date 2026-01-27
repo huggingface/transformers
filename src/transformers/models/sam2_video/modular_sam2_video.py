@@ -607,24 +607,6 @@ class Sam2VideoInferenceSession:
 
 
 class Sam2VideoProcessor(Sam2Processor):
-    r"""
-    Constructs a SAM2 processor which wraps a SAM2 image processor and an 2D points & Bounding boxes processor into a
-    single processor.
-
-    [`Sam2VideoProcessor`] offers all the functionalities of [`Sam2ImageProcessorFast`] and [`Sam2VideoProcessor`]. See the docstring of
-    [`~Sam2ImageProcessorFast.__call__`] and [`~Sam2VideoProcessor.__call__`] for more information.
-
-    Args:
-        image_processor (`Sam2ImageProcessorFast`):
-            An instance of [`Sam2ImageProcessorFast`].
-        video_processor (`Sam2VideoVideoProcessor`):
-            An instance of [`Sam2VideoVideoProcessor`].
-        target_size (`int`, *optional*):
-            The target size (target_size, target_size) to which the image will be resized.
-        point_pad_value (`int`, *optional*, defaults to -10):
-            The value used for padding input points.
-    """
-
     def __init__(
         self, image_processor, video_processor, target_size: int | None = None, point_pad_value: int = -10, **kwargs
     ):
@@ -995,7 +977,7 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = "video"
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_attention_backend = True
 
     @torch.no_grad()
@@ -1552,7 +1534,9 @@ class Sam2VideoModel(Sam2Model):
         else:
             # Compute features using image encoder
             image_batch = inference_session.get_frame(frame_idx).unsqueeze(0)  # Add batch dimension
-            vision_feats, vision_pos_embeds, _, _ = self.get_image_features(image_batch)
+            image_outputs = self.get_image_features(image_batch, return_dict=True)
+            vision_feats = image_outputs.fpn_hidden_states
+            vision_pos_embeds = image_outputs.fpn_position_encoding
             # Cache features
             inference_session.cache.cache_vision_features(
                 frame_idx, {"vision_feats": vision_feats, "vision_pos_embeds": vision_pos_embeds}
@@ -1657,10 +1641,10 @@ class Sam2VideoModel(Sam2Model):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            feature_maps, _, vision_hidden_states, vision_attentions = self.get_image_features(
-                pixel_values,
-                **kwargs,
-            )
+            image_outputs = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+            feature_maps = image_outputs.fpn_hidden_states
+            vision_hidden_states = image_outputs.hidden_states
+            vision_attentions = image_outputs.attentions
 
             # add no memory embedding to the last feature map
             feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -2150,7 +2134,7 @@ class Sam2VideoModel(Sam2Model):
                 num_object_pointer_tokens = object_pointers.shape[0]
 
         # Step 4: Concatenate all retrieved memories and their positional embeddings
-        combined_memory = torch.cat(memories_to_concatenate, dim=0)
+        combined_memory = torch.cat(memories_to_concatenate, dim=0).to(dtype=inference_session.dtype)
         combined_memory_positional_embeddings = torch.cat(memory_positional_embeddings_to_concatenate, dim=0)
 
         # Step 5: Forward through the memory attention mechanism

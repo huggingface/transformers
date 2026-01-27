@@ -13,8 +13,6 @@
 # limitations under the License.
 """Image processor class for LLaVa."""
 
-from typing import Union
-
 import numpy as np
 
 from ...image_processing_utils import (
@@ -38,7 +36,7 @@ from ...utils import TensorType, auto_docstring, is_torchvision_available, loggi
 
 if is_torchvision_available():
     import torch
-    from torchvision.transforms.v2 import functional as F
+    from torchvision.transforms.v2 import functional as tvF
 
 logger = logging.get_logger(__name__)
 
@@ -80,7 +78,7 @@ class LlavaTorchVisionBackend(TorchVisionBackend):
         paste_y_left = (max_dim - height) // 2
         paste_x_right = max_dim - width - paste_x_left
         paste_y_right = max_dim - height - paste_y_left
-        padded_images = F.pad(
+        padded_images = tvF.pad(
             images, padding=[paste_x_left, paste_y_left, paste_x_right, paste_y_right], fill=background_color
         )
 
@@ -91,7 +89,7 @@ class LlavaTorchVisionBackend(TorchVisionBackend):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: Union["PILImageResampling", "F.InterpolationMode", int, None],
+        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -148,7 +146,7 @@ class LlavaPythonBackend(PythonBackend):
     def pad_to_square(
         self,
         image: np.ndarray,
-        background_color: Union[int, tuple[int, int, int]] = 0,
+        background_color: int | tuple[int, int, int] = 0,
     ) -> np.ndarray:
         """
         Pads an image to a square based on the longest edge.
@@ -195,7 +193,7 @@ class LlavaPythonBackend(PythonBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: Union["PILImageResampling", "F.InterpolationMode", int, None],
+        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

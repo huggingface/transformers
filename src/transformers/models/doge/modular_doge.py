@@ -30,7 +30,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...integrations.flex_attention import compile_friendly_flex_attention
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import AttentionInterface, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, is_torch_flex_attn_available, logging
@@ -54,7 +54,7 @@ if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
 
 
-class DogeConfig(PreTrainedConfig):
+class DogeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`DogeModel`]. It is used to instantiate an Doge
     model according to the specified arguments, defining the model architecture like [SmallDoge/Doge-320M](https://huggingface.co/SmallDoge/Doge-320M).
@@ -122,6 +122,12 @@ class DogeConfig(PreTrainedConfig):
             allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import DogeConfig, DogeModel
@@ -185,6 +191,9 @@ class DogeConfig(PreTrainedConfig):
         norm_topk_prob: bool | None = False,
         output_router_logits: bool | None = False,
         router_aux_loss_coef: float | None = 0.001,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -212,16 +221,17 @@ class DogeConfig(PreTrainedConfig):
         self.norm_topk_prob = norm_topk_prob
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.rope_parameters = rope_parameters
 
         # for backward compatibility
         if num_key_value_heads is None:
             self.num_key_value_heads = num_attention_heads
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 class DogeRMSNorm(LlamaRMSNorm):

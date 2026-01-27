@@ -14,14 +14,14 @@
 """StableLM model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class StableLmConfig(PreTrainedConfig):
+class StableLmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`~StableLmModel`].
     It is used to instantiate an StableLM model according to the specified arguments, defining the model
@@ -145,12 +145,10 @@ class StableLmConfig(PreTrainedConfig):
         self.rope_parameters = rope_parameters
         kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
 
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["StableLmConfig"]

@@ -15,11 +15,10 @@
 Processor class for Blip.
 """
 
-from typing import Optional, Union
-
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...utils import auto_docstring
 
 
 class BlipProcessorKwargs(ProcessingKwargs, total=False):
@@ -38,48 +37,19 @@ class BlipProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class BlipProcessor(ProcessorMixin):
-    r"""
-    Constructs a BLIP processor which wraps a BERT tokenizer and BLIP image processor into a single processor.
-
-    [`BlipProcessor`] offers all the functionalities of [`BlipImageProcessor`] and [`BertTokenizerFast`]. See the
-    docstring of [`~BlipProcessor.__call__`] and [`~BlipProcessor.decode`] for more information.
-
-    Args:
-        image_processor (`BlipImageProcessor`):
-            An instance of [`BlipImageProcessor`]. The image processor is a required input.
-        tokenizer (`BertTokenizerFast`):
-            An instance of ['BertTokenizerFast`]. The tokenizer is a required input.
-    """
-
     def __init__(self, image_processor, tokenizer, **kwargs):
         tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: str | list[str] | TextInput | PreTokenizedInput | None = None,
         **kwargs: Unpack[BlipProcessorKwargs],
     ) -> BatchEncoding:
-        """
-        This method uses [`BlipImageProcessor.__call__`] method to prepare image(s) for the model, and
-        [`BertTokenizerFast.__call__`] to prepare text for the model.
-
-        Please refer to the docstring of the above two methods for more information.
-        Args:
-            images (`ImageInput`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                    - `'np'`: Return NumPy `np.ndarray` objects.
-        """
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 

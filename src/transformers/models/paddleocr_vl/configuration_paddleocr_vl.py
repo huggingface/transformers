@@ -27,7 +27,7 @@
 import inspect
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
 class PaddleOCRVisionConfig(PreTrainedConfig):
@@ -114,7 +114,7 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
         self.spatial_merge_size = spatial_merge_size
 
 
-class PaddleOCRTextConfig(PreTrainedConfig):
+class PaddleOCRTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`PaddleOCRTextModel`]. It is used to instantiate an Ernie 4.5
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -246,13 +246,11 @@ class PaddleOCRTextConfig(PreTrainedConfig):
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 class PaddleOCRVLConfig(PreTrainedConfig):
@@ -279,6 +277,8 @@ class PaddleOCRVLConfig(PreTrainedConfig):
             The token index to denote start of vision input.
         vision_end_token_id (`int`, *optional*, defaults to 101306):
             The token index to denote end of vision input.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import PaddleOCRVLForConditionalGeneration, PaddleOCRVLConfig
@@ -306,6 +306,7 @@ class PaddleOCRVLConfig(PreTrainedConfig):
         video_token_id=100296,
         vision_start_token_id=101305,
         vision_end_token_id=101306,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -327,9 +328,7 @@ class PaddleOCRVLConfig(PreTrainedConfig):
         self.video_token_id = video_token_id
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
-
-        # FIXME: arthur/cyril - tying has to be used from the text config
-        kwargs["tie_word_embeddings"] = self.text_config.tie_word_embeddings
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

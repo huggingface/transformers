@@ -14,7 +14,7 @@
 """Evolla model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
@@ -77,10 +77,16 @@ class SaProtConfig(PreTrainedConfig):
         position_embedding_type="rotary",
         emb_layer_norm_before=False,
         token_dropout=True,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, mask_token_id=mask_token_id, **kwargs)
+        super().__init__(**kwargs)
 
+        self.pad_token_id = pad_token_id
+        self.mask_token_id = mask_token_id
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -96,7 +102,7 @@ class SaProtConfig(PreTrainedConfig):
         self.token_dropout = token_dropout
 
 
-class EvollaConfig(PreTrainedConfig):
+class EvollaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`EvollaModel`]. It is used to instantiate an
     Evolla model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -169,6 +175,11 @@ class EvollaConfig(PreTrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether or not to tie the input and output word embeddings.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether cross-attention layers should be added to the model.
 
     Example:
 
@@ -220,8 +231,12 @@ class EvollaConfig(PreTrainedConfig):
         eos_token_id: int | None = 128009,
         use_cache: bool | None = False,
         tie_word_embeddings: bool | None = False,
+        is_decoder: bool | None = False,
+        add_cross_attention: bool | None = False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -255,13 +270,11 @@ class EvollaConfig(PreTrainedConfig):
             logger.info("`protein_encoder_config` is `None`. Initializing the `SaProtConfig` with default values.")
         self.protein_encoder_config = SaProtConfig(**protein_encoder_config)
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["EvollaConfig"]

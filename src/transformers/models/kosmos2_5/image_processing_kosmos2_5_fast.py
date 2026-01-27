@@ -14,7 +14,6 @@
 """Fast Image processor class for Kosmos2_5."""
 
 import math
-from typing import Optional, Union
 
 import torch
 
@@ -71,13 +70,6 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
 
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Kosmos2_5ImageProcessorKwargs]) -> BatchFeature:
-        r"""
-        patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
-            The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.
-        max_patches (`int`, *optional*, defaults to 4096):
-            The maximum number of patches to extract from the image as per the
-            [KOSMOS 2.5 paper](https://huggingface.co/papers/2309.11419).
-        """
         # return super().preprocess(images, **kwargs)
         # TODO: revert once the issue is fixed: https://huggingface.slack.com/archives/C02TXKQQLE5/p1743411133979019
         return super().preprocess(images, image_mean=0.0, image_std=0.0, **kwargs)
@@ -211,8 +203,8 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         max_patches: int,
         patch_size: dict[str, int],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Q: should we have this?

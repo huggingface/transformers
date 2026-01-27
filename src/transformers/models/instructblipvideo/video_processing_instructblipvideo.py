@@ -16,10 +16,10 @@
 Video processor class for InstructBLIPVideo
 """
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
@@ -47,15 +47,15 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group videos by size for batched resizing

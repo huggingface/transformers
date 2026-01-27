@@ -16,10 +16,10 @@
 import math
 import random
 from functools import lru_cache
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -46,12 +46,12 @@ from .image_processing_flava import (
 class FlavaMaskingGenerator:
     def __init__(
         self,
-        input_size: Union[int, tuple[int, int]] = 14,
+        input_size: int | tuple[int, int] = 14,
         total_mask_patches: int = 75,
-        mask_group_max_patches: Optional[int] = None,
+        mask_group_max_patches: int | None = None,
         mask_group_min_patches: int = 16,
-        mask_group_min_aspect_ratio: Optional[float] = 0.3,
-        mask_group_max_aspect_ratio: Optional[float] = None,
+        mask_group_min_aspect_ratio: float | None = 0.3,
+        mask_group_max_aspect_ratio: float | None = None,
     ):
         if not isinstance(input_size, tuple):
             input_size = (input_size,) * 2
@@ -199,17 +199,17 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
-        crop_size: Optional[SizeDict] = None,
-        default_to_square: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        codebook_size: Optional[SizeDict] = None,
-        codebook_crop_size: Optional[SizeDict] = None,
-        codebook_image_mean: Optional[Union[float, list[float]]] = None,
-        codebook_image_std: Optional[Union[float, list[float]]] = None,
-        codebook_resample: Optional[PILImageResampling] = None,
-        data_format: Optional[ChannelDimension] = None,
+        size: SizeDict | None = None,
+        crop_size: SizeDict | None = None,
+        default_to_square: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        codebook_size: SizeDict | None = None,
+        codebook_crop_size: SizeDict | None = None,
+        codebook_image_mean: float | list[float] | None = None,
+        codebook_image_std: float | list[float] | None = None,
+        codebook_resample: PILImageResampling | None = None,
+        data_format: ChannelDimension | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -268,17 +268,17 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         do_map_pixels: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
     ) -> "torch.Tensor":
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -313,37 +313,37 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         # Mask related params
-        return_image_mask: Optional[bool],
-        input_size_patches: Optional[int],
-        total_mask_patches: Optional[int],
-        mask_group_min_patches: Optional[int],
-        mask_group_max_patches: Optional[int],
-        mask_group_min_aspect_ratio: Optional[float],
-        mask_group_max_aspect_ratio: Optional[float],
+        return_image_mask: bool | None,
+        input_size_patches: int | None,
+        total_mask_patches: int | None,
+        mask_group_min_patches: int | None,
+        mask_group_max_patches: int | None,
+        mask_group_min_aspect_ratio: float | None,
+        mask_group_max_aspect_ratio: float | None,
         # Codebook related params
-        return_codebook_pixels: Optional[bool],
-        codebook_do_resize: Optional[bool],
-        codebook_size: Optional[SizeDict],
-        codebook_interpolation: Optional["F.InterpolationMode"],
-        codebook_do_center_crop: Optional[bool],
-        codebook_crop_size: Optional[SizeDict],
-        codebook_do_rescale: Optional[bool],
-        codebook_rescale_factor: Optional[float],
-        codebook_do_map_pixels: Optional[bool],
-        codebook_do_normalize: Optional[bool],
-        codebook_image_mean: Optional[Union[float, list[float]]],
-        codebook_image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        return_codebook_pixels: bool | None,
+        codebook_do_resize: bool | None,
+        codebook_size: SizeDict | None,
+        codebook_interpolation: Optional["tvF.InterpolationMode"],
+        codebook_do_center_crop: bool | None,
+        codebook_crop_size: SizeDict | None,
+        codebook_do_rescale: bool | None,
+        codebook_rescale_factor: float | None,
+        codebook_do_map_pixels: bool | None,
+        codebook_do_normalize: bool | None,
+        codebook_image_mean: float | list[float] | None,
+        codebook_image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = self._preprocess_image(

@@ -14,14 +14,14 @@
 """Dia model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DiaEncoderConfig(PreTrainedConfig):
+class DiaEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`DiaEncoder`]. It is used to instantiate a Dia
     encoder according to the specified arguments, defining the encoder architecture.
@@ -94,7 +94,7 @@ class DiaEncoderConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-class DiaDecoderConfig(PreTrainedConfig):
+class DiaDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`DiaDecoder`]. It is used to instantiate a Dia
     decoder according to the specified arguments, defining the decoder architecture.
@@ -270,18 +270,15 @@ class DiaConfig(PreTrainedConfig):
         self.delay_pattern = delay_pattern if delay_pattern is not None else [0, 8, 9, 10, 11, 12, 13, 14, 15]
         self.initializer_range = initializer_range
         self.use_cache = use_cache
+        self.decoder_config.pad_token_id = pad_token_id
+        self.decoder_config.eos_token_id = eos_token_id
+        self.decoder_config.bos_token_id = bos_token_id
 
         assert self.decoder_config.num_channels == len(self.delay_pattern), (
             "Number of channels must match delay pattern length."
         )
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            bos_token_id=bos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     def get_text_config(self, *args, **kwargs):
         """Defaulting to audio config as it's the decoder in this case which is usually the text backbone"""

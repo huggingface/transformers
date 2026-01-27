@@ -14,7 +14,6 @@
 """PyTorch SAM 2 model."""
 
 import torch
-import torch.utils.checkpoint
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
@@ -36,11 +35,6 @@ from ..sam2.modeling_sam2 import (
     Sam2VisionEncoderOutput,
     Sam2VisionModel,
 )
-
-
-# fix this in modular
-if True:
-    from ..timm_wrapper.modeling_timm_wrapper import TimmWrapperModel
 
 
 class EdgeTamVisionConfig(PreTrainedConfig):
@@ -189,7 +183,9 @@ class EdgeTamPreTrainedModel(Sam2PreTrainedModel):
 class EdgeTamVisionModel(Sam2VisionModel):
     config_class = EdgeTamVisionConfig
     main_input_name = "pixel_values"
-    _can_record_outputs = {"hidden_states": TimmWrapperModel, "attentions": TimmWrapperModel}
+    # TODO: TimmWrapper models aren't compatible with _can_record_outputs yet. We specifically set this to
+    # an empty dict to avoid the _can_record_outputs from Sam2VisionModel being inherited here.
+    _can_record_outputs = {}
 
     def get_input_embeddings(self):
         raise NotImplementedError("Can't get input embeddings from timm wrapper model")
@@ -204,7 +200,7 @@ class EdgeTamVisionModel(Sam2VisionModel):
             raise ValueError("You have to specify pixel_values")
 
         # Forward through backbone
-        backbone_output = self.backbone(pixel_values)
+        backbone_output = self.backbone(pixel_values, **kwargs)
         intermediate_hidden_states = backbone_output.last_hidden_state
         intermediate_hidden_states = [hidden_state.permute(0, 2, 3, 1) for hidden_state in intermediate_hidden_states]
 
@@ -217,6 +213,7 @@ class EdgeTamVisionModel(Sam2VisionModel):
             last_hidden_state=intermediate_hidden_states[-1],
             fpn_hidden_states=fpn_hidden_states,
             fpn_position_encoding=fpn_position_encoding,
+            hidden_states=backbone_output.hidden_states,
         )
 
 

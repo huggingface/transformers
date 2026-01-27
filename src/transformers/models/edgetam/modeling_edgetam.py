@@ -32,12 +32,12 @@ from transformers.utils.generic import OutputRecorder
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, auto_docstring
-from ...utils.generic import TransformersKwargs, check_model_inputs
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_edgetam import (
     EdgeTamConfig,
@@ -47,9 +47,7 @@ from .configuration_edgetam import (
 )
 
 
-# fix this in modular
-if True:
-    from ..timm_wrapper.modeling_timm_wrapper import TimmWrapperModel
+logger = logging.get_logger(__name__)
 
 
 class EdgeTamLayerNorm(nn.LayerNorm):
@@ -80,16 +78,10 @@ class EdgeTamLayerNorm(nn.LayerNorm):
 
 @dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
-class EdgeTamVisionEncoderOutput(ModelOutput):
+class EdgeTamVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    fpn_hidden_states (`tuple(torch.FloatTensor)`):
-        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
-        `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
-    fpn_position_encoding (`tuple(torch.FloatTensor)`):
-        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
-        `(batch_size, hidden_size, height, width)`. Positional encodings corresponding to the `fpn_hidden_states`.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`. Hidden-states of the
@@ -98,13 +90,16 @@ class EdgeTamVisionEncoderOutput(ModelOutput):
         Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
         the self-attention heads.
+    fpn_hidden_states (`tuple(torch.FloatTensor)`):
+        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
+        `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
+    fpn_position_encoding (`tuple(torch.FloatTensor)`):
+        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
+        `(batch_size, hidden_size, height, width)`. Positional encodings corresponding to the `fpn_hidden_states`.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
     fpn_hidden_states: torch.FloatTensor | None = None
     fpn_position_encoding: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 def eager_attention_forward(
@@ -170,6 +165,15 @@ class EdgeTamAttention(nn.Module):
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        if is_flash_attention_requested(self.config) and attention_similarity is not None:
+            # Target guided masks are represented as float masks and are incompatible with Flash Attention
+            # Fallback to SDPA for this call only so the rest of the model can still benefit from FA
+            attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]
+            logger.warning_once(
+                "Falling back to SDPA for target-guided attention because "
+                "Flash Attention does not support additive bias masks."
+            )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -305,7 +309,7 @@ class EdgeTamPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_attention_backend = True
 
     @torch.no_grad()
@@ -425,7 +429,9 @@ class EdgeTamVisionNeck(nn.Module):
 class EdgeTamVisionModel(EdgeTamPreTrainedModel):
     config_class = EdgeTamVisionConfig
     main_input_name = "pixel_values"
-    _can_record_outputs = {"hidden_states": TimmWrapperModel, "attentions": TimmWrapperModel}
+    # TODO: TimmWrapper models aren't compatible with _can_record_outputs yet. We specifically set this to
+    # an empty dict to avoid the _can_record_outputs from Sam2VisionModel being inherited here.
+    _can_record_outputs = {}
 
     def __init__(self, config: EdgeTamVisionConfig):
         super().__init__(config)
@@ -448,7 +454,7 @@ class EdgeTamVisionModel(EdgeTamPreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         # Forward through backbone
-        backbone_output = self.backbone(pixel_values)
+        backbone_output = self.backbone(pixel_values, **kwargs)
         intermediate_hidden_states = backbone_output.last_hidden_state
         intermediate_hidden_states = [hidden_state.permute(0, 2, 3, 1) for hidden_state in intermediate_hidden_states]
 
@@ -461,6 +467,7 @@ class EdgeTamVisionModel(EdgeTamPreTrainedModel):
             last_hidden_state=intermediate_hidden_states[-1],
             fpn_hidden_states=fpn_hidden_states,
             fpn_position_encoding=fpn_position_encoding,
+            hidden_states=backbone_output.hidden_states,
         )
 
 
@@ -914,6 +921,7 @@ class EdgeTamMaskDecoder(nn.Module):
 class EdgeTamModel(EdgeTamPreTrainedModel):
     input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(EdgeTamTwoWayAttentionBlock, index=2)}
+    _tied_weights_keys = {}
     _keys_to_ignore_on_load_unexpected = [
         r"^memory_.*",
         r"^mask_downsample.*",
@@ -969,7 +977,8 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
                 Input pixel values
         """
         batch_size = pixel_values.shape[0]
-        feature_maps, _, _, _ = self.get_image_features(pixel_values, **kwargs)
+        image_outputs = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+        feature_maps = image_outputs.fpn_hidden_states
 
         # add no memory embedding to the last feature map
         feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -1088,14 +1097,16 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("danelcsb/edgetam.1_hiera_tiny")
         >>> processor = AutoProcessor.from_pretrained("danelcsb/edgetam.1_hiera_tiny")
 
-        >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
+        >>> with httpx.stream("GET", url) as response:
+        ...     raw_image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> input_points = [[[400, 650]]]  # 2D location of a window on the car
         >>> inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt")
 
@@ -1125,10 +1136,12 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            feature_maps, _, vision_hidden_states, vision_attentions = self.get_image_features(
-                pixel_values,
-                **kwargs,
+            image_outputs: EdgeTamVisionEncoderOutput = self.get_image_features(
+                pixel_values, return_dict=True, **kwargs
             )
+            feature_maps = image_outputs.fpn_hidden_states
+            vision_hidden_states = image_outputs.hidden_states
+            vision_attentions = image_outputs.attentions
 
             # add no memory embedding to the last feature map
             feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -1188,34 +1201,18 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
             vision_attentions=vision_attentions,
         )
 
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[
-        list[torch.Tensor],
-        list[torch.Tensor],
-        tuple[torch.FloatTensor, ...] | None,
-        tuple[torch.FloatTensor, ...] | None,
-    ]:
+    ) -> tuple | EdgeTamVisionEncoderOutput:
         r"""
-        Extract and preprocess image features using the vision encoder.
-
-        Args:
-            pixel_values (`torch.FloatTensor`):
-                Input pixel values of shape `(batch_size, num_channels, height, width)`.
-
-        Returns:
-            `tuple`: A tuple containing:
-                - feature_maps (`list[torch.Tensor]`): List of feature maps from different levels.
-                - feature_maps_position_embeddings (`list[torch.Tensor]`): List of positional embeddings for each feature level.
-                - vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*): Hidden states from the vision encoder.
-                - vision_attentions (`tuple[torch.FloatTensor]`, *optional*): Attention weights from the vision encoder.
+        pixel_values (`torch.FloatTensor`):
+            Input pixel values of shape `(batch_size, num_channels, height, width)`.
         """
-        vision_outputs: EdgeTamVisionEncoderOutput = self.vision_encoder(
-            pixel_values,
-            **kwargs,
-        )
+        vision_outputs: EdgeTamVisionEncoderOutput = self.vision_encoder(pixel_values, return_dict=True, **kwargs)
 
         feature_maps = vision_outputs.fpn_hidden_states
         feature_maps_position_embeddings = vision_outputs.fpn_position_encoding
@@ -1232,8 +1229,10 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
             feature_map_position_embedding.flatten(2).permute(2, 0, 1)
             for feature_map_position_embedding in feature_maps_position_embeddings
         ]
+        vision_outputs.fpn_hidden_states = feature_maps
+        vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 
-        return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
+        return vision_outputs
 
 
 __all__ = ["EdgeTamModel", "EdgeTamVisionModel", "EdgeTamPreTrainedModel"]

@@ -14,14 +14,14 @@
 """Qwen3-Next model configuration"""
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Qwen3NextConfig(PreTrainedConfig):
+class Qwen3NextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3NextModel`]. It is used to instantiate a
     Qwen3-Next model according to the specified arguments, defining the model architecture.
@@ -107,6 +107,12 @@ class Qwen3NextConfig(PreTrainedConfig):
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
         layer_types (`list[str]`, *optional*):
             Types of each layer (attention or linear).
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3NextModel, Qwen3NextConfig
@@ -179,8 +185,15 @@ class Qwen3NextConfig(PreTrainedConfig):
         router_aux_loss_coef: float | None = 0.001,
         mlp_only_layers: list[int] | None = [],
         layer_types: list[str] | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -224,7 +237,7 @@ class Qwen3NextConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = mlp_only_layers
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = ["Qwen3NextConfig"]

@@ -14,7 +14,6 @@
 """Image processor class for GLM-4.1V."""
 
 import math
-from typing import Optional, Union
 
 import numpy as np
 
@@ -73,8 +72,11 @@ def smart_resize(
     if num_frames < temporal_factor:
         raise ValueError(f"t:{num_frames} must be larger than temporal_factor:{temporal_factor}")
     if height < factor or width < factor:
-        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
-    elif max(height, width) / min(height, width) > 200:
+        scale = max(factor / height, factor / width)
+        height = int(height * scale)
+        width = int(width * scale)
+
+    if max(height, width) / min(height, width) > 200:
         raise ValueError(
             f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
         )
@@ -140,13 +142,13 @@ class Glm4vImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         do_convert_rgb: bool = True,
         patch_size: int = 14,
         temporal_patch_size: int = 2,
@@ -175,21 +177,21 @@ class Glm4vImageProcessor(BaseImageProcessor):
 
     def _preprocess(
         self,
-        images: Union[ImageInput, VideoInput],
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        patch_size: Optional[int] = None,
-        temporal_patch_size: Optional[int] = None,
-        merge_size: Optional[int] = None,
-        do_convert_rgb: Optional[bool] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        images: ImageInput | VideoInput,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        patch_size: int | None = None,
+        temporal_patch_size: int | None = None,
+        merge_size: int | None = None,
+        do_convert_rgb: bool | None = None,
+        data_format: ChannelDimension | None = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
@@ -312,21 +314,21 @@ class Glm4vImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        patch_size: Optional[int] = None,
-        temporal_patch_size: Optional[int] = None,
-        merge_size: Optional[int] = None,
-        do_convert_rgb: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        patch_size: int | None = None,
+        temporal_patch_size: int | None = None,
+        merge_size: int | None = None,
+        do_convert_rgb: bool | None = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: ChannelDimension | None = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Args:

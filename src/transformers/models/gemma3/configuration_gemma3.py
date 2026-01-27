@@ -18,10 +18,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any
+from typing import Any, Literal
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 from ..siglip import SiglipVisionConfig
 
@@ -29,7 +29,7 @@ from ..siglip import SiglipVisionConfig
 logger = logging.get_logger(__name__)
 
 
-class Gemma3TextConfig(PreTrainedConfig):
+class Gemma3TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3TextModel`]. It is used to instantiate an Gemma3Text
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -78,8 +78,6 @@ class Gemma3TextConfig(PreTrainedConfig):
             End of stream token id.
         bos_token_id (`int`, *optional*, defaults to 2):
             Beginning of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -94,13 +92,14 @@ class Gemma3TextConfig(PreTrainedConfig):
             Scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*):
             Scaling factor when applying tanh softcapping on the attention scores.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
+        rope_parameters (`dict`, *optional*):
+            Dictionary mapping attention patterns (`"full_attention"`, `"sliding_attention"`) to `RopeParameters`.
+            Each value should be a dictionary containing `rope_type` and optional scaling parameters.
         use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
             If True, the model will attend to all text tokens instead of using a causal mask. This does not change
             behavior for vision tokens.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig
@@ -148,7 +147,6 @@ class Gemma3TextConfig(PreTrainedConfig):
         pad_token_id: int | None = 0,
         eos_token_id: int | None = 1,
         bos_token_id: int | None = 2,
-        tie_word_embeddings: bool | None = True,
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
         query_pre_attn_scalar: int | None = 256,
@@ -156,10 +154,15 @@ class Gemma3TextConfig(PreTrainedConfig):
         layer_types: list[str] | None = None,
         final_logit_softcapping: float | None = None,
         attn_logit_softcapping: float | None = None,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        rope_parameters: dict[Literal["full_attention", "sliding_attention"], RopeParameters] | None = None,
         use_bidirectional_attention: bool | None = False,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -195,13 +198,7 @@ class Gemma3TextConfig(PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
@@ -215,9 +212,15 @@ class Gemma3TextConfig(PreTrainedConfig):
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
+
+        # Set default values if not present
+        if self.rope_parameters.get("full_attention") is None:
+            self.rope_parameters["full_attention"] = {"rope_type": "default"}
         self.rope_parameters["full_attention"].setdefault(
             "rope_theta", kwargs.pop("rope_theta", self.default_theta["global"])
         )
+        if self.rope_parameters.get("sliding_attention") is None:
+            self.rope_parameters["sliding_attention"] = {"rope_type": "default"}
         self.rope_parameters["sliding_attention"].setdefault(
             "rope_theta", kwargs.pop("rope_local_base_freq", self.default_theta["local"])
         )
@@ -254,7 +257,8 @@ class Gemma3Config(PreTrainedConfig):
             The image token index to encode the image prompt.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -292,11 +296,12 @@ class Gemma3Config(PreTrainedConfig):
         self,
         text_config: Gemma3TextConfig | dict[str, Any] | None = None,
         vision_config: SiglipVisionConfig | dict[str, Any] | None = None,
-        mm_tokens_per_image: int = 256,
-        boi_token_index: int = 255_999,
-        eoi_token_index: int = 256_000,
-        image_token_index: int = 262_144,
-        initializer_range: float = 0.02,
+        mm_tokens_per_image: int | None = 256,
+        boi_token_index: int | None = 255_999,
+        eoi_token_index: int | None = 256_000,
+        image_token_index: int | None = 262_144,
+        initializer_range: float | None = 0.02,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         if text_config is None:
@@ -318,6 +323,7 @@ class Gemma3Config(PreTrainedConfig):
         self.eoi_token_index = eoi_token_index
         self.image_token_index = image_token_index
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

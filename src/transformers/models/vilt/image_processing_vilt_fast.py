@@ -13,10 +13,10 @@
 # limitations under the License.
 """Fast Image processor class for Vilt."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -58,16 +58,16 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
-        size_divisor: Optional[int],
+        interpolation: Optional["tvF.InterpolationMode"],
+        size_divisor: int | None,
         do_pad: bool,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -117,8 +117,8 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         self,
         images: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"] = None,
-        size_divisor: Optional[int] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
+        size_divisor: int | None = None,
     ) -> "torch.Tensor":
         """
         Resize an image or batch of images to specified size.
@@ -126,7 +126,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         Args:
             images (`torch.Tensor`): Image or batch of images to resize.
             size (`dict[str, int]`): Size dictionary with shortest_edge key.
-            interpolation (`F.InterpolationMode`, *optional*): Interpolation method to use.
+            interpolation (`tvF.InterpolationMode`, *optional*): Interpolation method to use.
             size_divisor (`int`, *optional*): Value to ensure height/width are divisible by.
 
         Returns:
@@ -165,13 +165,13 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
             new_widths = new_widths // size_divisor * size_divisor
 
         # Resize the image
-        return F.resize(images, [new_heights, new_widths], interpolation=interpolation)
+        return tvF.resize(images, [new_heights, new_widths], interpolation=interpolation)
 
     def _pad_batch(
         self,
         images: list["torch.Tensor"],
-        return_tensors: Optional[Union[str, TensorType]],
-        disable_grouping: Optional[bool],
+        return_tensors: str | TensorType | None,
+        disable_grouping: bool | None,
     ) -> tuple:
         """
         Pad a batch of images to the same size based on the maximum dimensions.
@@ -205,7 +205,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
                 padding_right = max_size[1] - original_size[1]
                 padding = [0, 0, padding_right, padding_bottom]
 
-                padded_images = F.pad(stacked_images, padding, fill=0)
+                padded_images = tvF.pad(stacked_images, padding, fill=0)
                 pixel_mask = mask_template.clone()
                 pixel_mask[: original_size[0], : original_size[1]].fill_(1)
                 pixel_masks = pixel_mask.unsqueeze(0).repeat(stacked_images.shape[0], 1, 1)

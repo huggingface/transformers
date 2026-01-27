@@ -18,11 +18,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class AriaTextConfig(PreTrainedConfig):
+class AriaTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This class handles the configuration for the text component of the Aria model.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the model of the Aria
@@ -167,13 +167,11 @@ class AriaTextConfig(PreTrainedConfig):
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 class AriaConfig(PreTrainedConfig):
@@ -199,18 +197,8 @@ class AriaConfig(PreTrainedConfig):
             Index used to represent image tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal initializer for initializing all weight matrices.
-
-    Attributes:
-        model_type (`str`):
-            Type of the model, set to `"aria"`.
-        image_token_index (`int`):
-            Index used to represent image tokens.
-        projector_patch_to_query_dict (`dict`):
-            Mapping of patch sizes to query dimensions.
-        vision_config (`AriaVisionConfig`):
-            Configuration for the vision component.
-        text_config (`AriaTextConfig`):
-            Configuration for the text component.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
     """
 
     model_type = "aria"
@@ -225,8 +213,9 @@ class AriaConfig(PreTrainedConfig):
         vision_feature_layer: int = -1,
         text_config: AriaTextConfig = None,
         projector_patch_to_query_dict: dict | None = None,
-        image_token_index: int = 9,
-        initializer_range: float = 0.02,
+        image_token_index: int | None = 9,
+        initializer_range: float | None = 0.02,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -256,6 +245,7 @@ class AriaConfig(PreTrainedConfig):
             text_config = AriaTextConfig()
 
         self.text_config = text_config
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

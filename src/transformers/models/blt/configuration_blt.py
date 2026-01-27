@@ -14,14 +14,14 @@
 """Blt model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BltLocalEncoderConfig(PreTrainedConfig):
+class BltLocalEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     """
     Configuration class for the Blt Local Encoder component.
     """
@@ -70,7 +70,7 @@ class BltLocalEncoderConfig(PreTrainedConfig):
         super().__init__(**kwargs, tie_word_embeddings=False)
 
 
-class BltLocalDecoderConfig(PreTrainedConfig):
+class BltLocalDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     """
     Configuration class for the Blt Local Decoder component.
     """
@@ -95,6 +95,10 @@ class BltLocalDecoderConfig(PreTrainedConfig):
         hidden_act: str | None = "silu",
         intermediate_size: int | None = 2816,
         initializer_range: float | None = 0.02,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -112,14 +116,16 @@ class BltLocalDecoderConfig(PreTrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = False  # Force-set to False for BC
         self.rope_parameters = rope_parameters
 
-        # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
-        kwargs.pop("tie_word_embeddings", None)
-        super().__init__(**kwargs, tie_word_embeddings=False)
+        super().__init__(**kwargs)
 
 
-class BltGlobalTransformerConfig(PreTrainedConfig):
+class BltGlobalTransformerConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     """
     Configuration class for the Blt Global Transformer component.
     """
@@ -140,6 +146,7 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
         hidden_act: str | None = "silu",
         intermediate_size: int | None = 5632,
         initializer_range: float | None = 0.02,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -153,14 +160,13 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = False
         self.rope_parameters = rope_parameters
 
-        # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
-        kwargs.pop("tie_word_embeddings", None)
-        super().__init__(**kwargs, tie_word_embeddings=False)
+        super().__init__(**kwargs)
 
 
-class BltPatcherConfig(PreTrainedConfig):
+class BltPatcherConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     Configuration class for the Blt Patcher/Entropy model component.
 
@@ -213,6 +219,7 @@ class BltPatcherConfig(PreTrainedConfig):
         intermediate_size: int | None = 2048,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         initializer_range: float | None = 0.02,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -229,12 +236,11 @@ class BltPatcherConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rope_parameters = rope_parameters
 
-        # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
-        kwargs.pop("tie_word_embeddings", None)
-        super().__init__(**kwargs, tie_word_embeddings=False)
+        self.tie_word_embeddings = False
+        super().__init__(**kwargs)
 
 
-class BltConfig(PreTrainedConfig):
+class BltConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`BltModel`]. It is used to instantiate a
     Blt model according to the specified arguments, defining the model architecture.
@@ -330,6 +336,9 @@ class BltConfig(PreTrainedConfig):
         decoder_config: dict | None = None,
         global_config: dict | None = None,
         tie_word_embeddings: bool | None = False,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         initializer_range: float | None = 0.02,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
@@ -402,11 +411,13 @@ class BltConfig(PreTrainedConfig):
             encoder_cross_output_size if encoder_cross_output_size != self.global_config.hidden_size else None
         )
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.rope_parameters = rope_parameters
 
-        # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
-        kwargs.pop("tie_word_embeddings", None)
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = [

@@ -19,10 +19,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class Exaone4Config(PreTrainedConfig):
+class Exaone4Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Exaone4Model`]. It is used to
     instantiate a EXAONE 4.0 model according to the specified arguments, defining the model architecture. Instantiating a
@@ -161,6 +161,9 @@ class Exaone4Config(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.sliding_window = sliding_window
         self.sliding_window_pattern = sliding_window_pattern
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.layer_types = layer_types
         if self.sliding_window is None:
@@ -178,9 +181,7 @@ class Exaone4Config(PreTrainedConfig):
 
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["Exaone4Config"]

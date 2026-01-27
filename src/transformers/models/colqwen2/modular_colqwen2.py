@@ -45,24 +45,6 @@ class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class ColQwen2Processor(ColPaliProcessor):
-    r"""
-    Constructs a ColQwen2 processor which wraps a Qwen2VLProcessor and special methods to process images and queries, as
-    well as to compute the late-interaction retrieval score.
-
-    [`ColQwen2Processor`] offers all the functionalities of [`Qwen2VLProcessor`]. See the [`~Qwen2VLProcessor.__call__`]
-    for more information.
-
-    Args:
-        image_processor ([`Qwen2VLImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`Qwen2TokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        visual_prompt_prefix (`str`, *optional*): A string that gets tokenized and prepended to the image tokens.
-        query_prefix (`str`, *optional*): A prefix to be used for the query.
-    """
-
     def __init__(
         self,
         image_processor=None,
@@ -72,6 +54,12 @@ class ColQwen2Processor(ColPaliProcessor):
         query_prefix: str | None = None,
         **kwargs,
     ):
+        r"""
+        visual_prompt_prefix (`str`, *optional*, defaults to `"<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"`):
+            A string that gets tokenized and prepended to the image tokens.
+        query_prefix (`str`, *optional*, defaults to `"Query: "`):
+            A prefix to be used for the query.
+        """
         ProcessorMixin.__init__(self, image_processor, tokenizer, chat_template=chat_template)
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
@@ -90,32 +78,7 @@ class ColQwen2Processor(ColPaliProcessor):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[ColQwen2ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model either (1) one or several texts, either (2) one or several image(s). This method is a custom
-        wrapper around the Qwen2VLProcessor's [`~Qwen2VLProcessor.__call__`] method adapted for the ColQwen2 model. It cannot process
-        both text and images at the same time.
-
-        When preparing the text(s), this method forwards the `text` and `kwargs` arguments to Qwen2TokenizerFast's
-        [`~Qwen2TokenizerFast.__call__`].
-        When preparing the image(s), this method forwards the `images` and `kwargs` arguments to Qwen2VLImageProcessor's
-        [`~Qwen2VLImageProcessor.__call__`].
-        Please refer to the doctsring of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -329,11 +292,10 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
         # Handle the custom "pixel_values" input obtained with `ColQwen2Processor` through unpadding
         if pixel_values is not None and image_grid_thw is not None:
             # NOTE: image_grid_thw: (batch_size, 3) where image_grid_thw[i] = (num_patches_h, num_patches_w, temporal_patch_size)
-            offsets = image_grid_thw[:, 1] * image_grid_thw[:, 2]  # (num_patches_h, num_patches_w)
-            pixel_values = torch.cat(
-                [pixel_sequence[:offset] for pixel_sequence, offset in zip(pixel_values, offsets)],
-                dim=0,
-            )  # (num_patches_h * num_patches_w, pixel_values)
+            offsets = image_grid_thw[:, 1] * image_grid_thw[:, 2]  # (batch_size,)
+            arange = torch.arange(pixel_values.shape[1], device=offsets.device)  # (max_len,)
+            mask = arange.unsqueeze(0) < offsets.unsqueeze(1)  # (batch_size, max_len)
+            pixel_values = pixel_values[mask]  # (total_valid_patches, channels, height, width)
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
@@ -354,7 +316,9 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
             inputs_embeds = self.vlm.get_input_embeddings()(input_ids)
 
             if pixel_values is not None:
-                image_embeds = self.vlm.model.visual(pixel_values, grid_thw=image_grid_thw)
+                image_embeds = self.vlm.model.visual(
+                    pixel_values, grid_thw=image_grid_thw, return_dict=True
+                ).pooler_output
                 image_mask = (
                     (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
                 )

@@ -14,7 +14,7 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -22,7 +22,7 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class KyutaiSpeechToTextConfig(PreTrainedConfig):
+class KyutaiSpeechToTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`KyutaiSpeechToTextForConditionalGeneration`].
     It is used to instantiate a Kyutai Speech-to-Text model according to the specified arguments, defining the model
@@ -90,6 +90,8 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 48000):
             Beginning of stream token id for text tokens.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
         codec_config (`PreTrainedConfig`, *optional*):
             Configuration for the codec.
         kwargs (*optional*):
@@ -142,6 +144,7 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
         tie_word_embeddings: bool | None = False,
         pad_token_id: int | None = 3,
         bos_token_id: int | None = 48000,
+        eos_token_id: int | None = None,
         codec_config: dict | None = None,
         **kwargs,
     ):
@@ -183,9 +186,11 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
         self.sliding_window = sliding_window
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id, bos_token_id=bos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["KyutaiSpeechToTextConfig"]

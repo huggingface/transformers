@@ -14,14 +14,14 @@
 """Starcoder2 model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Starcoder2Config(PreTrainedConfig):
+class Starcoder2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Starcoder2Model`]. It is used to instantiate a
     Starcoder2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -67,6 +67,8 @@ class Starcoder2Config(PreTrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 50256):
             The id of the "end-of-sequence" token.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
@@ -81,6 +83,8 @@ class Starcoder2Config(PreTrainedConfig):
             Embedding dropout.
         use_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias term on linear layers of the model.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
 
     ```python
@@ -128,12 +132,14 @@ class Starcoder2Config(PreTrainedConfig):
         use_cache: bool | None = True,
         bos_token_id: int | None = 50256,
         eos_token_id: int | None = 50256,
+        pad_token_id: int | None = None,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         sliding_window: int | None = None,
         attention_dropout: float | None = 0.0,
         residual_dropout: float | None = 0.0,
         embedding_dropout: float | None = 0.0,
         use_bias: bool | None = True,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -154,11 +160,11 @@ class Starcoder2Config(PreTrainedConfig):
         self.embedding_dropout = embedding_dropout
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["Starcoder2Config"]

@@ -20,9 +20,10 @@
 
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 
 
-class CwmConfig(PreTrainedConfig):
+class CwmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     """
     Configuration for Code World Model (CWM).
     This is an inherited Llama3-compatible configuration with layer-interleaved
@@ -177,13 +178,11 @@ class CwmConfig(PreTrainedConfig):
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["CwmConfig"]

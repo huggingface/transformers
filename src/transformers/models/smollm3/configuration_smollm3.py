@@ -19,10 +19,10 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class SmolLM3Config(PreTrainedConfig):
+class SmolLM3Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`SmolLM3Model`]. It is used to instantiate a
     SmolLM3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -147,8 +147,13 @@ class SmolLM3Config(PreTrainedConfig):
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
         mlp_bias: bool | None = False,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.mlp_bias = mlp_bias
@@ -194,12 +199,7 @@ class SmolLM3Config(PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["SmolLM3Config"]

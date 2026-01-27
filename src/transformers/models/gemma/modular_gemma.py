@@ -22,7 +22,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
@@ -49,7 +49,7 @@ SPIECE_UNDERLINE = "▁"
 logger = logging.get_logger(__name__)
 
 
-class GemmaConfig(PreTrainedConfig):
+class GemmaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`GemmaModel`]. It is used to instantiate an Gemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -176,15 +176,13 @@ class GemmaConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.use_bidirectional_attention = use_bidirectional_attention
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 class GemmaRMSNorm(nn.Module):

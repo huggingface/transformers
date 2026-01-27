@@ -26,7 +26,7 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
@@ -49,7 +49,7 @@ from ..mixtral.modeling_mixtral import (
 logger = logging.get_logger(__name__)
 
 
-class MiniMaxConfig(PreTrainedConfig):
+class MiniMaxConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`MiniMaxModel`]. It is used to instantiate an
     MiniMax model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -236,6 +236,10 @@ class MiniMaxConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         self.layer_types = layer_types
         self.block_size = block_size
@@ -253,13 +257,7 @@ class MiniMaxConfig(PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 class MiniMaxRMSNorm(MixtralRMSNorm):
@@ -548,7 +546,7 @@ class MiniMaxModel(MixtralModel):
         use_cache: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

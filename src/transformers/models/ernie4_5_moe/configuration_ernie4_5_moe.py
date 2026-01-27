@@ -14,14 +14,14 @@
 """Ernie 4.5 MoE model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Ernie4_5_MoeConfig(PreTrainedConfig):
+class Ernie4_5_MoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Ernie4_5_MoeModel`]. It is used to instantiate a
     Ernie 4.5 MoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -194,13 +194,11 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["Ernie4_5_MoeConfig"]

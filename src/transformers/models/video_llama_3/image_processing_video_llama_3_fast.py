@@ -21,7 +21,7 @@ import math
 from typing import Optional, Union
 
 import torch
-import torch.nn.functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
@@ -80,8 +80,6 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
     patch_size = 14
     temporal_patch_size = 1
     merge_size = 1
-    min_pixels = None
-    max_pixels = None
     valid_kwargs = VideoLlama3ImageProcessorKwargs
     model_input_names = [
         "pixel_values",
@@ -104,13 +102,13 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
         if "shortest_edge" not in size or "longest_edge" not in size:
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-        super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        super().__init__(size=size, **kwargs)
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
-        min_pixels: Optional[int] = None,
-        max_pixels: Optional[int] = None,
+        size: SizeDict | None = None,
+        min_pixels: int | None = None,
+        max_pixels: int | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -127,7 +125,7 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
         else:
             size = {**self.size}
 
-        return super()._further_process_kwargs(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        return super()._further_process_kwargs(size=size, **kwargs)
 
     @auto_docstring
     def preprocess(
@@ -170,17 +168,17 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         patch_size: int,
         temporal_patch_size: int,
         merge_size: int,
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ):
         # Group images by size for batched resizing

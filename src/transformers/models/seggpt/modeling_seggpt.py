@@ -671,15 +671,21 @@ class SegGptModel(SegGptPreTrainedModel):
         ```python
         >>> from transformers import SegGptImageProcessor, SegGptModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> image_input_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_2.jpg"
         >>> image_prompt_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1.jpg"
         >>> mask_prompt_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1_target.png"
 
-        >>> image_input = Image.open(requests.get(image_input_url, stream=True).raw)
-        >>> image_prompt = Image.open(requests.get(image_prompt_url, stream=True).raw)
-        >>> mask_prompt = Image.open(requests.get(mask_prompt_url, stream=True).raw).convert("L")
+        >>> with httpx.stream("GET", image_input_url) as response:
+        ...     image_input = Image.open(BytesIO(response.read()))
+
+        >>> with httpx.stream("GET", image_prompt_url) as response:
+        ...     image_prompt = Image.open(BytesIO(response.read()))
+
+        >>> with httpx.stream("GET", mask_prompt_url) as response:
+        ...     mask_prompt = Image.open(BytesIO(response.read())).convert("L")
 
         >>> checkpoint = "BAAI/seggpt-vit-large"
         >>> model = SegGptModel.from_pretrained(checkpoint)
@@ -868,15 +874,21 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         ```python
         >>> from transformers import SegGptImageProcessor, SegGptForImageSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> image_input_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_2.jpg"
         >>> image_prompt_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1.jpg"
         >>> mask_prompt_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1_target.png"
 
-        >>> image_input = Image.open(requests.get(image_input_url, stream=True).raw)
-        >>> image_prompt = Image.open(requests.get(image_prompt_url, stream=True).raw)
-        >>> mask_prompt = Image.open(requests.get(mask_prompt_url, stream=True).raw).convert("L")
+        >>> with httpx.stream("GET", image_input_url) as response:
+        ...     image_input = Image.open(BytesIO(response.read()))
+
+        >>> with httpx.stream("GET", image_prompt_url) as response:
+        ...     image_prompt = Image.open(BytesIO(response.read()))
+
+        >>> with httpx.stream("GET", mask_prompt_url) as response:
+        ...     mask_prompt = Image.open(BytesIO(response.read())).convert("L")
 
         >>> checkpoint = "BAAI/seggpt-vit-large"
         >>> model = SegGptForImageSegmentation.from_pretrained(checkpoint)

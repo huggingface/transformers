@@ -14,7 +14,7 @@
 """Moshi model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -76,6 +76,12 @@ class MoshiDepthConfig(PreTrainedConfig):
             The number of audio codebooks for each audio channels.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
                 - **audio_encoder_config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
@@ -121,6 +127,9 @@ class MoshiDepthConfig(PreTrainedConfig):
         rms_norm_eps=1e-8,
         num_codebooks=8,
         tie_word_embeddings=False,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -143,10 +152,14 @@ class MoshiDepthConfig(PreTrainedConfig):
         self.num_codebooks = num_codebooks
         self.audio_vocab_size = audio_vocab_size
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
-class MoshiConfig(PreTrainedConfig):
+class MoshiConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`MoshiModel`]. It is used to instantiate a
     Moshi model according to the specified arguments, defining the audio encoder, Moshi depth decoder and Moshi decoder
@@ -204,6 +217,12 @@ class MoshiConfig(PreTrainedConfig):
             The number of audio codebooks for each audio channels.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
                 - **audio_encoder_config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
@@ -260,6 +279,9 @@ class MoshiConfig(PreTrainedConfig):
         rms_norm_eps: int | None = 1e-8,
         num_codebooks: int | None = 8,
         tie_word_embeddings: bool | None = False,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -307,7 +329,11 @@ class MoshiConfig(PreTrainedConfig):
 
         self.depth_decoder_config = MoshiDepthConfig(**depth_decoder_config)
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
     @property
     def sampling_rate(self):

@@ -19,10 +19,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class MiniMaxConfig(PreTrainedConfig):
+class MiniMaxConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`MiniMaxModel`]. It is used to instantiate an
     MiniMax model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -209,6 +209,10 @@ class MiniMaxConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         self.layer_types = layer_types
         self.block_size = block_size
@@ -226,13 +230,7 @@ class MiniMaxConfig(PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["MiniMaxConfig"]

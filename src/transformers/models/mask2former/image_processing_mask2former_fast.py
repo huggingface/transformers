@@ -22,8 +22,8 @@ import math
 from typing import Any, Optional, Union
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 from torch import nn
-from torchvision.transforms.v2 import functional as F
 
 from transformers.image_transforms import get_size_with_aspect_ratio
 
@@ -58,8 +58,8 @@ logger = logging.get_logger(__name__)
 
 def convert_segmentation_map_to_binary_masks_fast(
     segmentation_map: "torch.Tensor",
-    instance_id_to_semantic_id: Optional[dict[int, int]] = None,
-    ignore_index: Optional[int] = None,
+    instance_id_to_semantic_id: dict[int, int] | None = None,
+    ignore_index: int | None = None,
     do_reduce_labels: bool = False,
 ):
     if do_reduce_labels and ignore_index is None:
@@ -144,7 +144,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         image: torch.Tensor,
         size: SizeDict,
         size_divisor: int = 0,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -169,7 +169,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
             interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 Resampling filter to use if resizing the image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
@@ -193,7 +193,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
             width = int(math.ceil(width / size_divisor) * size_divisor)
             new_size = (height, width)
 
-        image = F.resize(
+        image = tvF.resize(
             image,
             size=new_size,
             interpolation=interpolation,
@@ -205,7 +205,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         self,
         images: torch.Tensor,
         padded_size: tuple[int, int],
-        segmentation_maps: Optional[torch.Tensor] = None,
+        segmentation_maps: torch.Tensor | None = None,
         fill: int = 0,
         ignore_index: int = 255,
     ) -> BatchFeature:
@@ -219,9 +219,9 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
             )
         if original_size != padded_size:
             padding = [0, 0, padding_right, padding_bottom]
-            images = F.pad(images, padding, fill=fill)
+            images = tvF.pad(images, padding, fill=fill)
             if segmentation_maps is not None:
-                segmentation_maps = [F.pad(mask, padding, fill=ignore_index) for mask in segmentation_maps]
+                segmentation_maps = [tvF.pad(mask, padding, fill=ignore_index) for mask in segmentation_maps]
 
         # Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
         pixel_mask = torch.zeros((images.shape[0], *padded_size), dtype=torch.int64, device=images.device)
@@ -233,8 +233,8 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
-        instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]] = None,
+        segmentation_maps: ImageInput | None = None,
+        instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None = None,
         **kwargs: Unpack[Mask2FormerImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -254,10 +254,10 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         segmentation_maps: ImageInput,
-        instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]],
+        instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[Mask2FormerImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -282,21 +282,21 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         segmentation_maps: Optional["torch.Tensor"],
-        instance_id_to_semantic_id: Optional[dict[int, int]],
-        do_resize: Optional[bool],
-        size: Optional[SizeDict],
-        pad_size: Optional[SizeDict],
-        size_divisor: Optional[int],
-        interpolation: Optional[Union["PILImageResampling", "F.InterpolationMode"]],
-        do_rescale: Optional[bool],
-        rescale_factor: Optional[float],
-        do_normalize: Optional[bool],
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        ignore_index: Optional[int],
-        do_reduce_labels: Optional[bool],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        instance_id_to_semantic_id: dict[int, int] | None,
+        do_resize: bool | None,
+        size: SizeDict | None,
+        pad_size: SizeDict | None,
+        size_divisor: int | None,
+        interpolation: Union["PILImageResampling", "tvF.InterpolationMode"] | None,
+        do_rescale: bool | None,
+        rescale_factor: float | None,
+        do_normalize: bool | None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        ignore_index: int | None,
+        do_reduce_labels: bool | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         if segmentation_maps is not None and len(images) != len(segmentation_maps):
@@ -322,7 +322,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
                         image=stacked_segmentation_maps,
                         size=size,
                         size_divisor=size_divisor,
-                        interpolation=F.InterpolationMode.NEAREST_EXACT,
+                        interpolation=tvF.InterpolationMode.NEAREST_EXACT,
                     )
             resized_images_grouped[shape] = stacked_images
             if segmentation_maps is not None:

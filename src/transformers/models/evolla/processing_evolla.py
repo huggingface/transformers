@@ -15,36 +15,27 @@
 Processor class for EVOLLA.
 """
 
-from typing import Optional, Union
-
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import (
     ProcessorMixin,
 )
+from ...utils import auto_docstring
 
 
 PROTEIN_VALID_KEYS = ["aa_seq", "foldseek", "msa"]
 
 
+@auto_docstring
 class EvollaProcessor(ProcessorMixin):
-    r"""
-    Constructs a EVOLLA processor which wraps a LLama tokenizer and SaProt tokenizer (EsmTokenizer) into a single processor.
-
-    [`EvollaProcessor`] offers all the functionalities of [`EsmTokenizer`] and [`LlamaTokenizerFast`]. See the
-    docstring of [`~EvollaProcessor.__call__`] and [`~EvollaProcessor.decode`] for more information.
-
-    Args:
+    def __init__(self, protein_tokenizer, tokenizer=None, protein_max_length=1024, text_max_length=512, **kwargs):
+        r"""
         protein_tokenizer (`EsmTokenizer`):
             An instance of [`EsmTokenizer`]. The protein tokenizer is a required input.
-        tokenizer (`LlamaTokenizerFast`, *optional*):
-            An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
         protein_max_length (`int`, *optional*, defaults to 1024):
             The maximum length of the sequence to be generated.
         text_max_length (`int`, *optional*, defaults to 512):
             The maximum length of the text to be generated.
-    """
-
-    def __init__(self, protein_tokenizer, tokenizer=None, protein_max_length=1024, text_max_length=512, **kwargs):
+        """
         if protein_tokenizer is None:
             raise ValueError("You need to specify an `protein_tokenizer`.")
         if tokenizer is None:
@@ -93,30 +84,28 @@ class EvollaProcessor(ProcessorMixin):
         )
         return prompt_inputs
 
+    @auto_docstring
     def __call__(
         self,
-        proteins: Optional[Union[list[dict], dict]] = None,
-        messages_list: Optional[Union[list[list[dict]], list[dict]]] = None,
-        protein_max_length: Optional[int] = None,
-        text_max_length: Optional[int] = None,
+        proteins: list[dict] | dict | None = None,
+        messages_list: list[list[dict]] | list[dict] | None = None,
+        protein_max_length: int | None = None,
+        text_max_length: int | None = None,
         **kwargs,
     ):
-        r"""This method takes batched or non-batched proteins and messages_list and converts them into format that can be used by
-        the model.
-
-        Args:
-            proteins (`Union[List[dict], dict]`):
-                A list of dictionaries or a single dictionary containing the following keys:
-                    - `"aa_seq"` (`str`) -- The amino acid sequence of the protein.
-                    - `"foldseek"` (`str`) -- The foldseek string of the protein.
-            messages_list (`Union[List[List[dict]], List[dict]]`):
-                A list of lists of dictionaries or a list of dictionaries containing the following keys:
-                    - `"role"` (`str`) -- The role of the message.
-                    - `"content"` (`str`) -- The content of the message.
-            protein_max_length (`int`, *optional*, defaults to 1024):
-                The maximum length of the sequence to be generated.
-            text_max_length (`int`, *optional*, defaults to 512):
-                The maximum length of the text.
+        r"""
+        proteins (`Union[List[dict], dict]`):
+            A list of dictionaries or a single dictionary containing the following keys:
+                - `"aa_seq"` (`str`) -- The amino acid sequence of the protein.
+                - `"foldseek"` (`str`) -- The foldseek string of the protein.
+        messages_list (`Union[List[List[dict]], List[dict]]`):
+            A list of lists of dictionaries or a list of dictionaries containing the following keys:
+                - `"role"` (`str`) -- The role of the message.
+                - `"content"` (`str`) -- The content of the message.
+        protein_max_length (`int`, *optional*, defaults to 1024):
+            The maximum length of the sequence to be generated.
+        text_max_length (`int`, *optional*, defaults to 512):
+            The maximum length of the text.
 
         Return:
             a dict with following keys:

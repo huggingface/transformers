@@ -18,12 +18,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Literal
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class ModernBertDecoderConfig(PreTrainedConfig):
+class ModernBertDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`ModernBertDecoderModel`]. It is used to instantiate a ModernBert
     decoder model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -97,10 +98,11 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         layer_types (`list[str]`, *optional*):
             List of layer types, one for each layer. If not specified, will be automatically generated based on
             `global_attn_every_n_layers`. Should contain "full_attention" or "sliding_attention".
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
+        rope_parameters (`dict`, *optional*):
+            Dictionary mapping attention patterns (`"full_attention"`, `"sliding_attention"`) to `RopeParameters`.
+            Each value should be a dictionary containing `rope_type` and optional scaling parameters.
 
     Examples:
 
@@ -152,9 +154,16 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         local_attention: int | None = 128,
         global_attn_every_n_layers: int | None = 3,
         layer_types: list[str] | None = None,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: dict[Literal["full_attention", "sliding_attention"], RopeParameters] | None = None,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.cls_token_id = cls_token_id
+        self.sep_token_id = sep_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -194,14 +203,7 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         # NOTE: sliding window numbers matches ModernBERT but is only half of it
         self.sliding_window = local_attention // 2 if local_attention else -1
         self.rope_parameters = rope_parameters
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            cls_token_id=cls_token_id,
-            sep_token_id=sep_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
@@ -216,9 +218,15 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
             self.rope_parameters["sliding_attention"].update(rope_scaling)
+
+        # Set default values if not present
+        if self.rope_parameters.get("full_attention") is None:
+            self.rope_parameters["full_attention"] = {"rope_type": "default"}
         self.rope_parameters["full_attention"].setdefault(
             "rope_theta", kwargs.pop("global_rope_theta", self.default_theta["global"])
         )
+        if self.rope_parameters.get("sliding_attention") is None:
+            self.rope_parameters["sliding_attention"] = {"rope_type": "default"}
         self.rope_parameters["sliding_attention"].setdefault(
             "rope_theta", kwargs.pop("local_rope_theta", self.default_theta["local"])
         )

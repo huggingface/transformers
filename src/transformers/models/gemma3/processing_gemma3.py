@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from typing import Optional, Union
 
 import numpy as np
 
@@ -21,7 +20,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import to_py_obj
+from ...utils import auto_docstring, to_py_obj
 
 
 class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
@@ -40,6 +39,7 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Gemma3Processor(ProcessorMixin):
     def __init__(
         self,
@@ -63,10 +63,11 @@ class Gemma3Processor(ProcessorMixin):
             **kwargs,
         )
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Gemma3ProcessorKwargs],
     ) -> BatchFeature:
         if text is None and images is None:

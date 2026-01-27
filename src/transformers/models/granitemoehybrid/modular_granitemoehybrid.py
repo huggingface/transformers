@@ -298,6 +298,31 @@ class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def forward(self, **super_kwargs):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, GraniteMoeHybridForCausalLM
+
+        >>> model = GraniteMoeHybridForCausalLM.from_pretrained("ibm-granite/granite-4.0-h-tiny")
+        >>> tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-4.0-h-tiny")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
+        return super().forward(**super_kwargs)
+
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -312,53 +337,22 @@ class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
     ):
         # Overwritten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
 
-        empty_past_kv = past_key_values is None
-
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
-        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
-        #              (we can't check exception 3 while compiling)
-        if not empty_past_kv:
-            if (
-                inputs_embeds is not None  # Exception 1
-                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
-            ):
-                input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                input_ids = input_ids[:, cache_position]
-        elif use_cache:
+        if past_key_values is None and use_cache:
             past_key_values = HybridMambaAttentionDynamicCache(
                 self.config, input_ids.shape[0], self.dtype, device=self.device
             )
 
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if not empty_past_kv:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and is_first_iteration:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "past_key_values": past_key_values,
-                "use_cache": use_cache,
-                "attention_mask": attention_mask,
-                "cache_position": cache_position,
-            }
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
+            position_ids=position_ids,
+            use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
         )
-
-        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
-        for key, value in kwargs.items():
-            if key not in model_inputs:
-                model_inputs[key] = value
 
         return model_inputs
 

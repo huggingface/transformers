@@ -19,10 +19,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Literal
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import is_timm_available, logging, requires_backends
 
 
@@ -33,7 +33,7 @@ if is_timm_available():
 logger = logging.get_logger(__name__)
 
 
-class Gemma3nTextConfig(PreTrainedConfig):
+class Gemma3nTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3nTextModel`]. It is used to instantiate an
     Gemma3nTextModel model according to the specified arguments, defining the model architecture. Instantiating a
@@ -89,10 +89,9 @@ class Gemma3nTextConfig(PreTrainedConfig):
             End of stream token id.
         bos_token_id (`int`, *optional*, defaults to 2):
             Beginning of stream token id.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
+        rope_parameters (`dict`, *optional*):
+            Dictionary mapping attention patterns (`"full_attention"`, `"sliding_attention"`) to `RopeParameters`.
+            Each value should be a dictionary containing `rope_type` and optional scaling parameters.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -125,6 +124,8 @@ class Gemma3nTextConfig(PreTrainedConfig):
             The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
             explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
             sparse with a sparsity factor of 0.95 and the rest are dense.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     ```python
     >>> from transformers import Gemma3nTextModel, Gemma3nTextConfig
@@ -177,7 +178,7 @@ class Gemma3nTextConfig(PreTrainedConfig):
         pad_token_id: int = 0,
         eos_token_id: int = 1,
         bos_token_id: int = 2,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        rope_parameters: dict[Literal["sliding_attention", "full_attention"], RopeParameters] | None = None,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
         sliding_window: int = 512,
@@ -190,6 +191,7 @@ class Gemma3nTextConfig(PreTrainedConfig):
         num_kv_shared_layers: int = 15,
         laurel_rank: int = 64,
         activation_sparsity_pattern: float | Sequence[float] | None = None,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         if isinstance(intermediate_size, Sequence) and (intsize_len := len(intermediate_size)) != num_hidden_layers:
@@ -200,6 +202,9 @@ class Gemma3nTextConfig(PreTrainedConfig):
         elif not isinstance(intermediate_size, Sequence):
             intermediate_size = [intermediate_size] * num_hidden_layers
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.vocab_size_per_layer_input = vocab_size_per_layer_input
         self.max_position_embeddings = max_position_embeddings
@@ -249,12 +254,11 @@ class Gemma3nTextConfig(PreTrainedConfig):
             )
         self.activation_sparsity_pattern = activation_sparsity_pattern
         self.rope_parameters = rope_parameters
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
@@ -268,9 +272,15 @@ class Gemma3nTextConfig(PreTrainedConfig):
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
+
+        # Set default values if not present
+        if self.rope_parameters.get("full_attention") is None:
+            self.rope_parameters["full_attention"] = {"rope_type": "default"}
         self.rope_parameters["full_attention"].setdefault(
             "rope_theta", kwargs.pop("rope_theta", self.default_theta["global"])
         )
+        if self.rope_parameters.get("sliding_attention") is None:
+            self.rope_parameters["sliding_attention"] = {"rope_type": "default"}
         self.rope_parameters["sliding_attention"].setdefault(
             "rope_theta", kwargs.pop("rope_local_base_freq", self.default_theta["local"])
         )
@@ -581,7 +591,8 @@ class Gemma3nConfig(PreTrainedConfig):
             The audio token index to encode the audio prompt.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -619,15 +630,16 @@ class Gemma3nConfig(PreTrainedConfig):
         text_config: Gemma3nTextConfig | dict[str, Any] | None = None,
         vision_config: Gemma3nVisionConfig | dict[str, Any] | None = None,
         audio_config: Gemma3nAudioConfig | dict[str, Any] | None = None,
-        audio_soft_tokens_per_image: int = 188,
-        vision_soft_tokens_per_image: int = 256,
-        boi_token_id: int = 255_999,
-        eoi_token_id: int = 262_144,
-        image_token_id: int = 262_145,
-        boa_token_id: int = 256_000,
-        eoa_token_id: int = 262_272,
-        audio_token_id: int = 262_273,
-        initializer_range: float = 0.02,
+        audio_soft_tokens_per_image: int | None = 188,
+        vision_soft_tokens_per_image: int | None = 256,
+        boi_token_id: int | None = 255_999,
+        eoi_token_id: int | None = 262_144,
+        image_token_id: int | None = 262_145,
+        boa_token_id: int | None = 256_000,
+        eoa_token_id: int | None = 262_272,
+        audio_token_id: int | None = 262_273,
+        initializer_range: float | None = 0.02,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -663,6 +675,7 @@ class Gemma3nConfig(PreTrainedConfig):
         self.eoa_token_id = eoa_token_id
         self.audio_token_id = audio_token_id
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
 
 
 __all__ = ["Gemma3nAudioConfig", "Gemma3nConfig", "Gemma3nTextConfig", "Gemma3nVisionConfig"]

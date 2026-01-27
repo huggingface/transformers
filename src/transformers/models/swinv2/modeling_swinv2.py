@@ -15,7 +15,6 @@
 
 import collections.abc
 import math
-import warnings
 from dataclasses import dataclass
 
 import torch
@@ -113,15 +112,6 @@ class Swinv2MaskedImageModelingOutput(ModelOutput):
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
-
-    @property
-    def logits(self):
-        warnings.warn(
-            "logits attribute is deprecated and will be removed in version 5 of Transformers."
-            " Please use the reconstruction attribute to retrieve the final output instead.",
-            FutureWarning,
-        )
-        return self.reconstruction
 
 
 @dataclass
@@ -1048,10 +1038,12 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
         >>> from transformers import AutoImageProcessor, Swinv2ForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
         >>> model = Swinv2ForMaskedImageModeling.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
@@ -1227,10 +1219,12 @@ class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
         >>> model = AutoBackbone.from_pretrained(

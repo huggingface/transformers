@@ -18,14 +18,14 @@ import math
 import numpy as np
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MimiConfig(PreTrainedConfig):
+class MimiConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of an [`MimiModel`]. It is used to instantiate a
     Mimi model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -125,6 +125,8 @@ class MimiConfig(PreTrainedConfig):
             Initial scale of the residual rescaling operation done in the Transformer models.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     Example:
 
     ```python
@@ -182,6 +184,7 @@ class MimiConfig(PreTrainedConfig):
         attention_dropout: float | None = 0.0,
         layer_scale_initial_scale: float | None = 0.01,
         attention_bias: bool | None = False,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.sampling_rate = sampling_rate
@@ -219,6 +222,7 @@ class MimiConfig(PreTrainedConfig):
         self.head_dim = head_dim or hidden_size // num_attention_heads
         self.layer_scale_initial_scale = layer_scale_initial_scale
         self.attention_bias = attention_bias
+        self.tie_word_embeddings = tie_word_embeddings
         self.rope_parameters = rope_parameters
 
         # Handle backward compatibility for frame_rate:

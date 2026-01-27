@@ -15,6 +15,7 @@
 
 from ...image_processing_utils import BaseImageProcessor
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import auto_docstring
 
 
@@ -31,6 +32,14 @@ class CLIPImageProcessor(BaseImageProcessor):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+
+    def __init__(self, **kwargs: Unpack[ImagesKwargs]):
+        # for backwards compatibility of KOSMOS-2
+        if "use_square_size" in kwargs and kwargs["use_square_size"]:
+            kwargs["size"] = {"height": self.size["shortest_edge"], "width": self.size["shortest_edge"]}
+            kwargs.pop("use_square_size")
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["CLIPImageProcessor"]

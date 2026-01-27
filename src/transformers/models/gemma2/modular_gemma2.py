@@ -27,6 +27,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
     RopeParameters,
+    RotaryEmbeddingConfigMixin,
     dynamic_rope_update,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -51,7 +52,7 @@ from ..gemma.modeling_gemma import (
 logger = logging.get_logger(__name__)
 
 
-class Gemma2Config(PreTrainedConfig):
+class Gemma2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Gemma2Model`]. It is used to instantiate an Gemma2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -179,6 +180,10 @@ class Gemma2Config(PreTrainedConfig):
         use_bidirectional_attention: bool | None = None,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -208,13 +213,7 @@ class Gemma2Config(PreTrainedConfig):
 
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 class Gemma2RMSNorm(GemmaRMSNorm):

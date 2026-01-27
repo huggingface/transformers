@@ -13,11 +13,11 @@
 # limitations under the License.
 """Fast Image processor class for ImageGPT."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -81,7 +81,7 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(
         self,
-        clusters: Optional[Union[list, np.ndarray, torch.Tensor]] = None,  # keep as arg for backwards compatibility
+        clusters: list | np.ndarray | torch.Tensor | None = None,  # keep as arg for backwards compatibility
         **kwargs: Unpack[ImageGPTImageProcessorKwargs],
     ):
         r"""
@@ -97,18 +97,18 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: dict[str, int],
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: dict[str, int],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        do_color_quantize: Optional[bool] = None,
-        clusters: Optional[Union[list, np.ndarray, torch.Tensor]] = None,
-        disable_grouping: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_color_quantize: bool | None = None,
+        clusters: list | np.ndarray | torch.Tensor | None = None,
+        disable_grouping: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
         # Group images by size for batched resizing

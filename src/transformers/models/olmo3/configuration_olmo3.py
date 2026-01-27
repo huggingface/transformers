@@ -19,10 +19,10 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class Olmo3Config(PreTrainedConfig):
+class Olmo3Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Olmo3Model`]. It is used to instantiate an OLMo3
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -157,6 +157,11 @@ class Olmo3Config(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+
         self.rms_norm_eps = rms_norm_eps
         self.sliding_window = sliding_window
         self.layer_types = layer_types
@@ -168,13 +173,7 @@ class Olmo3Config(PreTrainedConfig):
 
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["Olmo3Config"]

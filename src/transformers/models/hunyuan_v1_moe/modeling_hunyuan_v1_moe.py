@@ -91,7 +91,7 @@ def rotate_half(x):
 
 
 @use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -99,8 +99,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -303,11 +301,6 @@ class HunYuanMoEV1Moe(nn.Module):
         routing_weights = F.softmax(hidden_states, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = torch.zeros_like(hidden_states, dtype=torch.float32).scatter_(
-            1, selected_experts, routing_weights
-        )
-        return selected_experts, routing_weights.to(hidden_states.dtype)
-
         return selected_experts, routing_weights.to(hidden_states.dtype)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:

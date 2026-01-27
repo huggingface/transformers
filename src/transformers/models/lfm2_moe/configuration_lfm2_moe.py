@@ -13,10 +13,10 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class Lfm2MoeConfig(PreTrainedConfig):
+class Lfm2MoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Lfm2MoeModel`]. It is used to instantiate a LFM2 Moe
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -165,13 +165,11 @@ class Lfm2MoeConfig(PreTrainedConfig):
 
         self.rope_parameters = rope_parameters
         tie_word_embeddings = kwargs.get("tie_embedding", tie_word_embeddings)  # to fit original config keys
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["Lfm2MoeConfig"]

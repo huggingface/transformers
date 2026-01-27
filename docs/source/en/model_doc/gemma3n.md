@@ -161,6 +161,7 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 ## Gemma3nProcessor
 
 [[autodoc]] Gemma3nProcessor
+    - __call__
 
 ## Gemma3nTextConfig
 
@@ -187,6 +188,8 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 
 [[autodoc]] Gemma3nModel
     - forward
+    - get_image_features
+    - get_audio_features
 
 ## Gemma3nForCausalLM
 
@@ -197,6 +200,7 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 
 [[autodoc]] Gemma3nForConditionalGeneration
     - forward
+    - get_image_features
 
 [altup]: https://proceedings.neurips.cc/paper_files/paper/2023/hash/f2059277ac6ce66e7e5543001afa8bb5-Abstract-Conference.html
 [attention-mask-viz]: https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139

@@ -27,7 +27,7 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast
+from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from .configuration_pixtral import PixtralVisionConfig
 
 
@@ -141,7 +141,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -149,8 +149,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -241,10 +239,6 @@ class PixtralAttention(nn.Module):
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        # Since we use packing, if flash_attention_2 is selected we rely on position_ids
-        if self.config._attn_implementation == "flash_attention_2":
-            kwargs["position_ids"] = kwargs["position_ids"].to(hidden_states.device, non_blocking=True)
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -513,12 +507,12 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         position_ids = position_ids_in_meshgrid(
             patch_embeds_list, max_width=self.config.image_size // self.config.patch_size
         )
-        kwargs["position_ids"] = position_ids
+        kwargs["position_ids"] = position_ids.unsqueeze(0).to(patch_embeds.device, non_blocking=True)
 
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
 
-        if self.config._attn_implementation == "flash_attention_2":
-            # We only rely on position_ids when using flash_attention_2
+        if is_flash_attention_requested(self.config):
+            # We only rely on position_ids when using flash attention
             attention_mask = None
         else:
             attention_mask = generate_block_attention_mask(

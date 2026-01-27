@@ -928,7 +928,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         set_seed(42)
 
         model_name = "roneneldan/TinyStories-33M"
-        dataset_name = "wikitext"
+        dataset_name = "Salesforce/wikitext"
         dataset_config = "wikitext-2-raw-v1"
         dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:40]")
         tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -1040,7 +1040,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 per_device_train_batch_size=1,
                 learning_rate=0.1,
                 gradient_checkpointing=True,
-                gradient_checkpointing_kwargs={"use_reentrant": False},
                 output_dir=tmp_dir,
             )
             previous_params = {k: v.detach().clone() for k, v in trainer.model.named_parameters()}

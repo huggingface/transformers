@@ -272,7 +272,7 @@ def rotate_half(x):
 
 
 @use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -280,8 +280,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -523,7 +521,7 @@ class AfmoePreTrainedModel(PreTrainedModel):
         "expert_bias",
     ]
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
     supports_gradient_checkpointing = True
@@ -573,7 +571,7 @@ class AfmoeModel(AfmoePreTrainedModel):
         cache_position: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

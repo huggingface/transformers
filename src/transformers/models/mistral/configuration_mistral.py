@@ -14,14 +14,14 @@
 """Mistral model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MistralConfig(PreTrainedConfig):
+class MistralConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`MistralModel`]. It is used to instantiate an
     Mistral model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -163,15 +163,13 @@ class MistralConfig(PreTrainedConfig):
                 "Detected Mistral model with layer_types. Consider using AutoModel or Ministral classes instead to enable alternating attention compatibility."
             )
 
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["MistralConfig"]

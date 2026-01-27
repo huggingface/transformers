@@ -21,6 +21,7 @@
 
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 from functools import cached_property
 from typing import Optional
 
@@ -35,13 +36,24 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
+
+
+@dataclass
+@auto_docstring
+class Emu3VQVAEModelOutput(BaseModelOutputWithPooling):
+    r"""
+    image_tokens (`torch.LongTensor` of shape `(batch_size, config.vocab_size`):
+        Indices of the image tokens predicted by the VQ-VAE model.
+    """
+
+    image_tokens: torch.LongTensor | None = None
 
 
 def rotate_half(x):
@@ -52,7 +64,7 @@ def rotate_half(x):
 
 
 @use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -60,8 +72,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -939,6 +949,10 @@ class Emu3VQVAE(PreTrainedModel):
         "Emu3VQVAEResnetBlock",
         "Emu3VQVAEVectorQuantizer",
     ]
+    _can_record_outputs = {
+        "hidden_states": [Emu3VQVAEResnetBlock, Emu3VQVAETemporalResnetBlock],
+        "attentions": Emu3VQVAEAttentionBlock,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -988,7 +1002,10 @@ class Emu3VQVAE(PreTrainedModel):
 
         self.post_init()
 
-    def encode(self, pixel_values: torch.Tensor, image_sizes: torch.Tensor):
+    @check_model_inputs
+    def encode(
+        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> Emu3VQVAEModelOutput:
         is_image = pixel_values.ndim == 4
         if is_image:
             temporal = self.config.temporal_downsample_factor
@@ -1000,12 +1017,12 @@ class Emu3VQVAE(PreTrainedModel):
         hidden_states = self.encoder(pixel_values)
 
         # b t c h w -> b c t h w
-        hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
-        hidden_states = self.quant_conv(hidden_states)
+        conv_hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
+        conv_hidden_states = self.quant_conv(conv_hidden_states)
 
         # b c t h w -> b t c h w
-        hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
-        codes = self.quantize(hidden_states)
+        conv_hidden_states = conv_hidden_states.permute(0, 2, 1, 3, 4)
+        codes = self.quantize(conv_hidden_states)
 
         image_tokens = codes.squeeze(1) if is_image else codes
 
@@ -1014,7 +1031,10 @@ class Emu3VQVAE(PreTrainedModel):
             for single_image, size in zip(image_tokens, image_sizes)
         ]
 
-        return image_tokens
+        return Emu3VQVAEModelOutput(
+            last_hidden_state=hidden_states,
+            image_tokens=image_tokens,
+        )
 
     def decode(self, hidden_states: torch.Tensor):
         is_image = hidden_states.ndim == 3
@@ -1112,6 +1132,10 @@ class Emu3PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": Emu3DecoderLayer,
+        "attentions": Emu3Attention,
+    }
 
 
 class Emu3RotaryEmbedding(nn.Module):
@@ -1181,11 +1205,6 @@ class Emu3RotaryEmbedding(nn.Module):
 
 @auto_docstring
 class Emu3TextModel(Emu3PreTrainedModel):
-    _can_record_outputs = {
-        "hidden_states": Emu3DecoderLayer,
-        "attentions": Emu3Attention,
-    }
-
     def __init__(self, config: Emu3Config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -1301,7 +1320,8 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import Emu3Processor, Emu3ForConditionalGeneration
         >>> import torch
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> model = Emu3ForCausalLM.from_pretrained("BAAI/Emu3-Chat-hf", dtype=torch.bfloat16)
@@ -1359,7 +1379,7 @@ class Emu3Model(Emu3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
-    def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor):
+    def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor) -> torch.LongTensor:
         """
         Tokenizes images into discrete tokens with VQGAN module. Converts
         obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
@@ -1371,28 +1391,40 @@ class Emu3Model(Emu3PreTrainedModel):
             image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
                 The sizes of the images in the batch, being (height, width) for each image.
         """
-        image_tokens_list = self.vqmodel.encode(pixel_values, image_sizes)
-        bpe_tokens_list = [self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in image_tokens_list]
+        vqmodel_outputs: Emu3VQVAEModelOutput = self.vqmodel.encode(pixel_values, image_sizes, return_dict=True)
+        bpe_tokens_list = [
+            self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in vqmodel_outputs.image_tokens
+        ]
         bpe_tokens = torch.cat(bpe_tokens_list)
         return bpe_tokens
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor):
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Tokenizes images into discrete tokens with VQGAN module and embeds them with text embeddings layer"
+    )
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | Emu3VQVAEModelOutput:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+            The tensors corresponding to the input images.
         """
-        Tokenizes images into discrete tokens with VQGAN module and embeds
-        them with text embeddings layer
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-                The tensors corresponding to the input images.
-        """
-        image_tokens = self.get_image_tokens(pixel_values, image_sizes)
+        vqmodel_outputs: Emu3VQVAEModelOutput = self.vqmodel.encode(
+            pixel_values, image_sizes, return_dict=True, **kwargs
+        )
         split_sizes = [
             (height // self.vqmodel.vision_spatial_factor) * (width // self.vqmodel.vision_spatial_factor + 1)
             for height, width in image_sizes
         ]
-        image_features = self.get_input_embeddings()(image_tokens)
-        image_features = torch.split(image_features, split_sizes)
-        return image_features
+        bpe_tokens_list = [
+            self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in vqmodel_outputs.image_tokens
+        ]
+        bpe_tokens = torch.cat(bpe_tokens_list)
+        image_embeddings = self.get_input_embeddings()(bpe_tokens)
+        image_features = torch.split(image_embeddings, split_sizes)
+        vqmodel_outputs.pooler_output = image_features
+
+        return vqmodel_outputs
 
     @torch.no_grad()
     def decode_image_tokens(self, image_tokens: torch.LongTensor, height: int, width: int):
@@ -1429,12 +1461,12 @@ class Emu3Model(Emu3PreTrainedModel):
             special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
         return special_image_mask
 
     @can_return_tuple
@@ -1467,12 +1499,12 @@ class Emu3Model(Emu3PreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_sizes)
-            image_embeds = torch.cat(image_embeds, dim=0)
+            image_features = self.get_image_features(pixel_values, image_sizes).pooler_output
+            image_features = torch.cat(image_features, dim=0)
             special_image_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_embeds)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.text_model(
@@ -1548,7 +1580,8 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import Emu3Processor, Emu3ForConditionalGeneration
         >>> import torch
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", dtype=torch.bfloat16)
@@ -1571,7 +1604,9 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         ... ]
 
         >>> prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-        >>> image = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=[image], text=[prompt], return_tensors="pt").to(model.device, torch.bfloat16)
 

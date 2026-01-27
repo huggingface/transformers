@@ -17,7 +17,7 @@ import importlib
 import os
 import warnings
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 # Build the list of all image processors
 from ...configuration_utils import PreTrainedConfig
@@ -46,11 +46,19 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
+# These image processors use Lanczos interpolation, which is not supported by fast image processors.
+# To avoid important differences in outputs, we default to using the python backend for these processors.
+DEFAULT_TO_PYTHON_BACKEND_IMAGE_PROCESSORS = [
+    "ChameleonImageProcessor",
+    "FlavaImageProcessor",
+    "Idefics3ImageProcessor",
+    "SmolVLMImageProcessor",
+]
 
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
     # the transformers package is used with Microsoft's Pylance language server.
-    IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[str, Optional[str]] = OrderedDict()
+    IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[str, str] = OrderedDict()
 else:
     IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
@@ -104,6 +112,7 @@ else:
             ("git", "CLIPImageProcessor"),
             ("glm46v", "Glm46VImageProcessor"),
             ("glm4v", "Glm4vImageProcessor"),
+            ("glm_image", "GlmImageImageProcessor"),
             ("glpn", "GLPNImageProcessor"),
             ("got_ocr2", "GotOcr2ImageProcessor"),
             ("grounding-dino", "GroundingDinoImageProcessor"),
@@ -125,11 +134,13 @@ else:
             ("levit", "LevitImageProcessor"),
             ("lfm2_vl", "Lfm2VlImageProcessor"),
             ("lightglue", "LightGlueImageProcessor"),
+            ("lighton_ocr", "PixtralImageProcessor"),
             ("llama4", "Llama4ImageProcessor"),
             ("llava", "LlavaImageProcessor"),
             ("llava_next", "LlavaNextImageProcessor"),
             ("llava_next_video", "LlavaNextImageProcessor"),
             ("llava_onevision", "LlavaOnevisionImageProcessor"),
+            ("lw_detr", "DeformableDetrImageProcessor"),
             ("mask2former", "Mask2FormerImageProcessor"),
             ("maskformer", "MaskFormerImageProcessor"),
             ("metaclip_2", "CLIPImageProcessor"),
@@ -172,6 +183,8 @@ else:
             ("sam2", "Sam2ImageProcessor"),
             ("sam2_video", "Sam2ImageProcessor"),
             ("sam3", "Sam3ImageProcessor"),
+            ("sam3_tracker", "Sam3ImageProcessor"),
+            ("sam3_tracker_video", "Sam3ImageProcessor"),
             ("sam3_video", "Sam3ImageProcessor"),
             ("sam_hq", "SamImageProcessor"),
             ("segformer", "SegformerImageProcessor"),
@@ -268,12 +281,12 @@ def get_image_processor_class_from_name(class_name: str):
 
 
 def get_image_processor_config(
-    pretrained_model_name_or_path: Union[str, os.PathLike],
-    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    pretrained_model_name_or_path: str | os.PathLike,
+    cache_dir: str | os.PathLike | None = None,
     force_download: bool = False,
-    proxies: Optional[dict[str, str]] = None,
-    token: Optional[Union[bool, str]] = None,
-    revision: Optional[str] = None,
+    proxies: dict[str, str] | None = None,
+    token: bool | str | None = None,
+    revision: str | None = None,
     local_files_only: bool = False,
     **kwargs,
 ):

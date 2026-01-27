@@ -14,14 +14,14 @@
 """FalconH1 model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class FalconH1Config(PreTrainedConfig):
+class FalconH1Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`FalconH1Model`]. It is used to instantiate a
     FalconH1Model model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -101,6 +101,12 @@ class FalconH1Config(PreTrainedConfig):
             Whether to use RMSNorm before the gate in the Mamba block
         mamba_rms_norm (`bool`, *optional*, defaults to `False`):
             Whether to use RMSNorm instead of LayerNorm in the Mamba block
+        time_step_min (`float`, *optional*, defaults to 0.001):
+            Minimum `time_step` used to bound `dt_proj.bias`.
+        time_step_max (`float`, *optional*, defaults to 0.1):
+            Maximum `time_step` used to bound `dt_proj.bias`.
+        time_step_limit (`tuple`, *optional*, defaults to `(0.0, inf)`):
+            Accepted range of time step values for clamping.
         projectors_bias (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the attention block
         rope_parameters (`float`, *optional*):
@@ -160,6 +166,9 @@ class FalconH1Config(PreTrainedConfig):
         mamba_proj_bias: bool | None = False,
         mamba_norm_before_gate: bool | None = True,
         mamba_rms_norm: bool | None = False,
+        time_step_min: float | None = 0.001,
+        time_step_max: float | None = 0.1,
+        time_step_limit: tuple[float, float] | None = (0.0, float("inf")),
         projectors_bias: bool | None = False,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         lm_head_multiplier: float | None = 1.0,
@@ -220,6 +229,9 @@ class FalconH1Config(PreTrainedConfig):
 
         self.mamba_norm_before_gate = mamba_norm_before_gate
         self.mamba_rms_norm = mamba_rms_norm
+        self.time_step_min = time_step_min
+        self.time_step_max = time_step_max
+        self.time_step_limit = tuple(time_step_limit) if time_step_limit is not None else None
 
         self.lm_head_multiplier = lm_head_multiplier
         self.embedding_multiplier = embedding_multiplier
@@ -259,15 +271,12 @@ class FalconH1Config(PreTrainedConfig):
         else:
             self.ssm_out_multiplier = 1.0
 
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.rope_parameters = rope_parameters
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     @property
     def layers_block_type(self):

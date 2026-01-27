@@ -20,9 +20,11 @@
 
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 
 
-class LasrEncoderConfig(PreTrainedConfig):
+# Cannot inhert because the mixin will not carry over otherwise
+class LasrEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`LasrEncoder`]. It is used to instantiate a
     `LasrEncoder` model according to the specified arguments, defining the model architecture.
@@ -221,11 +223,9 @@ class LasrCTCConfig(PreTrainedConfig):
 
         self.encoder_config = self.encoder_config
         self.initializer_range = self.encoder_config.initializer_range
+        self.pad_token_id = pad_token_id
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     @classmethod
     def from_encoder_config(cls, encoder_config: LasrEncoderConfig, **kwargs):

@@ -18,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
 class Glm4vVisionConfig(PreTrainedConfig):
@@ -114,7 +114,7 @@ class Glm4vVisionConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class Glm4vTextConfig(PreTrainedConfig):
+class Glm4vTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
     GLM-4.1V model according to the specified arguments, defining the model architecture. Instantiating a
@@ -154,8 +154,6 @@ class Glm4vTextConfig(PreTrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_parameters (`RopeParameters`, *optional*):
@@ -207,7 +205,6 @@ class Glm4vTextConfig(PreTrainedConfig):
         initializer_range: float | None = 0.02,
         rms_norm_eps: int | None = 1e-05,
         use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
         attention_dropout: float | None = 0.0,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
@@ -231,9 +228,7 @@ class Glm4vTextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope_section"}, **kwargs
-        )
+        super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
 
 class Glm4vConfig(PreTrainedConfig):
@@ -264,6 +259,8 @@ class Glm4vConfig(PreTrainedConfig):
             The video start token index to encode the start of video.
         video_end_token_id (`int`, *optional*, defaults to 151342):
             The video end token index to encode the end of video.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig
@@ -292,6 +289,7 @@ class Glm4vConfig(PreTrainedConfig):
         image_end_token_id=151340,
         video_start_token_id=151341,
         video_end_token_id=151342,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -310,6 +308,7 @@ class Glm4vConfig(PreTrainedConfig):
         self.video_end_token_id = video_end_token_id
         self.image_start_token_id = image_start_token_id
         self.image_end_token_id = image_end_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

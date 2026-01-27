@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Mapping, Sequence
-from typing import Optional
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -46,8 +45,8 @@ DEFAULT_SHIELDGEMMA2_POLICIES: Mapping[str, str] = {
 
 
 class ShieldGemma2ProcessorKwargs(Gemma3ProcessorKwargs, total=False):
-    policies: Optional[Sequence[str]]
-    custom_policies: Optional[Mapping[str, str]]
+    policies: Sequence[str] | None
+    custom_policies: Mapping[str, str] | None
     _defaults = {
         "text_kwargs": {
             "padding": True,
@@ -84,7 +83,7 @@ class ShieldGemma2Processor(Gemma3Processor):
 
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
+        images: ImageInput | None = None,
         text=None,
         **kwargs: Unpack[ShieldGemma2ProcessorKwargs],
     ) -> BatchFeature:

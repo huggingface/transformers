@@ -13,11 +13,9 @@
 # limitations under the License.
 """Fast Image processor class for Pix2Struct."""
 
-from typing import Optional, Union
-
 import torch
+import torchvision.transforms.v2.functional as tvF
 from PIL import Image
-from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast
@@ -64,7 +62,7 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
 
     def _further_process_kwargs(
         self,
-        patch_size: Optional[dict[str, int]] = None,
+        patch_size: dict[str, int] | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -88,8 +86,8 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         header: str,
-        font_bytes: Optional[bytes] = None,
-        font_path: Optional[str] = None,
+        font_bytes: bytes | None = None,
+        font_path: str | None = None,
     ) -> torch.Tensor:
         """
         Render header text on image using torch tensors.
@@ -112,11 +110,11 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
 
         # Convert tensor to PIL (channel-first to channel-last for PIL)
         if image.dtype == torch.uint8:
-            image_pil = F.to_pil_image(image)
+            image_pil = tvF.to_pil_image(image)
         else:
             # If float, convert to uint8 first
             image_uint8 = (image * 255).clamp(0, 255).to(torch.uint8)
-            image_pil = F.to_pil_image(image_uint8)
+            image_pil = tvF.to_pil_image(image_uint8)
 
         # Render header text as PIL image
         header_image = render_text(header, font_bytes=font_bytes, font_path=font_path)
@@ -132,7 +130,7 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
         new_image.paste(image_pil.resize((new_width, new_height)), (0, new_header_height))
 
         # Convert back to tensor (channel-first)
-        result = F.pil_to_tensor(new_image).to(device)
+        result = tvF.pil_to_tensor(new_image).to(device)
 
         # Convert back to original dtype if needed
         if dtype != torch.uint8:
@@ -194,7 +192,7 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
         # Resize images (batched) using parent class method
         resize_size = SizeDict(height=resized_height, width=resized_width)
         images = self.resize(
-            image=images, size=resize_size, interpolation=F.InterpolationMode.BILINEAR, antialias=True
+            image=images, size=resize_size, interpolation=tvF.InterpolationMode.BILINEAR, antialias=True
         )
 
         # Extract patches: [batch, rows, columns, patch_height * patch_width * channels]
@@ -236,7 +234,7 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        header_text: Optional[Union[str, list[str]]] = None,
+        header_text: str | list[str] | None = None,
         **kwargs: Unpack[Pix2StructImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -248,10 +246,10 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        header_text: Optional[Union[str, list[str]]] = None,
+        header_text: str | list[str] | None = None,
         do_convert_rgb: bool = True,
         input_data_format: ChannelDimension = ChannelDimension.FIRST,
-        device: Optional[Union[str, torch.device]] = None,
+        device: str | torch.device | None = None,
         **kwargs: Unpack[Pix2StructImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -291,7 +289,7 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         max_patches: int,
         patch_size: SizeDict,
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: str | TensorType | None,
         disable_grouping: bool,
         **kwargs,
     ) -> BatchFeature:

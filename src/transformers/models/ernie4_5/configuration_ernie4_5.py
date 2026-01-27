@@ -14,10 +14,10 @@
 """Ernie 4.5 model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class Ernie4_5Config(PreTrainedConfig):
+class Ernie4_5Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Ernie4_5Model`]. It is used to instantiate an Ernie 4.5
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -149,13 +149,11 @@ class Ernie4_5Config(PreTrainedConfig):
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["Ernie4_5Config"]

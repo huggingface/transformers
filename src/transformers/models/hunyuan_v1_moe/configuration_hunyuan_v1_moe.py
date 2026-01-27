@@ -14,14 +14,14 @@
 """HunYuanMoEV1 model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class HunYuanMoEV1Config(PreTrainedConfig):
+class HunYuanMoEV1Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`HunYuanMoEV1Model`]. It is used to instantiate an
     HunYuan model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -156,14 +156,12 @@ class HunYuanMoEV1Config(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            sep_token_id=sep_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.sep_token_id = sep_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
     def _rope_parameters_validation(self):
         """

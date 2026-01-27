@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import math
 from collections.abc import Callable
 
@@ -32,10 +31,11 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import check_model_inputs
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_audioflamingo3 import AudioFlamingo3Config, AudioFlamingo3EncoderConfig
 
@@ -280,6 +280,11 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     input_modalities = "audio"
     _no_split_modules = ["AudioFlamingo3EncoderLayer"]
 
+    _can_record_outputs = {
+        "hidden_states": AudioFlamingo3EncoderLayer,
+        "attentions": AudioFlamingo3Attention,
+    }
+
     def __init__(self, config: AudioFlamingo3EncoderConfig):
         super().__init__(config)
         self.dropout = config.dropout
@@ -287,7 +292,6 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
 
         embed_dim = config.d_model
         self.num_mel_bins = config.num_mel_bins
-        self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
@@ -317,13 +321,13 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
-    @can_return_tuple
+    @check_model_inputs
     def forward(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor | None = None,
         **kwargs,
-    ):
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Args:
             input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
@@ -367,7 +371,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         hidden_states = self.avg_pooler(hidden_states).permute(0, 2, 1)
         hidden_states = self.layer_norm(hidden_states)
 
-        return BaseModelOutput(
+        return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
         )
 
@@ -442,35 +446,40 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector."
+    )
     def get_audio_features(
-        self, input_features: torch.FloatTensor, input_features_mask: torch.Tensor
-    ) -> torch.FloatTensor:
-        """
-        This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
-        Args:
-            input_features (`torch.FloatTensor`):
-                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
-                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-            input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
-                Mask to avoid performing attention on padded feature indices.
-
-        Returns:
-            `torch.FloatTensor`:
-                The audio embeddings.
+        self,
+        input_features: torch.FloatTensor,
+        input_features_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        input_features (`torch.FloatTensor`):
+            Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
+            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
+            `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+            `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+            and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask to avoid performing attention on padded feature indices.
         """
 
         # Encode audio
-        encoder_output = self.audio_tower(input_features, input_features_mask=input_features_mask)
-        audio_embeds = self.multi_modal_projector(encoder_output.last_hidden_state)
+        audio_output = self.audio_tower(
+            input_features, input_features_mask=input_features_mask, return_dict=True, **kwargs
+        )
+        audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
 
         # Mask according to avg pooling (which is after attention blocks)
         post_lengths = (input_features_mask.sum(-1) - 2) // 2 + 1
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
-        return audio_embeds
+        audio_output.pooler_output = audio_embeds
+
+        return audio_output
 
     @can_return_tuple
     @auto_docstring
@@ -556,7 +565,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, input_features_mask)
+            audio_embeds = self.get_audio_features(input_features, input_features_mask, return_dict=True).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
             audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)

@@ -14,14 +14,14 @@
 """GPTNeoX model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class GPTNeoXConfig(PreTrainedConfig):
+class GPTNeoXConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`GPTNeoXModel`]. It is used to instantiate an
     GPTNeoX model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -126,8 +126,12 @@ class GPTNeoXConfig(PreTrainedConfig):
         use_parallel_residual: bool | None = True,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         attention_bias: bool | None = True,
+        is_decoder: bool | None = False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -144,14 +148,13 @@ class GPTNeoXConfig(PreTrainedConfig):
         self.use_parallel_residual = use_parallel_residual
         self.attention_bias = attention_bias
         self.rope_parameters = rope_parameters
+        self.tie_word_embeddings = tie_word_embeddings
 
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size is not divisible by the number of attention heads! Make sure to update them!"
             )
-        super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
+        super().__init__(**kwargs)
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)

@@ -14,14 +14,14 @@
 """RecurrentGemma model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class RecurrentGemmaConfig(PreTrainedConfig):
+class RecurrentGemmaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`RecurrentGemmaModel`]. It is used to instantiate a RecurrentGemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -82,6 +82,8 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         num_key_value_heads (`16`, *optional*, defaults to 16): Number of key value heads to use GQA.
         attention_bias (`bool`, *optional*, defaults to `False`): whether or not the linear q,k,v of the Attention layer should have bias
         w_init_variance_scale (`float`, *optional*, defaults to 0.01): weight initialization variance.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     ```python
     >>> from transformers import RecurrentGemmaModel, RecurrentGemmaConfig
 
@@ -120,6 +122,7 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         num_key_value_heads: int | None = None,
         attention_bias: str | None = False,
         w_init_variance_scale: float | None = 0.01,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.num_hidden_layers = num_hidden_layers
@@ -143,15 +146,14 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.w_init_variance_scale = w_init_variance_scale
         self.final_w_init_variance_scale = 2.0 / self.num_hidden_layers
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.rope_parameters = rope_parameters
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     @property
     def layers_block_type(self):

@@ -19,10 +19,10 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class Glm4MoeConfig(PreTrainedConfig):
+class Glm4MoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Glm4MoeModel`]. It is used to instantiate a
     Glm4Moe model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -94,6 +94,13 @@ class Glm4MoeConfig(PreTrainedConfig):
             Whether to normalize the topk probabilities.
         use_qk_norm (`bool`, *optional*, defaults to `False`):
             Whether to use query-key normalization in the attention
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+
     ```python
     >>> from transformers import Glm4MoeModel, Glm4MoeConfig
 
@@ -159,6 +166,9 @@ class Glm4MoeConfig(PreTrainedConfig):
         first_k_dense_replace: int | None = 1,
         norm_topk_prob: bool | None = True,
         use_qk_norm: bool | None = False,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -189,11 +199,12 @@ class Glm4MoeConfig(PreTrainedConfig):
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
         self.use_qk_norm = use_qk_norm
+        self.tie_word_embeddings = tie_word_embeddings
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["Glm4MoeConfig"]

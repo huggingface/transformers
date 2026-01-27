@@ -13,8 +13,6 @@
 # limitations under the License.
 """Image processor class for LLaVa-NeXT."""
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...image_processing_utils import (
@@ -45,7 +43,7 @@ from ...utils import TensorType, auto_docstring, is_torchvision_available, loggi
 
 if is_torchvision_available():
     import torch
-    from torchvision.transforms.v2 import functional as F
+    from torchvision.transforms.v2 import functional as tvF
 
 logger = logging.get_logger(__name__)
 
@@ -65,7 +63,7 @@ class LlavaNextTorchVisionBackend(TorchVisionBackend):
     """TorchVision backend for LLaVA-NeXT with patch processing support."""
 
     def _get_padding_size(self, original_resolution: tuple, target_resolution: tuple):
-        """Get padding size for patching (returns list format for F.pad)."""
+        """Get padding size for patching (returns list format for tvF.pad)."""
         original_height, original_width = original_resolution
         target_height, target_width = target_resolution
         paste_x, r_x = divmod(target_width - original_width, 2)
@@ -76,7 +74,7 @@ class LlavaNextTorchVisionBackend(TorchVisionBackend):
         self,
         image: "torch.Tensor",
         target_resolution: tuple,
-        resample: Union["PILImageResampling", "F.InterpolationMode", int, None],
+        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None,
         input_data_format: ChannelDimension,
     ) -> "torch.Tensor":
         """Resizes an image to a target resolution while maintaining aspect ratio."""
@@ -96,7 +94,7 @@ class LlavaNextTorchVisionBackend(TorchVisionBackend):
         new_resolution = get_patch_output_size(image, target_resolution, input_data_format)
         padding = self._get_padding_size(new_resolution, target_resolution)
 
-        padded_image = F.pad(image, padding=padding)
+        padded_image = tvF.pad(image, padding=padding)
 
         return padded_image
 
@@ -106,7 +104,7 @@ class LlavaNextTorchVisionBackend(TorchVisionBackend):
         grid_pinpoints: list[list[int]],
         size: tuple,
         patch_size: int,
-        resample: Union["PILImageResampling", "F.InterpolationMode", int, None],
+        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None,
     ) -> list["torch.Tensor"]:
         """Process an image with variable resolutions by dividing it into patches."""
         if not isinstance(grid_pinpoints, list):
@@ -153,7 +151,7 @@ class LlavaNextTorchVisionBackend(TorchVisionBackend):
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
-        resample: Union["PILImageResampling", "F.InterpolationMode", int, None],
+        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -316,8 +314,8 @@ class LlavaNextPythonBackend(PythonBackend):
     def _pad_for_batching(
         self,
         pixel_values: list[np.ndarray],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> list[np.ndarray]:
         """Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches."""
         max_patch = max(len(x) for x in pixel_values)
@@ -337,7 +335,7 @@ class LlavaNextPythonBackend(PythonBackend):
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
-        resample: Union["PILImageResampling", "F.InterpolationMode", int, None],
+        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

@@ -224,6 +224,7 @@ print(generated_text[0])
 ## Kosmos2_5Processor
 
 [[autodoc]] Kosmos2_5Processor
+    - __call__
 
 ## Kosmos2_5Model
 

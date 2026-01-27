@@ -35,12 +35,18 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    torch_compilable_check,
+)
+from ...utils.generic import check_model_inputs, is_flash_attention_requested, maybe_autocast
 from .configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 
 
@@ -143,6 +149,7 @@ class Glm4vVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.interpolated_method = "bicubic"
 
     def forward(self, embeddings, lengths, image_shapes, h_coords, w_coords) -> torch.Tensor:
         """
@@ -161,57 +168,45 @@ class Glm4vVisionEmbeddings(nn.Module):
         # Get position embedding parameters
         pos_embed_weight = self.position_embedding.weight
         hidden_size = pos_embed_weight.shape[1]
-        total_seq = h_coords.shape[0]
         device = pos_embed_weight.device
 
-        # Move coordinates to correct device
-        h_coords, w_coords = h_coords.to(device), w_coords.to(device)
+        # Convert inputs to tensors if needed
+        if isinstance(lengths, list):
+            lengths = torch.tensor(lengths, device=device, dtype=torch.long)
 
-        # Handle empty sequence case
-        if total_seq == 0:
-            adapted_pos_embed = torch.empty(0, hidden_size, device=device, dtype=pos_embed_weight.dtype)
-        else:
-            # Convert inputs to tensors if needed
-            if isinstance(lengths, list):
-                lengths = torch.tensor(lengths, device=device, dtype=torch.long)
-            if not isinstance(image_shapes, torch.Tensor):
-                image_shapes = torch.tensor(image_shapes, device=device, dtype=torch.long)
+        # Prepare 2D position embedding
+        orig_size_sq = pos_embed_weight.shape[0]
+        orig_size = int(orig_size_sq**0.5)
+        pos_embed_2d = (
+            pos_embed_weight.view(orig_size, orig_size, hidden_size)
+            .permute(2, 0, 1)
+            .unsqueeze(0)
+            .to(device=device, dtype=torch.float32)
+        )
 
-            # Prepare 2D position embedding
-            orig_size_sq = pos_embed_weight.shape[0]
-            orig_size = int(orig_size_sq**0.5)
-            pos_embed_2d = (
-                pos_embed_weight.view(orig_size, orig_size, hidden_size)
-                .permute(2, 0, 1)
-                .unsqueeze(0)
-                .to(device=device, dtype=torch.float32)
-            )
+        # Calculate target dimensions for each patch
+        target_h = torch.cat([image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]).to(
+            device=device, dtype=torch.float32
+        )
+        target_w = torch.cat([image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]).to(
+            device=device, dtype=torch.float32
+        )
 
-            # Calculate target dimensions for each patch
-            target_h = torch.cat([image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]).to(
-                device=device, dtype=torch.float32
-            )
-            target_w = torch.cat([image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]).to(
-                device=device, dtype=torch.float32
-            )
+        # Normalize coordinates to [-1, 1] range for grid_sample
+        norm_w = ((w_coords + 0.5) / target_w) * 2 - 1
+        norm_h = ((h_coords + 0.5) / target_h) * 2 - 1
 
-            # Normalize coordinates to [-1, 1] range for grid_sample
-            h_coords = h_coords.to(device=device, dtype=torch.float32)
-            w_coords = w_coords.to(device=device, dtype=torch.float32)
-            norm_w = ((w_coords + 0.5) / target_w) * 2 - 1
-            norm_h = ((h_coords + 0.5) / target_h) * 2 - 1
+        # Create sampling grid
+        grid = torch.stack((norm_w, norm_h), dim=-1).unsqueeze(0).unsqueeze(2)
 
-            # Create sampling grid
-            grid = torch.stack((norm_w, norm_h), dim=-1).unsqueeze(0).unsqueeze(2)
+        # Perform bicubic interpolation
+        interpolated_embed_fp32 = F.grid_sample(
+            pos_embed_2d, grid, mode=self.interpolated_method, align_corners=False, padding_mode="border"
+        )
 
-            # Perform bicubic interpolation
-            interpolated_embed_fp32 = F.grid_sample(
-                pos_embed_2d, grid, mode="bicubic", align_corners=False, padding_mode="border"
-            )
-
-            # Reshape and convert back to original dtype
-            adapted_pos_embed_fp32 = interpolated_embed_fp32.squeeze(0).squeeze(-1).permute(1, 0)
-            adapted_pos_embed = adapted_pos_embed_fp32.to(pos_embed_weight.dtype).to(embeddings.device)
+        # Reshape and convert back to original dtype
+        adapted_pos_embed_fp32 = interpolated_embed_fp32.squeeze(0).squeeze(-1).permute(1, 0)
+        adapted_pos_embed = adapted_pos_embed_fp32.to(pos_embed_weight.dtype).to(embeddings.device)
 
         # Add adapted position encoding to embeddings
         embeddings = embeddings + adapted_pos_embed
@@ -314,7 +309,7 @@ class Glm4vVisionAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        if "flash" in self.config._attn_implementation:
+        if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, _ = attention_interface(
@@ -405,6 +400,7 @@ class Glm4vTextRotaryEmbedding(nn.Module):
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.mrope_section = config.rope_parameters.get("mrope_section", [8, 12, 12])
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -441,7 +437,7 @@ class Glm4vTextRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        # In contrast to other models, GLM4V different position ids for the grids
+        # In contrast to other models, GLM-V has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
@@ -449,11 +445,18 @@ class Glm4vTextRotaryEmbedding(nn.Module):
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+            freqs = self.apply_mrope(freqs, self.mrope_section)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+    def apply_mrope(self, freqs, mrope_section):
+        section = mrope_section
+        chunks = freqs.split(section, dim=-1)
+        result = torch.cat([chunk[i % 3] for i, chunk in enumerate(chunks)], dim=-1)
+        return result
 
 
 def rotate_half_llm(x):
@@ -463,25 +466,14 @@ def rotate_half_llm(x):
     return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
-def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding with Multimodal Sections to the query and key tensors (https://qwenlm.github.io/blog/qwen2-vl/).
-
-    Explanation:
-        Multimodal 3D rotary position embedding is an extension to 1D rotary position embedding. The input embedding
-        sequence contains vision (images / videos) embedding and text embedding or just contains text embedding. For
-        vision embedding part, we apply rotary position embedding on temporal, height and width dimension separately.
-        Here we split the channel dimension to 3 chunks for the temporal, height and width rotary position embedding.
-        For text embedding part, we just apply 1D rotary position embedding. The three rotary position index (temporal,
-        height and width) of text embedding is always the same, so the text embedding rotary position embedding has no
-        difference with modern LLMs.
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
         q (`torch.Tensor`): The query tensor.
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        mrope_section(`List(int)`):
-            Multimodal rope section is for channel dimension of temporal, height and width in rope calculation.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -492,13 +484,8 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    mrope_section = mrope_section * 2
-    cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
-    sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
 
     # Interleave them instead of usual shape
     cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1)
@@ -516,7 +503,6 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     # Concatenate back to full shape
     q_embed = torch.cat([q_embed, q_pass], dim=-1)
     k_embed = torch.cat([k_embed, k_pass], dim=-1)
-
     return q_embed, k_embed
 
 
@@ -566,9 +552,7 @@ class Glm4vTextAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_multimodal_rotary_pos_emb(  # diff with Llama
-            query_states, key_states, cos, sin, self.rope_parameters["mrope_section"]
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
@@ -717,6 +701,10 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
     config: Glm4vVisionConfig
     input_modalities = ("image", "video")
     _no_split_modules = ["Glm4vVisionBlock"]
+    _can_record_outputs = {
+        "hidden_states": Glm4vVisionBlock,
+        "attentions": Glm4vVisionAttention,
+    }
 
     def __init__(self, config) -> None:
         super().__init__(config)
@@ -775,20 +763,22 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb, pos_ids
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
-                The final hidden states of the model.
-            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
-                The temporal, height and width of feature shape of each image in LLM.
+    @check_model_inputs
+    @auto_docstring
+    def forward(
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
+            The final hidden states of the model.
+        grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+            The temporal, height and width of feature shape of each image in LLM.
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
         hidden_states = self.patch_embed(hidden_states)
         hidden_states = self.post_conv_layernorm(hidden_states)
-
         rotary_pos_emb, image_type_ids = self.rot_pos_emb(grid_thw)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
@@ -803,13 +793,20 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
         seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
-        hidden_states = self.embeddings(hidden_states, seqlens, grid_thw, image_type_ids[:, 0], image_type_ids[:, 1])
+        hidden_states = self.embeddings(
+            hidden_states,
+            seqlens,
+            grid_thw,
+            image_type_ids[:, 0].to(hidden_states.device),
+            image_type_ids[:, 1].to(hidden_states.device),
+        )
 
         for blk in self.blocks:
             hidden_states = blk(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 position_embeddings=position_embeddings,
+                **kwargs,
             )
 
         hidden_states = self.post_layernorm(hidden_states)
@@ -820,8 +817,12 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         hidden_states = hidden_states.permute(0, 3, 1, 2)
         hidden_states = self.downsample(hidden_states).view(-1, self.config.out_hidden_size)
 
-        hidden_states = self.merger(hidden_states)
-        return hidden_states
+        merged_hidden_states = self.merger(hidden_states)
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=merged_hidden_states,
+        )
 
 
 @auto_docstring
@@ -915,7 +916,7 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
-                position_ids=position_ids,
+                position_ids=text_position_ids,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
@@ -1145,17 +1146,19 @@ class Glm4vModel(Glm4vPreTrainedModel):
 
             return position_ids, mrope_position_deltas
 
+    @can_return_tuple
+    @auto_docstring
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: torch.LongTensor | None = None
-    ):
-        """
-        Encodes videos into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input videos.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
@@ -1164,26 +1167,36 @@ class Glm4vModel(Glm4vPreTrainedModel):
             repeated_row = torch.tensor([1, h.item(), w.item()]).unsqueeze(0).repeat(t, 1)
             temp_frames_hw.append(repeated_row)
         flattened_video_grid_thw = torch.cat(temp_frames_hw, dim=0)
-        video_embeds = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw)
+        vision_outputs = self.visual(
+            pixel_values_videos, grid_thw=flattened_video_grid_thw, return_dict=True, **kwargs
+        )
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        video_embeds = torch.split(video_embeds, split_sizes)
-        return video_embeds
+        video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = video_embeds
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
+        return vision_outputs
 
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(image_embeds, split_sizes)
-        return image_embeds
+        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = image_embeds
+
+        return vision_outputs
 
     def get_placeholder_mask(
         self,
@@ -1212,18 +1225,19 @@ class Glm4vModel(Glm4vPreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
+        if image_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
 
         n_video_tokens = special_video_mask.sum()
         special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
-            raise ValueError(
-                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+        if video_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_video_mask].numel() == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
-
         return special_image_mask, special_video_mask
 
     @auto_docstring
@@ -1258,13 +1272,13 @@ class Glm4vModel(Glm4vPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(input_ids, inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, return_dict=True).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features=video_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
@@ -1382,13 +1396,37 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @auto_docstring
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: torch.LongTensor | None = None
-    ):
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw)
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        return self.model.get_video_features(
+            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
+        )
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
-        return self.model.get_image_features(pixel_values, image_grid_thw)
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        """
+        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -1422,23 +1460,25 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Glm4vForConditionalGeneration
 
-        >>> model = Glm4vForConditionalGeneration.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
-        >>> processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
+        >>> model = Glm4vForConditionalGeneration.from_pretrained("zai-org/GLM-4.1V-9B-Thinking")
+        >>> processor = AutoProcessor.from_pretrained("zai-org/GLM-4.1V-9B-Thinking")
 
         >>> messages = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "image"},
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
                     {"type": "text", "text": "What is shown in this image?"},
                 ],
             },
         ]
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         >>> inputs = processor(text=[text], images=[image], vision_infos=[vision_infos])
@@ -1515,7 +1555,7 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        # GLM-4.1V position_ids are prepareed with rope_deltas in forward
+        # GLM-V position_ids are prepared with rope_deltas in forward
         model_inputs["position_ids"] = None
 
         if not is_first_iteration and use_cache:

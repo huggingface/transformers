@@ -13,8 +13,6 @@
 # limitations under the License.
 """Image processor class for EfficientNet."""
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -100,16 +98,16 @@ class EfficientNetImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_center_crop: bool = False,
-        crop_size: Optional[dict[str, int]] = None,
-        rescale_factor: Union[int, float] = 1 / 255,
+        crop_size: dict[str, int] | None = None,
+        rescale_factor: int | float = 1 / 255,
         rescale_offset: bool = False,
         do_rescale: bool = True,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         include_top: bool = True,
         **kwargs,
     ) -> None:
@@ -137,8 +135,8 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -183,10 +181,10 @@ class EfficientNetImageProcessor(BaseImageProcessor):
     def rescale(
         self,
         image: np.ndarray,
-        scale: Union[int, float],
+        scale: int | float,
         offset: bool = True,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ):
         """
@@ -224,21 +222,21 @@ class EfficientNetImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
         resample=None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[dict[str, int]] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        rescale_offset: Optional[bool] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        include_top: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_center_crop: bool | None = None,
+        crop_size: dict[str, int] | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        rescale_offset: bool | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        include_top: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.

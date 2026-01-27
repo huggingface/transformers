@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -1064,30 +1063,6 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
-        input_shape = input_ids.shape
-        effective_batch_size = input_shape[0]
-
-        #  add a dummy token
-        if self.config.pad_token_id is None:
-            raise ValueError("The PAD token should be defined for generation")
-
-        attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
-        dummy_token = torch.full(
-            (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
-        )
-        input_ids = torch.cat([input_ids, dummy_token], dim=1)
-
-        return {"input_ids": input_ids, "attention_mask": attention_mask}
-
-    @classmethod
-    def can_generate(cls) -> bool:
-        """
-        Legacy correction: ErnieForMaskedLM can't call `generate()` from `GenerationMixin`, even though it has a
-        `prepare_inputs_for_generation` method.
-        """
-        return False
-
 
 class ErnieOnlyNSPHead(nn.Module):
     def __init__(self, config):
@@ -1158,14 +1133,6 @@ class ErnieForNextSentencePrediction(ErniePreTrainedModel):
         >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
         ```
         """
-
-        if "next_sentence_label" in kwargs:
-            warnings.warn(
-                "The `next_sentence_label` argument is deprecated and will be removed in a future version, use"
-                " `labels` instead.",
-                FutureWarning,
-            )
-            labels = kwargs.pop("next_sentence_label")
 
         outputs = self.ernie(
             input_ids,

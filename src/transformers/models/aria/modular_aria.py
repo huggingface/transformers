@@ -36,10 +36,12 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_python import PreTokenizedInput, TextInput
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import check_model_inputs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -217,18 +219,8 @@ class AriaConfig(PreTrainedConfig):
             Index used to represent image tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal initializer for initializing all weight matrices.
-
-    Attributes:
-        model_type (`str`):
-            Type of the model, set to `"aria"`.
-        image_token_index (`int`):
-            Index used to represent image tokens.
-        projector_patch_to_query_dict (`dict`):
-            Mapping of patch sizes to query dimensions.
-        vision_config (`AriaVisionConfig`):
-            Configuration for the vision component.
-        text_config (`AriaTextConfig`):
-            Configuration for the text component.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
     """
 
     model_type = "aria"
@@ -243,8 +235,9 @@ class AriaConfig(PreTrainedConfig):
         vision_feature_layer: int = -1,
         text_config: AriaTextConfig = None,
         projector_patch_to_query_dict: dict | None = None,
-        image_token_index: int = 9,
-        initializer_range: float = 0.02,
+        image_token_index: int | None = 9,
+        initializer_range: float | None = 0.02,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -274,6 +267,7 @@ class AriaConfig(PreTrainedConfig):
             text_config = AriaTextConfig()
 
         self.text_config = text_config
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 
@@ -878,6 +872,21 @@ class AriaImageProcessor(BaseImageProcessor):
 
 
 class AriaImagesKwargs(ImagesKwargs, total=False):
+    """
+    split_image (`bool`, *optional*, defaults to `False`):
+        Whether to split large images into multiple crops. When enabled, images exceeding the maximum size are
+        divided into overlapping crops that are processed separately and then combined. This allows processing
+        of very high-resolution images that exceed the model's input size limits.
+    max_image_size (`int`, *optional*, defaults to `980`):
+        Maximum image size (in pixels) for a single image crop. Images larger than this will be split into
+        multiple crops when `split_image=True`, or resized if splitting is disabled. This parameter controls
+        the maximum resolution of individual image patches processed by the model.
+    min_image_size (`int`, *optional*):
+        Minimum image size (in pixels) for a single image crop. Images smaller than this will be upscaled to
+        meet the minimum requirement. If not specified, images are processed at their original size (subject
+        to the maximum size constraint).
+    """
+
     split_image: bool
     max_image_size: int
     min_image_size: int
@@ -899,21 +908,8 @@ class AriaProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class AriaProcessor(ProcessorMixin):
-    """
-    AriaProcessor is a processor for the Aria model which wraps the Aria image preprocessor and the LLama slow tokenizer.
-
-    Args:
-        image_processor (`AriaImageProcessor`, *optional*):
-            The AriaImageProcessor to use for image preprocessing.
-        tokenizer (`PreTrainedTokenizerBase`, *optional*):
-            An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
-        chat_template (`str`, *optional*):
-            A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
-        size_conversion (`Dict`, *optional*):
-            A dictionary indicating size conversions for images.
-    """
-
     def __init__(
         self,
         image_processor=None,
@@ -921,6 +917,10 @@ class AriaProcessor(ProcessorMixin):
         chat_template: str | None = None,
         size_conversion: dict[float | int, int] | None = None,
     ):
+        r"""
+        size_conversion (`Dict`, *optional*):
+            A dictionary indicating size conversions for images.
+        """
         if size_conversion is None:
             size_conversion = {490: 128, 980: 256}
         self.size_conversion = {int(k): v for k, v in size_conversion.items()}
@@ -932,25 +932,14 @@ class AriaProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
         images: ImageInput | None = None,
         **kwargs: Unpack[AriaProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s).
-
-        Args:
-            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`ImageInput`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
@@ -1271,33 +1260,25 @@ class AriaModel(LlavaModel):
         )
         return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
 
+    @check_model_inputs(tie_last_hidden_states=False)
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.FloatTensor | None = None,
         vision_feature_layer: int = -1,
-    ):
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
-               The tensors corresponding to the input images.
-            pixel_mask (`torch.FloatTensor]`, *optional*):
-                The tensors corresponding to the input image mask.
-            vision_feature_layer (`Union[int, list[int]]`, *optional*):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
-        """
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
-        )
+        output_hidden_states: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
         image_outputs = self.vision_tower(
-            pixel_values, patch_attention_mask=patch_attention_mask, output_hidden_states=True
+            pixel_values,
+            patch_attention_mask=patch_attention_mask,
+            output_hidden_states=True,  # Ignore arg on purpose
+            return_dict=True,
+            **kwargs,
         )
         image_attn_mask = None
         if patch_attention_mask is not None:
@@ -1305,9 +1286,12 @@ class AriaModel(LlavaModel):
             image_attn_mask = torch.logical_not(flattened_mask)
 
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
-        return image_features
+        image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
 
+        return image_outputs
+
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1330,7 +1314,8 @@ class AriaModel(LlavaModel):
                 pixel_values=pixel_values,
                 pixel_mask=pixel_mask,
                 vision_feature_layer=self.config.vision_feature_layer,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -1367,16 +1352,19 @@ class AriaModel(LlavaModel):
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.FloatTensor | None = None,
         vision_feature_layer: int = -1,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
             vision_feature_layer=vision_feature_layer,
+            **kwargs,
         )
 
     @can_return_tuple
@@ -1406,7 +1394,8 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         Example:
 
         ```python
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
         >>> from PIL import Image
         >>> from io import BytesIO
