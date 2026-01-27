@@ -39,7 +39,7 @@ from ...utils.backbone_utils import load_backbone
 from .configuration_pp_doclayout_v3 import PPDocLayoutV3Config
 
 
-class GlobalPointer(nn.Module):
+class PPDocLayoutV3GlobalPointer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.head_size = config.global_pointer_head_size
@@ -1275,7 +1275,7 @@ class PPDocLayoutV3Decoder(PPDocLayoutV3PreTrainedModel):
 
             if order_head is not None and global_pointer is not None:
                 valid_query = out_query[:, -self.num_queries :] if self.num_queries is not None else out_query
-                order_logits = global_pointer(order_head(valid_query))
+                order_logits = global_pointer(order_head[idx](valid_query))
                 decoder_out_order_logits += (order_logits,)
 
             if output_attentions:
@@ -1667,8 +1667,10 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
         self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
         self.decoder = PPDocLayoutV3Decoder(config)
 
-        self.decoder_order_head = nn.Linear(config.d_model, config.d_model)
-        self.decoder_global_pointer = GlobalPointer(config)
+        self.decoder_order_head = nn.ModuleList(
+            [nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)]
+        )
+        self.decoder_global_pointer = PPDocLayoutV3GlobalPointer(config)
         self.decoder_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.decoder.class_embed = self.enc_score_head
         self.decoder.bbox_embed = self.enc_bbox_head

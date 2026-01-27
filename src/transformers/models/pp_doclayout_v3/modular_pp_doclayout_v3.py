@@ -14,20 +14,25 @@
 
 import math
 from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 import torch
 import torch.nn.functional as F
+import torchvision.transforms.v2.functional as tvF
 from torch import nn
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
+    BatchFeature,
 )
-from ...image_utils import (
-    PILImageResampling,
+from ...image_transforms import (
+    group_images_by_shape,
+    reorder_images,
 )
+from ...image_utils import PILImageResampling, SizeDict
 from ...modeling_outputs import BaseModelOutput
 from ...utils import (
     ModelOutput,
@@ -356,6 +361,56 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
+    # We require `self.resize(..., antialias=False)` to approximate the output of `cv2.resize`
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["tvF.InterpolationMode"],
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(
+                    image=stacked_images, size=size, interpolation=interpolation, antialias=False
+                )
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        if do_pad:
+            processed_images = self.pad(processed_images, pad_size=pad_size, disable_grouping=disable_grouping)
+
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
     def _get_order_seqs(self, order_logits):
         """
         Computes the order sequences for a batch of inputs based on logits.
@@ -387,6 +442,112 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
 
         return order_seq
 
+    def angle_between_vectors(self, v1, v2):
+        unit_v1 = v1 / np.linalg.norm(v1)
+        unit_v2 = v2 / np.linalg.norm(v2)
+        dot_prod = np.clip(np.dot(unit_v1, unit_v2), -1.0, 1.0)
+        angle_rad = np.arccos(dot_prod)
+        return np.degrees(angle_rad)
+
+    def is_convex(self, p_prev, p_curr, p_next):
+        v1 = p_curr - p_prev
+        v2 = p_next - p_curr
+        cross = v1[0] * v2[1] - v1[1] * v2[0]
+        return cross < 0
+
+    def extract_custom_vertices(self, polygon, sharp_angle_thresh=45):
+        poly = np.array(polygon)
+        n = len(poly)
+        res = []
+        i = 0
+        while i < n:
+            p_prev = poly[(i - 1) % n]
+            p_curr = poly[i]
+            p_next = poly[(i + 1) % n]
+            v1 = p_prev - p_curr
+            v2 = p_next - p_curr
+            angle = self.angle_between_vectors(v1, v2)
+            if self.is_convex(p_prev, p_curr, p_next):
+                if abs(angle - sharp_angle_thresh) < 1:
+                    # Calculate the new point based on the direction of two vectors.
+                    dir_vec = v1 / np.linalg.norm(v1) + v2 / np.linalg.norm(v2)
+                    dir_vec = dir_vec / np.linalg.norm(dir_vec)
+                    d = (np.linalg.norm(v1) + np.linalg.norm(v2)) / 2
+                    p_new = p_curr + dir_vec * d
+                    res.append(tuple(p_new))
+                else:
+                    res.append(tuple(p_curr))
+            i += 1
+        return res
+
+    def _mask2polygon(self, mask, epsilon_ratio=0.004):
+        """
+        Postprocess mask by removing small noise.
+        Args:
+            mask (ndarray): The input mask of shape [H, W].
+            epsilon_ratio (float): The ratio of epsilon.
+        Returns:
+            ndarray: The output mask after postprocessing.
+        """
+        requires_backends(self._mask2polygon, ["cv2"])
+        import cv2
+
+        cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        if not cnts:
+            return None
+
+        cnt = max(cnts, key=cv2.contourArea)
+        epsilon = epsilon_ratio * cv2.arcLength(cnt, True)
+        approx_cnt = cv2.approxPolyDP(cnt, epsilon, True)
+        polygon_points = approx_cnt.squeeze()
+        polygon_points = np.atleast_2d(polygon_points)
+
+        polygon_points = self.extract_custom_vertices(polygon_points)
+
+        return polygon_points
+
+    def _extract_polygon_points_by_masks(self, boxes, masks, scale_ratio):
+        requires_backends(self._extract_polygon_points_by_masks, ["cv2"])
+        import cv2
+
+        scale_w, scale_h = scale_ratio[0] / 4, scale_ratio[1] / 4
+        mask_height, mask_width = masks.shape[1:]
+        polygon_points = []
+
+        for i in range(len(boxes)):
+            x_min, y_min, x_max, y_max = boxes[i].astype(np.int32)
+            box_w, box_h = x_max - x_min, y_max - y_min
+
+            # default rect
+            rect = np.array(
+                [[x_min, y_min], [x_max, y_min], [x_max, y_max], [x_min, y_max]],
+                dtype=np.float32,
+            )
+
+            if box_w <= 0 or box_h <= 0:
+                polygon_points.append(rect)
+                continue
+
+            # crop mask
+            x_s = np.clip([int(round(x_min * scale_w)), int(round(x_max * scale_w))], 0, mask_width)
+            y_s = np.clip([int(round(y_min * scale_h)), int(round(y_max * scale_h))], 0, mask_height)
+            cropped = masks[i, y_s[0] : y_s[1], x_s[0] : x_s[1]]
+
+            # resize mask to match box size
+            resized_mask = cv2.resize(cropped.astype(np.uint8), (box_w, box_h), interpolation=cv2.INTER_NEAREST)
+
+            polygon = self._mask2polygon(resized_mask)
+            if polygon is not None and len(polygon) < 4:
+                polygon_points.append(rect)
+                continue
+            if polygon is not None and len(polygon) > 0:
+                polygon = polygon + np.array([x_min, y_min])
+
+            polygon_points.append(polygon)
+
+        return polygon_points
+
     def post_process_object_detection(
         self,
         outputs,
@@ -401,13 +562,14 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
             outputs ([`DetrObjectDetectionOutput`]):
                 Raw outputs of the model.
         Returns:
-            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and polygon_points for an image
             in the batch as predicted by the model.
         """
         requires_backends(self, ["torch"])
         boxes = outputs.pred_boxes
         logits = outputs.logits
         order_logits = outputs.order_logits
+        masks = outputs.out_masks
 
         order_seqs = self._get_order_seqs(order_logits)
 
@@ -436,17 +598,29 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         labels = index % num_classes
         index = index // num_classes
         boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
+        masks = masks.gather(
+            dim=1, index=index.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, masks.shape[-2], masks.shape[-1])
+        )
+        masks = (masks.sigmoid() > threshold).int()
         order_seqs = order_seqs.gather(dim=1, index=index)
 
         results = []
-        for score, label, box, order_seq in zip(scores, labels, boxes, order_seqs):
+        for score, label, box, order_seq, target_size, mask in zip(
+            scores, labels, boxes, order_seqs, target_sizes, masks
+        ):
             order_seq = order_seq[score >= threshold]
             order_seq, indices = torch.sort(order_seq)
+            polygon_points = self._extract_polygon_points_by_masks(
+                box[score >= threshold][indices].detach().numpy(),
+                mask[score >= threshold][indices].detach().numpy(),
+                [self.size["width"] / target_size[1], self.size["height"] / target_size[0]],
+            )
             results.append(
                 {
                     "scores": score[score >= threshold][indices],
                     "labels": label[score >= threshold][indices],
                     "boxes": box[score >= threshold][indices],
+                    "polygon_points": polygon_points,
                     "order_seq": order_seq,
                 }
             )
@@ -454,7 +628,7 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         return results
 
 
-class GlobalPointer(nn.Module):
+class PPDocLayoutV3GlobalPointer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.head_size = config.global_pointer_head_size
@@ -1018,7 +1192,7 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
 
             if order_head is not None and global_pointer is not None:
                 valid_query = out_query[:, -self.num_queries :] if self.num_queries is not None else out_query
-                order_logits = global_pointer(order_head(valid_query))
+                order_logits = global_pointer(order_head[idx](valid_query))
                 decoder_out_order_logits += (order_logits,)
 
             if output_attentions:
@@ -1081,8 +1255,10 @@ class PPDocLayoutV3Model(RTDetrModel):
         encoder_input_proj_list = []
         self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list[1:])
 
-        self.decoder_order_head = nn.Linear(config.d_model, config.d_model)
-        self.decoder_global_pointer = GlobalPointer(config)
+        self.decoder_order_head = nn.ModuleList(
+            [nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)]
+        )
+        self.decoder_global_pointer = PPDocLayoutV3GlobalPointer(config)
         self.decoder_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.decoder = PPDocLayoutV3Decoder(config)
         self.decoder.class_embed = self.enc_score_head
