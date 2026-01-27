@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig, PretrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..timm_wrapper import TimmWrapperConfig
@@ -22,7 +22,7 @@ from ..timm_wrapper import TimmWrapperConfig
 logger = logging.get_logger(__name__)
 
 
-class PeVideoEncoderConfig(PreTrainedConfig):
+class PeVideoEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`PeVideoEncoder`]. It is used to instantiate a
     PeVideoEncoder model according to the specified arguments, defining the model architecture. Instantiating a configuration

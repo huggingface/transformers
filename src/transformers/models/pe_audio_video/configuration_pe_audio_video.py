@@ -14,7 +14,7 @@
 
 
 from ...configuration_utils import PreTrainedConfig, PretrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class PeAudioVideoEncoderConfig(PreTrainedConfig):
+class PeAudioVideoEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`PeAudioVideoEncoderModel`]. It is used to instantiate a
     PeAudioVideoEncoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
