@@ -16,6 +16,7 @@ def attn_mask_is_needed(config: PretrainedConfig) -> bool:
     """Checks if attention mask is needed for the given (config)."""
     return config._attn_implementation in ["paged|eager", "paged|sdpa"]
 
+
 def build_attention_mask(
     attention_mask: torch.Tensor,
     cumulative_seqlens_q: list[int],
@@ -99,6 +100,7 @@ def build_attention_mask(
         # Replace in attention mask
         attention_mask[..., query_range, key_range] = masked
 
+
 @dataclass
 class PagedAttentionArgs:
     input_ids: torch.Tensor
@@ -132,7 +134,6 @@ class PagedAttentionArgs:
 
 
 class ContinuousBatchingIOs:
-
     def __init__(
         self, cache: PagedAttentionCache, config: PretrainedConfig, device: torch.device, model_dtype: torch.dtype
     ) -> None:
@@ -161,7 +162,9 @@ class ContinuousBatchingIOs:
         # Some tensors always have the same shape regardless of the model
         self.input_ids = torch.empty((1, self.cache.max_batch_tokens), dtype=torch.int32, device=self.device)
         self.position_ids = torch.empty((1, self.cache.max_batch_tokens), dtype=torch.int32, device=self.device)
-        self.cumulative_seqlens_q = torch.empty((self.cache.max_batch_tokens + 1,), dtype=torch.int32, device=self.device)
+        self.cumulative_seqlens_q = torch.empty(
+            (self.cache.max_batch_tokens + 1,), dtype=torch.int32, device=self.device
+        )
         self.max_seqlen_q = 0
         self.logits_indices = torch.empty((self.cache.max_batch_tokens,), dtype=torch.int32, device=self.device)
         self.output_ids = torch.empty((self.cache.max_batch_tokens,), dtype=torch.int32, device=self.device)
@@ -169,9 +172,13 @@ class ContinuousBatchingIOs:
         # For some kwargs, we have a dict of tensors with as many items as there are attention types
         self.cumulative_seqlens_k: dict[str, torch.Tensor] = {}
         if self.cache.num_full_attention_groups:
-            self.cumulative_seqlens_k["full_attention"] = torch.empty((self.cache.max_batch_tokens + 1,), dtype=torch.int32, device=self.device)
+            self.cumulative_seqlens_k["full_attention"] = torch.empty(
+                (self.cache.max_batch_tokens + 1,), dtype=torch.int32, device=self.device
+            )
         if self.cache.num_sliding_attention_groups:
-            self.cumulative_seqlens_k["sliding_attention"] = torch.empty((self.cache.max_batch_tokens + 1,), dtype=torch.int32, device=self.device)
+            self.cumulative_seqlens_k["sliding_attention"] = torch.empty(
+                (self.cache.max_batch_tokens + 1,), dtype=torch.int32, device=self.device
+            )
         self.max_seqlen_k = dict.fromkeys(self.cumulative_seqlens_k.keys(), 0)
 
         if attn_mask_is_needed(self.config):
@@ -277,7 +284,9 @@ class ContinuousBatchingIOs:
                 self.max_seqlen_k[layer_type] = max(self.max_seqlen_k[layer_type], layer_type_seqlen_k)
 
             # We extend the read and write indices for the cache
-            self.cache.extend_read_and_write_indices(state.request_id, past_length, query_length, read_index, write_index)
+            self.cache.extend_read_and_write_indices(
+                state.request_id, past_length, query_length, read_index, write_index
+            )
 
             # If the request has no remaining prefill tokens, it means the next token prediction is relevant
             if not state.remaining_prefill_tokens:
@@ -379,4 +388,3 @@ class ContinuousBatchingIOs:
         if self.attention_mask is None:
             kwargs.attention_mask = None
         return kwargs.asdict()  # TODO: this is imperfect, check if there is no better way to juggle dict / dataclass
-
