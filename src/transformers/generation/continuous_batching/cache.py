@@ -190,8 +190,8 @@ class PagedAttentionCache:
             num_attention_masks=num_attention_masks,
         )
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
-            num_blocks_=getattr(generation_config, "num_blocks", None),
-            max_batch_tokens_=getattr(generation_config, "max_batch_tokens", None),
+            num_blocks=getattr(generation_config, "num_blocks", None),
+            max_batch_tokens=getattr(generation_config, "max_batch_tokens", None),
             max_memory_percent=getattr(
                 generation_config, "max_memory", 0.8
             ),  # FIXME: it seems we overcommit memory, was changed from 0.9 which caused OOMs in our benchmarking CI
@@ -515,8 +515,8 @@ class PagedAttentionMemoryHandler:
 
     def infer_num_blocks_and_max_batch_tokens(
         self,
-        num_blocks_: int | None = None,  # the underscore helps with the typing
-        max_batch_tokens_: int | None = None,
+        num_blocks: int | None = None,
+        max_batch_tokens: int | None = None,
         max_memory_percent: float = 0.8,  # FIXME: it seems we overcommit memory, was changed from 0.9 which caused OOMs in our benchmarking CI
         cache_dtype: torch.dtype = torch.float16,
     ) -> tuple[int, int]:
@@ -532,19 +532,21 @@ class PagedAttentionMemoryHandler:
 
         where we already simplified int32_size = 4.
         """
-        # If neither num_blocks nor max_batch_tokens are provided, we use a second-order polynomial
-        if num_blocks_ is None and max_batch_tokens_ is None:
-            num_blocks, max_batch_tokens = self.compute_num_blocks_and_max_batch_tokens(
-                max_memory_percent, cache_dtype
-            )
-        # If only num_blocks is provided, we infer the max_batch_tokens
-        elif num_blocks_ is not None and max_batch_tokens_ is None:
-            num_blocks = num_blocks_
-            max_batch_tokens = self.compute_max_batch_tokens(num_blocks, max_memory_percent, cache_dtype)
-        # If only max_batch_tokens is provided, we infer the num_blocks
-        elif max_batch_tokens_ is not None and num_blocks_ is None:
-            max_batch_tokens = max_batch_tokens_
-            num_blocks = self.compute_num_blocks(max_batch_tokens, max_memory_percent, cache_dtype)
+        if num_blocks is None:
+            if max_batch_tokens is None:
+                # If neither num_blocks nor max_batch_tokens are provided, we use a second-order polynomial
+                num_blocks, max_batch_tokens = self.compute_num_blocks_and_max_batch_tokens(
+                    max_memory_percent, cache_dtype
+                )
+            else:
+                # If only max_batch_tokens is provided, we infer the num_blocks
+                num_blocks = self.compute_num_blocks(max_batch_tokens, max_memory_percent, cache_dtype)
+        elif max_batch_tokens is None:
+                # If only num_blocks is provided, we infer the max_batch_tokens
+                max_batch_tokens = self.compute_max_batch_tokens(num_blocks, max_memory_percent, cache_dtype)
+        else:
+            # If both num_blocks and max_batch_tokens are provided, we use them (useless, but helps with typing)
+            max_batch_tokens = max_batch_tokens
 
         # We check if the memory footprint is too large in all cases
         available_memory = self.get_available_memory(max_memory_percent)
