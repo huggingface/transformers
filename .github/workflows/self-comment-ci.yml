@@ -2,8 +2,6 @@ name: PR comment GitHub CI
 
 on:
   pull_request:
-    branches-ignore:
-      - main
 permissions: read-all
 
 env:
