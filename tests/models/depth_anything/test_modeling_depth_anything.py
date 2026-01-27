@@ -19,7 +19,6 @@ import pytest
 
 from transformers import DepthAnythingConfig, Dinov2Config
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils.import_utils import get_torch_major_and_minor_version
 
@@ -287,8 +286,6 @@ class DepthAnythingModelIntegrationTest(unittest.TestCase):
                 if strict and get_torch_major_and_minor_version() == "2.7":
                     self.skipTest(reason="`strict=True` is currently failing with torch 2.7.")
 
-                if not is_torch_greater_or_equal_than_2_4:
-                    self.skipTest(reason="This test requires torch >= 2.4 to run.")
                 model = (
                     DepthAnythingForDepthEstimation.from_pretrained("LiheYoung/depth-anything-small-hf")
                     .to(torch_device)

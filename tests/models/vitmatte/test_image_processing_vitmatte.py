@@ -19,7 +19,6 @@ import warnings
 
 import numpy as np
 import pytest
-from packaging import version
 
 from transformers.image_utils import load_image
 from transformers.testing_utils import (
@@ -350,8 +349,6 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # override as trimaps are needed for the image processor
         if self.fast_image_processing_class is None:
             self.skipTest("Skipping compilation test as fast image processor is not defined")
-        if version.parse(torch.__version__) < version.parse("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         torch.compiler.reset()
         input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)

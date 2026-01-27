@@ -686,8 +686,6 @@ class CacheExportIntegrationTest(unittest.TestCase):
         """
         Tests that static cache works with `torch.export()`
         """
-        if not is_torch_greater_or_equal("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         set_seed(0)
         device = torch_device

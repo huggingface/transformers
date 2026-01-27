@@ -252,8 +252,6 @@ def is_torch_xpu_available(check_device: bool = False) -> bool:
     if torch_version.major == 2 and torch_version.minor < 6:
         if is_ipex_available():
             import intel_extension_for_pytorch  # noqa: F401
-        elif torch_version.major == 2 and torch_version.minor < 4:
-            return False
 
     import torch
 
