@@ -109,6 +109,8 @@ if is_torch_available():
 
 from unittest.mock import patch
 
+def is_moe_model(config):
+    return getattr(config, "_experts_implementation", None) is not None
 
 class GenerationTesterMixin:
     input_name = "input_ids"
@@ -719,7 +721,7 @@ class GenerationTesterMixin:
 
             # `gpt_oss` seems to have larger differences on CPU every other generated tokens, sth. like
             # 1e-9, 1e-5, 1e-9, 1e-5. While on GPU, they are all very small 1e-9.
-            if getattr(config, "_experts_implementation", None) is not None:
+            if is_moe_model(config):
                 atol = rtol = 1e-3
             else:
                 atol = rtol = 1e-5
@@ -803,7 +805,7 @@ class GenerationTesterMixin:
             output_prompt_lookup = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
 
             # The two outputs must match and their shape must be as expected
-            if getattr(config, "_experts_implementation", None) is not None:
+            if is_moe_model(config):
                 atol = rtol = 1e-3
             else:
                 atol = rtol = 1e-5
@@ -1174,7 +1176,7 @@ class GenerationTesterMixin:
             outputs_from_embeds = model.generate(
                 input_ids=input_ids, inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
             )
-            if getattr(config, "_experts_implementation", None) is not None:
+            if is_moe_model(config):
                 atol = rtol = 1e-3
             else:
                 atol = rtol = 1e-5
@@ -1334,7 +1336,7 @@ class GenerationTesterMixin:
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            if getattr(config, "_experts_implementation", None) is not None:
+            if is_moe_model(config):
                 atol = rtol = 1e-3
             else:
                 atol = rtol = 1e-5
@@ -1458,7 +1460,7 @@ class GenerationTesterMixin:
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
-                if getattr(config, "_experts_implementation", None) is not None:
+                if is_moe_model(config):
                     atol = rtol = 1e-3
                 else:
                     atol = rtol = 1e-5
@@ -1626,7 +1628,7 @@ class GenerationTesterMixin:
                     "See the test logs for more details."
                 )
 
-            if getattr(config, "_experts_implementation", None) is not None:
+            if is_moe_model(config):
                 atol = rtol = 1e-3
             else:
                 atol = rtol = 1e-5
