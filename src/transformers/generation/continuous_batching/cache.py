@@ -542,8 +542,8 @@ class PagedAttentionMemoryHandler:
                 # If only max_batch_tokens is provided, we infer the num_blocks
                 num_blocks = self.compute_num_blocks(max_batch_tokens, max_memory_percent, cache_dtype)
         elif max_batch_tokens is None:
-                # If only num_blocks is provided, we infer the max_batch_tokens
-                max_batch_tokens = self.compute_max_batch_tokens(num_blocks, max_memory_percent, cache_dtype)
+            # If only num_blocks is provided, we infer the max_batch_tokens
+            max_batch_tokens = self.compute_max_batch_tokens(num_blocks, max_memory_percent, cache_dtype)
         else:
             # If both num_blocks and max_batch_tokens are provided, we use them (useless, but helps with typing)
             max_batch_tokens = max_batch_tokens
