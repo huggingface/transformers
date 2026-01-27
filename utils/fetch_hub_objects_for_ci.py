@@ -120,22 +120,14 @@ def download_test_file(url):
     else:
         # Use httpx for non-HF URLs (COCO, Britannica, etc.)
         print(f"Downloading {filename} from external URL...")
-        try:
-            with open(filename, "wb") as f:
-                with httpx.stream("GET", url, follow_redirects=True) as resp:
-                    resp.raise_for_status()
-                    f.writelines(resp.iter_bytes(chunk_size=8192))
+        with open(filename, "wb") as f:
+            with httpx.stream("GET", url, follow_redirects=True) as resp:
+                resp.raise_for_status()
+                f.writelines(resp.iter_bytes(chunk_size=8192))
 
-            # Validate the downloaded content
-            validate_downloaded_content(filename)
-            print(f"Successfully downloaded: {filename}")
-        except httpx.HTTPError as e:
-            print(f"Error downloading {filename}: {e}")
-            raise
-        except ValueError as e:
-            # Validation failed - remove corrupted file
-            print(f"Validation failed for {filename}: {e}")
-            raise
+        # Validate the downloaded content
+        validate_downloaded_content(filename)
+        print(f"Successfully downloaded: {filename}")
 
     return filename
 
