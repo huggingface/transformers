@@ -28,8 +28,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from .configuration_vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerConfig
 
 
@@ -412,6 +411,23 @@ class VibeVoiceAcousticTokenizerEncoder(nn.Module):
             layer_idx=sum(depth + 1 for depth in config.depths),
         )
 
+        # Parameters for cache creation
+        self.num_conv_layers = sum(depth + 1 for depth in config.depths) + 1
+        self.per_conv_layer_padding = [self.stem.conv.causal_padding]
+        self.per_conv_layer_in_channels = [self.stem.conv.conv.in_channels]
+        self.per_conv_layer_padding.extend([block.mixer.causal_padding for block in self.stem.stage])
+        self.per_conv_layer_in_channels.extend([block.mixer.conv.in_channels for block in self.stem.stage])
+
+        for layer in self.conv_layers:
+            self.per_conv_layer_padding.append(layer.conv.causal_padding)
+            self.per_conv_layer_in_channels.append(layer.conv.conv.in_channels)
+            self.per_conv_layer_padding.extend([block.mixer.causal_padding for block in layer.stage])
+            self.per_conv_layer_in_channels.extend([block.mixer.conv.in_channels for block in layer.stage])
+
+        self.per_conv_layer_padding.append(self.head.causal_padding)
+        self.per_conv_layer_in_channels.append(self.head.conv.in_channels)
+        self.per_conv_layer_padding_mode = ["constant" for _ in self.per_conv_layer_padding]
+
     def forward(self, hidden_states, padding_cache=None):
         hidden_states = self.stem(hidden_states, padding_cache=padding_cache)
         for layer in self.conv_layers:
@@ -554,12 +570,23 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
 
     @can_return_tuple
     @auto_docstring
-    def encode(self, audio):
+    def encode(self, audio, padding_cache=None, use_cache=None):
         r"""
         audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representation.
+        padding_cache (`VibeVoiceAcousticTokenizerConv1dPaddingCache`, *optional*):
+            Cache object for streaming mode to maintain convolution states across layers.
+        use_cache (`bool`, *optional*):
+            Whether to use caching for convolution states.
         """
-        latents = self.encoder(audio)
+        if use_cache and padding_cache is None:
+            padding_cache = VibeVoiceAcousticTokenizerConv1dPaddingCache(
+                num_layers=self.encoder.num_conv_layers,
+                per_layer_padding=self.encoder.per_conv_layer_padding,
+                per_layer_padding_mode=self.encoder.per_conv_layer_padding_mode,
+                per_layer_in_channels=self.encoder.per_conv_layer_in_channels,
+            )
+        latents = self.encoder(audio, padding_cache=padding_cache)
         return VibeVoiceAcousticTokenizerEncoderOutput(latents=latents)
 
     @can_return_tuple
@@ -598,7 +625,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
 
     @can_return_tuple
     @auto_docstring
-    def forward(self, audio, padding_cache=None, use_cache=False, sample=True, **kwargs: Unpack[TransformersKwargs]):
+    def forward(self, audio, padding_cache=None, use_cache=False, sample=True):
         r"""
         audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representation.
