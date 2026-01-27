@@ -246,6 +246,7 @@ class GlmImageTextConfig(PreTrainedConfig):
         self.vocab_size = vocab_size
         self.vision_vocab_size = vision_vocab_size
         self.attention_bias = attention_bias
+        self.pad_token_id = pad_token_id
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -264,7 +265,6 @@ class GlmImageTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
 
         super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
