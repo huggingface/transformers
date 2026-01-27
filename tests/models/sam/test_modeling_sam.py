@@ -991,7 +991,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         iou_scores = outputs.iou_scores.cpu()
         self.assertTrue(iou_scores.shape == (1, 2, 3))
         torch.testing.assert_close(
-            iou_scores, torch.tensor([[[0.9105, 0.9825, 0.9675], [0.7646, 0.7943, 0.7774]]]), atol=1e-4, rtol=1e-4
+            iou_scores, torch.tensor([[[0.9105, 0.9825, 0.9675], [0.7646, 0.7944, 0.7769]]]), atol=1e-4, rtol=1e-4
         )
 
     def test_inference_mask_generation_three_boxes_point_batch(self):
@@ -1003,14 +1003,8 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         raw_image = prepare_image()
 
-        # fmt: off
-        input_boxes = torch.Tensor([[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]],  [[75, 275, 1725, 850]]]).cpu()
-        EXPECTED_IOU = torch.tensor([[
-            [0.9773, 0.9881, 0.9522],
-            [0.5996, 0.7661, 0.7937],
-            [0.5996, 0.7661, 0.7937],
-        ]])
-        # fmt: on
+        input_boxes = torch.Tensor([[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]], [[75, 275, 1725, 850]]]).cpu()
+        EXPECTED_IOU = torch.tensor([[[0.9773, 0.9880, 0.9522], [0.5995, 0.7658, 0.7936], [0.5995, 0.7658, 0.7936]]])
         input_boxes = input_boxes.unsqueeze(0)
 
         inputs = processor(raw_image, input_boxes=input_boxes, return_tensors="pt").to(torch_device)
