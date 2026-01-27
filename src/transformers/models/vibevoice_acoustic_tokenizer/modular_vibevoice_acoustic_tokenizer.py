@@ -21,8 +21,7 @@ import torch.nn as nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from .configuration_vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerConfig
@@ -509,7 +508,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
 
     @can_return_tuple
     @auto_docstring
-    def forward(self, audio, padding_cache=None, use_cache=False, sample=False, **kwargs: Unpack[TransformersKwargs]):
+    def forward(self, audio, padding_cache=None, use_cache=False, sample=False, **kwargs):
         r"""
         audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representation.
