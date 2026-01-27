@@ -1181,6 +1181,7 @@ class Sam2Model(SamModel):
         "no_object_pointer",
         "occlusion_spatial_embedding_parameter",
     ]
+    _tied_weights_keys = {}
 
     def __init__(self, config: Sam2Config):
         PreTrainedModel.__init__(self, config)
