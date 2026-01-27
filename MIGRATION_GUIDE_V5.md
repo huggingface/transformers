@@ -16,13 +16,6 @@ limitations under the License.
 
 # Version 5 Migration guide
 
-> [!NOTE] 
-> 👀 Welcome to the migration guide for the first release candidate! Nothing is final and things are still actively in 
-> movement. We have a section dedicated to what is planned for future release candidates, yet is known not to work in 
-> the RC0. Look for "Disclaimers for the RC0".
-> 
-> We'll be eagerly awaiting your feedback in our GitHub issues!
-
 ## Library-wide changes with widespread impact
 
 ### Removal of TensorFlow and Jax
@@ -104,10 +97,7 @@ class Llama5Tokenizer(TokenizersBackend):
         else:
             self._vocab = vocab
 
-        if merges is not None:
-            self._merges = merges or []
-        else:
-            self._merges = generate_merges(filtered_vocab)
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True)
@@ -313,7 +303,6 @@ model_inputs["labels"] = model_inputs.pop("input_ids_target")
 
 **Removed Methods:**
 - `create_token_type_ids_from_sequences()`: Removed from base class. Subclasses that need custom token type ID creation should implement this method directly.
-- `clean_up_tokenization()`: Removed from base class. Now defined at model class level for models that need it (e.g., PLBart, CLVP, Wav2Vec2).
 - `prepare_for_model()`, `build_inputs_with_special_tokens()`, `truncate_sequences()`: Moved from `tokenization_utils_base.py` to `tokenization_python.py` for `PythonBackend` tokenizers. `TokenizersBackend` provides model-ready input via `tokenize()` and `encode()`, so these methods are no longer needed in the base class.
 - `_switch_to_input_mode()`, `_switch_to_target_mode()`, `as_target_tokenizer()`: Removed from base class. Use `__call__()` with `text_target` parameter instead.
 
