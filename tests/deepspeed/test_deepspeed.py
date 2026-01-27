@@ -476,6 +476,9 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                         loaded_model = Qwen3MoeModel.from_pretrained(old_checkpoint_dir)
 
             self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+
+            # Without weight conversion, gate_up_proj and down_proj would be MISSING
+            # This regex fails the test if expert fusion weights are missing from checkpoint
             self.assertNotRegex(cl.out, r"mlp\.experts\.(gate_up_proj|down_proj)\s*\|\s*MISSING")
 
             # Verify the model structure is correct (fused experts in v5 format)
@@ -487,6 +490,13 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 if "mlp.experts.gate_up_proj" in name or "mlp.experts.down_proj" in name:
                     expert_params_to_check.append((name, param))
                 self.assertNotRegex(name, r"mlp\.experts\.\d+\.(gate_proj|up_proj|down_proj)\.weight")
+
+            # Without the fix, expert_params_to_check would be empty (all MISSING)
+            self.assertGreater(
+                len(expert_params_to_check), 0,
+                "No expert weights found - weight conversion failed! "
+                "Expected fused gate_up_proj and down_proj but found none."
+            )
 
             with deepspeed.zero.GatheredParameters([param for _, param in expert_params_to_check], modifier_rank=0):
                 for name, param in expert_params_to_check:
