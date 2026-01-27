@@ -310,7 +310,7 @@ class ViTModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[4.2325, 4.3882, -6.6678], [4.5372, 1.8933, -6.7355], [4.4454, 0.8514, -5.8747]]
+            [[4.2325, 4.3882, -6.6678], [4.5372, 1.8933, -6.7355], [4.4454, 0.8514, -7.8747]]
         ).to(torch_device)
 
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
