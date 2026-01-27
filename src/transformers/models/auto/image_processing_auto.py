@@ -22,8 +22,7 @@ from typing import TYPE_CHECKING, Optional, Union
 # Build the list of all image processors
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...image_processing_utils import ImageProcessingMixin
-from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_processing_utils import BaseImageProcessor, ImageProcessingMixin
 from ...utils import (
     CONFIG_NAME,
     IMAGE_PROCESSOR_NAME,
@@ -31,7 +30,6 @@ from ...utils import (
     cached_file,
     is_timm_config_dict,
     is_timm_local_checkpoint,
-    is_torchvision_available,
     is_vision_available,
     logging,
     safe_load_json_file,
@@ -49,209 +47,222 @@ from .configuration_auto import (
 logger = logging.get_logger(__name__)
 
 
-FORCE_FAST_IMAGE_PROCESSOR = ["Qwen2VLImageProcessor"]
-
-
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
     # the transformers package is used with Microsoft's Pylance language server.
-    IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[str, tuple[Optional[str], Optional[str]]] = OrderedDict()
+    IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[str, Optional[str]] = OrderedDict()
 else:
     IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
-            ("aimv2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("aimv2_vision_model", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("align", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
-            ("altclip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("aria", ("AriaImageProcessor", None)),
-            ("aya_vision", ("GotOcr2ImageProcessor", "GotOcr2ImageProcessorFast")),
-            ("beit", ("BeitImageProcessor", "BeitImageProcessorFast")),
-            ("bit", ("BitImageProcessor", "BitImageProcessorFast")),
-            ("blip", ("BlipImageProcessor", "BlipImageProcessorFast")),
-            ("blip-2", ("BlipImageProcessor", "BlipImageProcessorFast")),
-            ("bridgetower", ("BridgeTowerImageProcessor", "BridgeTowerImageProcessorFast")),
-            ("chameleon", ("ChameleonImageProcessor", "ChameleonImageProcessorFast")),
-            ("chinese_clip", ("ChineseCLIPImageProcessor", "ChineseCLIPImageProcessorFast")),
-            ("clip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("clipseg", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("cohere2_vision", (None, "Cohere2VisionImageProcessorFast")),
-            ("colpali", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
-            ("colqwen2", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
-            ("conditional_detr", ("ConditionalDetrImageProcessor", "ConditionalDetrImageProcessorFast")),
-            ("convnext", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
-            ("convnextv2", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
-            ("cvt", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
-            ("data2vec-vision", ("BeitImageProcessor", "BeitImageProcessorFast")),
-            ("deepseek_vl", ("DeepseekVLImageProcessor", "DeepseekVLImageProcessorFast")),
-            ("deepseek_vl_hybrid", ("DeepseekVLHybridImageProcessor", "DeepseekVLHybridImageProcessorFast")),
-            ("deformable_detr", ("DeformableDetrImageProcessor", "DeformableDetrImageProcessorFast")),
-            ("deit", ("DeiTImageProcessor", "DeiTImageProcessorFast")),
-            ("depth_anything", ("DPTImageProcessor", "DPTImageProcessorFast")),
-            ("depth_pro", ("DepthProImageProcessor", "DepthProImageProcessorFast")),
-            ("detr", ("DetrImageProcessor", "DetrImageProcessorFast")),
-            ("dinat", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("dinov2", ("BitImageProcessor", "BitImageProcessorFast")),
-            ("dinov3_vit", (None, "DINOv3ViTImageProcessorFast")),
-            ("donut-swin", ("DonutImageProcessor", "DonutImageProcessorFast")),
-            ("dpt", ("DPTImageProcessor", "DPTImageProcessorFast")),
-            ("edgetam", (None, "Sam2ImageProcessorFast")),
-            ("efficientloftr", ("EfficientLoFTRImageProcessor", "EfficientLoFTRImageProcessorFast")),
-            ("efficientnet", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
-            ("emu3", ("Emu3ImageProcessor", None)),
-            ("eomt", ("EomtImageProcessor", "EomtImageProcessorFast")),
-            ("ernie4_5_vl_moe", ("Ernie4_5_VL_MoeImageProcessor", "Ernie4_5_VL_MoeImageProcessorFast")),
-            ("flava", ("FlavaImageProcessor", "FlavaImageProcessorFast")),
-            ("florence2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("focalnet", ("BitImageProcessor", "BitImageProcessorFast")),
-            ("fuyu", ("FuyuImageProcessor", "FuyuImageProcessorFast")),
-            ("gemma3", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
-            ("gemma3n", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
-            ("git", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("glm46v", ("Glm46VImageProcessor", "Glm46VImageProcessorFast")),
-            ("glm4v", ("Glm4vImageProcessor", "Glm4vImageProcessorFast")),
-            ("glpn", ("GLPNImageProcessor", "GLPNImageProcessorFast")),
-            ("got_ocr2", ("GotOcr2ImageProcessor", "GotOcr2ImageProcessorFast")),
-            ("grounding-dino", ("GroundingDinoImageProcessor", "GroundingDinoImageProcessorFast")),
-            ("groupvit", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("hiera", ("BitImageProcessor", "BitImageProcessorFast")),
-            ("idefics", ("IdeficsImageProcessor", None)),
-            ("idefics2", ("Idefics2ImageProcessor", "Idefics2ImageProcessorFast")),
-            ("idefics3", ("Idefics3ImageProcessor", "Idefics3ImageProcessorFast")),
-            ("ijepa", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("imagegpt", ("ImageGPTImageProcessor", "ImageGPTImageProcessorFast")),
-            ("instructblip", ("BlipImageProcessor", "BlipImageProcessorFast")),
-            ("internvl", ("GotOcr2ImageProcessor", "GotOcr2ImageProcessorFast")),
-            ("janus", ("JanusImageProcessor", "JanusImageProcessorFast")),
-            ("kosmos-2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("kosmos-2.5", ("Kosmos2_5ImageProcessor", "Kosmos2_5ImageProcessorFast")),
-            ("layoutlmv2", ("LayoutLMv2ImageProcessor", "LayoutLMv2ImageProcessorFast")),
-            ("layoutlmv3", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
-            ("layoutxlm", ("LayoutLMv2ImageProcessor", "LayoutLMv2ImageProcessor")),
-            ("levit", ("LevitImageProcessor", "LevitImageProcessorFast")),
-            ("lfm2_vl", (None, "Lfm2VlImageProcessorFast")),
-            ("lightglue", ("LightGlueImageProcessor", "LightGlueImageProcessorFast")),
-            ("llama4", (None, "Llama4ImageProcessorFast")),
-            ("llava", ("LlavaImageProcessor", "LlavaImageProcessorFast")),
-            ("llava_next", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
-            ("llava_next_video", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
-            ("llava_onevision", ("LlavaOnevisionImageProcessor", "LlavaOnevisionImageProcessorFast")),
-            ("mask2former", ("Mask2FormerImageProcessor", "Mask2FormerImageProcessorFast")),
-            ("maskformer", ("MaskFormerImageProcessor", "MaskFormerImageProcessorFast")),
-            ("metaclip_2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("mgp-str", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("mistral3", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
-            ("mlcd", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("mllama", ("MllamaImageProcessor", "MllamaImageProcessorFast")),
-            ("mm-grounding-dino", ("GroundingDinoImageProcessor", "GroundingDinoImageProcessorFast")),
-            ("mobilenet_v1", ("MobileNetV1ImageProcessor", "MobileNetV1ImageProcessorFast")),
-            ("mobilenet_v2", ("MobileNetV2ImageProcessor", "MobileNetV2ImageProcessorFast")),
-            ("mobilevit", ("MobileViTImageProcessor", "MobileViTImageProcessorFast")),
-            ("mobilevitv2", ("MobileViTImageProcessor", "MobileViTImageProcessorFast")),
-            ("nougat", ("NougatImageProcessor", "NougatImageProcessorFast")),
-            ("omdet-turbo", ("DetrImageProcessor", "DetrImageProcessorFast")),
-            ("oneformer", ("OneFormerImageProcessor", "OneFormerImageProcessorFast")),
-            ("ovis2", ("Ovis2ImageProcessor", "Ovis2ImageProcessorFast")),
-            ("owlv2", ("Owlv2ImageProcessor", "Owlv2ImageProcessorFast")),
-            ("owlvit", ("OwlViTImageProcessor", "OwlViTImageProcessorFast")),
-            ("paddleocr_vl", ("PaddleOCRVLImageProcessor", "PaddleOCRVLImageProcessorFast")),
-            ("paligemma", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
-            ("perceiver", ("PerceiverImageProcessor", "PerceiverImageProcessorFast")),
-            ("perception_lm", (None, "PerceptionLMImageProcessorFast")),
-            ("phi4_multimodal", (None, "Phi4MultimodalImageProcessorFast")),
-            ("pix2struct", ("Pix2StructImageProcessor", "Pix2StructImageProcessorFast")),
-            ("pixio", ("BitImageProcessor", "BitImageProcessorFast")),
-            ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
-            ("poolformer", ("PoolFormerImageProcessor", "PoolFormerImageProcessorFast")),
-            ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor", "PromptDepthAnythingImageProcessorFast")),
-            ("pvt", ("PvtImageProcessor", "PvtImageProcessorFast")),
-            ("pvt_v2", ("PvtImageProcessor", "PvtImageProcessorFast")),
-            ("qwen2_5_omni", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
-            ("qwen2_5_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
-            ("qwen2_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
-            ("qwen3_omni_moe", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
-            ("qwen3_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
-            ("regnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
-            ("resnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
-            ("rt_detr", ("RTDetrImageProcessor", "RTDetrImageProcessorFast")),
-            ("sam", ("SamImageProcessor", "SamImageProcessorFast")),
-            ("sam2", (None, "Sam2ImageProcessorFast")),
-            ("sam2_video", (None, "Sam2ImageProcessorFast")),
-            ("sam3", (None, "Sam3ImageProcessorFast")),
-            ("sam3_video", (None, "Sam3ImageProcessorFast")),
-            ("sam_hq", ("SamImageProcessor", "SamImageProcessorFast")),
-            ("segformer", ("SegformerImageProcessor", "SegformerImageProcessorFast")),
-            ("seggpt", ("SegGptImageProcessor", None)),
-            ("shieldgemma2", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
-            ("siglip", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
-            ("siglip2", ("Siglip2ImageProcessor", "Siglip2ImageProcessorFast")),
-            ("smolvlm", ("SmolVLMImageProcessor", "SmolVLMImageProcessorFast")),
-            ("superglue", ("SuperGlueImageProcessor", "SuperGlueImageProcessorFast")),
-            ("superpoint", ("SuperPointImageProcessor", "SuperPointImageProcessorFast")),
-            ("swiftformer", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("swin", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("swin2sr", ("Swin2SRImageProcessor", "Swin2SRImageProcessorFast")),
-            ("swinv2", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("t5gemma2", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
-            ("table-transformer", ("DetrImageProcessor", "DetrImageProcessorFast")),
-            ("textnet", ("TextNetImageProcessor", "TextNetImageProcessorFast")),
-            ("timesformer", ("VideoMAEImageProcessor", None)),
-            ("timm_wrapper", ("TimmWrapperImageProcessor", None)),
-            ("trocr", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("tvp", ("TvpImageProcessor", "TvpImageProcessorFast")),
-            ("udop", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
-            ("upernet", ("SegformerImageProcessor", "SegformerImageProcessorFast")),
-            ("video_llama_3", ("VideoLlama3ImageProcessor", "VideoLlama3ImageProcessorFast")),
-            ("video_llava", ("VideoLlavaImageProcessor", None)),
-            ("videomae", ("VideoMAEImageProcessor", None)),
-            ("vilt", ("ViltImageProcessor", "ViltImageProcessorFast")),
-            ("vipllava", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("vit", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("vit_mae", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("vit_msn", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("vitmatte", ("VitMatteImageProcessor", "VitMatteImageProcessorFast")),
-            ("vitpose", ("VitPoseImageProcessor", "VitPoseImageProcessorFast")),
-            ("xclip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("yolos", ("YolosImageProcessor", "YolosImageProcessorFast")),
-            ("zoedepth", ("ZoeDepthImageProcessor", "ZoeDepthImageProcessorFast")),
+            ("aimv2", "CLIPImageProcessor"),
+            ("aimv2_vision_model", "CLIPImageProcessor"),
+            ("align", "EfficientNetImageProcessor"),
+            ("altclip", "CLIPImageProcessor"),
+            ("aria", "AriaImageProcessor"),
+            ("aya_vision", "GotOcr2ImageProcessor"),
+            ("beit", "BeitImageProcessor"),
+            ("bit", "BitImageProcessor"),
+            ("blip", "BlipImageProcessor"),
+            ("blip-2", "BlipImageProcessor"),
+            ("bridgetower", "BridgeTowerImageProcessor"),
+            ("chameleon", "ChameleonImageProcessor"),
+            ("chinese_clip", "ChineseCLIPImageProcessor"),
+            ("clip", "CLIPImageProcessor"),
+            ("clipseg", "ViTImageProcessor"),
+            ("cohere2_vision", "Cohere2VisionImageProcessor"),
+            ("colpali", "SiglipImageProcessor"),
+            ("colqwen2", "Qwen2VLImageProcessor"),
+            ("conditional_detr", "ConditionalDetrImageProcessor"),
+            ("convnext", "ConvNextImageProcessor"),
+            ("convnextv2", "ConvNextImageProcessor"),
+            ("cvt", "ConvNextImageProcessor"),
+            ("data2vec-vision", "BeitImageProcessor"),
+            ("deepseek_vl", "DeepseekVLImageProcessor"),
+            ("deepseek_vl_hybrid", "DeepseekVLHybridImageProcessor"),
+            ("deformable_detr", "DeformableDetrImageProcessor"),
+            ("deit", "DeiTImageProcessor"),
+            ("depth_anything", "DPTImageProcessor"),
+            ("depth_pro", "DepthProImageProcessor"),
+            ("detr", "DetrImageProcessor"),
+            ("dinat", "ViTImageProcessor"),
+            ("dinov2", "BitImageProcessor"),
+            ("dinov3_vit", "DINOv3ViTImageProcessor"),
+            ("donut-swin", "DonutImageProcessor"),
+            ("dpt", "DPTImageProcessor"),
+            ("edgetam", "Sam2ImageProcessor"),
+            ("efficientloftr", "EfficientLoFTRImageProcessor"),
+            ("efficientnet", "EfficientNetImageProcessor"),
+            ("emu3", "Emu3ImageProcessor"),
+            ("eomt", "EomtImageProcessor"),
+            ("ernie4_5_vl_moe", "Ernie4_5_VL_MoeImageProcessor"),
+            ("flava", "FlavaImageProcessor"),
+            ("florence2", "CLIPImageProcessor"),
+            ("focalnet", "BitImageProcessor"),
+            ("fuyu", "FuyuImageProcessor"),
+            ("gemma3", "Gemma3ImageProcessor"),
+            ("gemma3n", "SiglipImageProcessor"),
+            ("git", "CLIPImageProcessor"),
+            ("glm46v", "Glm46VImageProcessor"),
+            ("glm4v", "Glm4vImageProcessor"),
+            ("glpn", "GLPNImageProcessor"),
+            ("got_ocr2", "GotOcr2ImageProcessor"),
+            ("grounding-dino", "GroundingDinoImageProcessor"),
+            ("groupvit", "CLIPImageProcessor"),
+            ("hiera", "BitImageProcessor"),
+            ("idefics", "IdeficsImageProcessor"),
+            ("idefics2", "Idefics2ImageProcessor"),
+            ("idefics3", "Idefics3ImageProcessor"),
+            ("ijepa", "ViTImageProcessor"),
+            ("imagegpt", "ImageGPTImageProcessor"),
+            ("instructblip", "BlipImageProcessor"),
+            ("internvl", "GotOcr2ImageProcessor"),
+            ("janus", "JanusImageProcessor"),
+            ("kosmos-2", "CLIPImageProcessor"),
+            ("kosmos-2.5", "Kosmos2_5ImageProcessor"),
+            ("layoutlmv2", "LayoutLMv2ImageProcessor"),
+            ("layoutlmv3", "LayoutLMv3ImageProcessor"),
+            ("layoutxlm", "LayoutLMv2ImageProcessor"),
+            ("levit", "LevitImageProcessor"),
+            ("lfm2_vl", "Lfm2VlImageProcessor"),
+            ("lightglue", "LightGlueImageProcessor"),
+            ("llama4", "Llama4ImageProcessor"),
+            ("llava", "LlavaImageProcessor"),
+            ("llava_next", "LlavaNextImageProcessor"),
+            ("llava_next_video", "LlavaNextImageProcessor"),
+            ("llava_onevision", "LlavaOnevisionImageProcessor"),
+            ("mask2former", "Mask2FormerImageProcessor"),
+            ("maskformer", "MaskFormerImageProcessor"),
+            ("metaclip_2", "CLIPImageProcessor"),
+            ("mgp-str", "ViTImageProcessor"),
+            ("mistral3", "PixtralImageProcessor"),
+            ("mlcd", "CLIPImageProcessor"),
+            ("mllama", "MllamaImageProcessor"),
+            ("mm-grounding-dino", "GroundingDinoImageProcessor"),
+            ("mobilenet_v1", "MobileNetV1ImageProcessor"),
+            ("mobilenet_v2", "MobileNetV2ImageProcessor"),
+            ("mobilevit", "MobileViTImageProcessor"),
+            ("mobilevitv2", "MobileViTImageProcessor"),
+            ("nougat", "NougatImageProcessor"),
+            ("omdet-turbo", "DetrImageProcessor"),
+            ("oneformer", "OneFormerImageProcessor"),
+            ("ovis2", "Ovis2ImageProcessor"),
+            ("owlv2", "Owlv2ImageProcessor"),
+            ("owlvit", "OwlViTImageProcessor"),
+            ("paddleocr_vl", "PaddleOCRVLImageProcessor"),
+            ("paligemma", "SiglipImageProcessor"),
+            ("perceiver", "PerceiverImageProcessor"),
+            ("perception_lm", "PerceptionLMImageProcessor"),
+            ("phi4_multimodal", "Phi4MultimodalImageProcessor"),
+            ("pix2struct", "Pix2StructImageProcessor"),
+            ("pixio", "BitImageProcessor"),
+            ("pixtral", "PixtralImageProcessor"),
+            ("poolformer", "PoolFormerImageProcessor"),
+            ("prompt_depth_anything", "PromptDepthAnythingImageProcessor"),
+            ("pvt", "PvtImageProcessor"),
+            ("pvt_v2", "PvtImageProcessor"),
+            ("qwen2_5_omni", "Qwen2VLImageProcessor"),
+            ("qwen2_5_vl", "Qwen2VLImageProcessor"),
+            ("qwen2_vl", "Qwen2VLImageProcessor"),
+            ("qwen3_omni_moe", "Qwen2VLImageProcessor"),
+            ("qwen3_vl", "Qwen2VLImageProcessor"),
+            ("regnet", "ConvNextImageProcessor"),
+            ("resnet", "ConvNextImageProcessor"),
+            ("rt_detr", "RTDetrImageProcessor"),
+            ("sam", "SamImageProcessor"),
+            ("sam2", "Sam2ImageProcessor"),
+            ("sam2_video", "Sam2ImageProcessor"),
+            ("sam3", "Sam3ImageProcessor"),
+            ("sam3_video", "Sam3ImageProcessor"),
+            ("sam_hq", "SamImageProcessor"),
+            ("segformer", "SegformerImageProcessor"),
+            ("seggpt", "SegGptImageProcessor"),
+            ("shieldgemma2", "Gemma3ImageProcessor"),
+            ("siglip", "SiglipImageProcessor"),
+            ("siglip2", "Siglip2ImageProcessor"),
+            ("smolvlm", "SmolVLMImageProcessor"),
+            ("superglue", "SuperGlueImageProcessor"),
+            ("superpoint", "SuperPointImageProcessor"),
+            ("swiftformer", "ViTImageProcessor"),
+            ("swin", "ViTImageProcessor"),
+            ("swin2sr", "Swin2SRImageProcessor"),
+            ("swinv2", "ViTImageProcessor"),
+            ("t5gemma2", "Gemma3ImageProcessor"),
+            ("table-transformer", "DetrImageProcessor"),
+            ("textnet", "TextNetImageProcessor"),
+            ("timesformer", "VideoMAEImageProcessor"),
+            ("timm_wrapper", "TimmWrapperImageProcessor"),
+            ("trocr", "ViTImageProcessor"),
+            ("tvp", "TvpImageProcessor"),
+            ("udop", "LayoutLMv3ImageProcessor"),
+            ("upernet", "SegformerImageProcessor"),
+            ("video_llama_3", "VideoLlama3ImageProcessor"),
+            ("video_llava", "VideoLlavaImageProcessor"),
+            ("videomae", "VideoMAEImageProcessor"),
+            ("vilt", "ViltImageProcessor"),
+            ("vipllava", "CLIPImageProcessor"),
+            ("vit", "ViTImageProcessor"),
+            ("vit_mae", "ViTImageProcessor"),
+            ("vit_msn", "ViTImageProcessor"),
+            ("vitmatte", "VitMatteImageProcessor"),
+            ("vitpose", "VitPoseImageProcessor"),
+            ("xclip", "CLIPImageProcessor"),
+            ("yolos", "YolosImageProcessor"),
+            ("zoedepth", "ZoeDepthImageProcessor"),
         ]
     )
 
-# Override to None if the packages are not available
-for model_type, (slow_class, fast_class) in IMAGE_PROCESSOR_MAPPING_NAMES.items():
-    if not is_vision_available():
-        slow_class = None
-    if not is_torchvision_available():
-        fast_class = None
-
-    IMAGE_PROCESSOR_MAPPING_NAMES[model_type] = (slow_class, fast_class)
+# Override to None if vision is not available
+if not is_vision_available():
+    for model_type in list(IMAGE_PROCESSOR_MAPPING_NAMES.keys()):
+        IMAGE_PROCESSOR_MAPPING_NAMES[model_type] = None
 
 IMAGE_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, IMAGE_PROCESSOR_MAPPING_NAMES)
 
 
 def get_image_processor_class_from_name(class_name: str):
     if class_name == "BaseImageProcessorFast":
-        return BaseImageProcessorFast
+        # BaseImageProcessorFast has been unified with BaseImageProcessor
+        return BaseImageProcessor
 
-    for module_name, extractors in IMAGE_PROCESSOR_MAPPING_NAMES.items():
-        if class_name in extractors:
+    base_class_name = class_name.removesuffix("Fast")
+    is_fast_variant = class_name != base_class_name
+
+    for module_name, processor_class_name in IMAGE_PROCESSOR_MAPPING_NAMES.items():
+        if processor_class_name is None:
+            continue
+        if base_class_name == processor_class_name:
             module_name = model_type_to_module_name(module_name)
-
             module = importlib.import_module(f".{module_name}", "transformers.models")
             try:
-                return getattr(module, class_name)
+                if hasattr(module, processor_class_name):
+                    return getattr(module, processor_class_name)
+                # Fall back to Fast variant for backward compatibility
+                elif is_fast_variant and hasattr(module, class_name):
+                    return getattr(module, class_name)
             except AttributeError:
                 continue
 
-    for extractors in IMAGE_PROCESSOR_MAPPING._extra_content.values():
-        for extractor in extractors:
-            if getattr(extractor, "__name__", None) == class_name:
-                return extractor
+    for processor_class in IMAGE_PROCESSOR_MAPPING._extra_content.values():
+        if isinstance(processor_class, tuple):
+            # Legacy tuple format - check both entries
+            for proc in processor_class:
+                if proc is not None:
+                    proc_name = getattr(proc, "__name__", None)
+                    if proc_name == class_name or proc_name == base_class_name:
+                        return proc
+        elif processor_class is not None:
+            proc_name = getattr(processor_class, "__name__", None)
+            if proc_name == class_name or proc_name == base_class_name:
+                return processor_class
 
     # We did not find the class, but maybe it's because a dep is missing. In that case, the class will be in the main
     # init and we return the proper dummy to get an appropriate error message.
     main_module = importlib.import_module("transformers")
     if hasattr(main_module, class_name):
         return getattr(main_module, class_name)
+    # Also try base class name in main module
+    if is_fast_variant and hasattr(main_module, base_class_name):
+        return getattr(main_module, base_class_name)
 
     return None
 
@@ -367,13 +378,6 @@ def get_image_processor_config(
     return image_processor_dict
 
 
-def _warning_fast_image_processor_available(fast_class):
-    logger.warning(
-        f"Fast image processor class {fast_class} is available for this model. "
-        "Using slow image processor class. To use the fast image processor class set `use_fast=True`."
-    )
-
-
 @requires(backends=("vision",))
 class AutoImageProcessor:
     r"""
@@ -429,9 +433,15 @@ class AutoImageProcessor:
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
             use_fast (`bool`, *optional*, defaults to `False`):
+                **Deprecated.** Use `backend="torchvision"` instead.
                 Use a fast torchvision-base image processor if it is supported for a given model.
                 If a fast image processor is not available for a given model, a normal numpy-based image processor
                 is returned instead.
+            backend (`str`, *optional*, defaults to `"auto"`):
+                Backend to use for image processing. Can be `"auto"`, `"python"`, or `"torchvision"`.
+                - `"auto"`: Uses torchvision if available, otherwise python
+                - `"torchvision"`: Uses GPU-accelerated TorchVision operations (faster, requires torchvision)
+                - `"python"`: Uses NumPy/PIL operations (more portable, CPU-only)
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
                 If `False`, then this function returns just the final image processor object. If `True`, then this
                 functions returns a `Tuple(image_processor, unused_kwargs)` where *unused_kwargs* is a dictionary
@@ -466,8 +476,19 @@ class AutoImageProcessor:
         >>> # image_processor = AutoImageProcessor.from_pretrained("./test/saved_model/")
         ```"""
         config = kwargs.pop("config", None)
-        # TODO: @yoni, change in v4.48 (use_fast set to True by default)
+
+        backend = kwargs.pop("backend", "auto")
         use_fast = kwargs.pop("use_fast", None)
+        if use_fast is not None:
+            warnings.warn(
+                "The `use_fast` argument is deprecated and will be removed in v5 of Transformers. "
+                "Use `backend='torchvision'` for fast processing or `backend='python'` for standard processing.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            backend = "torchvision" if use_fast else "python"
+        kwargs["backend"] = backend
+
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
@@ -531,66 +552,24 @@ class AutoImageProcessor:
                 image_processor_auto_map = config.auto_map["AutoImageProcessor"]
 
         image_processor_class = None
-        # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
         if image_processor_type is not None:
-            # if use_fast is not set and the processor was saved with a fast processor, we use it, otherwise we use the slow processor.
-            if use_fast is None:
-                use_fast = image_processor_type.endswith("Fast")
-                if not use_fast and image_processor_type in FORCE_FAST_IMAGE_PROCESSOR and is_torchvision_available():
-                    use_fast = True
-                    logger.warning_once(
-                        f"The image processor of type `{image_processor_type}` is now loaded as a fast processor by default, even if the model checkpoint was saved with a slow processor. "
-                        "This is a breaking change and may produce slightly different outputs. To continue using the slow processor, instantiate this class with `use_fast=False`. "
-                        "Note that this behavior will be extended to all models in a future release."
-                    )
-                if not use_fast:
-                    logger.warning_once(
-                        "Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. "
-                        "`use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. "
-                        "This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`."
-                    )
-            if use_fast and not image_processor_type.endswith("Fast"):
-                image_processor_type += "Fast"
-            if use_fast and not is_torchvision_available():
-                # check if there is a slow image processor class to fallback to
-                image_processor_class = get_image_processor_class_from_name(image_processor_type[:-4])
-                if image_processor_class is None:
-                    raise ValueError(
-                        f"`{image_processor_type}` requires `torchvision` to be installed. Please install `torchvision` and try again."
-                    )
-                logger.warning_once(
-                    "Using `use_fast=True` but `torchvision` is not available. Falling back to the slow image processor."
-                )
-                use_fast = False
-            if use_fast:
-                # Check if the fast image processor class exists
-                image_processor_class_fast = get_image_processor_class_from_name(image_processor_type)
-                if image_processor_class_fast is None:
-                    image_processor_type = image_processor_type[:-4]
-                    use_fast = False
-                    logger.warning_once(
-                        "`use_fast` is set to `True` but the image processor class does not have a fast version. "
-                        " Falling back to the slow version."
-                    )
-                image_processor_class = get_image_processor_class_from_name(image_processor_type)
-            else:
-                image_processor_type_slow = image_processor_type.removesuffix("Fast")
-                image_processor_class = get_image_processor_class_from_name(image_processor_type_slow)
-                if image_processor_class is None and image_processor_type.endswith("Fast"):
-                    raise ValueError(
-                        f"`{image_processor_type}` does not have a slow version. Please set `use_fast=True` when instantiating the processor."
-                    )
+            # get_image_processor_class_from_name handles Fast variants for backward compatibility
+            # (old configs/models may still reference Fast classes)
+            image_processor_class = get_image_processor_class_from_name(image_processor_type)
 
         has_remote_code = image_processor_auto_map is not None
         has_local_code = image_processor_class is not None or type(config) in IMAGE_PROCESSOR_MAPPING
         if has_remote_code:
-            if image_processor_auto_map is not None and not isinstance(image_processor_auto_map, tuple):
-                # In some configs, only the slow image processor class is stored
-                image_processor_auto_map = (image_processor_auto_map, None)
-            if use_fast and image_processor_auto_map[1] is not None:
-                class_ref = image_processor_auto_map[1]
+            # Handle both tuple (legacy) and single string formats
+            if isinstance(image_processor_auto_map, (list, tuple)):
+                class_ref = (
+                    image_processor_auto_map[0]
+                    if image_processor_auto_map[0] is not None
+                    else image_processor_auto_map[1]
+                )
             else:
-                class_ref = image_processor_auto_map[0]
+                class_ref = image_processor_auto_map
+
             if "--" in class_ref:
                 upstream_repo = class_ref.split("--")[0]
             else:
@@ -600,9 +579,6 @@ class AutoImageProcessor:
             )
 
         if has_remote_code and trust_remote_code:
-            if not use_fast and image_processor_auto_map[1] is not None:
-                _warning_fast_image_processor_available(image_processor_auto_map[1])
-
             image_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
             image_processor_class.register_for_auto_class()
@@ -611,22 +587,14 @@ class AutoImageProcessor:
             return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         # Last try: we use the IMAGE_PROCESSOR_MAPPING.
         elif type(config) in IMAGE_PROCESSOR_MAPPING:
-            image_processor_tuple = IMAGE_PROCESSOR_MAPPING[type(config)]
+            image_processor_class = IMAGE_PROCESSOR_MAPPING[type(config)]
 
-            image_processor_class_py, image_processor_class_fast = image_processor_tuple
-
-            if not use_fast and image_processor_class_fast is not None:
-                _warning_fast_image_processor_available(image_processor_class_fast)
-
-            if image_processor_class_fast and (use_fast or image_processor_class_py is None):
-                return image_processor_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            if image_processor_class is not None:
+                return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
             else:
-                if image_processor_class_py is not None:
-                    return image_processor_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-                else:
-                    raise ValueError(
-                        "This image processor cannot be instantiated. Please make sure you have `Pillow` installed."
-                    )
+                raise ValueError(
+                    "This image processor cannot be instantiated. Please make sure you have `Pillow` installed."
+                )
         raise ValueError(
             f"Unrecognized image processor in {pretrained_model_name_or_path}. Should have a "
             f"`image_processor_type` key in its {IMAGE_PROCESSOR_NAME} of {CONFIG_NAME}, or one of the following "
@@ -648,36 +616,44 @@ class AutoImageProcessor:
             config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
             image_processor_class ([`ImageProcessingMixin`]): The image processor to register.
+                This is the preferred way to register. All image processors now support both backends.
+            slow_image_processor_class ([`ImageProcessingMixin`], *optional*):
+                **Deprecated.** Use `image_processor_class` instead. Kept for backward compatibility.
+            fast_image_processor_class ([`ImageProcessingMixin`], *optional*):
+                **Deprecated.** Use `image_processor_class` instead. Kept for backward compatibility.
         """
+
+        # Handle backward compatibility with old API
         if image_processor_class is not None:
-            if slow_image_processor_class is not None:
-                raise ValueError("Cannot specify both image_processor_class and slow_image_processor_class")
+            if slow_image_processor_class is not None or fast_image_processor_class is not None:
+                raise ValueError(
+                    "Cannot specify both `image_processor_class` and `slow_image_processor_class`/`fast_image_processor_class`. "
+                    "Use only `image_processor_class`."
+                )
+            processor_class = image_processor_class
+        elif slow_image_processor_class is not None or fast_image_processor_class is not None:
             warnings.warn(
-                "The image_processor_class argument is deprecated and will be removed in v4.42. Please use `slow_image_processor_class`, or `fast_image_processor_class` instead",
+                "The `slow_image_processor_class` and `fast_image_processor_class` arguments are deprecated. "
+                "All image processors now support both backends. Use `image_processor_class` instead.",
                 FutureWarning,
+                stacklevel=2,
             )
-            slow_image_processor_class = image_processor_class
+            # Prefer fast if both are provided, otherwise use whichever is available
+            processor_class = (
+                fast_image_processor_class if fast_image_processor_class is not None else slow_image_processor_class
+            )
+        else:
+            raise ValueError("You need to specify `image_processor_class`.")
 
-        if slow_image_processor_class is None and fast_image_processor_class is None:
-            raise ValueError("You need to specify either slow_image_processor_class or fast_image_processor_class")
-        if slow_image_processor_class is not None and issubclass(slow_image_processor_class, BaseImageProcessorFast):
-            raise ValueError("You passed a fast image processor in as the `slow_image_processor_class`.")
-        if fast_image_processor_class is not None and not issubclass(
-            fast_image_processor_class, BaseImageProcessorFast
-        ):
-            raise ValueError("The `fast_image_processor_class` should inherit from `BaseImageProcessorFast`.")
+        if not issubclass(processor_class, BaseImageProcessor):
+            raise ValueError("The `image_processor_class` should inherit from `BaseImageProcessor`.")
 
-        # Avoid resetting a set slow/fast image processor if we are passing just the other ones.
+        # Check if already registered
         if config_class in IMAGE_PROCESSOR_MAPPING._extra_content:
-            existing_slow, existing_fast = IMAGE_PROCESSOR_MAPPING[config_class]
-            if slow_image_processor_class is None:
-                slow_image_processor_class = existing_slow
-            if fast_image_processor_class is None:
-                fast_image_processor_class = existing_fast
+            if not exist_ok:
+                raise ValueError(f"`{config_class}` is already registered. Use `exist_ok=True` to override.")
 
-        IMAGE_PROCESSOR_MAPPING.register(
-            config_class, (slow_image_processor_class, fast_image_processor_class), exist_ok=exist_ok
-        )
+        IMAGE_PROCESSOR_MAPPING.register(config_class, processor_class, exist_ok=exist_ok)
 
 
 __all__ = ["IMAGE_PROCESSOR_MAPPING", "AutoImageProcessor"]

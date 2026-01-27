@@ -1867,7 +1867,7 @@ def requires_backends(obj, backends):
         obj: object to be checked
         backends: list or tuple of backends to check.
     """
-    if not isinstance(backends, (list, tuple)):
+    if not isinstance(backends, list | tuple):
         backends = [backends]
 
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
@@ -2155,6 +2155,38 @@ class _LazyModule(ModuleType):
                         value = getattr(fb_module, fallback_name)
                         setattr(self, fallback_name, value)
                         setattr(self, name, value)
+                        return value
+                    except Exception:
+                        pass
+            # V5: Handle *ImageProcessorFast backward compatibility
+            # Similar to TokenizerFast, but for image processors
+            if name.endswith("ImageProcessorFast"):
+                print(f"Handling {name} backward compatibility")
+                fallback_name = name[:-4]  # Remove "Fast"
+                if fallback_name in self._class_to_module:
+                    try:
+                        fb_module = self._get_module(self._class_to_module[fallback_name])
+                        UnifiedClass = getattr(fb_module, fallback_name)
+
+                        # Create wrapper that defaults to torchvision backend
+                        import functools
+
+                        @functools.wraps(UnifiedClass)
+                        def fast_alias_factory(*args, **kwargs):
+                            import warnings
+
+                            warnings.warn(
+                                f"{name} is deprecated. Use {fallback_name} with backend='torchvision' instead.",
+                                FutureWarning,
+                                stacklevel=2,
+                            )
+                            kwargs.setdefault("backend", "torchvision")
+                            return UnifiedClass(*args, **kwargs)
+
+                        fast_alias_factory.__name__ = name
+                        fast_alias_factory.__qualname__ = name
+                        setattr(self, name, fast_alias_factory)
+                        value = fast_alias_factory
                         return value
                     except Exception:
                         pass
