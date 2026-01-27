@@ -20,9 +20,11 @@
 
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 
 
-class LasrEncoderConfig(PreTrainedConfig):
+# Cannot inhert because the mixin will not carry over otherwise
+class LasrEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`LasrEncoder`]. It is used to instantiate a
     `LasrEncoder` model according to the specified arguments, defining the model architecture.
