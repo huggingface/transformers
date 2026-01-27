@@ -19,8 +19,6 @@ import inspect
 
 from huggingface_hub import repo_exists
 
-from .configuration_utils import PreTrainedConfig
-from .models.auto import CONFIG_MAPPING
 from .utils import logging
 
 
@@ -275,6 +273,9 @@ def consolidate_backbone_kwargs_to_config(
     timm_default_kwargs: dict | None = None,
     **kwargs,
 ):
+    from .configuration_utils import PreTrainedConfig
+    from .models.auto import CONFIG_MAPPING
+
     use_timm_backbone = kwargs.pop("use_timm_backbone", True)  # this is not always `True`
     backbone_kwargs = kwargs.pop("backbone_kwargs", {})
     backbone = kwargs.pop("backbone") if kwargs.get("backbone") is not None else default_backbone
