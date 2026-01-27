@@ -59,13 +59,13 @@ fix-repo: style
 	-python utils/add_dates.py
 
 
-# Run tests for the library
+# Run tests for the library, requires pytest-random-order
 test:
-	python -m pytest -n auto --dist=loadfile -s -v ./tests/
+	python -m pytest -p random_order -n auto --dist=loadfile -s -v --random-order-bucket=module ./tests/
 
-# Run tests for examples
+# Run tests for examples, requires pytest-random-order
 test-examples:
-	python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/
+	python -m pytest -p random_order -n auto --dist=loadfile -s -v --random-order-bucket=module ./examples/pytorch/
 
 # Run benchmark
 benchmark:
