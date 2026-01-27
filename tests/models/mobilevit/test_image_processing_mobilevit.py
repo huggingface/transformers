@@ -263,6 +263,11 @@ class MobileViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
+            # Ensure reduce label returns the same number of masks
+            image, map = prepare_semantic_batch_inputs()
+            encoding = image_processing(image, map, return_tensors="pt")
+            self.assertTrue(len(encoding["labels"]) == len(map))
+
     @require_vision
     @require_torch
     def test_slow_fast_equivalence(self):
