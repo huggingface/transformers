@@ -300,17 +300,10 @@ class MixedInt8Test(BaseMixedInt8Test):
         The test ensures that such operations are prohibited on 8-bit models
         to prevent invalid conversions.
         """
-        with self.assertRaises(ValueError):
-            # Tries with `str`
-            self.model_8bit.to("cpu")
 
         with self.assertRaises(ValueError):
             # Tries with a `dtype``
             self.model_8bit.to(torch.float16)
-
-        with self.assertRaises(ValueError):
-            # Tries with a `device`
-            self.model_8bit.to(torch.device(torch_device))
 
         with self.assertRaises(ValueError):
             # Tries to cast the 8-bit model to float32 using `float()`
@@ -319,6 +312,10 @@ class MixedInt8Test(BaseMixedInt8Test):
         with self.assertRaises(ValueError):
             # Tries to cast the 4-bit model to float16 using `half()`
             self.model_8bit.half()
+
+        # works now with 0.48.0 in bnb
+        self.model_8bit.to("cpu")
+        self.model_8bit.to(torch.device(torch_device))
 
         # Test if we did not break anything
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")

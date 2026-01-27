@@ -95,6 +95,12 @@ class Qwen3MoeConfig(PreTrainedConfig):
             Indicate which layers use Qwen3MoeMLP rather than Qwen3MoeSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3MoeModel, Qwen3MoeConfig
@@ -111,6 +117,10 @@ class Qwen3MoeConfig(PreTrainedConfig):
 
     model_type = "qwen3_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
+
+    attribute_map = {
+        "num_experts": "num_local_experts",
+    }
 
     # Default tensor parallel plan for base model `Qwen3Moe`
     base_model_tp_plan = {
@@ -158,6 +168,9 @@ class Qwen3MoeConfig(PreTrainedConfig):
         output_router_logits: bool | None = False,
         router_aux_loss_coef: float | None = 0.001,
         mlp_only_layers: bool | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -188,10 +201,11 @@ class Qwen3MoeConfig(PreTrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["Qwen3MoeConfig"]

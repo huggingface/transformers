@@ -209,8 +209,6 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
@@ -242,6 +240,12 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
             Indicate which layers use Qwen3OmniMoeTextMLP rather than Qwen3OmniMoeTextSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3OmniMoeTextModel, Qwen3OmniMoeTextConfig
@@ -292,7 +296,6 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         initializer_range: float | None = 0.02,
         rms_norm_eps: float | None = 1e-6,
         use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         attention_bias: bool | None = False,
         sliding_window: int | None = None,
@@ -305,6 +308,9 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         output_router_logits: bool | None = False,
         router_aux_loss_coef: float | None = 0.001,
         mlp_only_layers: list[int] | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -333,9 +339,11 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
             ignore_keys_at_rope_validation={"mrope_section", "interleaved", "mrope_interleaved"},
             **kwargs,
         )
@@ -374,6 +382,8 @@ class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
             The user token id to encode the user token.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
 
     Example:
 
@@ -411,12 +421,14 @@ class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
         audio_start_token_id=151647,
         user_token_id=872,
         initializer_range=0.02,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.user_token_id = user_token_id
         self.position_id_per_seconds = position_id_per_seconds
         self.audio_start_token_id = audio_start_token_id
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
 
         if isinstance(vision_config, dict):
             vision_config = Qwen3OmniMoeVisionEncoderConfig(**vision_config)
@@ -504,6 +516,12 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
             Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3OmniMoeTalkerCodePredictorModel, Qwen3OmniMoeTalkerCodePredictorConfig
@@ -558,15 +576,20 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         layer_types: list[str] | None = None,
         attention_dropout: int | None = 0,
         num_code_groups: int | None = 32,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
+        self.sliding_window = sliding_window
+        self.num_code_groups = num_code_groups
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
+        self.sliding_window = sliding_window if self.use_sliding_window else None
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -591,13 +614,13 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
-        self.num_code_groups = num_code_groups
+        super().__init__(**kwargs)
 
 
 class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
@@ -674,6 +697,12 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
             Indicate which layers use Qwen3OmniMoeTalkerTextMLP rather than Qwen3OmniMoeTalkerTextSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3OmniMoeTalkerTextModel, Qwen3OmniMoeTalkerTextConfig
@@ -690,6 +719,10 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
 
     model_type = "qwen3_omni_moe_talker_text"
     keys_to_ignore_at_inference = ["past_key_values"]
+
+    attribute_map = {
+        "num_experts": "num_local_experts",
+    }
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeTalkerText`
     base_model_tp_plan = {
@@ -736,6 +769,9 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         output_router_logits: bool | None = False,
         router_aux_loss_coef: float | None = 0.001,
         mlp_only_layers: list[int] | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -765,10 +801,11 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):

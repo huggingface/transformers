@@ -68,6 +68,8 @@ class ClvpEncoderConfig(PreTrainedConfig):
             Beginning of sequence token id.
         eos_token_id (`int`, *optional*, defaults to 0):
             End of sequence token id.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
 
     Example:
 
@@ -105,6 +107,7 @@ class ClvpEncoderConfig(PreTrainedConfig):
         initializer_factor=1.0,
         bos_token_id=255,
         eos_token_id=0,
+        pad_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -123,8 +126,9 @@ class ClvpEncoderConfig(PreTrainedConfig):
         self.summary_type = summary_type
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
 
     @classmethod
     def from_pretrained(
@@ -220,6 +224,8 @@ class ClvpDecoderConfig(PreTrainedConfig):
         eos_token_id (`int`, *optional*, defaults to 8193):
             End of sequence token id, used in the method
             [`ClvpModelForConditionalGeneration.fix_speech_decoder_output()`] to correct decoder outputs.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
         feature_size (`int`, *optional*, defaults to 80):
             The feature dimension of the extracted mel features. This value is used in [`ClvpConditioningEncoder`].
         use_attention_bias (`bool`, *optional*, defaults to `True`):
@@ -229,6 +235,8 @@ class ClvpDecoderConfig(PreTrainedConfig):
             testing).
         decoder_fixing_codes (`list`, *optional*, defaults to `[83, 45, 45, 248]`):
             These values are used in the method `fix_speech_decoder_output` to fix decoder generated outputs.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether cross-attention layers should be added to the model.
 
     Example:
 
@@ -272,10 +280,12 @@ class ClvpDecoderConfig(PreTrainedConfig):
         use_cache=True,
         bos_token_id=8192,
         eos_token_id=8193,
+        pad_token_id=None,
         feature_size=80,
         use_attention_bias=True,
         initializer_factor=1.0,
         decoder_fixing_codes=[83, 45, 45, 248],
+        add_cross_attention=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -305,8 +315,10 @@ class ClvpDecoderConfig(PreTrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.add_cross_attention = add_cross_attention
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
 
 
 class ClvpConfig(PreTrainedConfig):

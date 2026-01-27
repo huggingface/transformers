@@ -215,19 +215,23 @@ print(output_text)
 ## Glm4vVisionModel
 
 [[autodoc]] Glm4vVisionModel
-- forward
+    - forward
 
 ## Glm4vTextModel
 
 [[autodoc]] Glm4vTextModel
-- forward
+    - forward
 
 ## Glm4vModel
 
 [[autodoc]] Glm4vModel
-- forward
+    - forward
+    - get_video_features
+    - get_image_features
 
 ## Glm4vForConditionalGeneration
 
 [[autodoc]] Glm4vForConditionalGeneration
-- forward
+    - forward
+    - get_video_features
+    - get_image_features
