@@ -574,6 +574,17 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         model = GroupViTModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester.vision_model_tester
+        # GroupViT returns attention grouping of each stage
+        return sum(g > 0 for g in self.model_tester.vision_model_tester.num_group_tokens)
+
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester.vision_model_tester
+        return model_tester.expected_num_hidden_layers
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():

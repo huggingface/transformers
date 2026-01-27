@@ -290,6 +290,7 @@ class SamHQConfig(PreTrainedConfig):
         prompt_encoder_config=None,
         mask_decoder_config=None,
         initializer_range=0.02,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         vision_config = vision_config if vision_config is not None else {}
@@ -307,6 +308,7 @@ class SamHQConfig(PreTrainedConfig):
         self.prompt_encoder_config = SamHQPromptEncoderConfig(**prompt_encoder_config)
         self.mask_decoder_config = SamHQMaskDecoderConfig(**mask_decoder_config)
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 
