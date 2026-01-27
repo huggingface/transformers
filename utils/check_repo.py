@@ -96,6 +96,9 @@ PRIVATE_MODELS = [
     "Siglip2VisionTransformer",
     "AriaTextForCausalLM",
     "AriaTextModel",
+    "MolmoAdapterModel",
+    "MolmoTextPreTrainedModel",
+    "MolmoVisionModel",
     "Phi4MultimodalAudioModel",
     "Phi4MultimodalVisionModel",
     "Glm4vVisionModel",
@@ -188,6 +191,9 @@ IGNORE_NON_TESTED = (
         "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",  # Building part of bigger (tested) model. Tested implicitly through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
+        "MolmoForCausalLM",  # Building part of bigger (tested) model.
+        "MolmoTextModel",  # Building part of bigger (tested) model.
+        "MolmoModel",  # Building part of bigger (tested) model.
         "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Llama4VisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Emu3VQVAE",  # Building part of bigger (tested) model
@@ -393,6 +399,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "MetaClip2VisionModel",
     "MetaClip2VisionModelWithProjection",
     "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
+    "MolmoTextModel",
     "Emu3VQVAE",  # no autoclass for VQ-VAE models
     "Emu3TextModel",  # Building part of bigger (tested) model
     "JanusVQVAE",  # no autoclass for VQ-VAE models
