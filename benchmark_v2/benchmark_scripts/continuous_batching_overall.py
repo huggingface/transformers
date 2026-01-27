@@ -44,7 +44,7 @@ if __name__ == "__main__":
 
     # Benchmark with low number of samples
     results.append(run_and_parse_cb_example("--samples 10"))
-    results.append(run_and_parse_cb_example("--samples 20 --num-blocks 16"))  # and low number of blocks
+    results.append(run_and_parse_cb_example("--samples 20 --num-blocks 20"))  # and low number of blocks
     results.append(run_and_parse_cb_example("--samples 50"))
 
     # Benchmark with compile: default, flash attention 2 and sdpa
