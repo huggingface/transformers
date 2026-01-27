@@ -18,20 +18,16 @@ import unittest
 import pytest
 from packaging import version
 
-from transformers import AutoTokenizer, YoutuConfig, is_torch_available
+from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_torch,
     require_torch_accelerator,
-    require_torch_large_accelerator,
     slow,
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
@@ -46,175 +42,30 @@ if is_torch_available():
     )
 
 
-class YoutuModelTester:
+class YoutuModelTester(CausalLMModelTester):
+    if is_torch_available():
+        base_model_class = YoutuModel
+
     def __init__(
         self,
         parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        intermediate_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=4,
         kv_lora_rank=16,
         q_lora_rank=32,
         qk_rope_head_dim=32,
-        v_head_dim=32,
         qk_nope_head_dim=32,
-        hidden_act="silu",
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        embedding_initializer_range=0.04,
-        attention_probs_dropout_prob=0.1,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        num_labels=3,
-        num_choices=4,
-        bos_token_id=0,
-        eos_token_id=1,
-        pad_token_id=1,
-        scope=None,
+        v_head_dim=32,
     ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
+        super().__init__(parent=parent)
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
+        self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.embedding_initializer_range = embedding_initializer_range
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.scope = scope
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-        config = self.get_config()
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-
-    def get_config(self):
-        return YoutuConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            kv_lora_rank=self.kv_lora_rank,
-            q_lora_rank=self.q_lora_rank,
-            qk_rope_head_dim=self.qk_rope_head_dim,
-            v_head_dim=self.v_head_dim,
-            qk_nope_head_dim=self.qk_nope_head_dim,
-            hidden_act=self.hidden_act,
-            max_position_embeddings=self.max_position_embeddings,
-            initializer_range=self.initializer_range,
-            embedding_initializer_range=self.embedding_initializer_range,
-            use_cache=True,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
-            attention_dropout=self.attention_probs_dropout_prob,
-        )
-
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = YoutuModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
-        return config, inputs_dict
 
 
 @require_torch
-class YoutuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            YoutuModel,
-            YoutuForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
-    all_generative_model_classes = (YoutuForCausalLM,) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": YoutuModel,
-            "text-generation": YoutuForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-
-    # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
-    # This is because we are hitting edge cases with the causal_mask buffer
-    model_split_percents = [0.5, 0.7, 0.8]
-
-    # used in `test_torch_compile_for_training`
-    _torch_compile_train_cls = YoutuForCausalLM if is_torch_available() else None
-
-    def setUp(self):
-        self.model_tester = YoutuModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=YoutuConfig, hidden_size=37)
+class YoutuModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = YoutuModelTester
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         """Needs to be overridden as youtu-llm has special MLA cache format (though we don't really use the MLA)"""
@@ -232,61 +83,6 @@ class YoutuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         for layer in past_key_values.layers:
             self.assertEqual(layer.keys.shape, expected_key_shape)
             self.assertEqual(layer.values.shape, expected_value_shape)
-
-    @unittest.skip(reason="Youtu-LLM is not suitable for testing with extreme small vocabulary")
-    def test_resize_tokens_embeddings(self):
-        pass
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @require_torch_large_accelerator
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        max_new_tokens = 30
-
-        tokenizer = AutoTokenizer.from_pretrained("Junrulu/Youtu-LLM-2B-Base-hf")
-
-        model_sdpa = YoutuForCausalLM.from_pretrained(
-            "Junrulu/Youtu-LLM-2B-Base-hf",
-            dtype=torch.float16,
-            attn_implementation="sdpa",
-        ).to(torch_device)
-
-        self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-
-        model_eager = YoutuForCausalLM.from_pretrained(
-            "Junrulu/Youtu-LLM-2B-Base-hf",
-            dtype=torch.float16,
-            attn_implementation="eager",
-        ).to(torch_device)
-
-        self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-        texts = [
-            "hi here's a longer context, getting longer and",
-            "Today I am in Paris and",
-        ]
-
-        for padding_side in ["left", "right"]:
-            tokenizer.padding_side = padding_side
-            tokenizer.pad_token = tokenizer.eos_token
-
-            inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
-
-            res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-            res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-
-            with self.subTest(f"{padding_side}"):
-                torch.testing.assert_close(
-                    res_eager,
-                    res_sdpa,
-                    msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
-                )
 
 
 @slow
