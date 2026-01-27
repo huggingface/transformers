@@ -18,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_backbone_utils import BackboneConfigMixin
+from ...modeling_backbone_utils import consolidate_backbone_kwargs_to_config
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -26,7 +26,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class MMGroundingDinoConfig(PreTrainedConfig, BackboneConfigMixin):
+class MMGroundingDinoConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MMGroundingDinoModel`]. It is used to instantiate a
     MM Grounding DINO model according to the specified arguments, defining the model architecture. Instantiating a
@@ -193,7 +193,7 @@ class MMGroundingDinoConfig(PreTrainedConfig, BackboneConfigMixin):
         layer_norm_eps=1e-5,
         **kwargs,
     ):
-        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
             backbone=backbone,
             default_config_type="swin",

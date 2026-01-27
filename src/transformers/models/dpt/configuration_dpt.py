@@ -14,7 +14,7 @@
 """DPT model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_backbone_utils import BackboneConfigMixin
+from ...modeling_backbone_utils import consolidate_backbone_kwargs_to_config
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -22,7 +22,7 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class DPTConfig(PreTrainedConfig, BackboneConfigMixin):
+class DPTConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DPTModel`]. It is used to instantiate an DPT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -185,7 +185,7 @@ class DPTConfig(PreTrainedConfig, BackboneConfigMixin):
             if isinstance(backbone_config, dict):
                 backbone_config.setdefault("model_type", "bit")
 
-            backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
+            backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
                 backbone_config=backbone_config,
                 backbone=backbone,
                 default_config_type="bit",
@@ -201,7 +201,7 @@ class DPTConfig(PreTrainedConfig, BackboneConfigMixin):
             if readout_type != "project":
                 raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
         elif backbone_config is not None:
-            backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
+            backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
                 backbone_config=backbone_config,
                 **kwargs,
             )

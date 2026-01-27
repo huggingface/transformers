@@ -19,7 +19,7 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_backbone_utils import BackboneConfigMixin
+from ...modeling_backbone_utils import consolidate_backbone_kwargs_to_config
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -27,7 +27,7 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class PromptDepthAnythingConfig(PreTrainedConfig, BackboneConfigMixin):
+class PromptDepthAnythingConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PromptDepthAnythingModel`]. It is used to instantiate a PromptDepthAnything
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -108,7 +108,7 @@ class PromptDepthAnythingConfig(PreTrainedConfig, BackboneConfigMixin):
         max_depth=None,
         **kwargs,
     ):
-        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
             backbone=backbone,
             default_config_type="dinov2",

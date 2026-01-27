@@ -18,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_backbone_utils import BackboneConfigMixin
+from ...modeling_backbone_utils import BackboneConfigMixin, consolidate_backbone_kwargs_to_config
 from ...utils import logging
 from ..auto import AutoConfig
 
@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 
 # TODO: Attribute map assignment logic should be fixed in modular
 # as well as super() call parsing because otherwise we cannot re-write args after initialization
-class DFineConfig(PreTrainedConfig, BackboneConfigMixin):
+class DFineConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`DFineModel`]. It is used to instantiate a D-FINE
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -278,8 +278,7 @@ class DFineConfig(PreTrainedConfig, BackboneConfigMixin):
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
 
-        backbone_config, kwargs = BackboneConfigMixin.consolidate_backbone_kwargs_to_config(
-            self,
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
             backbone=backbone,
             default_config_type="hgnet_v2",

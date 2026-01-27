@@ -14,7 +14,7 @@
 """ZoeDepth model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_backbone_utils import BackboneConfigMixin
+from ...modeling_backbone_utils import consolidate_backbone_kwargs_to_config
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -26,7 +26,7 @@ ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class ZoeDepthConfig(PreTrainedConfig, BackboneConfigMixin):
+class ZoeDepthConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ZoeDepthForDepthEstimation`]. It is used to instantiate an ZoeDepth
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -173,7 +173,7 @@ class ZoeDepthConfig(PreTrainedConfig, BackboneConfigMixin):
         if attractor_kind not in ["mean", "sum"]:
             raise ValueError("Attractor_kind must be one of ['mean', 'sum']")
 
-        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
             backbone=backbone,
             default_config_type="beit",

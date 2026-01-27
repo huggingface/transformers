@@ -14,7 +14,7 @@
 """RT-DETR model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_backbone_utils import BackboneConfigMixin
+from ...modeling_backbone_utils import consolidate_backbone_kwargs_to_config
 from ...utils import logging
 from ..auto import AutoConfig
 
@@ -22,7 +22,7 @@ from ..auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class RTDetrConfig(PreTrainedConfig, BackboneConfigMixin):
+class RTDetrConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RTDetrModel`]. It is used to instantiate a
     RT-DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -246,7 +246,7 @@ class RTDetrConfig(PreTrainedConfig, BackboneConfigMixin):
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
 
-        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
             backbone=backbone,
             default_config_type="rt_detr_resnet",

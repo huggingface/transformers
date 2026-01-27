@@ -14,7 +14,7 @@
 """VitMatte model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_backbone_utils import BackboneConfigMixin
+from ...modeling_backbone_utils import consolidate_backbone_kwargs_to_config
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -22,7 +22,7 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class VitMatteConfig(PreTrainedConfig, BackboneConfigMixin):
+class VitMatteConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of [`VitMatteForImageMatting`]. It is used to
     instantiate a ViTMatte model according to the specified arguments, defining the model architecture. Instantiating a
@@ -87,7 +87,7 @@ class VitMatteConfig(PreTrainedConfig, BackboneConfigMixin):
         fusion_hidden_sizes: list[int] = [256, 128, 64, 32],
         **kwargs,
     ):
-        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
             backbone=backbone,
             default_config_type="vitdet",

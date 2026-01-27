@@ -256,51 +256,6 @@ class BackboneConfigMixin:
         self._out_features = None
         self.align_output_features_output_indices()
 
-    def consolidate_backbone_kwargs_to_config(
-        self,
-        backbone_config,
-        backbone: str | None = None,
-        default_config_type: str | None = None,
-        default_config_kwargs: dict | None = None,
-        timm_default_kwargs: dict | None = None,
-        **kwargs,
-    ):
-        use_timm_backbone = kwargs.pop("use_timm_backbone", True)  # this is not always `True`
-        backbone_kwargs = kwargs.pop("backbone_kwargs", {})
-        kwargs.pop("use_pretrained_backbone", None)
-
-        # Init timm backbone with hardcoded values for BC
-        if (
-            timm_default_kwargs is not None
-            and use_timm_backbone
-            and backbone is not None
-            and backbone_config is None
-            and backbone_kwargs is None
-        ):
-            backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **timm_default_kwargs)
-        elif backbone is not None and backbone_config is None:
-            if repo_exists(backbone):
-                config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
-                config_class = CONFIG_MAPPING[config_dict["model_type"]]
-                config_dict.update(backbone_kwargs)
-                backbone_config = config_class(**config_dict)
-            else:
-                backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
-        elif backbone_config is None and default_config_type is not None:
-            logger.info(
-                f"`backbone_config` is `None`. Initializing the config with the default `{default_config_type}` vision config."
-            )
-            default_config_kwargs = default_config_kwargs or {}
-            backbone_config = CONFIG_MAPPING[default_config_type](**default_config_kwargs)
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-
-        # if backbone_config is None:
-        #     raise ValueError(f"Failed to infer `backbone_config` for {self.__class__.__name__}")
-        return backbone_config, kwargs
-
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PreTrainedConfig` to
@@ -310,6 +265,51 @@ class BackboneConfigMixin:
         output["out_features"] = output.pop("_out_features")
         output["out_indices"] = output.pop("_out_indices")
         return output
+
+
+def consolidate_backbone_kwargs_to_config(
+    backbone_config,
+    backbone: str | None = None,
+    default_config_type: str | None = None,
+    default_config_kwargs: dict | None = None,
+    timm_default_kwargs: dict | None = None,
+    **kwargs,
+):
+    use_timm_backbone = kwargs.pop("use_timm_backbone", True)  # this is not always `True`
+    backbone_kwargs = kwargs.pop("backbone_kwargs", {})
+    kwargs.pop("use_pretrained_backbone", None)
+
+    # Init timm backbone with hardcoded values for BC
+    if (
+        timm_default_kwargs is not None
+        and use_timm_backbone
+        and backbone is not None
+        and backbone_config is None
+        and backbone_kwargs is None
+    ):
+        backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **timm_default_kwargs)
+    elif backbone is not None and backbone_config is None:
+        if repo_exists(backbone):
+            config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
+            config_class = CONFIG_MAPPING[config_dict["model_type"]]
+            config_dict.update(backbone_kwargs)
+            backbone_config = config_class(**config_dict)
+        else:
+            backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
+    elif backbone_config is None and default_config_type is not None:
+        logger.info(
+            f"`backbone_config` is `None`. Initializing the config with the default `{default_config_type}` vision config."
+        )
+        default_config_kwargs = default_config_kwargs or {}
+        backbone_config = CONFIG_MAPPING[default_config_type](**default_config_kwargs)
+    elif isinstance(backbone_config, dict):
+        backbone_model_type = backbone_config.get("model_type")
+        config_class = CONFIG_MAPPING[backbone_model_type]
+        backbone_config = config_class.from_dict(backbone_config)
+
+    # if backbone_config is None:
+    #     raise ValueError(f"Failed to infer `backbone_config` for {self.__class__.__name__}")
+    return backbone_config, kwargs
 
 
 def load_backbone(config):

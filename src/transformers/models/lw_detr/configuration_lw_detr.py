@@ -20,7 +20,7 @@
 import math
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_backbone_utils import BackboneConfigMixin
+from ...modeling_backbone_utils import BackboneConfigMixin, consolidate_backbone_kwargs_to_config
 from ...utils import logging
 from ..auto import AutoConfig
 
@@ -166,7 +166,7 @@ class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
         self.num_windows_side = int(math.sqrt(num_windows))
 
 
-class LwDetrConfig(PreTrainedConfig, BackboneConfigMixin):
+class LwDetrConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LwDetrModel`]. It is used to instantiate
     a LW-DETR model according to the specified arguments, defining the model architecture. Instantiating a
@@ -308,7 +308,7 @@ class LwDetrConfig(PreTrainedConfig, BackboneConfigMixin):
     ):
         self.batch_norm_eps = batch_norm_eps
 
-        backbone_config, kwargs = self.consolidate_backbone_kwargs_to_config(
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
             default_config_type="lw_detr_vit",
             default_config_kwargs={
