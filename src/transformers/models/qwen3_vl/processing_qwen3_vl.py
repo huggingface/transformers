@@ -102,8 +102,32 @@ class Qwen3VLProcessor(ProcessorMixin):
             **kwargs,
         )
         if images is not None:
-            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_grid_thw = image_inputs["image_grid_thw"]
+            # Preserve per-sample image grouping when a nested list of images is provided
+            if isinstance(images, (list, tuple)) and len(images) > 0 and isinstance(images[0], (list, tuple)):
+                per_sample_inputs = [
+                    self.image_processor(images=imgs, **output_kwargs["images_kwargs"]) for imgs in images
+                ]
+                per_sample_pixel_values = [ps["pixel_values"] for ps in per_sample_inputs]
+                # Concatenate image_grid_thw across samples for compatibility with text token placeholder logic
+                image_grid_thw = []
+                for ps in per_sample_inputs:
+                    image_grid_thw.extend(ps.get("image_grid_thw", []))
+
+                # Zero-pad along image dimension to the max number of images in the batch, then stack batch-first
+                max_n = max(p.shape[0] for p in per_sample_pixel_values) if len(per_sample_pixel_values) > 0 else 0
+                padded = []
+                for p in per_sample_pixel_values:
+                    if p.shape[0] < max_n:
+                        pad_shape = (max_n - p.shape[0],) + p.shape[1:]
+                        pad = np.zeros(pad_shape, dtype=p.dtype)
+                        p = np.concatenate([p, pad], axis=0)
+                    padded.append(p)
+                # Final shape: [B, max_n, ...]
+                pixel_values = np.stack(padded, axis=0) if max_n > 0 else np.zeros((0,), dtype=np.float32)
+                image_inputs = {"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}
+            else:
+                image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+                image_grid_thw = image_inputs["image_grid_thw"]
         else:
             image_inputs = {}
             image_grid_thw = None
