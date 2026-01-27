@@ -416,7 +416,6 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         input_values: torch.FloatTensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
         acoustic_loss_mask: torch.BoolTensor | None = None,
-        ddpm_batch_mul: int = 4,
         **kwargs,
     ) -> tuple | VibeVoiceCausalLMOutputWithPast:
         r"""
@@ -426,8 +425,6 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             Masks indicating valid input frames.
         acoustic_loss_mask (`torch.BoolTensor`, *optional*):
             Mask to compute diffusion loss only on specific acoustic tokens.
-        ddpm_batch_mul (`int`, *optional*, defaults to 4):
-            TODO
         """
 
         outputs = self.model(
@@ -449,49 +446,8 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         diffusion_loss = None
-        # TODO (ebezzam) original has an implementation which should be verified (and would need noise scheduler from `diffusers`):
-        # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L407
-        # Community repo has a version for TTS (no voice cloning):
-        # https://github.com/vibevoice-community/VibeVoice/blob/493b186f5b973477cadab0f93f4a5dd290cc9125/vibevoice/finetune/train_vibevoice.py#L684
-        if acoustic_loss_mask is not None:
-            condition_features = hidden_states[acoustic_loss_mask]
-            audio_features = outputs.audio_features
-            audio_len, latent_size = audio_features.shape
-            
-            noise = torch.randn(
-                (audio_len * ddpm_batch_mul, latent_size),
-                device=hidden_states.device,
-                dtype=hidden_states.dtype
-            )
-            timesteps = torch.multinomial(
-                torch.ones(self.config.diffusion_head_config.ddpm_num_steps),
-                audio_len * ddpm_batch_mul,
-                replacement=True,
-            ).to(hidden_states.device)
-
-            audio_features_repeated = audio_features.repeat_interleave(ddpm_batch_mul, dim=0)
-            condition_features_repeated = condition_features.repeat_interleave(ddpm_batch_mul, dim=0)
-
-            noisy_audio_features = self.model.noise_scheduler.add_noise(
-                audio_features_repeated, noise, timesteps
-            )
-            model_output = self.model.prediction_head(
-                noisy_audio_features, 
-                timesteps.type_as(audio_features), 
-                condition_features_repeated
-            )
-            # target for `v_prediction`
-            target = self.model.noise_scheduler.get_velocity(
-                audio_features_repeated, noise, timesteps
-            )
-
-            diffusion_loss = torch.nn.functional.mse_loss(model_output.float(), target.float(), reduction='sum')
-            if latent_size > 0 and ddpm_batch_mul > 0:
-                # NOTE (ebezzam) normalize by speech tokens as in community repo:
-                # https://github.com/vibevoice-community/VibeVoice/blob/493b186f5b973477cadab0f93f4a5dd290cc9125/vibevoice/finetune/train_vibevoice.py#L741
-                diffusion_loss = diffusion_loss / latent_size / ddpm_batch_mul / max(audio_len, 1)
-            else:
-                diffusion_loss = torch.tensor(0.0, device=diffusion_loss.device)
+        if acoustic_loss_mask is not None and outputs.audio_features is not None:
+            raise NotImplementedError("Diffusion loss computation is not yet implemented.")
 
         return VibeVoiceCausalLMOutputWithPast(loss=loss, diffusion_loss=diffusion_loss, logits=logits, **outputs)
 

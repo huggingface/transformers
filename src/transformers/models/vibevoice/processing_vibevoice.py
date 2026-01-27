@@ -178,18 +178,14 @@ class VibeVoiceProcessor(ProcessorMixin):
         encoding = self.tokenizer(text, **text_kwargs)
         data.update(encoding)
         if output_labels:
-            # for the language model, -100 is ignored
+            # TODO (ebezzam) for the diffusion loss, input_ids and masks need to be extended,
+            # and `acoustic_loss_mask` created
             labels = data["input_ids"].clone()
             labels[labels == self.audio_bos_token_id] = -100
             labels[labels == self.audio_eos_token_id] = -100
             labels[labels == self.audio_diffusion_token_id] = -100
             labels[labels == self.tokenizer.pad_token_id] = -100
             data["labels"] = labels
-
-            # TODO for the audio generation
-            # community repo has example for TTS (no voice cloning): 
-            # https://github.com/vibevoice-community/VibeVoice/blob/main/vibevoice/finetune/data_vibevoice.py#L283-L287
-
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
