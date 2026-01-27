@@ -1525,25 +1525,25 @@ class ModelUtilsTest(TestCasePlus):
     def test_tied_weights_are_always_tied_from_config(self):
         """Test that if a model is initialized from config it's always tied, and that the context `no_tie_weights` works
         as expected"""
-        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=16, tie_words_embeddings=True)
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=16, tie_word_embeddings=True)
 
         # Make sure they are tied if called with `_from_config` and directly
         model = LlamaForCausalLM._from_config(copy.deepcopy(config))
-        self.assertTrue(model.model.lm_head.weight is model.model.embed_tokens.weight)
+        self.assertTrue(model.lm_head.weight is model.model.embed_tokens.weight)
         model = LlamaForCausalLM(copy.deepcopy(config))
-        self.assertTrue(model.model.lm_head.weight is model.model.embed_tokens.weight)
+        self.assertTrue(model.lm_head.weight is model.model.embed_tokens.weight)
 
         # Also when using a meta device explicitly (as it skips e.g. weight init automatically)
         with torch.device("meta"):
             model = LlamaForCausalLM._from_config(copy.deepcopy(config))
-            self.assertTrue(model.model.lm_head.weight is model.model.embed_tokens.weight)
+            self.assertTrue(model.lm_head.weight is model.model.embed_tokens.weight)
             model = LlamaForCausalLM(copy.deepcopy(config))
-            self.assertTrue(model.model.lm_head.weight is model.model.embed_tokens.weight)
+            self.assertTrue(model.lm_head.weight is model.model.embed_tokens.weight)
 
         # Make sure the context works as expected
         with init.no_tie_weights():
             model = LlamaForCausalLM._from_config(copy.deepcopy(config))
-            self.assertTrue(model.model.lm_head.weight is not model.model.embed_tokens.weight)
+            self.assertTrue(model.lm_head.weight is not model.model.embed_tokens.weight)
 
     def test_unexpected_keys_warnings(self):
         model = ModelWithHead(PreTrainedConfig(tie_word_embeddings=True))
