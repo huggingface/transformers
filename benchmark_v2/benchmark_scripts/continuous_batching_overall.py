@@ -7,21 +7,18 @@ from tabulate import tabulate
 
 SCRIPT_LOCATION = (Path(__file__).parent.parent.parent / "examples/pytorch/continuous_batching.py").as_posix()
 COMMON_ARGS = "--log-level WARNING --seed 0".split()
+ERROR_OUTPUT = {"time_seconds": "X", "num_tokens": "X", "throughput_tok_per_sec": "ERROR"}
 
 
-def run_and_parse_cb_example(args: list[str]) -> dict:
+def run_and_parse_cb_example(args: str) -> dict:
     print(f"Benchmarking with args: {args}")
-    output = subprocess.check_output(
+    output = subprocess.run(
         ["python", SCRIPT_LOCATION] + args.split() + COMMON_ARGS,
-        # stderr=subprocess.DEVNULL,
-    ).decode("utf-8")
-    if "Generation thread terminated unexpectedly." in output:
-        return {
-            "args": args,
-            "time_seconds": "X",
-            "num_tokens": "X",
-            "throughput_tok_per_sec": "ERROR",
-        }
+        stdout=subprocess.PIPE,
+    )
+    output = output.stdout.decode("utf-8")
+    if "generate_batch despite unexpected termination" in output:
+        return {"args": args, **ERROR_OUTPUT}
     pattern = r"CB generation took: ([\d.]+) seconds for (\d+) tokens\. ([\d.]+)tok/s"
     match = re.search(pattern, output)
     if match is not None:
@@ -31,7 +28,8 @@ def run_and_parse_cb_example(args: list[str]) -> dict:
             "num_tokens": int(match.group(2)),
             "throughput_tok_per_sec": float(match.group(3)),
         }
-    return {}
+    else:
+        return {"args": args, **ERROR_OUTPUT}
 
 
 if __name__ == "__main__":

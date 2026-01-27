@@ -1375,6 +1375,8 @@ class ContinuousMixin:
                     else:
                         if not manager.is_running():
                             logger.error("Generation thread terminated unexpectedly.")
+                            # This helps get some information in stdout
+                            print("Returning results of generate_batch despite unexpected termination.")
                             break
 
             except Exception as e:
