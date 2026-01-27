@@ -106,6 +106,7 @@ if is_torch_available():
     from test_module.custom_modeling import CustomModel
     from torch import nn
 
+    import transformers.initialization as init
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
@@ -113,6 +114,8 @@ if is_torch_available():
         BertModel,
         CLIPTextModel,
         GenerationMixin,
+        LlamaConfig,
+        LlamaForCausalLM,
         MixtralConfig,
         MixtralModel,
         MusicgenConfig,
@@ -1518,6 +1521,29 @@ class ModelUtilsTest(TestCasePlus):
             self.assertSetEqual(load_info["missing_keys"], {"linear.weight", "linear_2.weight"})
             # They should still be tied though
             self.assertIs(new_model.linear.weight, new_model.linear_2.weight, msg="Weights are not tied!")
+
+    def test_tied_weights_are_always_tied_from_config(self):
+        """Test that if a model is initialized from config it's always tied, and that the context `no_tie_weights` works
+        as expected"""
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=16, tie_words_embeddings=True)
+
+        # Make sure they are tied if called with `_from_config` and directly
+        model = LlamaForCausalLM._from_config(copy.deepcopy(config))
+        self.assertTrue(model.model.lm_head.weight is model.model.embed_tokens.weight)
+        model = LlamaForCausalLM(copy.deepcopy(config))
+        self.assertTrue(model.model.lm_head.weight is model.model.embed_tokens.weight)
+
+        # Also when using a meta device explicitly (as it skips e.g. weight init automatically)
+        with torch.device("meta"):
+            model = LlamaForCausalLM._from_config(copy.deepcopy(config))
+            self.assertTrue(model.model.lm_head.weight is model.model.embed_tokens.weight)
+            model = LlamaForCausalLM(copy.deepcopy(config))
+            self.assertTrue(model.model.lm_head.weight is model.model.embed_tokens.weight)
+
+        # Make sure the context works as expected
+        with init.no_tie_weights():
+            model = LlamaForCausalLM._from_config(copy.deepcopy(config))
+            self.assertTrue(model.model.lm_head.weight is not model.model.embed_tokens.weight)
 
     def test_unexpected_keys_warnings(self):
         model = ModelWithHead(PreTrainedConfig(tie_word_embeddings=True))
