@@ -322,14 +322,16 @@ class DeformableDetrConvEncoder(nn.Module):
 
         # We used to load with timm library directly instead of the AutoBackbone API
         # so we need to unwrap the `backbone._backbone` module to load weights without mismatch
+        is_timm_model = False
         if hasattr(backbone, "_backbone"):
             backbone = backbone._backbone
+            is_timm_model = True
         self.model = backbone
 
         backbone_model_type = config.backbone_config.model_type
         if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
-                if hasattr(backbone, "_backbone"):
+                if is_timm_model:
                     if "layer2" not in name and "layer3" not in name and "layer4" not in name:
                         parameter.requires_grad_(False)
                 else:

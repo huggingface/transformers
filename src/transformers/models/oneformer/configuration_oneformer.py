@@ -149,7 +149,6 @@ class OneFormerConfig(PreTrainedConfig):
     def __init__(
         self,
         backbone_config: dict | PreTrainedConfig | None = None,
-        backbone: str | None = None,
         ignore_value: int = 255,
         num_queries: int = 150,
         no_object_weight: int = 0.1,
@@ -194,7 +193,6 @@ class OneFormerConfig(PreTrainedConfig):
     ):
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone=backbone,
             default_config_type="swin",
             default_config_kwargs={
                 "drop_path_rate": 0.3,

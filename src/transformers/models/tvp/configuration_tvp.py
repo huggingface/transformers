@@ -103,7 +103,6 @@ class TvpConfig(PreTrainedConfig):
     def __init__(
         self,
         backbone_config=None,
-        backbone=None,
         distance_loss_weight=1.0,
         duration_loss_weight=0.1,
         visual_prompter_type="framepad",
@@ -129,11 +128,8 @@ class TvpConfig(PreTrainedConfig):
     ):
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone=backbone,
             default_config_type="resnet",
-            default_config_kwargs={
-                "out_features": ["stage4"],
-            },
+            default_config_kwargs={"out_features": ["stage4"]},
             **kwargs,
         )
 

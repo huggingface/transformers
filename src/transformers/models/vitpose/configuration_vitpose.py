@@ -76,7 +76,6 @@ class VitPoseConfig(PreTrainedConfig):
     def __init__(
         self,
         backbone_config: PreTrainedConfig | None = None,
-        backbone: str | None = None,
         initializer_range: float = 0.02,
         scale_factor: int = 4,
         use_simple_decoder: bool = True,
@@ -84,11 +83,8 @@ class VitPoseConfig(PreTrainedConfig):
     ):
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone=backbone,
             default_config_type="vitpose_backbone",
-            default_config_kwargs={
-                "out_indices": [4],
-            },
+            default_config_kwargs={"out_indices": [4]},
             **kwargs,
         )
 

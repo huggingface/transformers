@@ -118,12 +118,10 @@ class MaskFormerConfig(PreTrainedConfig):
         cross_entropy_weight: float = 1.0,
         mask_weight: float = 20.0,
         output_auxiliary_logits: bool | None = None,
-        backbone: str | None = None,
         **kwargs,
     ):
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone=backbone,
             default_config_type="swin",
             default_config_kwargs={
                 "depths": [2, 2, 18, 2],

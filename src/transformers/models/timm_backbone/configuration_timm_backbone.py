@@ -67,7 +67,6 @@ class TimmBackboneConfig(PreTrainedConfig):
         backbone=None,
         num_channels=3,
         features_only=True,
-        use_pretrained_backbone=True,
         out_indices=None,
         freeze_batch_norm_2d=False,
         output_stride=None,
@@ -77,8 +76,6 @@ class TimmBackboneConfig(PreTrainedConfig):
         self.backbone = backbone
         self.num_channels = num_channels
         self.features_only = features_only
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = True
         self.out_indices = out_indices if out_indices is not None else [-1]
         self.output_stride = output_stride
         self.freeze_batch_norm_2d = freeze_batch_norm_2d

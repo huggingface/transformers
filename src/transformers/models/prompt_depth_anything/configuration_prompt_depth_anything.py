@@ -95,7 +95,6 @@ class PromptDepthAnythingConfig(PreTrainedConfig):
     def __init__(
         self,
         backbone_config=None,
-        backbone=None,
         patch_size=14,
         initializer_range=0.02,
         reassemble_hidden_size=384,
@@ -110,7 +109,6 @@ class PromptDepthAnythingConfig(PreTrainedConfig):
     ):
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone=backbone,
             default_config_type="dinov2",
             default_config_kwargs={
                 "image_size": 518,

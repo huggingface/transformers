@@ -156,7 +156,6 @@ class GroundingDinoConfig(PreTrainedConfig):
     def __init__(
         self,
         backbone_config=None,
-        backbone=None,
         text_config=None,
         num_queries=900,
         encoder_layers=6,
@@ -201,7 +200,6 @@ class GroundingDinoConfig(PreTrainedConfig):
     ):
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone=backbone,
             default_config_type="swin",
             default_config_kwargs={"out_indices": [2, 3, 4]},
             **kwargs,

@@ -159,12 +159,10 @@ class Mask2FormerConfig(PreTrainedConfig):
         use_auxiliary_loss: bool = True,
         feature_strides: list[int] = [4, 8, 16, 32],
         output_auxiliary_logits: bool | None = None,
-        backbone: str | None = None,
         **kwargs,
     ):
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone=backbone,
             default_config_type="swin",
             default_config_kwargs={
                 "depths": [2, 2, 18, 2],

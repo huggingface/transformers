@@ -269,7 +269,7 @@ class BackboneConfigMixin:
 
 def consolidate_backbone_kwargs_to_config(
     backbone_config,
-    backbone: str | None = None,
+    default_backbone: str | None = None,
     default_config_type: str | None = None,
     default_config_kwargs: dict | None = None,
     timm_default_kwargs: dict | None = None,
@@ -277,6 +277,7 @@ def consolidate_backbone_kwargs_to_config(
 ):
     use_timm_backbone = kwargs.pop("use_timm_backbone", True)  # this is not always `True`
     backbone_kwargs = kwargs.pop("backbone_kwargs", {})
+    backbone = kwargs.pop("backbone") if kwargs.get("backbone") is not None else default_backbone
     kwargs.pop("use_pretrained_backbone", None)
 
     # Init timm backbone with hardcoded values for BC

@@ -173,7 +173,6 @@ class DeformableDetrConfig(PreTrainedConfig):
         return_intermediate=True,
         auxiliary_loss=False,
         position_embedding_type="sine",
-        backbone="resnet50",
         dilation=False,
         num_feature_levels=4,
         encoder_n_points=4,
@@ -197,15 +196,15 @@ class DeformableDetrConfig(PreTrainedConfig):
         timm_default_kwargs = {
             "num_channels": 3,
             "features_only": True,
-            "use_pretrained_backbone": False,  # backbone weights are already in state dict
+            "use_pretrained_backbone": False,
             "out_indices": [2, 3, 4] if num_feature_levels > 1 else [4],
         }
         if dilation:
-            # TODO: check if `output_stride` is used anywhere, not in `TimmBackboneConfig`
             timm_default_kwargs["output_stride"] = 16
+
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone=backbone,
+            default_backbone="resnet50",
             default_config_type="resnet50",
             default_config_kwargs={"out_features": ["stage4"]},
             timm_default_kwargs=timm_default_kwargs,

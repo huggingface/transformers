@@ -74,7 +74,8 @@ Note that initializing from config will create the model with random weights. If
 ```py
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
 
-config = MaskFormerConfig(backbone="microsoft/resnet-50")
+backbone_config = AutoConfig.from_pretrained("microsoft/resnet-50")
+config = MaskFormerConfig(backbone_config=backbone_config)
 model = MaskFormerForInstanceSegmentation(config)
 ```
 
@@ -101,7 +102,8 @@ model = MaskFormerForInstanceSegmentation(config)
 ```py
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
 
-config = MaskFormerConfig(backbone="resnet50")
+backbone_config = TimmBackboneConfig(backbone="resnet50", out_indices=[-1])
+config = MaskFormerConfig(backbone_config=backbone_config)
 model = MaskFormerForInstanceSegmentation(config)
 ```
 

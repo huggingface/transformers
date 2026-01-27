@@ -188,7 +188,6 @@ class RTDetrConfig(PreTrainedConfig):
         batch_norm_eps=1e-5,
         # backbone
         backbone_config=None,
-        backbone=None,
         freeze_backbone_batch_norms=True,
         # encoder HybridEncoder
         encoder_hidden_dim=256,
@@ -248,7 +247,6 @@ class RTDetrConfig(PreTrainedConfig):
 
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone=backbone,
             default_config_type="rt_detr_resnet",
             default_config_kwargs={
                 "out_indices": [2, 3, 4],

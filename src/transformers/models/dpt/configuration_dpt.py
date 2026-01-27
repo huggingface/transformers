@@ -170,7 +170,6 @@ class DPTConfig(PreTrainedConfig):
         backbone_featmap_shape=[1, 1024, 24, 24],
         neck_ignore_stages=[0, 1],
         backbone_config=None,
-        backbone=None,
         pooler_output_size=None,
         pooler_act="tanh",
         **kwargs,
@@ -187,7 +186,6 @@ class DPTConfig(PreTrainedConfig):
 
             backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
                 backbone_config=backbone_config,
-                backbone=backbone,
                 default_config_type="bit",
                 default_config_kwargs={
                     "global_padding": "same",
@@ -200,9 +198,8 @@ class DPTConfig(PreTrainedConfig):
             )
             if readout_type != "project":
                 raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
-        elif backbone is not None or backbone_config is not None:
+        elif kwargs.get("backbone") is not None or backbone_config is not None:
             backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-                backbone=backbone,
                 backbone_config=backbone_config,
                 **kwargs,
             )

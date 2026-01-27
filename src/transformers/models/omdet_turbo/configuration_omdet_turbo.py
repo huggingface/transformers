@@ -37,15 +37,6 @@ class OmDetTurboConfig(PreTrainedConfig):
             The configuration of the text backbone.
         backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `SwinConfig()`):
             The configuration of the vision backbone.
-        use_timm_backbone (`bool`, *optional*, defaults to `True`):
-            Whether to use the timm for the vision backbone.
-        backbone (`str`, *optional*, defaults to `"swin_tiny_patch4_window7_224"`):
-            The name of the pretrained vision backbone to use. If `use_pretrained_backbone=False` a randomly initialized
-            backbone with the same architecture `backbone` is used.
-        backbone_kwargs (`dict`, *optional*):
-            Additional kwargs for the vision backbone.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use a pretrained vision backbone.
         apply_layernorm_after_vision_backbone (`bool`, *optional*, defaults to `True`):
             Whether to apply layer normalization on the feature maps of the vision backbone output.
         image_size (`int`, *optional*, defaults to 640):
@@ -154,7 +145,6 @@ class OmDetTurboConfig(PreTrainedConfig):
         self,
         text_config=None,
         backbone_config=None,
-        backbone="swin_tiny_patch4_window7_224",
         apply_layernorm_after_vision_backbone=True,
         image_size=640,
         disable_custom_kernels=False,
@@ -203,7 +193,7 @@ class OmDetTurboConfig(PreTrainedConfig):
         }
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone=backbone,
+            default_backbone="swin_tiny_patch4_window7_224",
             default_config_type="swin",
             default_config_kwargs={"image_size": image_size, "out_indices": [2, 3, 4]},
             timm_default_kwargs=timm_default_kwargs,

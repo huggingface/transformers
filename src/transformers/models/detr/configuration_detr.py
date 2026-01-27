@@ -156,7 +156,6 @@ class DetrConfig(PreTrainedConfig):
         init_xavier_std=1.0,
         auxiliary_loss=False,
         position_embedding_type="sine",
-        backbone="resnet50",
         dilation=False,
         class_cost=1,
         bbox_cost=5,
@@ -172,15 +171,15 @@ class DetrConfig(PreTrainedConfig):
         timm_default_kwargs = {
             "num_channels": backbone_kwargs.get("num_channels", num_channels),
             "features_only": True,
-            "use_pretrained_backbone": False,  # backbone weights are already in state dict
+            "use_pretrained_backbone": False,
             "out_indices": backbone_kwargs.get("out_indices", [1, 2, 3, 4]),
         }
         if dilation:
-            # TODO: check if `output_stride` is used anywhere, not in `TimmBackboneConfig`
             timm_default_kwargs["output_stride"] = backbone_kwargs.get("output_stride", 16)
+
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone=backbone,
+            default_backbone="resnet50",
             default_config_type="resnet50",
             default_config_kwargs={"out_features": ["stage4"]},
             timm_default_kwargs=timm_default_kwargs,

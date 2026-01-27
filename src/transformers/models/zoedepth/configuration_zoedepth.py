@@ -138,7 +138,6 @@ class ZoeDepthConfig(PreTrainedConfig):
     def __init__(
         self,
         backbone_config=None,
-        backbone=None,
         hidden_act="gelu",
         initializer_range=0.02,
         batch_norm_eps=1e-05,
@@ -175,7 +174,6 @@ class ZoeDepthConfig(PreTrainedConfig):
 
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone=backbone,
             default_config_type="beit",
             default_config_kwargs={
                 "image_size": 384,

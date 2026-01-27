@@ -79,7 +79,6 @@ class VitMatteConfig(PreTrainedConfig):
     def __init__(
         self,
         backbone_config: PreTrainedConfig | None = None,
-        backbone=None,
         hidden_size: int = 384,
         batch_norm_eps: float = 1e-5,
         initializer_range: float = 0.02,
@@ -89,11 +88,8 @@ class VitMatteConfig(PreTrainedConfig):
     ):
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone=backbone,
             default_config_type="vitdet",
-            default_config_kwargs={
-                "out_features": ["stage4"],
-            },
+            default_config_kwargs={"out_features": ["stage4"]},
             **kwargs,
         )
 

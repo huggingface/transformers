@@ -87,10 +87,6 @@ class UperNetConfig(PreTrainedConfig):
     def __init__(
         self,
         backbone_config=None,
-        backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
-        backbone_kwargs=None,
         hidden_size=512,
         initializer_range=0.02,
         pool_scales=[1, 2, 3, 6],
@@ -105,7 +101,6 @@ class UperNetConfig(PreTrainedConfig):
     ):
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone=backbone,
             default_config_type="resnet",
             default_config_kwargs={
                 "out_features": ["stage1", "stage2", "stage3", "stage4"],
