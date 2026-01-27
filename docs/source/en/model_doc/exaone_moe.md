@@ -1,4 +1,4 @@
-<!--Copyright 2025 The LG AI Research and The HuggingFace Team. All rights reserved.
+<!--Copyright 2026 The LG AI Research and The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -132,7 +132,7 @@ For your AI-powered agent, you can leverage K-EXAONE’s tool calling capability
 The K-EXAONE model is compatible with both OpenAI and HuggingFace tool calling specifications. 
 The example below demonstrates tool calling using HuggingFace’s docstring-to-tool-schema utility.
 
-Please check the [example file](examples/example_output_search.txt) for an example of a search agent conversation using K-EXAONE.
+Please check the [example file](https://github.com/LG-AI-EXAONE/K-EXAONE/blob/main/examples/example_output_search.txt) for an example of a search agent conversation using K-EXAONE.
 
 ```python
 from transformers.utils import get_json_schema

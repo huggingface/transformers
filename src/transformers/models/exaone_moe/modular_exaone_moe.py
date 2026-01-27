@@ -17,7 +17,9 @@
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...modeling_utils import PreTrainedModel
 from ...utils import is_grouped_mm_available
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3MoE,
@@ -279,6 +281,16 @@ class ExaoneMoePreTrainedModel(Exaone4PreTrainedModel):
     )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, ExaoneMoeTopkRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.e_score_correction_bias)
+        elif isinstance(module, ExaoneMoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 class ExaoneMoeModel(Exaone4Model, ExaoneMoePreTrainedModel):

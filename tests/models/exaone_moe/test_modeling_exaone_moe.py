@@ -112,7 +112,7 @@ class ExaoneMoeIntegrationTest(unittest.TestCase):
         input_ids = input_ids.to(model.model.embed_tokens.weight.device)
 
         with torch.no_grad():
-            generated_ids = model.generate(**input_ids, max_new_tokens=20, temperature=0)
+            generated_ids = model.generate(**input_ids, max_new_tokens=20, do_sample=False)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=False)
         self.assertEqual(EXPECTED_TEXT, text)
 
@@ -122,8 +122,9 @@ class ExaoneMoeIntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT_TOKEN_IDS = [21605, 2711]
         input_ids = [72861, 2711] * 2048
         model = self.get_model()
+        model.config._attn_implementation = "flash_attention_2"
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
 
         with torch.no_grad():
-            generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+            generated_ids = model.generate(input_ids, max_new_tokens=4, do_sample=False)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
