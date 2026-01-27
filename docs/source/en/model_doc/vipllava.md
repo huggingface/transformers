@@ -109,3 +109,4 @@ A chat between a curious human and an artificial intelligence assistant. The ass
 
 [[autodoc]] VipLlavaForConditionalGeneration
     - forward
+    - get_image_features

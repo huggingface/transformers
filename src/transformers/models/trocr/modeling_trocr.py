@@ -703,7 +703,8 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
         ...     ViTModel,
         ...     VisionEncoderDecoderModel,
         ... )
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> # TrOCR is a decoder model and should be used within a VisionEncoderDecoderModel
@@ -718,7 +719,8 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
 
         >>> # load image from the IAM dataset
         >>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> pixel_values = processor(image, return_tensors="pt").pixel_values
         >>> text = "industry, ' Mr. Brown commented icily. ' Let us have a"
 

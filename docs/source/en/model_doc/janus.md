@@ -229,6 +229,7 @@ for i, image in enumerate(images['pixel_values']):
 
 [[autodoc]] JanusModel
     - forward
+    - get_image_features
 
 ## JanusForConditionalGeneration
 
