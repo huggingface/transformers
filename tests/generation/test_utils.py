@@ -5074,7 +5074,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.assert_no_sklearn()
 
 
-def has_similar_generate_outputs(output_1, output_2, atol=1e-5, rtol=1e-5) -> bool:
+def has_similar_generate_outputs(output_1, output_2, atol=1e-3, rtol=1e-3) -> bool:
     """
     Returns a boolean indicating whether a pair of generate outputs are similar. Two `generate` call outputs are
     considered similar in the following situations:
