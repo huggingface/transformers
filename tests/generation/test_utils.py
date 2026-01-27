@@ -1179,7 +1179,9 @@ class GenerationTesterMixin:
             else:
                 atol = rtol = 1e-5
             if not has_complex_embeds_computation:
-                self.assertTrue(has_similar_generate_outputs(outputs_from_ids, outputs_from_embeds, atol=atol, rtol=rtol))
+                self.assertTrue(
+                    has_similar_generate_outputs(outputs_from_ids, outputs_from_embeds, atol=atol, rtol=rtol)
+                )
 
             # input_ids is not a required input on most models -- if we don't pass it, the newly generated tokens will
             # be the same
@@ -1188,7 +1190,9 @@ class GenerationTesterMixin:
                     inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
                 )
                 outputs_from_embeds.sequences = outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :]
-                self.assertTrue(has_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds, atol=atol, rtol=rtol))
+                self.assertTrue(
+                    has_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds, atol=atol, rtol=rtol)
+                )
 
     @pytest.mark.generate
     def test_generate_from_inputs_embeds_with_static_cache(self):
@@ -1458,7 +1462,11 @@ class GenerationTesterMixin:
                     atol = rtol = 1e-3
                 else:
                     atol = rtol = 1e-5
-                self.assertTrue(has_similar_generate_outputs(dynamic_cache_generation, static_cache_generation, atol=atol, rtol=rtol))
+                self.assertTrue(
+                    has_similar_generate_outputs(
+                        dynamic_cache_generation, static_cache_generation, atol=atol, rtol=rtol
+                    )
+                )
 
     @require_optimum_quanto
     @pytest.mark.generate
