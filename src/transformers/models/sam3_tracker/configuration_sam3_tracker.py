@@ -197,14 +197,14 @@ class Sam3TrackerConfig(PreTrainedConfig):
     ```"""
 
     model_type = "sam3_tracker"
+    # sam3_video checkpoints can be loaded with Sam3TrackerModel since sam3_tracker's
+    # weights are a subset of sam3_video's weights - only the model_type in config differs
+    compatible_model_types = ("sam3_video",)
     sub_configs = {
         "vision_config": AutoConfig,
         "prompt_encoder_config": Sam3TrackerPromptEncoderConfig,
         "mask_decoder_config": Sam3TrackerMaskDecoderConfig,
     }
-    # sam3_video checkpoints can be loaded with Sam3TrackerModel since they share
-    # the same architecture and weights - only the model_type in config differs
-    compatible_model_types = ("sam3_video",)
 
     def __init__(
         self,

@@ -23,9 +23,16 @@ from pathlib import Path
 
 import httpx
 
-from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
+from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config, logging
 from transformers.configuration_utils import PreTrainedConfig
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_torch
+from transformers.testing_utils import (
+    TOKEN,
+    CaptureLogger,
+    LoggingLevel,
+    TemporaryHubRepo,
+    is_staging_test,
+    require_torch,
+)
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
@@ -360,8 +367,6 @@ class ConfigTestUtils(unittest.TestCase):
 
     def test_compatible_model_types_suppresses_warning(self):
         """Test that compatible_model_types suppresses the model type mismatch warning."""
-        from transformers import logging
-        from transformers.testing_utils import CaptureLogger, LoggingLevel
 
         # Create a config class that declares compatible_model_types
         class CompatibleConfig(PreTrainedConfig):
