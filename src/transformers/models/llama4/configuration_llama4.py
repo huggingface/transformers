@@ -15,7 +15,7 @@
 
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
@@ -128,7 +128,7 @@ class Llama4VisionConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-class Llama4TextConfig(PreTrainedConfig):
+class Llama4TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Llama4TextModel`]. It is used to instantiate a
     Llama4 text model according to the specified arguments, defining the model architecture. Instantiating a configuration
