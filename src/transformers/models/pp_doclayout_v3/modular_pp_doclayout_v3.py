@@ -442,41 +442,32 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
 
         return order_seq
 
-    def angle_between_vectors(self, v1, v2):
-        unit_v1 = v1 / np.linalg.norm(v1)
-        unit_v2 = v2 / np.linalg.norm(v2)
-        dot_prod = np.clip(np.dot(unit_v1, unit_v2), -1.0, 1.0)
-        angle_rad = np.arccos(dot_prod)
-        return np.degrees(angle_rad)
-
-    def is_convex(self, p_prev, p_curr, p_next):
-        v1 = p_curr - p_prev
-        v2 = p_next - p_curr
-        cross = v1[0] * v2[1] - v1[1] * v2[0]
-        return cross < 0
-
     def extract_custom_vertices(self, polygon, sharp_angle_thresh=45):
         poly = np.array(polygon)
         n = len(poly)
         res = []
         i = 0
         while i < n:
-            p_prev = poly[(i - 1) % n]
-            p_curr = poly[i]
-            p_next = poly[(i + 1) % n]
-            v1 = p_prev - p_curr
-            v2 = p_next - p_curr
-            angle = self.angle_between_vectors(v1, v2)
-            if self.is_convex(p_prev, p_curr, p_next):
+            previous_point = poly[(i - 1) % n]
+            current_point = poly[i]
+            next_point = poly[(i + 1) % n]
+            vector_1 = previous_point - current_point
+            vector_2 = next_point - current_point
+            cross_product_value = (vector_1[1] * vector_2[0]) - (vector_1[0] * vector_2[1])
+            if cross_product_value < 0:
+                angle_cos = np.clip(
+                    (vector_1 @ vector_2) / (np.linalg.norm(vector_1) * np.linalg.norm(vector_2)), -1.0, 1.0
+                )
+                angle = np.degrees(np.arccos(angle_cos))
                 if abs(angle - sharp_angle_thresh) < 1:
                     # Calculate the new point based on the direction of two vectors.
-                    dir_vec = v1 / np.linalg.norm(v1) + v2 / np.linalg.norm(v2)
+                    dir_vec = vector_1 / np.linalg.norm(vector_1) + vector_2 / np.linalg.norm(vector_2)
                     dir_vec = dir_vec / np.linalg.norm(dir_vec)
-                    d = (np.linalg.norm(v1) + np.linalg.norm(v2)) / 2
-                    p_new = p_curr + dir_vec * d
+                    d = (np.linalg.norm(vector_1) + np.linalg.norm(vector_2)) / 2
+                    p_new = current_point + dir_vec * d
                     res.append(tuple(p_new))
                 else:
-                    res.append(tuple(p_curr))
+                    res.append(tuple(current_point))
             i += 1
         return res
 
@@ -489,15 +480,14 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         Returns:
             ndarray: The output mask after postprocessing.
         """
-        requires_backends(self._mask2polygon, ["cv2"])
         import cv2
 
-        cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        if not cnts:
+        if not contours:
             return None
 
-        cnt = max(cnts, key=cv2.contourArea)
+        cnt = max(contours, key=cv2.contourArea)
         epsilon = epsilon_ratio * cv2.arcLength(cnt, True)
         approx_cnt = cv2.approxPolyDP(cnt, epsilon, True)
         polygon_points = approx_cnt.squeeze()
@@ -508,7 +498,7 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         return polygon_points
 
     def _extract_polygon_points_by_masks(self, boxes, masks, scale_ratio):
-        requires_backends(self._extract_polygon_points_by_masks, ["cv2"])
+        requires_backends(self, ["cv2"])
         import cv2
 
         scale_w, scale_h = scale_ratio[0] / 4, scale_ratio[1] / 4
@@ -530,12 +520,14 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
                 continue
 
             # crop mask
-            x_s = np.clip([int(round(x_min * scale_w)), int(round(x_max * scale_w))], 0, mask_width)
-            y_s = np.clip([int(round(y_min * scale_h)), int(round(y_max * scale_h))], 0, mask_height)
-            cropped = masks[i, y_s[0] : y_s[1], x_s[0] : x_s[1]]
+            x_coordinates = [int(round((x_min * scale_w).item())), int(round((x_max * scale_w).item()))]
+            x_start, x_end = np.clip(x_coordinates, 0, mask_width)
+            y_coordinates = [int(round((y_min * scale_h).item())), int(round((y_max * scale_h).item()))]
+            y_start, y_end = np.clip(y_coordinates, 0, mask_height)
+            cropped_mask = masks[i, y_start:y_end, x_start:x_end]
 
             # resize mask to match box size
-            resized_mask = cv2.resize(cropped.astype(np.uint8), (box_w, box_h), interpolation=cv2.INTER_NEAREST)
+            resized_mask = cv2.resize(cropped_mask.astype(np.uint8), (box_w, box_h), interpolation=cv2.INTER_NEAREST)
 
             polygon = self._mask2polygon(resized_mask)
             if polygon is not None and len(polygon) < 4:
@@ -841,18 +833,18 @@ class PPDocLayoutV3MLPPredictionHead(RTDetrMLPPredictionHead):
     pass
 
 
-class BaseConv(ResNetConvLayer):
+class PPDocLayoutV3ConvLayer(ResNetConvLayer):
     pass
 
 
-class ScaleHead(nn.Module):
+class PPDocLayoutV3ScaleHead(nn.Module):
     def __init__(self, in_channels, feature_channels, fpn_stride, base_stride, align_corners=False):
         super().__init__()
         head_length = max(1, int(np.log2(fpn_stride) - np.log2(base_stride)))
         self.layers = nn.ModuleList()
         for k in range(head_length):
             in_c = in_channels if k == 0 else feature_channels
-            self.layers.append(BaseConv(in_c, feature_channels, 3, 1, "silu"))
+            self.layers.append(PPDocLayoutV3ConvLayer(in_c, feature_channels, 3, 1, "silu"))
             if fpn_stride != base_stride:
                 self.layers.append(nn.Upsample(scale_factor=2, mode="bilinear", align_corners=align_corners))
 
@@ -862,7 +854,7 @@ class ScaleHead(nn.Module):
         return x
 
 
-class MaskFeatFPN(nn.Module):
+class PPDocLayoutV3MaskFeatFPN(nn.Module):
     def __init__(
         self,
         in_channels=[256, 256, 256],
@@ -888,7 +880,7 @@ class MaskFeatFPN(nn.Module):
         self.scale_heads = nn.ModuleList()
         for i in range(len(fpn_strides)):
             self.scale_heads.append(
-                ScaleHead(
+                PPDocLayoutV3ScaleHead(
                     in_channels=in_channels[i],
                     feature_channels=feature_channels,
                     fpn_stride=fpn_strides[i],
@@ -896,7 +888,7 @@ class MaskFeatFPN(nn.Module):
                     align_corners=align_corners,
                 )
             )
-        self.output_conv = BaseConv(feature_channels, out_channels, 3, 1, "silu")
+        self.output_conv = PPDocLayoutV3ConvLayer(feature_channels, out_channels, 3, 1, "silu")
 
     def forward(self, inputs):
         x = [inputs[i] for i in self.reorder_index]
@@ -916,7 +908,7 @@ class MaskFeatFPN(nn.Module):
 class EncoderMaskOutput(nn.Module):
     def __init__(self, in_channels, num_prototypes):
         super().__init__()
-        self.base_conv = BaseConv(in_channels, in_channels, 3, 1, "silu")
+        self.base_conv = PPDocLayoutV3ConvLayer(in_channels, in_channels, 3, 1, "silu")
         self.conv = nn.Conv2d(in_channels, num_prototypes, kernel_size=1)
 
     def forward(self, x):
@@ -928,7 +920,7 @@ class EncoderMaskOutput(nn.Module):
 class PPDocLayoutV3HybridEncoder(RTDetrHybridEncoder):
     """
     Main difference to `RTDetrHybridEncoder`:
-        1. Mask Feature Head: Added `MaskFeatFPN` module (`self.mask_feature_head`) for document - specific mask feature generation.
+        1. Mask Feature Head: Added `PPDocLayoutV3MaskFeatFPN` module (`self.mask_feature_head`) for document - specific mask feature generation.
         2. Extra Conv Layers: Introduced `self.encoder_mask_lateral` and `self.encoder_mask_output` for mask feature processing and output.
     """
 
@@ -937,13 +929,13 @@ class PPDocLayoutV3HybridEncoder(RTDetrHybridEncoder):
 
         feat_strides = config.feat_strides
         mask_feature_channels = config.mask_feature_channels
-        self.mask_feature_head = MaskFeatFPN(
+        self.mask_feature_head = PPDocLayoutV3MaskFeatFPN(
             [self.encoder_hidden_dim] * len(feat_strides),
             feat_strides,
             feature_channels=mask_feature_channels[0],
             out_channels=mask_feature_channels[1],
         )
-        self.encoder_mask_lateral = BaseConv(config.x4_feat_dim, mask_feature_channels[1], 3, 1, "silu")
+        self.encoder_mask_lateral = PPDocLayoutV3ConvLayer(config.x4_feat_dim, mask_feature_channels[1], 3, 1, "silu")
         self.encoder_mask_output = EncoderMaskOutput(
             in_channels=mask_feature_channels[1], num_prototypes=config.num_prototypes
         )

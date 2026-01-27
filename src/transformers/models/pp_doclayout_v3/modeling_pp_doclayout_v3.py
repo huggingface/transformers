@@ -424,7 +424,7 @@ class PPDocLayoutV3MLPPredictionHead(nn.Module):
         return x
 
 
-class BaseConv(nn.Module):
+class PPDocLayoutV3ConvLayer(nn.Module):
     def __init__(
         self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"
     ):
@@ -442,14 +442,14 @@ class BaseConv(nn.Module):
         return hidden_state
 
 
-class ScaleHead(nn.Module):
+class PPDocLayoutV3ScaleHead(nn.Module):
     def __init__(self, in_channels, feature_channels, fpn_stride, base_stride, align_corners=False):
         super().__init__()
         head_length = max(1, int(np.log2(fpn_stride) - np.log2(base_stride)))
         self.layers = nn.ModuleList()
         for k in range(head_length):
             in_c = in_channels if k == 0 else feature_channels
-            self.layers.append(BaseConv(in_c, feature_channels, 3, 1, "silu"))
+            self.layers.append(PPDocLayoutV3ConvLayer(in_c, feature_channels, 3, 1, "silu"))
             if fpn_stride != base_stride:
                 self.layers.append(nn.Upsample(scale_factor=2, mode="bilinear", align_corners=align_corners))
 
@@ -459,7 +459,7 @@ class ScaleHead(nn.Module):
         return x
 
 
-class MaskFeatFPN(nn.Module):
+class PPDocLayoutV3MaskFeatFPN(nn.Module):
     def __init__(
         self,
         in_channels=[256, 256, 256],
@@ -485,7 +485,7 @@ class MaskFeatFPN(nn.Module):
         self.scale_heads = nn.ModuleList()
         for i in range(len(fpn_strides)):
             self.scale_heads.append(
-                ScaleHead(
+                PPDocLayoutV3ScaleHead(
                     in_channels=in_channels[i],
                     feature_channels=feature_channels,
                     fpn_stride=fpn_strides[i],
@@ -493,7 +493,7 @@ class MaskFeatFPN(nn.Module):
                     align_corners=align_corners,
                 )
             )
-        self.output_conv = BaseConv(feature_channels, out_channels, 3, 1, "silu")
+        self.output_conv = PPDocLayoutV3ConvLayer(feature_channels, out_channels, 3, 1, "silu")
 
     def forward(self, inputs):
         x = [inputs[i] for i in self.reorder_index]
@@ -513,7 +513,7 @@ class MaskFeatFPN(nn.Module):
 class EncoderMaskOutput(nn.Module):
     def __init__(self, in_channels, num_prototypes):
         super().__init__()
-        self.base_conv = BaseConv(in_channels, in_channels, 3, 1, "silu")
+        self.base_conv = PPDocLayoutV3ConvLayer(in_channels, in_channels, 3, 1, "silu")
         self.conv = nn.Conv2d(in_channels, num_prototypes, kernel_size=1)
 
     def forward(self, x):
@@ -816,7 +816,7 @@ class PPDocLayoutV3Encoder(nn.Module):
 class PPDocLayoutV3HybridEncoder(nn.Module):
     """
     Main difference to `RTDetrHybridEncoder`:
-        1. Mask Feature Head: Added `MaskFeatFPN` module (`self.mask_feature_head`) for document - specific mask feature generation.
+        1. Mask Feature Head: Added `PPDocLayoutV3MaskFeatFPN` module (`self.mask_feature_head`) for document - specific mask feature generation.
         2. Extra Conv Layers: Introduced `self.encoder_mask_lateral` and `self.encoder_mask_output` for mask feature processing and output.
     """
 
@@ -872,13 +872,13 @@ class PPDocLayoutV3HybridEncoder(nn.Module):
 
         feat_strides = config.feat_strides
         mask_feature_channels = config.mask_feature_channels
-        self.mask_feature_head = MaskFeatFPN(
+        self.mask_feature_head = PPDocLayoutV3MaskFeatFPN(
             [self.encoder_hidden_dim] * len(feat_strides),
             feat_strides,
             feature_channels=mask_feature_channels[0],
             out_channels=mask_feature_channels[1],
         )
-        self.encoder_mask_lateral = BaseConv(config.x4_feat_dim, mask_feature_channels[1], 3, 1, "silu")
+        self.encoder_mask_lateral = PPDocLayoutV3ConvLayer(config.x4_feat_dim, mask_feature_channels[1], 3, 1, "silu")
         self.encoder_mask_output = EncoderMaskOutput(
             in_channels=mask_feature_channels[1], num_prototypes=config.num_prototypes
         )
