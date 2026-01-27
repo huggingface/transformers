@@ -20,8 +20,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_eomt_dinov3 import *
-    from .image_processing_eomt_dinov3 import *
-    from .image_processing_eomt_dinov3_fast import *
     from .modeling_eomt_dinov3 import *
 else:
     import sys
