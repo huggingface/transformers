@@ -1,0 +1,31 @@
+name: "\U0001F31F New model addition"
+description: Submit a proposal/request to implement a new model
+labels: [ "New model" ]
+
+body:
+  - type: textarea
+    id: description-request
+    validations:
+      required: true
+    attributes:
+      label: Model description
+      description: |
+        Put any and all important information relative to the model
+
+  - type: checkboxes
+    id: information-tasks
+    attributes:
+      label: Open source status
+      description: |
+          Please note that if the model implementation isn't available or if the weights aren't open-source, we are less likely to implement it in `transformers`.
+      options:
+        - label: "The model implementation is available"
+        - label: "The model weights are available"
+
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Provide useful links for the implementation
+      description: |
+        Please provide information regarding the implementation, the weights, and the authors.
+        Please mention the authors by @gh-username if you're aware of their usernames.

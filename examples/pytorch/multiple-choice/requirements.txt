@@ -1,0 +1,5 @@
+accelerate >= 0.12.0
+sentencepiece != 0.1.92
+protobuf
+torch >= 1.3
+evaluate

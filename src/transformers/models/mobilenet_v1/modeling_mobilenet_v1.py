@@ -1,0 +1,296 @@
+# Copyright 2022 Apple Inc. and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""PyTorch MobileNetV1 model."""
+
+import torch
+from torch import nn
+
+from ...activations import ACT2FN
+from ...modeling_outputs import BaseModelOutputWithPoolingAndNoAttention, ImageClassifierOutputWithNoAttention
+from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring, logging
+from .configuration_mobilenet_v1 import MobileNetV1Config
+
+
+logger = logging.get_logger(__name__)
+
+
+def apply_tf_padding(features: torch.Tensor, conv_layer: nn.Conv2d) -> torch.Tensor:
+    """
+    Apply TensorFlow-style "SAME" padding to a convolution layer. See the notes at:
+    https://www.tensorflow.org/api_docs/python/tf/nn#notes_on_padding_2
+    """
+    in_height, in_width = features.shape[-2:]
+    stride_height, stride_width = conv_layer.stride
+    kernel_height, kernel_width = conv_layer.kernel_size
+
+    if in_height % stride_height == 0:
+        pad_along_height = max(kernel_height - stride_height, 0)
+    else:
+        pad_along_height = max(kernel_height - (in_height % stride_height), 0)
+
+    if in_width % stride_width == 0:
+        pad_along_width = max(kernel_width - stride_width, 0)
+    else:
+        pad_along_width = max(kernel_width - (in_width % stride_width), 0)
+
+    pad_left = pad_along_width // 2
+    pad_right = pad_along_width - pad_left
+    pad_top = pad_along_height // 2
+    pad_bottom = pad_along_height - pad_top
+
+    padding = (pad_left, pad_right, pad_top, pad_bottom)
+    return nn.functional.pad(features, padding, "constant", 0.0)
+
+
+class MobileNetV1ConvLayer(nn.Module):
+    def __init__(
+        self,
+        config: MobileNetV1Config,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int | None = 1,
+        groups: int | None = 1,
+        bias: bool = False,
+        use_normalization: bool | None = True,
+        use_activation: bool | str | None = True,
+    ) -> None:
+        super().__init__()
+        self.config = config
+
+        if in_channels % groups != 0:
+            raise ValueError(f"Input channels ({in_channels}) are not divisible by {groups} groups.")
+        if out_channels % groups != 0:
+            raise ValueError(f"Output channels ({out_channels}) are not divisible by {groups} groups.")
+
+        padding = 0 if config.tf_padding else int((kernel_size - 1) / 2)
+
+        self.convolution = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            groups=groups,
+            bias=bias,
+            padding_mode="zeros",
+        )
+
+        if use_normalization:
+            self.normalization = nn.BatchNorm2d(
+                num_features=out_channels,
+                eps=config.layer_norm_eps,
+                momentum=0.9997,
+                affine=True,
+                track_running_stats=True,
+            )
+        else:
+            self.normalization = None
+
+        if use_activation:
+            if isinstance(use_activation, str):
+                self.activation = ACT2FN[use_activation]
+            elif isinstance(config.hidden_act, str):
+                self.activation = ACT2FN[config.hidden_act]
+            else:
+                self.activation = config.hidden_act
+        else:
+            self.activation = None
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        if self.config.tf_padding:
+            features = apply_tf_padding(features, self.convolution)
+        features = self.convolution(features)
+        if self.normalization is not None:
+            features = self.normalization(features)
+        if self.activation is not None:
+            features = self.activation(features)
+        return features
+
+
+@auto_docstring
+class MobileNetV1PreTrainedModel(PreTrainedModel):
+    config: MobileNetV1Config
+    base_model_prefix = "mobilenet_v1"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    supports_gradient_checkpointing = False
+    _no_split_modules = []
+
+
+@auto_docstring
+class MobileNetV1Model(MobileNetV1PreTrainedModel):
+    def __init__(self, config: MobileNetV1Config, add_pooling_layer: bool = True):
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        """
+        super().__init__(config)
+        self.config = config
+
+        depth = 32
+        out_channels = max(int(depth * config.depth_multiplier), config.min_depth)
+
+        self.conv_stem = MobileNetV1ConvLayer(
+            config,
+            in_channels=config.num_channels,
+            out_channels=out_channels,
+            kernel_size=3,
+            stride=2,
+        )
+
+        strides = [1, 2, 1, 2, 1, 2, 1, 1, 1, 1, 1, 2, 1]
+
+        self.layer = nn.ModuleList()
+        for i in range(13):
+            in_channels = out_channels
+
+            if strides[i] == 2 or i == 0:
+                depth *= 2
+                out_channels = max(int(depth * config.depth_multiplier), config.min_depth)
+
+            self.layer.append(
+                MobileNetV1ConvLayer(
+                    config,
+                    in_channels=in_channels,
+                    out_channels=in_channels,
+                    kernel_size=3,
+                    stride=strides[i],
+                    groups=in_channels,
+                )
+            )
+
+            self.layer.append(
+                MobileNetV1ConvLayer(
+                    config,
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=1,
+                )
+            )
+
+        self.pooler = nn.AdaptiveAvgPool2d((1, 1)) if add_pooling_layer else None
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithPoolingAndNoAttention:
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.conv_stem(pixel_values)
+
+        all_hidden_states = () if output_hidden_states else None
+
+        for i, layer_module in enumerate(self.layer):
+            hidden_states = layer_module(hidden_states)
+
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+        last_hidden_state = hidden_states
+
+        if self.pooler is not None:
+            pooled_output = torch.flatten(self.pooler(last_hidden_state), start_dim=1)
+        else:
+            pooled_output = None
+
+        if not return_dict:
+            return tuple(v for v in [last_hidden_state, pooled_output, all_hidden_states] if v is not None)
+
+        return BaseModelOutputWithPoolingAndNoAttention(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=all_hidden_states,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    MobileNetV1 model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
+    ImageNet.
+    """
+)
+class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
+    def __init__(self, config: MobileNetV1Config) -> None:
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.mobilenet_v1 = MobileNetV1Model(config)
+
+        last_hidden_size = self.mobilenet_v1.layer[-1].convolution.out_channels
+
+        # Classifier head
+        self.dropout = nn.Dropout(config.classifier_dropout_prob, inplace=True)
+        self.classifier = nn.Linear(last_hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        labels: torch.Tensor | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | ImageClassifierOutputWithNoAttention:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss). If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.mobilenet_v1(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+
+        pooled_output = outputs.pooler_output if return_dict else outputs[1]
+
+        logits = self.classifier(self.dropout(pooled_output))
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(labels, logits, self.config)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return ImageClassifierOutputWithNoAttention(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+        )
+
+
+__all__ = [
+    "MobileNetV1ForImageClassification",
+    "MobileNetV1Model",
+    "MobileNetV1PreTrainedModel",
+]

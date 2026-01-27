@@ -1,0 +1,23 @@
+---
+name: Check Permissions Advisor
+
+on:
+  workflow_dispatch:
+    inputs:
+      workflow_name:
+        description: 'Workflow file name'
+        type: string
+      run_count:
+        description: 'Number of runs to analyze'
+        type: string
+        default: "10"
+
+jobs:
+  advisor:
+    uses: huggingface/security-workflows/.github/workflows/permissions-advisor-reusable.yml@main
+    permissions:
+      actions: read
+      contents: read
+    with:
+      workflow_name: ${{ inputs.workflow_name }}
+      run_count: ${{ fromJSON(inputs.run_count) }}

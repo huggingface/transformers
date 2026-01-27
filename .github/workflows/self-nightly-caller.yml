@@ -1,0 +1,57 @@
+name: Nvidia CI with nightly torch
+
+on:
+  repository_dispatch:
+  # triggered when the daily scheduled Nvidia CI is completed.
+  # This way, we can compare the results more easily.
+  workflow_run:
+    workflows: ["Nvidia CI"]
+    branches: ["main"]
+    types: [completed]
+  push:
+    branches:
+      - run_ci_with_nightly_torch*
+
+# Used for `push` to easily modify the target workflow runs to compare against
+env:
+    prev_workflow_run_id: ""
+    other_workflow_run_id: ""
+
+
+jobs:
+  build_nightly_torch_ci_images:
+    name: Build CI Docker Images with nightly torch
+    uses: ./.github/workflows/build-nightly-ci-docker-images.yml
+    with:
+      job: latest-with-torch-nightly-docker
+    secrets: inherit
+
+  setup:
+    name: Setup
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Setup
+        run: |
+          mkdir "setup_values"
+          echo "${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}" > "setup_values/prev_workflow_run_id.txt"
+          echo "${{ inputs.other_workflow_run_id || env.other_workflow_run_id }}" > "setup_values/other_workflow_run_id.txt"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: setup_values
+          path: setup_values
+
+  model-ci:
+    name: Model CI
+    needs: build_nightly_torch_ci_images
+    uses: ./.github/workflows/self-scheduled.yml
+    with:
+      job: run_models_gpu
+      slack_report_channel: "#transformers-ci-past-future"
+      docker: huggingface/transformers-all-latest-torch-nightly-gpu
+      ci_event: Nightly CI
+      runner_type: "a10"
+      report_repo_id: hf-internal-testing/transformers_daily_ci_with_torch_nightly
+      commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
+    secrets: inherit

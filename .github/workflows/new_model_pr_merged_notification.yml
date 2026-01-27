@@ -1,0 +1,68 @@
+# Used to notify core maintainers about new model PR being merged
+name: New model PR merged notification
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/transformers/models/*/modeling_*'
+
+jobs:
+  notify_new_model:
+    name: Notify new model
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check new model
+        shell: bash
+        run: |
+          python -m pip install gitpython
+          python -c 'from utils.pr_slow_ci_models import get_new_model; new_model = get_new_model(diff_with_last_commit=True); print(new_model)' | tee output.txt
+          echo "NEW_MODEL=$(tail -n 1 output.txt)" >> $GITHUB_ENV
+          echo "COMMIT_SHA=$(git log -1 --format=%H)" >> $GITHUB_ENV
+
+      - name: print commit sha
+        if: ${{ env.NEW_MODEL != ''}}
+        shell: bash
+        run: |
+          echo "$COMMIT_SHA"
+
+      - name: print new model
+        if: ${{ env.NEW_MODEL != ''}}
+        shell: bash
+        run: |
+          echo "$NEW_MODEL"
+
+      - name: Notify
+        if: ${{ env.NEW_MODEL != ''}}
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
+        with:
+          # Slack channel id, channel name, or user id to post message.
+          # See also: https://api.slack.com/methods/chat.postMessage#channels
+          channel-id: transformers-new-model-notification
+          # For posting a rich message using Block Kit
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "New model!",
+                    "emoji": true
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "<https://github.com/huggingface/transformers/commit/${{ env.COMMIT_SHA }}|New model: ${{ env.NEW_MODEL }}> GH_ArthurZucker, GH_lysandrejik, GH_ydshieh\ncommit SHA: ${{ env.COMMIT_SHA }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
