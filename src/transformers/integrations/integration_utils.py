@@ -27,6 +27,7 @@ import shutil
 import sys
 import tempfile
 import warnings
+from copy import deepcopy
 from dataclasses import fields
 from enum import Enum
 from pathlib import Path
@@ -35,7 +36,8 @@ from typing import TYPE_CHECKING, Any, Literal
 import numpy as np
 import packaging.version
 
-from transformers.utils.import_utils import _is_package_available
+from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
+from .transformers.utils.import_utils import _is_package_available
 
 
 if os.getenv("WANDB_MODE") == "offline":
@@ -2416,3 +2418,17 @@ def get_reporting_integration_callbacks(report_to):
             )
 
     return [INTEGRATION_TO_CALLBACK[integration] for integration in report_to]
+
+
+class SPEvalCallBack(TrainerCallback):
+    _local_mapping = None
+
+    def on_step_begin(self, *args, **kwargs) -> None:
+        if self._local_mapping:
+            ALL_ATTENTION_FUNCTIONS._local_mapping = self._local_mapping
+            self._local_mapping = None
+
+    def on_step_end(self, args, state, control, **kwargs) -> None:
+        if control.should_evaluate:
+            self._local_mapping = deepcopy(ALL_ATTENTION_FUNCTIONS._local_mapping)
+            ALL_ATTENTION_FUNCTIONS._local_mapping = ALL_ATTENTION_FUNCTIONS._global_mapping

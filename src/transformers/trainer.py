@@ -38,9 +38,7 @@ from typing import TYPE_CHECKING, Any, Union
 
 # Integrations must be imported before ML frameworks:
 # ruff: isort: off
-from .integrations import (
-    get_reporting_integration_callbacks,
-)
+from .integrations import get_reporting_integration_callbacks, SPEvalCallBack
 
 # ruff: isort: on
 
@@ -642,6 +640,10 @@ class Trainer:
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
+
+        pc = getattr(self.accelerator, "parallelism_config", None)
+        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
+            self.add_callback(SPEvalCallBack)
 
         # Add JIT checkpoint callback if enabled
         if self.args.enable_jit_checkpoint:
@@ -3865,7 +3867,7 @@ class Trainer:
         make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculating might be slightly inaccurate when performing gradient accumulation.
         """
         pc = getattr(self.accelerator, "parallelism_config", None)
-        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
+        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled and self.model.training:
             return self._deepspeed_sp_compute_loss(model, inputs, return_outputs, pc)
 
         if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
