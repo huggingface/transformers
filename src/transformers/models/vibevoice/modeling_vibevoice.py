@@ -39,10 +39,25 @@ from .generation_vibevoice import VibeVoiceGenerationMixin
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for VibeVoice causal language model outputs.
+    VibeVoice base model outputs.
     """
 )
-class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
+class VibeVoiceBaseModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    audio_features (`torch.FloatTensor` of shape `(batch_size * seq_length, hidden_size)`):
+        Audio features extracted from the input audio waveform.
+    """
+
+    audio_features: torch.FloatTensor | None = None
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    VibeVoice causal language model outputs.
+    """
+)
+class VibeVoiceCausalLMOutputWithPast(VibeVoiceBaseModelOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -653,7 +668,8 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
                 audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
             )
 
-        return self.language_model(inputs_embeds=inputs_embeds, **kwargs), audio_features
+        outputs = self.language_model(inputs_embeds=inputs_embeds, **kwargs)
+        return VibeVoiceBaseModelOutputWithPast(audio_features=audio_features, **outputs)
 
 
 @auto_docstring(
@@ -670,8 +686,6 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         self.model = VibeVoiceModel(config)
         self.latent_scaling_factor = nn.Parameter(torch.tensor(1.0))
         self.latent_bias_factor = nn.Parameter(torch.tensor(0.0))
-        # self.latent_scaling_factor = nn.Parameter(torch.empty(1))
-        # self.latent_bias_factor = nn.Parameter(torch.empty(1))
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
@@ -695,10 +709,12 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         padding_mask (`torch.BoolTensor`, *optional*):
             Masks indicating valid input frames.
         acoustic_loss_mask (`torch.BoolTensor`, *optional*):
-            Mask to compute diffusion loss only on specific acoustic tokens. Diffusion loss calculation is not supported yet.
+            Mask to compute diffusion loss only on specific acoustic tokens.
+        ddpm_batch_mul (`int`, *optional*, defaults to 4):
+            TODO
         """
 
-        outputs, audio_features = self.model(
+        outputs = self.model(
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
             input_values=input_values,
@@ -721,9 +737,9 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L407
         # Community repo has a version for TTS (no voice cloning):
         # https://github.com/vibevoice-community/VibeVoice/blob/493b186f5b973477cadab0f93f4a5dd290cc9125/vibevoice/finetune/train_vibevoice.py#L684
-        # if input_values is not None and acoustic_loss_mask.sum().item() > 0:
         if acoustic_loss_mask is not None:
             condition_features = hidden_states[acoustic_loss_mask]
+            audio_features = outputs.audio_features
             audio_len, latent_size = audio_features.shape
 
             noise = torch.randn(
@@ -752,11 +768,6 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
                 diffusion_loss = diffusion_loss / latent_size / ddpm_batch_mul / max(audio_len, 1)
             else:
                 diffusion_loss = torch.tensor(0.0, device=diffusion_loss.device)
-        else:
-            # Dummy loss for when there are no audio samples
-            diffusion_loss = sum(p.sum() for p in self.model.diffusion_head.parameters()) * 0.0
-            diffusion_loss += sum(p.sum() for p in self.model.acoustic_connector.parameters()) * 0.0
-            diffusion_loss += sum(p.sum() for p in self.model.semantic_connector.parameters()) * 0.0
 
         return VibeVoiceCausalLMOutputWithPast(loss=loss, diffusion_loss=diffusion_loss, logits=logits, **outputs)
 
