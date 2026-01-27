@@ -508,7 +508,6 @@ OBJECTS_TO_IGNORE = {
     "YolosImageProcessor",
     "YolosModel",
     "YosoConfig",
-    "YoutuConfig",
     "ZeroShotAudioClassificationPipeline",
     "ZeroShotClassificationPipeline",
     "ZeroShotImageClassificationPipeline",

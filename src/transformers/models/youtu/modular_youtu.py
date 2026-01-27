@@ -14,7 +14,6 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
 )
 from ..qwen3.modeling_qwen3 import Qwen3MLP
-from .configuration_youtu import YoutuConfig
 
 
 logger = logging.get_logger(__name__)
@@ -37,16 +36,7 @@ class YoutuAttention(DeepseekV3Attention):
 
 
 class YoutuDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: YoutuConfig, layer_idx: int):
-        nn.Module.__init__(self)
-        self.hidden_size = config.hidden_size
-
-        self.self_attn = YoutuAttention(config=config, layer_idx=layer_idx)
-
-        self.mlp = YoutuMLP(config)
-
-        self.input_layernorm = YoutuRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = YoutuRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+    pass
 
 
 class YoutuPreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
@@ -55,11 +45,7 @@ class YoutuPreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         std = getattr(self.config, "initializer_range", 0.02)
         embed_std = getattr(self.config, "embedding_initializer_range", 2 * std)
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
+        if isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=embed_std)
             if module.padding_idx is not None:
                 init.zeros_(module.weight.data[module.padding_idx])

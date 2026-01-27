@@ -375,7 +375,6 @@ class YoutuDecoderLayer(GradientCheckpointingLayer):
         self.self_attn = YoutuAttention(config=config, layer_idx=layer_idx)
 
         self.mlp = YoutuMLP(config)
-
         self.input_layernorm = YoutuRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = YoutuRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -436,11 +435,7 @@ class YoutuPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         std = getattr(self.config, "initializer_range", 0.02)
         embed_std = getattr(self.config, "embedding_initializer_range", 2 * std)
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
+        if isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=embed_std)
             if module.padding_idx is not None:
                 init.zeros_(module.weight.data[module.padding_idx])
