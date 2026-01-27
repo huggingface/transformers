@@ -586,6 +586,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
                 per_layer_padding_mode=self.encoder.per_conv_layer_padding_mode,
                 per_layer_in_channels=self.encoder.per_conv_layer_in_channels,
             )
+
         latents = self.encoder(audio, padding_cache=padding_cache)
         return VibeVoiceAcousticTokenizerEncoderOutput(latents=latents)
 
