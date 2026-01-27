@@ -49,6 +49,8 @@ class Lfm2VlConfig(PreTrainedConfig):
             Whether to use layernorm in the multimodal projector.
         downsample_factor (`int`, *optional*, defaults to 2):
             The downsample_factor factor of the vision backbone.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie the word embeddings of the text backbone.
     """
 
     model_type = "lfm2_vl"
