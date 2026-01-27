@@ -1420,8 +1420,8 @@ class UdopModel(UdopPreTrainedModel):
     _tied_weights_keys = {
         "encoder.embed_tokens.weight": "shared.weight",
         "decoder.embed_tokens.weight": "shared.weight",
-        "encoder.embed_patches.proj.weight": "patch_embed.proj.weight",  # TODO tie weights for patch embeddings not working
-        "encoder.embed_patches.proj.bias": "patch_embed.proj.bias",  # TODO tie weights for patch embeddings not working
+        "encoder.embed_patches.proj.weight": "patch_embed.proj.weight",
+        "encoder.embed_patches.proj.bias": "patch_embed.proj.bias",
     }
 
     def __init__(self, config):
@@ -1466,7 +1466,7 @@ class UdopModel(UdopPreTrainedModel):
         encoder_outputs: Tensor | None = None,
         past_key_values: Cache | None = None,
         decoder_inputs_embeds: Tensor | None = None,
-        use_cache=True,
+        use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -1642,7 +1642,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         encoder_outputs: Tensor | None = None,
         past_key_values: Cache | None = None,
         decoder_inputs_embeds: Tensor | None = None,
-        use_cache=True,
+        use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
