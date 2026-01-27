@@ -22,6 +22,10 @@ from ...utils.logging import logging
 from ...utils.metrics import traced
 
 
+# This is a temporary token ID used to represent a token that is not yet generated
+TMP_TOKEN_ID = -1
+
+
 # We centralize the logger here to coordinate between logging and progress bar
 logger = logging.getLogger("ContinuousBatchingLogger")
 
@@ -229,6 +233,8 @@ class RequestState:
 
     def to_generation_output(self):
         """Convert the request state to a GenerationOutput object."""
+        if self.generated_tokens and self.generated_tokens[-1] == TMP_TOKEN_ID:
+            self.generated_tokens.pop()
         if self._true_initial_tokens:
             self.generated_tokens = self.initial_tokens[self._true_initial_tokens :] + self.generated_tokens
             self.initial_tokens = self.initial_tokens[: self._true_initial_tokens]
@@ -272,6 +278,9 @@ class RequestState:
         """Creates an equivalent new request by removing the generated tokens and adding them to the initial prompt. The
         created request has THE SAME request_id. Notably, we can retrieve the original request from the created one with
         the _true_initial_tokens attribute."""
+        # Remove the temporary token if it exists
+        if self.generated_tokens and self.generated_tokens[-1] == TMP_TOKEN_ID:
+            self.generated_tokens.pop()
         new_state = RequestState(
             request_id=self.request_id,
             initial_tokens=self.initial_tokens + self.generated_tokens,

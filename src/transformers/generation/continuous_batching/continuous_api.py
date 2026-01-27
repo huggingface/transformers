@@ -35,7 +35,7 @@ from ...generation.logits_process import LogitsProcessorList
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
-from .requests import GenerationOutput, RequestState, RequestStatus, logger
+from .requests import TMP_TOKEN_ID, GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 
 
@@ -60,9 +60,6 @@ padding in the case of cuda graphs AND torch.compile.
 """
 NUM_Q_PADDING_INTERVALS = 4
 NUM_KV_PADDING_INTERVALS = 8
-
-# This is a temporary token ID used to represent a token that is not yet generated
-TMP_TOKEN_ID = 0
 
 
 def pad_by_intervals(size: int, max_value: int, nb_intervals: int) -> int:
