@@ -14,7 +14,7 @@
 """chameleon model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
@@ -95,7 +95,7 @@ class ChameleonVQVAEConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
-class ChameleonConfig(PreTrainedConfig):
+class ChameleonConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`ChameleonModel`]. It is used to instantiate a
     chameleon model according to the specified arguments, defining the model architecture. Instantiating a

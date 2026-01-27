@@ -71,10 +71,10 @@ def parse_hf_url(url):
 
 
 def validate_downloaded_content(filepath):
-    with open(filepath, "r") as f:
+    with open(filepath, "rb") as f:
         header = f.read(32)
 
-    for bad_sig in ["<!doctype", "<html", '{"error', '{"message']:
+    for bad_sig in [b"<!doctype", b"<html", b'{"error', b'{"message']:
         if header.lower().startswith(bad_sig):
             raise ValueError(
                 f"Downloaded file appears to be an HTML error page, not a valid media file. "
