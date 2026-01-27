@@ -1469,6 +1469,22 @@ if __name__ == "__main__":
             token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
         )
 
+        # plain text file
+        with open("captured_info.txt", "w", encoding="UTF-8") as fp:
+            for matrix_name in matrix_job_results_extra:
+                if "single" in matrix_job_results_extra[matrix_name]["captured_info"]:
+                    fp.write(f"job name: {matrix_name}\n")
+                    fp.write(f'job link: {matrix_job_results_extra[matrix_name]["captured_info"]["single"]["link"]}\n\n')
+                    fp.write(f'captured_info: {matrix_job_results_extra[matrix_name]["captured_info"]["single"]["captured_info"]}')
+
+        api.upload_file(
+            path_or_fileobj=f"ci_results_{job_name}/captured_info.txt",
+            path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/captured_info.txt",
+            repo_id=report_repo_id,
+            repo_type="dataset",
+            token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+        )
+
     # Let's create a file contain job --> job link
     if len(matrix_job_results) > 0:
         target_results = matrix_job_results
