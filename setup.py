@@ -128,7 +128,7 @@ _deps = [
     # `Trainer` tests (see references to `run_translation.py`).
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
-    "safetensors>=0.4.3",
+    "safetensors==0.6.0.dev0",
     "sagemaker>=2.31.0",
     "schedulefree>=1.2.6",
     "scikit-learn",
