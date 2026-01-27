@@ -619,7 +619,7 @@ class BarkSemanticModel(BarkCausalModel):
                 (max_input_semantic_length,),
                 semantic_generation_config.semantic_pad_token,
                 device=self.device,
-                dtype=torch.long,
+                dtype=torch.int,
             )
 
         semantic_history = torch.repeat_interleave(semantic_history[None], batch_size, dim=0)
