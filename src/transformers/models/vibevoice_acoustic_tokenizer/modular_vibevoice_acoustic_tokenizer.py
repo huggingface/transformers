@@ -21,7 +21,8 @@ import torch.nn as nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from .configuration_vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerConfig
@@ -458,7 +459,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
 
     @can_return_tuple
     @auto_docstring
-    def encode(self, audio, padding_cache=None, use_cache=None):
+    def encode(self, audio, padding_cache=None, use_cache=None, sample=False):
         r"""
         audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representation.
@@ -466,6 +467,8 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
             Cache object for streaming mode to maintain convolution states across layers.
         use_cache (`bool`, *optional*):
             Whether to use caching for convolution states.
+        sample (`bool`, *optional*):
+            Whether to sample from the output distribution or return the latent as is.
         """
         if use_cache and padding_cache is None:
             padding_cache = VibeVoiceAcousticTokenizerConv1dPaddingCache(
@@ -474,19 +477,11 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
                 per_layer_padding_mode=self.encoder.per_conv_layer_padding_mode,
                 per_layer_in_channels=self.encoder.per_conv_layer_in_channels,
             )
-            
-        latents = self.encoder(audio, padding_cache=padding_cache)
-        return VibeVoiceAcousticTokenizerEncoderOutput(latents=latents)
 
-    @can_return_tuple
-    @auto_docstring
-    def sample(self, latents):
-        r"""
-        latents (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
-            Input latent representation to be sampled.
-        """
-        noise_std = self.config.vae_std * torch.randn(latents.shape[0], device=latents.device, dtype=latents.dtype)
-        latents = latents + noise_std[:, None, None] * torch.randn_like(latents)
+        latents = self.encoder(audio, padding_cache=padding_cache)
+        if sample:
+            noise_std = self.config.vae_std * torch.randn(latents.shape[0], device=latents.device, dtype=latents.dtype)
+            latents = latents + noise_std[:, None, None] * torch.randn_like(latents)
         return VibeVoiceAcousticTokenizerEncoderOutput(latents=latents)
 
     @can_return_tuple
@@ -514,7 +509,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
 
     @can_return_tuple
     @auto_docstring
-    def forward(self, audio, padding_cache=None, use_cache=False, sample=True):
+    def forward(self, audio, padding_cache=None, use_cache=False, sample=False, **kwargs: Unpack[TransformersKwargs]):
         r"""
         audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representation.
@@ -525,9 +520,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
         sample (`bool`, *optional*):
             Whether to sample from the output distribution of the encoder, or return the latent as is.
         """
-        encoder_output = self.encode(audio)
-        if sample:
-            encoder_output = self.sample(encoder_output.latents)
+        encoder_output = self.encode(audio, sample=sample)
         decoder_output = self.decode(encoder_output.latents, padding_cache=padding_cache, use_cache=use_cache)
         return VibeVoiceAcousticTokenizerOutput(
             audio=decoder_output.audio,

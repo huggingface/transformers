@@ -79,11 +79,6 @@ with torch.no_grad():
     encoded_outputs = model.encode(inputs.input_values)
     print("Latent shape:", encoded_outputs.latents.shape)
     # Latent shape: torch.Size([1, 70, 64])
-
-    # VAE sampling (optional)
-    encoded_outputs = model.sample(encoded_outputs.latents)
-    print("Noisy latents shape:", encoded_outputs.latents.shape)
-    # Noisy latents shape: torch.Size([1, 70, 64])
     
     decoded_outputs = model.decode(**encoded_outputs)
     print("Reconstructed audio shape:", decoded_outputs.audio.shape)
@@ -95,7 +90,7 @@ wavfile.write(output_fp, sampling_rate, decoded_outputs.audio.squeeze().float().
 print(f"Reconstructed audio saved to : {output_fp}")
 ```
 
-For streaming, the `use_cache` parameter can be used when decoding:
+For streaming, the `use_cache` parameter can be used when decoding (or encoding):
 ```python
 # `padding_cache` can be initialized after a first pass
 padding_cache = None
@@ -120,6 +115,5 @@ print("Number of cached layers:", len(padding_cache.per_layer_in_channels))
 
 [[autodoc]] VibeVoiceAcousticTokenizerModel
     - encode
-    - sample
     - decode
     - forward
