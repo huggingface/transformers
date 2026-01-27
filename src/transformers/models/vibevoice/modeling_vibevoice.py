@@ -578,7 +578,6 @@ class VibeVoiceSemanticTokenizerModel(VibeVoicePreTrainedModel):
                 per_layer_in_channels=self.encoder.per_conv_layer_in_channels,
             )
         latents = self.encoder(audio, padding_cache=padding_cache)
-
         return VibeVoiceSemanticTokenizerOutput(
             latents=latents,
             padding_cache=padding_cache if use_cache else None,
@@ -636,8 +635,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         padding_mask = torch.arange(max(num_audio_tokens)) < num_audio_tokens[:, None].cpu()
 
         with torch.no_grad():
-            acoustic_latents = self.acoustic_tokenizer.encode(input_values).latents
-            acoustic_latents = self.acoustic_tokenizer.sample(acoustic_latents).latents
+            acoustic_latents = self.acoustic_tokenizer.encode(input_values, sample=True).latents
         acoustic_features = (
             acoustic_latents + latent_bias_factor.to(acoustic_latents.device)
         ) * latent_scaling_factor.to(acoustic_latents.device)

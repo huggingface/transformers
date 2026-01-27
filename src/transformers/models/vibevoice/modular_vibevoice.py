@@ -21,22 +21,17 @@ import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaMLP
 from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import (
-    VibeVoiceAcousticTokenizerEncoder,
     VibeVoiceAcousticTokenizerModel,
     VibeVoiceAcousticTokenizerPreTrainedModel,
 )
 from .configuration_vibevoice import VibeVoiceConfig, VibeVoiceSemanticTokenizerConfig
 from .generation_vibevoice import VibeVoiceGenerationMixin
-
-
-logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -229,28 +224,6 @@ class VibeVoiceSemanticTokenizerOutput(ModelOutput):
     padding_cache: Optional["VibeVoiceConv1dPaddingCache"] = None
 
 
-class VibeVoiceEncoder(VibeVoiceAcousticTokenizerEncoder):
-    def __init__(self, config):
-        super().__init__(config)
-
-        # Parameters for cache creation
-        self.num_conv_layers = sum(depth + 1 for depth in config.depths) + 1
-        self.per_conv_layer_padding = [self.stem.conv.causal_padding]
-        self.per_conv_layer_in_channels = [self.stem.conv.conv.in_channels]
-        self.per_conv_layer_padding.extend([block.mixer.causal_padding for block in self.stem.stage])
-        self.per_conv_layer_in_channels.extend([block.mixer.conv.in_channels for block in self.stem.stage])
-
-        for layer in self.conv_layers:
-            self.per_conv_layer_padding.append(layer.conv.causal_padding)
-            self.per_conv_layer_in_channels.append(layer.conv.conv.in_channels)
-            self.per_conv_layer_padding.extend([block.mixer.causal_padding for block in layer.stage])
-            self.per_conv_layer_in_channels.extend([block.mixer.conv.in_channels for block in layer.stage])
-
-        self.per_conv_layer_padding.append(self.head.causal_padding)
-        self.per_conv_layer_in_channels.append(self.head.conv.in_channels)
-        self.per_conv_layer_padding_mode = ["constant" for _ in self.per_conv_layer_padding]
-
-
 @auto_docstring(
     custom_intro="""
     Semantic tokenizer which only encodes audio into semantic tokens, namely no decoding.
@@ -285,19 +258,15 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceAcousticTokenizerModel):
                 per_layer_in_channels=self.encoder.per_conv_layer_in_channels,
             )
         latents = self.encoder(audio, padding_cache=padding_cache)
-
         return VibeVoiceSemanticTokenizerOutput(
             latents=latents,
             padding_cache=padding_cache if use_cache else None,
         )
 
-    def sample(self):
-        raise NotImplementedError("Sample method is not implemented for VibeVoiceSemanticTokenizerModel.")
-
     def decode(self, latents, padding_cache=None, use_cache=False):
         raise NotImplementedError("Decode method is not implemented for VibeVoiceSemanticTokenizerModel.")
 
-    def forward(self, audio, padding_cache=None, use_cache=None, **kwargs: Unpack[TransformersKwargs]):
+    def forward(self, audio, padding_cache=None, use_cache=None, **kwargs):
         raise NotImplementedError("Forward method is not implemented for VibeVoiceSemanticTokenizerModel.")
 
 
@@ -352,8 +321,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         padding_mask = torch.arange(max(num_audio_tokens)) < num_audio_tokens[:, None].cpu()
 
         with torch.no_grad():
-            acoustic_latents = self.acoustic_tokenizer.encode(input_values).latents
-            acoustic_latents = self.acoustic_tokenizer.sample(acoustic_latents).latents
+            acoustic_latents = self.acoustic_tokenizer.encode(input_values, sample=True).latents
         acoustic_features = (
             acoustic_latents + latent_bias_factor.to(acoustic_latents.device)
         ) * latent_scaling_factor.to(acoustic_latents.device)
