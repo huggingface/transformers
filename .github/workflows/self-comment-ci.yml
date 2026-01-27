@@ -218,10 +218,39 @@ jobs:
           echo "$MODEL_REPORT"
           echo "$QUANT_REPORT"
 
+      # model job specific
+      - uses: actions/download-artifact@v4
+        continue-on-error: true  # Won't fail the workflow if artifact missing
+        with:
+          name: ci_results_run_models_gpu
+          path: ci_results_run_models_gpu
+
+      # check the hub repo. link for `captured_info.txt`
+      - name: Get hub repo. links
+        id: get_hub_repo_links
+        run: |
+          # Check if we have the file `hub_uploaded_file_links.json` in `ci_results_run_models_gpu`.
+          if [ -f "ci_results_run_models_gpu/hub_uploaded_file_links.json" ]; then
+            echo "Found hub_uploaded_file_links.json"
+            
+            # Extract the value for captured_info.txt key
+            CAPTURED_INFO_LINK=$(jq -r '.["captured_info.txt"] // empty' ci_results_run_models_gpu/hub_uploaded_file_links.json)
+            
+            if [ -n "$CAPTURED_INFO_LINK" ]; then
+              echo "captured_info_link=$CAPTURED_INFO_LINK" >> $GITHUB_OUTPUT
+              echo "Found captured_info.txt link: $CAPTURED_INFO_LINK"
+            else
+              echo "Key 'captured_info.txt' not found in JSON"
+            fi
+          else
+            echo "hub_uploaded_file_links.json not found"
+          fi
+
       - name: Process and filter reports
         env:
           MODEL_REPORT: ${{ needs.model-ci.outputs.report }}
           QUANT_REPORT: ${{ needs.quantization-ci.outputs.report }}
+          CAPTURED_INFO_LINK: ${{ steps.get_hub_repo_links.outputs.captured_info_link }}
         run: |
           # Preprocess with Python
           python3 << 'PYTHON_SCRIPT'
@@ -263,6 +292,8 @@ jobs:
           # Load and filter reports
           model_report_str = os.environ.get('MODEL_REPORT', '{}')
           quant_report_str = os.environ.get('QUANT_REPORT', '{}')
+
+          captured_info_link = os.environ.get('CAPTURED_INFO_LINK', '')
           
           model_report = json.loads(model_report_str) if model_report_str else {}
           quant_report = json.loads(quant_report_str) if quant_report_str else {}
@@ -275,6 +306,9 @@ jobs:
               f.write(formatted_model)
               if formatted_model:
                   f.write('\n')
+              # Add the captured_info.txt link if it exists
+              if captured_info_link:
+                  f.write(f'\ncaptured_info.txt: {captured_info_link}\n')
           
           with open('quantization_ci.txt', 'w') as f:
               f.write(formatted_quant)

@@ -1411,6 +1411,11 @@ if __name__ == "__main__":
     if not os.path.isdir(os.path.join(os.getcwd(), f"ci_results_{job_name}")):
         os.makedirs(os.path.join(os.getcwd(), f"ci_results_{job_name}"))
 
+    hub_uploaded_file_links = {}
+    # Used to tore the links of all files uploaded to a CI hub repository
+    with open(f"ci_results_{job_name}/hub_uploaded_file_links.json", "w", encoding="UTF-8") as fp:
+        json.dump(hub_uploaded_file_links, fp, indent=4, ensure_ascii=False)
+
     nvidia_daily_ci_workflow = (
         "huggingface/transformers/.github/workflows/self-scheduled-caller.yml",
         "huggingface/transformers/.github/workflows/self-scheduled-flash-attn-caller.yml",
@@ -1470,20 +1475,28 @@ if __name__ == "__main__":
         )
 
         # plain text file
-        with open("captured_info.txt", "w", encoding="UTF-8") as fp:
+        with open(f"ci_results_{job_name}/captured_info.txt", "w", encoding="UTF-8") as fp:
             for matrix_name in matrix_job_results_extra:
                 if "single" in matrix_job_results_extra[matrix_name]["captured_info"]:
                     fp.write(f"job name: {matrix_name}\n")
                     fp.write(f'job link: {matrix_job_results_extra[matrix_name]["captured_info"]["single"]["link"]}\n\n')
                     fp.write(f'captured_info: {matrix_job_results_extra[matrix_name]["captured_info"]["single"]["captured_info"]}')
 
-        api.upload_file(
+        commit_info = api.upload_file(
             path_or_fileobj=f"ci_results_{job_name}/captured_info.txt",
             path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/captured_info.txt",
             repo_id=report_repo_id,
             repo_type="dataset",
             token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
         )
+        file_link = f"https://huggingface.co/datasets/{report_repo_id}/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/captured_info.txt"
+
+        with open(f"ci_results_{job_name}/hub_uploaded_file_links.json", "r") as fp:
+            hub_uploaded_file_links = json.load(fp)
+            hub_uploaded_file_links["captured_info.txt"] = file_link
+
+        with open(f"ci_results_{job_name}/hub_uploaded_file_links.json", "w", encoding="UTF-8") as fp:
+            json.dump(hub_uploaded_file_links, fp, indent=4, ensure_ascii=False)
 
     # Let's create a file contain job --> job link
     if len(matrix_job_results) > 0:
