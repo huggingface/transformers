@@ -114,12 +114,13 @@ def batched_mm_experts_forward(
     # Resolve routing weights per selected sample, allowing top_k_weights to be either:
     # - (num_tokens, num_top_k) Qwen2MoE style
     # - (num_tokens, num_experts) DeepseekV2 style
+    # S is the number of selected tokens-experts pairs (S = num_tokens * num_top_k)
     if top_k_weights.shape == (num_tokens, num_top_k):
-        sample_weights = top_k_weights
+        sample_weights = top_k_weights  # (num_tokens, num_top_k)
     elif top_k_weights.shape == (num_tokens, num_experts):
         # TODO: routers that output full expert distribution
         # should probably be corrected to output only top_k weights
-        sample_weights = top_k_weights[token_idx, expert_ids]
+        sample_weights = top_k_weights[token_idx, expert_ids]  # (S,)
     else:
         raise ValueError(
             f"top_k_weights has an invalid/unsupported shape. It should be either (num_tokens, num_top_k)({num_tokens}, {num_top_k}) "
@@ -221,12 +222,13 @@ def grouped_mm_experts_forward(
     # Resolve routing weights per selected sample, allowing top_k_weights to be either:
     # - (num_tokens, num_top_k) Qwen2MoE style
     # - (num_tokens, num_experts) DeepseekV2 style
+    # S is the number of selected tokens-experts pairs (S = num_tokens * num_top_k)
     if top_k_weights.shape == (num_tokens, num_top_k):
-        sample_weights = top_k_weights
+        sample_weights = top_k_weights  # (num_tokens, num_top_k)
     elif top_k_weights.shape == (num_tokens, num_experts):
         # TODO: routers that output full expert distribution
         # should probably be corrected to output only top_k weights
-        sample_weights = top_k_weights[token_idx, expert_ids]
+        sample_weights = top_k_weights[token_idx, expert_ids]  # (S,)
     else:
         raise ValueError(
             f"top_k_weights has an invalid/unsupported shape. It should be either (num_tokens, num_top_k)({num_tokens}, {num_top_k}) "
