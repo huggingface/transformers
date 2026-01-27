@@ -118,6 +118,10 @@ class Qwen3MoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     model_type = "qwen3_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
 
+    attribute_map = {
+        "num_experts": "num_local_experts",
+    }
+
     # Default tensor parallel plan for base model `Qwen3Moe`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
