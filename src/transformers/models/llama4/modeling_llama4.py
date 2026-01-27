@@ -1187,7 +1187,10 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         self.multi_modal_projector = Llama4MultiModalProjector(config)
         self.language_model = Llama4ForCausalLM(config.text_config)
         self.vocab_size = config.text_config.vocab_size
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        if hasattr(self.config, "pad_token_id"):
+            self.pad_token_id = self.config.pad_token_id
+        else:
+            self.pad_token_id = self.config.text_config.pad_token_id or -1
 
         self.post_init()
 
