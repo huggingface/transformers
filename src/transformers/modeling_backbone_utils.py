@@ -270,7 +270,13 @@ class BackboneConfigMixin:
         kwargs.pop("use_pretrained_backbone", None)
 
         # Init timm backbone with hardcoded values for BC
-        if timm_default_kwargs is not None and use_timm_backbone and backbone is not None and backbone_config is None:
+        if (
+            timm_default_kwargs is not None
+            and use_timm_backbone
+            and backbone is not None
+            and backbone_config is None
+            and backbone_kwargs is None
+        ):
             backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **timm_default_kwargs)
         elif backbone is not None and backbone_config is None:
             if repo_exists(backbone):
