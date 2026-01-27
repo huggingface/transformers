@@ -442,7 +442,6 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
         PreTrainedModel.__init__(self, config)
         self.config = config
         self.num_hidden_layers = config.num_hidden_layers
-
         self.embeddings = EomtEmbeddings(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -574,10 +573,7 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
                 attention_mask = attention_mask[:, None, ...].expand(-1, self.config.num_attention_heads, -1, -1)
                 attention_mask = attention_mask.float().masked_fill(~attention_mask, -1e9)
 
-            hidden_states = layer_module(
-                hidden_states,
-                attention_mask=attention_mask,
-            )
+            hidden_states = layer_module(hidden_states, attention_mask=attention_mask)
 
         sequence_output = self.layernorm(hidden_states)
 
