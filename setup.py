@@ -293,7 +293,6 @@ extras["all"] = (
     + extras["integrations"]
     + extras["timm"]
     + extras["codecarbon"]
-    + extras["accelerate"]
     + extras["video"]
     + extras["num2words"]
     + extras["mistral-common"]
