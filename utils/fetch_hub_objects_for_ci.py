@@ -111,12 +111,7 @@ def download_test_file(url):
         # Use hf_hub_download for HF URLs - handles auth automatically via HF_TOKEN env var
         print(f"Downloading {filename} from HuggingFace Hub...")
         try:
-            cached_path = hf_hub_download(
-                repo_id=hf_parts["repo_id"],
-                filename=hf_parts["filename"],
-                repo_type=hf_parts["repo_type"],
-                revision=hf_parts["revision"],
-            )
+            cached_path = hf_hub_download(**hf_parts)
             os.symlink(cached_path, filename)
             print(f"Successfully downloaded: {filename}")
         except Exception as e:
