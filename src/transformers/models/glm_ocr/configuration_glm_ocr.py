@@ -19,7 +19,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
 class GlmOcrVisionConfig(PreTrainedConfig):
@@ -107,7 +107,7 @@ class GlmOcrVisionConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class GlmOcrTextConfig(PreTrainedConfig):
+class GlmOcrTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`GlmOcrTextConfig`]. It is used to instantiate a
     GLM-OCR model according to the specified arguments, defining the model architecture. Instantiating a
