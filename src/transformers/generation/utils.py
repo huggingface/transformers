@@ -1812,7 +1812,7 @@ class GenerationMixin(ContinuousMixin):
             generation_config.cache_implementation = None
 
         # It doesn't make sense to allow kwargs and `generation_config`, that should be mutually exclusive
-        if generation_config_provided is not None and set(kwargs.keys()) - set(model_kwargs.keys()):
+        if generation_config_provided and set(kwargs.keys()) - set(model_kwargs.keys()):
             generation_kwargs = set(kwargs.keys()) - set(model_kwargs.keys())
             logger.warning_once(
                 f"Passing `generation_config` together with generation-related "
