@@ -78,7 +78,6 @@ _deps = [
     "faiss-cpu",
     "fastapi",
     "filelock",
-    "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
@@ -223,16 +222,10 @@ class DepsTableUpdateCommand(Command):
 
 extras = {}
 
-extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
-extras["sklearn"] = deps_list("scikit-learn")
-
 extras["torch"] = deps_list("torch", "accelerate")
+extras["sklearn"] = deps_list("scikit-learn")
 extras["accelerate"] = deps_list("accelerate")
-
 extras["retrieval"] = deps_list("faiss-cpu", "datasets")
-
-extras["ftfy"] = deps_list("ftfy")
-
 extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
 extras["optuna"] = deps_list("optuna")
@@ -260,6 +253,7 @@ extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["mistral-common"] = deps_list("mistral-common[image]")
 extras["chat_template"] = deps_list("jinja2", "jmespath")
+extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
 extras["testing"] = (
     deps_list(
         "pytest",
@@ -314,7 +308,6 @@ extras["all"] = (
     + extras["chat_template"]
 )
 
-
 extras["dev-torch"] = (
     extras["testing"]
     + extras["torch"]
@@ -333,12 +326,6 @@ extras["dev-torch"] = (
 
 extras["dev"] = extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["sklearn"]
 
-extras["torchhub"] = deps_list(
-    "importlib_metadata",
-    "protobuf",
-    "sentencepiece",
-    "torch",
-)
 
 extras["benchmark"] = deps_list("optimum-benchmark")
 
@@ -355,7 +342,6 @@ install_requires = [
     deps["pyyaml"],  # used for the model cards metadata
     deps["regex"],  # for OpenAI GPT
     deps["tokenizers"],
-    deps["typer-slim"],  # CLI utilities. In practice, already a dependency of huggingface_hub
     deps["safetensors"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]

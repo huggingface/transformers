@@ -16,7 +16,6 @@ deps = {
     "faiss-cpu": "faiss-cpu",
     "fastapi": "fastapi",
     "filelock": "filelock",
-    "ftfy": "ftfy",
     "fugashi": "fugashi>=1.0",
     "GitPython": "GitPython<3.1.19",
     "hf-doc-builder": "hf-doc-builder>=0.3.0",

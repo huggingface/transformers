@@ -97,7 +97,6 @@ from .utils import (
     is_flute_available,
     is_fp_quant_available,
     is_fsdp_available,
-    is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
     is_gguf_available,
@@ -765,13 +764,6 @@ def require_vision(test_case):
     installed.
     """
     return unittest.skipUnless(is_vision_available(), "test requires vision")(test_case)
-
-
-def require_ftfy(test_case):
-    """
-    Decorator marking a test that requires ftfy. These tests are skipped when ftfy isn't installed.
-    """
-    return unittest.skipUnless(is_ftfy_available(), "test requires ftfy")(test_case)
 
 
 def require_spacy(test_case):
