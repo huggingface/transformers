@@ -101,7 +101,33 @@ class YoutuConfig(DeepseekV3Config):
         attention_dropout: float | None = 0.0,
         **kwargs,
     ):
-        super().__init__()
+        super().__init__(
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            num_key_value_heads=num_key_value_heads,
+            kv_lora_rank=kv_lora_rank,
+            q_lora_rank=q_lora_rank,
+            qk_rope_head_dim=qk_rope_head_dim,
+            v_head_dim=v_head_dim,
+            qk_nope_head_dim=qk_nope_head_dim,
+            hidden_act=hidden_act,
+            max_position_embeddings=max_position_embeddings,
+            rms_norm_eps=rms_norm_eps,
+            use_cache=use_cache,
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            rope_parameters=rope_parameters,
+            rope_interleave=rope_interleave,
+            attention_bias=attention_bias,
+            attention_dropout=attention_dropout,
+            **kwargs,
+        )
+
         # remove unused attribute
         del self.n_shared_experts
         del self.n_routed_experts
@@ -112,15 +138,17 @@ class YoutuConfig(DeepseekV3Config):
         del self.first_k_dense_replace
         del self.norm_topk_prob
         del self.pretraining_tp
+        del self.moe_intermediate_size
 
         # if initializer_range is None, set it to 2.0 / (5.0 * self.hidden_size) ** 0.5
-        self.initializer_range = (
-            (2.0 / (5.0 * self.hidden_size)) ** 0.5 if initializer_range is None else initializer_range
-        )
+        if self.initializer_range is None:
+            self.initializer_range = 2.0 / (5.0 * self.hidden_size) ** 0.5
+
         # if embedding_initializer_range is None, set it to 2.0 * self.initializer_range
-        self.embedding_initializer_range = (
-            self.initializer_range * 2.0 if embedding_initializer_range is None else embedding_initializer_range
-        )
+        if embedding_initializer_range is None:
+            self.embedding_initializer_range = 2.0 * self.initializer_range
+        else:
+            self.embedding_initializer_range = embedding_initializer_range
 
 
 __all__ = ["YoutuConfig"]
