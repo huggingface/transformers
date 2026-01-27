@@ -70,7 +70,6 @@ _deps = [
     "beautifulsoup4",
     "blobfile",
     "codecarbon>=2.8.1",
-    "cookiecutter==1.7.3",
     "datasets>=2.15.0",  # We need either this pin or pyarrow<21.0.0
     "deepspeed>=0.9.3",
     "diffusers",
@@ -83,7 +82,6 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "hf_xet",
     "huggingface-hub>=1.3.0,<2.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
@@ -230,13 +228,10 @@ extras["sklearn"] = deps_list("scikit-learn")
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
-extras["hf_xet"] = deps_list("hf_xet")
 
 extras["retrieval"] = deps_list("faiss-cpu", "datasets")
 
-extras["tokenizers"] = deps_list("tokenizers")
 extras["ftfy"] = deps_list("ftfy")
-extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
@@ -253,8 +248,6 @@ extras["audio"] = deps_list(
     "phonemizer",
     "kenlm",
 )
-# `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
-extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
@@ -297,19 +290,17 @@ extras["testing"] = (
         "libcst",
     )
     + extras["retrieval"]
-    + extras["modelcreation"]
     + extras["mistral-common"]
     + extras["serving"]
 )
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 extras["ruff"] = deps_list("ruff")
-extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "pandas")
+extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich")
 
 extras["all"] = (
     extras["torch"]
     + extras["sentencepiece"]
-    + extras["tokenizers"]
     + extras["torch-speech"]
     + extras["vision"]
     + extras["integrations"]
@@ -328,7 +319,6 @@ extras["dev-torch"] = (
     extras["testing"]
     + extras["torch"]
     + extras["sentencepiece"]
-    + extras["tokenizers"]
     + extras["torch-speech"]
     + extras["vision"]
     + extras["integrations"]
@@ -338,26 +328,16 @@ extras["dev-torch"] = (
     + extras["quality"]
     + extras["ja"]
     + extras["sklearn"]
-    + extras["modelcreation"]
     + extras["num2words"]
 )
 
-extras["dev"] = (
-    extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["sklearn"] + extras["modelcreation"]
-)
+extras["dev"] = extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["sklearn"]
 
 extras["torchhub"] = deps_list(
-    "filelock",
-    "huggingface-hub",
     "importlib_metadata",
-    "numpy",
-    "packaging",
     "protobuf",
-    "regex",
     "sentencepiece",
     "torch",
-    "tokenizers",
-    "tqdm",
 )
 
 extras["benchmark"] = deps_list("optimum-benchmark")
