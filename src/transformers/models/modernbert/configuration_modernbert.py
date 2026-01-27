@@ -23,6 +23,10 @@ from typing import Literal
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class ModernBertConfig(PreTrainedConfig):
@@ -108,10 +112,7 @@ class ModernBertConfig(PreTrainedConfig):
             Whether to compile the layers of the model which were compiled during pretraining. If `None`, then parts of
             the model will be compiled if 1) `triton` is installed, 2) the model is not on MPS, 3) the model is not
             shared between devices, and 4) the model is not resized after initialization. If `True`, then the model may
-            be faster in some scenarios.
-        repad_logits_with_grad (`bool`, *optional*, defaults to `False`):
-            When True, ModernBertForMaskedLM keeps track of the logits' gradient when repadding for output. This only
-            applies when using Flash Attention 2 with passed labels. Otherwise output logits always have a gradient.
+            be faster in some scenarios. This argument is deprecated and will be removed in a future version.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
 
@@ -133,6 +134,15 @@ class ModernBertConfig(PreTrainedConfig):
     model_type = "modernbert"
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = {"global": 160_000.0, "local": 10_000.0}
+
+    def __setattr__(self, name, value):
+        if name == "reference_compile" and value is not None:
+            logger.warning_once(
+                "The `reference_compile` argument is deprecated and will be removed in a future version. "
+                "Use `torch.compile()` directly on the model instead."
+            )
+            value = None
+        super().__setattr__(name, value)
 
     def __init__(
         self,
@@ -168,8 +178,7 @@ class ModernBertConfig(PreTrainedConfig):
         deterministic_flash_attn: bool | None = False,
         sparse_prediction: bool | None = False,
         sparse_pred_ignore_index: int | None = -100,
-        reference_compile: bool | None = None,
-        repad_logits_with_grad: bool | None = False,
+        reference_compile: bool | None = None,  # Deprecated
         tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
@@ -205,7 +214,6 @@ class ModernBertConfig(PreTrainedConfig):
         self.sparse_prediction = sparse_prediction
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile
-        self.repad_logits_with_grad = repad_logits_with_grad
 
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
@@ -262,6 +270,16 @@ class ModernBertConfig(PreTrainedConfig):
         output = super().to_dict()
         output.pop("reference_compile", None)
         return output
+
+    @property
+    def sliding_window(self):
+        """Half-window size: `local_attention` is the total window, so we divide by 2."""
+        return self.local_attention // 2
+
+    @sliding_window.setter
+    def sliding_window(self, value):
+        """Set sliding_window by updating local_attention to 2 * value."""
+        self.local_attention = value * 2
 
 
 __all__ = ["ModernBertConfig"]

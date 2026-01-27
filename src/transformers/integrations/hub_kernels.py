@@ -210,7 +210,12 @@ try:
                 Mode.INFERENCE: FuncRepository(
                     repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
                 )
-            }
+            },
+            "cuda": {
+                Mode.INFERENCE: FuncRepository(
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                )
+            },
         }
 
     def has_key(d, key):

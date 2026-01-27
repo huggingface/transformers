@@ -545,8 +545,7 @@ def _process_flash_attention_kwargs(
         # The flash attention API sets inclusive boundaries, i.e. (4, 0) would take 4 tokens to the left
         # and the current token for a total size of 5. However, we usually define our window sizes by
         # their total window size (when causal). Encoder models as of now seldom use SWA and when they
-        # do, they have a custom workaround (e.g. ModernBERT) which would align with this symmetric logic, i.e.
-        # for a total of `2*sliding_window + 1`.
+        # do, they must align with this symmetric logic, i.e. for a total of `2*sliding_window + 1`.
         flash_kwargs["window_size"] = (sliding_window - 1, sliding_window - 1)
 
     if supports_mapping["deterministic"]:
