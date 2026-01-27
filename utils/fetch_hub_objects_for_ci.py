@@ -1,6 +1,7 @@
 import os
+import re
 
-import requests
+import httpx
 from huggingface_hub import hf_hub_download, snapshot_download
 
 from transformers.testing_utils import _run_pipeline_tests, _run_staging
@@ -44,6 +45,88 @@ def url_to_local_path(url, return_url_if_not_found=True):
 
     if not os.path.exists(filename) and return_url_if_not_found:
         return url
+
+    return filename
+
+
+def parse_hf_url(url):
+    """
+    Parse a HuggingFace Hub URL into components for hf_hub_download.
+
+    Returns dict with (repo_id, filename, repo_type, revision) or None if not a HF URL.
+    """
+    pattern = r"https://huggingface\.co/(datasets/)?([^/]+/[^/]+)/resolve/([^/]+)/(.+)"
+    match = re.match(pattern, url)
+    if not match:
+        return None
+
+    is_dataset = match.group(1) is not None
+    revision = match.group(3)
+    return {
+        "repo_id": match.group(2),
+        "filename": match.group(4),
+        "repo_type": "dataset" if is_dataset else "model",
+        "revision": revision if revision != "main" else None,
+    }
+
+
+def validate_downloaded_content(filepath):
+    with open(filepath, "r") as f:
+        header = f.read(32)
+
+    for bad_sig in ["<!doctype", "<html", '{"error', '{"message']:
+        if header.lower().startswith(bad_sig):
+            raise ValueError(
+                f"Downloaded file appears to be an HTML error page, not a valid media file. "
+                f"This may indicate rate limiting. File starts with: {header[:50]!r}"
+            )
+
+    file_size = os.path.getsize(filepath)
+    if file_size < 100:
+        raise ValueError(f"Downloaded file is suspiciously small ({file_size} bytes).")
+
+    return True
+
+
+def download_test_file(url):
+    """
+    Download a URL to a local file, using hf_hub_download for HF URLs.
+
+    For HuggingFace URLs, uses hf_hub_download which handles authentication
+    automatically via the HF_TOKEN environment variable.
+
+    Returns the local filename.
+    """
+    filename = url.split("/")[-1]
+
+    # Skip if file already exists
+    if os.path.exists(filename):
+        print(f"File already exists: {filename}")
+        return filename
+
+    # Check if this is a HuggingFace URL
+    hf_parts = parse_hf_url(url)
+
+    if hf_parts:
+        # Use hf_hub_download for HF URLs - handles auth automatically via HF_TOKEN env var
+        print(f"Downloading {filename} from HuggingFace Hub...")
+        try:
+            hf_hub_download(**hf_parts, local_dir=".")
+            print(f"Successfully downloaded: {filename}")
+        except Exception as e:
+            print(f"Error downloading {filename} from HuggingFace Hub: {e}")
+            raise
+    else:
+        # Use httpx for non-HF URLs (COCO, Britannica, etc.)
+        print(f"Downloading {filename} from external URL...")
+        with open(filename, "wb") as f:
+            with httpx.stream("GET", url, follow_redirects=True) as resp:
+                resp.raise_for_status()
+                f.writelines(resp.iter_bytes(chunk_size=8192))
+
+        # Validate the downloaded content
+        validate_downloaded_content(filename)
+        print(f"Successfully downloaded: {filename}")
 
     return filename
 
@@ -197,20 +280,4 @@ if __name__ == "__main__":
 
     # Download files from URLs to local directory
     for url in URLS_FOR_TESTING_DATA:
-        filename = url_to_local_path(url, return_url_if_not_found=False)
-
-        # Skip if file already exists
-        if os.path.exists(filename):
-            print(f"File already exists: {filename}")
-            continue
-
-        print(f"Downloading {filename}...")
-        try:
-            response = requests.get(url, stream=True)
-            response.raise_for_status()
-
-            with open(filename, "wb") as f:
-                f.writelines(response.iter_content(chunk_size=8192))
-            print(f"Successfully downloaded: {filename}")
-        except requests.exceptions.RequestException as e:
-            print(f"Error downloading {filename}: {e}")
+        download_test_file(url)

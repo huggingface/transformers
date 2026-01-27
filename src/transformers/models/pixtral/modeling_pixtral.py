@@ -507,7 +507,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         position_ids = position_ids_in_meshgrid(
             patch_embeds_list, max_width=self.config.image_size // self.config.patch_size
         )
-        kwargs["position_ids"] = position_ids.to(patch_embeds.device, non_blocking=True)
+        kwargs["position_ids"] = position_ids.unsqueeze(0).to(patch_embeds.device, non_blocking=True)
 
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
 

@@ -339,7 +339,7 @@ class Sam3ModelTester:
             "hidden_size": 32,
             "intermediate_size": 64,
             "projection_dim": 32,
-            "num_hidden_layers": 1,
+            "num_hidden_layers": self.num_hidden_layers,
             "num_attention_heads": 4,
             "max_position_embeddings": 32,  # Keep at 32 for stability
             "hidden_act": "gelu",
@@ -750,8 +750,8 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # First get text embeddings
             with torch.no_grad():
                 text_embeds = model.get_text_features(
-                    input_ids=inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"]
-                )
+                    input_ids=inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"], return_dict=True
+                ).pooler_output
 
             # Forward with text_embeds (remove input_ids)
             inputs_with_embeds = {

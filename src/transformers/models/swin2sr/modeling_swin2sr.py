@@ -995,7 +995,8 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          >>> import torch
          >>> import numpy as np
          >>> from PIL import Image
-         >>> import requests
+         >>> import httpx
+        >>> from io import BytesIO
 
          >>> from transformers import AutoImageProcessor, Swin2SRForImageSuperResolution
 
@@ -1003,7 +1004,8 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          >>> model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-classical-sr-x2-64")
 
          >>> url = "https://huggingface.co/spaces/jjourney1125/swin2sr/resolve/main/samples/butterfly.jpg"
-         >>> image = Image.open(requests.get(url, stream=True).raw)
+         >>> with httpx.stream("GET", url) as response:
+         ...     image = Image.open(BytesIO(response.read()))
          >>> # prepare image for the model
          >>> inputs = processor(image, return_tensors="pt")
 

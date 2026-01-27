@@ -399,12 +399,12 @@ class Phi4MultimodalConfig(Phi3Config):
         if isinstance(vision_config, dict):
             vision_config = Phi4MultimodalVisionConfig(**vision_config)
         elif vision_config is None:
-            Phi4MultimodalVisionConfig()
+            vision_config = Phi4MultimodalVisionConfig()
         self.vision_config = vision_config
 
         if isinstance(audio_config, dict):
             audio_config = Phi4MultimodalAudioConfig(**audio_config)
-        elif vision_config is None:
+        elif audio_config is None:
             audio_config = Phi4MultimodalAudioConfig()
         self.audio_config = audio_config
 
@@ -688,7 +688,7 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
         pixel_values,
         patch_attention_mask: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPooling:
         batch_size = pixel_values.size(0)
         if patch_attention_mask is None:
             patch_attention_mask = torch.ones(
@@ -1505,7 +1505,7 @@ class Phi4MultimodalModel(Phi3Model):
         output_hidden_states: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> BaseModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         r"""
         image_pixel_values (`torch.FloatTensor`, *optional*):
             If the input contains images, these correspond to the pixel values after transformations (as returned by

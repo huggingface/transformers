@@ -7,7 +7,7 @@ on:
     branches-ignore:
       - main
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, '@bot /repo') }}
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, '@bot /repo') || startsWith(github.event.comment.body, '@bot /style') }}
   cancel-in-progress: true
 permissions: read-all
 
@@ -15,7 +15,7 @@ permissions: read-all
 jobs:
   get-pr-number:
     name: Get PR number
-    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille", "IlyasMoutawwakil", "tarekziade"]'), github.actor) && startsWith(github.event.comment.body, '@bot /repo') }}
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille", "IlyasMoutawwakil", "tarekziade"]'), github.actor) && (startsWith(github.event.comment.body, '@bot /repo') || startsWith(github.event.comment.body, '@bot /style')) }}
     uses: ./.github/workflows/get-pr-number.yml
 
   get-pr-info:
@@ -70,10 +70,10 @@ jobs:
               issue_number: PR_NUMBER
             });
             
-            // Find existing bot comments that start with "Repo. Consistency"
+            // Find existing bot comments that start with "Repo. Consistency" or "Style fix"
             const existingComments = comments.filter(comment => 
               comment.user.login === 'github-actions[bot]' && 
-              comment.body.startsWith('Repo. Consistency')
+              (comment.body.startsWith('Repo. Consistency') || comment.body.startsWith('Style fix'))
             );
 
             if (existingComments.length > 0) {
@@ -93,17 +93,23 @@ jobs:
         id: init_comment
         env:
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
         uses: actions/github-script@v6
         with:
           script: |
             const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
+            const COMMENT_BODY = process.env.COMMENT_BODY;
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+            
+            // Determine which command was used
+            const isStyleFix = COMMENT_BODY.startsWith('@bot /style');
+            const messagePrefix = isStyleFix ? 'Style fix' : 'Repo. Consistency fix';
 
             const { data: botComment } = await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: PR_NUMBER,
-              body: `Repo. Consistency fix is beginning .... [View the workflow run here](${runUrl}).`
+              body: `${messagePrefix} is beginning .... [View the workflow run here](${runUrl}).`
             });
             core.setOutput('comment_id', botComment.id);
 
@@ -111,7 +117,7 @@ jobs:
     runs-on: ubuntu-22.04
     needs: [get-pr-info, check-timestamps, init_comment_with_url]
     outputs:
-      changes_detected: ${{ steps.run_checks.outputs.changes_detected }}
+      changes_detected: ${{ steps.run_repo_checks.outputs.changes_detected || steps.run_style_checks.outputs.changes_detected }}
     steps:
       # Checkout the trusted base repository (main branch) - this is safe
       - name: Checkout base repository
@@ -133,27 +139,92 @@ jobs:
       - name: Fetch and checkout PR code manually
         env:
           PR_HEAD_REPO_FULL_NAME: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
+          PR_HEAD_REF: ${{ needs.get-pr-info.outputs.PR_HEAD_REF }}
           PR_HEAD_SHA: ${{ needs.check-timestamps.outputs.VERIFIED_PR_HEAD_SHA }}
         run: |
           # Create separate directory for PR code
           mkdir -p pr-repo
           cd pr-repo
           
-          # Initialize git and fetch only the specific commit
+          # Initialize git and fetch with full history
           git init
           git remote add pr-origin https://github.com/${PR_HEAD_REPO_FULL_NAME}.git
-          git fetch --depth=1 pr-origin ${PR_HEAD_SHA}
+          git fetch pr-origin ${PR_HEAD_REF}
           git checkout ${PR_HEAD_SHA}
 
-      - name: Run checks with trusted script
-        id: run_checks
+          # Also fetch main branch from upstream for comparison (required by `check_modular_conversion`)
+          git remote add upstream https://github.com/${{ github.repository }}.git
+          git fetch upstream main:main
+
+      - name: Copy trusted scripts from main branch
         run: |
-          # Copy trusted script to PR directory
+          # Security: Copy trusted scripts from main branch and run commands explicitly (not via make)
+          # to avoid executing potentially malicious Makefile or scripts from the PR
+          cp setup.py pr-repo/setup.py
+          cp utils/custom_init_isort.py pr-repo/utils/custom_init_isort.py
+          cp utils/sort_auto_mappings.py pr-repo/utils/sort_auto_mappings.py
+          cp utils/check_doc_toc.py pr-repo/utils/check_doc_toc.py
           cp utils/check_copies.py pr-repo/utils/check_copies.py
+          cp utils/check_modular_conversion.py pr-repo/utils/check_modular_conversion.py
+          cp utils/check_dummies.py pr-repo/utils/check_dummies.py
+          cp utils/check_pipeline_typing.py pr-repo/utils/check_pipeline_typing.py
+          cp utils/check_doctest_list.py pr-repo/utils/check_doctest_list.py
+          cp utils/check_docstrings.py pr-repo/utils/check_docstrings.py
+          cp utils/add_dates.py pr-repo/utils/add_dates.py
+
+      - name: Run repo consistency checks with trusted script
+        id: run_repo_checks
+        if: startsWith(github.event.comment.body, '@bot /repo')
+        run: |
+          # Continue on errors (like Makefile's - prefix)
+          set +e
           
-          # Run the trusted script in PR directory
+          # Run commands in PR directory (with the copied trusted scripts)
           cd pr-repo
+          
+          # Run style commands
+          ruff check examples tests src utils scripts benchmark benchmark_v2 setup.py conftest.py --fix
+          ruff format examples tests src utils scripts benchmark benchmark_v2 setup.py conftest.py
+          python utils/custom_init_isort.py
+          python utils/sort_auto_mappings.py
+          
+          # Run fix-repo commands
+          python setup.py deps_table_update
+          python utils/check_doc_toc.py --fix_and_overwrite
           python utils/check_copies.py --fix_and_overwrite
+          python utils/check_modular_conversion.py --fix_and_overwrite
+          python utils/check_dummies.py --fix_and_overwrite
+          python utils/check_pipeline_typing.py --fix_and_overwrite
+          python utils/check_doctest_list.py --fix_and_overwrite
+          python utils/check_docstrings.py --fix_and_overwrite
+          python utils/add_dates.py
+          
+          # Check if there are changes
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changes_detected=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes_detected=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run style checks with trusted script
+        id: run_style_checks
+        if: startsWith(github.event.comment.body, '@bot /style')
+        run: |
+          # Continue on errors (like Makefile's - prefix)
+          set +e
+          
+          # Run commands in PR directory (with the copied trusted scripts)
+          cd pr-repo
+          
+          # Run style commands
+          ruff check examples tests src utils scripts benchmark benchmark_v2 setup.py conftest.py --fix
+          ruff format examples tests src utils scripts benchmark benchmark_v2 setup.py conftest.py
+          python utils/sort_auto_mappings.py
+          
+          # Run fix-repo commands
+          python setup.py deps_table_update
+          python utils/check_doc_toc.py --fix_and_overwrite
+          python utils/check_docstrings.py --fix_and_overwrite
           
           # Check if there are changes
           if [ -n "$(git status --porcelain)" ]; then
@@ -163,7 +234,7 @@ jobs:
           fi
 
       - name: Save modified files
-        if: steps.run_checks.outputs.changes_detected == 'true'
+        if: steps.run_repo_checks.outputs.changes_detected == 'true' || steps.run_style_checks.outputs.changes_detected == 'true'
         run: |
           cd pr-repo
           mkdir -p ../artifact-staging
@@ -175,7 +246,7 @@ jobs:
           done < ../artifact-staging/modified-files.txt
 
       - name: Upload modified files
-        if: steps.run_checks.outputs.changes_detected == 'true'
+        if: steps.run_repo_checks.outputs.changes_detected == 'true' || steps.run_style_checks.outputs.changes_detected == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: modified-files
@@ -291,11 +362,19 @@ jobs:
         if: needs.init_comment_with_url.result == 'success'
         env:
           CHANGES_DETECTED: ${{ needs.run-repo-consistency-checks.outputs.changes_detected }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
-          if [ "$CHANGES_DETECTED" = 'true' ]; then
-            echo "final_comment=Repo. Consistency bot fixed some files and pushed the changes." >> $GITHUB_OUTPUT
+          # Determine which command was used
+          if [[ "$COMMENT_BODY" == "@bot /style"* ]]; then
+            MESSAGE_PREFIX="Style fix"
           else
-            echo "final_comment=Repo. Consistency fix runs successfully without any file modified." >> $GITHUB_OUTPUT
+            MESSAGE_PREFIX="Repo. Consistency"
+          fi
+          
+          if [ "$CHANGES_DETECTED" = 'true' ]; then
+            echo "final_comment=${MESSAGE_PREFIX} bot fixed some files and pushed the changes." >> $GITHUB_OUTPUT
+          else
+            echo "final_comment=${MESSAGE_PREFIX} fix runs successfully without any file modified." >> $GITHUB_OUTPUT
           fi
 
       - name: Comment on PR
