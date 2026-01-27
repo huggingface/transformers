@@ -290,6 +290,9 @@ class EdgeTamConfig(PreTrainedConfig):
     ```"""
 
     model_type = "edgetam"
+    # edgetam_video checkpoints can be loaded with EdgeTamModel since edgetam's
+    # weights are a subset of edgetam_video's weights - only the model_type in config differs
+    compatible_model_types = ("edgetam_video",)
     sub_configs = {
         "vision_config": AutoConfig,
         "prompt_encoder_config": EdgeTamPromptEncoderConfig,

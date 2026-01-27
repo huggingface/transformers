@@ -23,8 +23,18 @@ from pathlib import Path
 
 import httpx
 
-from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config, logging
+from transformers import (
+    AutoConfig,
+    BertConfig,
+    Florence2Config,
+    GPT2Config,
+    Sam2Config,
+    Sam3Config,
+    Sam3TrackerConfig,
+    logging,
+)
 from transformers.configuration_utils import PreTrainedConfig
+from transformers.models.edgetam.configuration_edgetam import EdgeTamConfig
 from transformers.testing_utils import (
     TOKEN,
     CaptureLogger,
@@ -410,3 +420,16 @@ class ConfigTestUtils(unittest.TestCase):
             self.assertIn(
                 "You are using a model of type other_model to instantiate a model of type incompatible_model", cl.out
             )
+
+    def test_sam2_sam3_edgetam_compatible_model_types(self):
+        """Test that SAM2, SAM3, EdgeTam, and Sam3Tracker configs have correct compatible_model_types."""
+        self.assertEqual(Sam2Config.compatible_model_types, ("sam2_video",))
+
+        # Sam3Config should be compatible with sam3_video (overrides inherited sam2_video)
+        self.assertEqual(Sam3Config.compatible_model_types, ("sam3_video",))
+
+        # Sam3TrackerConfig should be compatible with sam3_video
+        self.assertEqual(Sam3TrackerConfig.compatible_model_types, ("sam3_video",))
+
+        # EdgeTamConfig should be compatible with edgetam_video (overrides inherited sam2_video)
+        self.assertEqual(EdgeTamConfig.compatible_model_types, ("edgetam_video",))
