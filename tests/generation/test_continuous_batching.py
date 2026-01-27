@@ -297,6 +297,13 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         # Generation with continuous batching
         model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, dtype=dtype)
+        if (
+            attn_implementation == "flash_attention_2"
+            and torch_device == "cpu"
+            and getattr(model.config, "sliding_window", None) is not None
+            and model.config.sliding_window > 0
+        ):
+            self.skipTest("Flash Attention 2 with sliding window attention is not supported on CPU. Skipping test.")
         model = model.to(torch_device).eval()
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
