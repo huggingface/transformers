@@ -953,7 +953,7 @@ class ContinuousBatchingManager:
         logger.warning(
             f"No behavior specified for use_cuda_graph, defaulting to {use_cuda_graph = } because "
             f"{self.model.config._attn_implementation = }. If you want to save memory, turn off cuda graphs, but "
-            "they can improve performances."
+            "they tend to improve performances by a lot."
         )
         return use_cuda_graph
 
