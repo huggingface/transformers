@@ -27,8 +27,12 @@ import torchvision.transforms.v2.functional as tvF
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
-from ...utils import auto_docstring, requires_backends
+from ...utils import auto_docstring, is_cv2_available, requires_backends
 from ...utils.generic import TensorType
+
+
+if is_cv2_available():
+    import cv2
 
 
 @auto_docstring
@@ -163,8 +167,6 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         Returns:
             ndarray: The output mask after postprocessing.
         """
-        import cv2
-
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         if not contours:
@@ -181,9 +183,6 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         return polygon_points
 
     def _extract_polygon_points_by_masks(self, boxes, masks, scale_ratio):
-        requires_backends(self, ["cv2"])
-        import cv2
-
         scale_w, scale_h = scale_ratio[0] / 4, scale_ratio[1] / 4
         mask_height, mask_width = masks.shape[1:]
         polygon_points = []
@@ -240,7 +239,7 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and polygon_points for an image
             in the batch as predicted by the model.
         """
-        requires_backends(self, ["torch"])
+        requires_backends(self, ["torch", "cv2"])
         boxes = outputs.pred_boxes
         logits = outputs.logits
         order_logits = outputs.order_logits

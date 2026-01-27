@@ -37,6 +37,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...utils import (
     ModelOutput,
     auto_docstring,
+    is_cv2_available,
     logging,
     requires_backends,
 )
@@ -57,6 +58,10 @@ from ..rt_detr.modeling_rt_detr import (
     get_contrastive_denoising_training_group,
     inverse_sigmoid,
 )
+
+
+if is_cv2_available():
+    import cv2
 
 
 logger = logging.get_logger(__name__)
@@ -480,8 +485,6 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         Returns:
             ndarray: The output mask after postprocessing.
         """
-        import cv2
-
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         if not contours:
@@ -498,9 +501,6 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         return polygon_points
 
     def _extract_polygon_points_by_masks(self, boxes, masks, scale_ratio):
-        requires_backends(self, ["cv2"])
-        import cv2
-
         scale_w, scale_h = scale_ratio[0] / 4, scale_ratio[1] / 4
         mask_height, mask_width = masks.shape[1:]
         polygon_points = []
@@ -557,7 +557,7 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and polygon_points for an image
             in the batch as predicted by the model.
         """
-        requires_backends(self, ["torch"])
+        requires_backends(self, ["torch", "cv2"])
         boxes = outputs.pred_boxes
         logits = outputs.logits
         order_logits = outputs.order_logits
