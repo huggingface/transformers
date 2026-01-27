@@ -17,7 +17,7 @@ import os
 import re
 from collections import Counter
 
-import httpx
+import requests
 
 
 if __name__ == "__main__":
@@ -25,7 +25,7 @@ if __name__ == "__main__":
     parser.add_argument("--workflow_id", type=str, required=True)
     args = parser.parse_args()
 
-    r = httpx.get(
+    r = requests.get(
         f"https://circleci.com/api/v2/workflow/{args.workflow_id}/job",
         headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")},
     )
@@ -38,7 +38,7 @@ if __name__ == "__main__":
     for job in jobs:
         if job["name"].startswith(("tests_", "examples_", "pipelines_")):
             url = f"https://circleci.com/api/v2/project/{job['project_slug']}/{job['job_number']}/artifacts"
-            r = httpx.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
+            r = requests.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
             job_artifacts = r.json()["items"]
 
             os.makedirs(f"outputs/{job['name']}", exist_ok=True)
@@ -49,10 +49,10 @@ if __name__ == "__main__":
             for artifact in job_artifacts:
                 url = artifact["url"]
                 if artifact["path"].endswith("/summary_short.txt"):
-                    r = httpx.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
+                    r = requests.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
                     job_test_summaries[artifact["node_index"]] = r.text
                 elif artifact["path"].endswith("/failures_line.txt"):
-                    r = httpx.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
+                    r = requests.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
                     job_failure_lines[artifact["node_index"]] = r.text
 
             summary = {}
