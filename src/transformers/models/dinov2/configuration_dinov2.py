@@ -14,8 +14,8 @@
 """DINOv2 model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin
 from ...utils import logging
-from ...utils.backbone_utils import BackboneConfigMixin
 
 
 logger = logging.get_logger(__name__)

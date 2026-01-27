@@ -22,11 +22,11 @@ from torch import Tensor, nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_backbone_utils import load_backbone
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, is_timm_available, logging
-from ...utils.backbone_utils import load_backbone
 from .configuration_conditional_detr import ConditionalDetrConfig
 
 

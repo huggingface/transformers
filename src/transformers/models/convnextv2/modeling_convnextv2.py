@@ -18,6 +18,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...modeling_backbone_utils import BackboneMixin
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
@@ -26,7 +27,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import can_return_tuple
 from .configuration_convnextv2 import ConvNextV2Config
 

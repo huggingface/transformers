@@ -19,7 +19,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils.backbone_utils import BackboneConfigMixin
+from ...modeling_backbone_utils import BackboneConfigMixin
 
 
 class PixioConfig(BackboneConfigMixin, PreTrainedConfig):

@@ -19,6 +19,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin, BackboneMixin
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
@@ -28,7 +29,6 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
 )
-from ...utils.backbone_utils import BackboneConfigMixin, BackboneMixin
 from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetConvLayer
 
 

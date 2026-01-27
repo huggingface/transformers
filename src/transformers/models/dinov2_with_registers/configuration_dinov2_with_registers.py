@@ -21,7 +21,7 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils.backbone_utils import BackboneConfigMixin
+from ...modeling_backbone_utils import BackboneConfigMixin
 
 
 class Dinov2WithRegistersConfig(BackboneConfigMixin, PreTrainedConfig):

@@ -13,9 +13,9 @@
 # limitations under the License.
 """TextNet model configuration"""
 
-from transformers import PreTrainedConfig
-from transformers.utils import logging
-from transformers.utils.backbone_utils import BackboneConfigMixin
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)

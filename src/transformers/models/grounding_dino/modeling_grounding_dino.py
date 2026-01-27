@@ -25,10 +25,10 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_timm_available
 from ...integrations import use_kernel_forward_from_hub
+from ...modeling_backbone_utils import load_backbone
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
 from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import load_backbone
 from ..auto import AutoModel
 from .configuration_grounding_dino import GroundingDinoConfig
 

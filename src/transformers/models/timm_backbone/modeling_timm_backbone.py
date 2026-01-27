@@ -17,10 +17,10 @@ import torch
 from torch import Tensor, nn
 
 from ... import initialization as init
+from ...modeling_backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_timm_available, requires_backends
-from ...utils.backbone_utils import BackboneMixin
 from .configuration_timm_backbone import TimmBackboneConfig
 
 

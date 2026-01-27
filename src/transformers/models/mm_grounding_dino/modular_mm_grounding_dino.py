@@ -19,7 +19,6 @@ from torch import nn
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..grounding_dino.modeling_grounding_dino import (
@@ -223,14 +222,6 @@ class MMGroundingDinoConfig(PreTrainedConfig):
             backbone_model_type = backbone_config.pop("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
-            backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
-        )
 
         if text_config is None:
             text_config = {}

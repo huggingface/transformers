@@ -22,11 +22,11 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...modeling_backbone_utils import BackboneMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
 from .configuration_focalnet import FocalNetConfig
 
 

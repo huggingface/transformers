@@ -164,7 +164,7 @@ class BackboneConfigMixin:
         out_features = out_features if out_features is not None else self._out_features
         out_indices = out_indices if out_indices is not None else self._out_indices
 
-        out_indices = list(out_indices) if out_indices is not None else None
+        out_indices = list(out_indices) if isinstance(out_indices, tuple) else out_indices
         # First verify that the out_features and out_indices are valid
         self.verify_out_features_out_indices()
 

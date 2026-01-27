@@ -30,10 +30,10 @@ from ...file_utils import (
 )
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_backbone_utils import load_backbone
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import load_backbone
 from ..auto import AutoModel
 from .configuration_omdet_turbo import OmDetTurboConfig
 

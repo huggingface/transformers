@@ -27,10 +27,10 @@ from ....transformers.models.dinov2.modeling_dinov2 import (
 )
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging, torch_int
-from ...utils.backbone_utils import BackboneConfigMixin
 
 
 logger = logging.get_logger(__name__)

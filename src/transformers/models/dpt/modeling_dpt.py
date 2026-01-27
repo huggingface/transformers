@@ -28,12 +28,12 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...modeling_backbone_utils import load_backbone
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.backbone_utils import load_backbone
 from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_dpt import DPTConfig
 
