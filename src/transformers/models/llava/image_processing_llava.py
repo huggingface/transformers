@@ -44,43 +44,30 @@ logger = logging.get_logger(__name__)
 
 
 class LlavaTorchVisionBackend(TorchVisionBackend):
-    """TorchVision backend for LLaVA with custom pad_to_square and preprocessing order."""
-
     def pad_to_square(
         self,
         images: "torch.Tensor",
-        background_color: Union[int, tuple[int, int, int]] = 0,
+        background_color: int | tuple[int, int, int] = 0,
     ) -> "torch.Tensor":
         """
-        Pads images to a square based on the longest edge.
+        Pads an image to a square based on the longest edge.
 
         Args:
             images (`torch.Tensor`):
                 The images to pad. Shape: (batch_size, num_channels, height, width) or (num_channels, height, width).
             background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
-                The color to use for the padding.
-
+                The color to use for the padding. Can be an integer for single channel or a
+                tuple of integers representing for multi-channel images. If passed as integer
+                in multi-channel mode, it will default to `0` in subsequent channels.
         Returns:
             `torch.Tensor`: The padded images.
         """
-        # Handle both batched and single image cases
-        if images.ndim == 3:
-            images = images.unsqueeze(0)
-            was_single = True
-        else:
-            was_single = False
-
         height, width = images.shape[-2:]
-        num_channels = images.shape[1]
-
-        # Convert to Python ints if they're tensor scalars
-        height = int(height)
-        width = int(width)
 
         if height == width:
-            return images.squeeze(0) if was_single else images
+            return images
 
-        # Ensure background_color is the correct shape
+        num_channels = images.shape[1]
         if isinstance(background_color, int):
             background_color = [background_color] + [0] * (num_channels - 1)
         elif len(background_color) != num_channels:
@@ -93,12 +80,11 @@ class LlavaTorchVisionBackend(TorchVisionBackend):
         paste_y_left = (max_dim - height) // 2
         paste_x_right = max_dim - width - paste_x_left
         paste_y_right = max_dim - height - paste_y_left
-
         padded_images = F.pad(
             images, padding=[paste_x_left, paste_y_left, paste_x_right, paste_y_right], fill=background_color
         )
 
-        return padded_images.squeeze(0) if was_single else padded_images
+        return padded_images
 
     def preprocess(
         self,
@@ -119,21 +105,20 @@ class LlavaTorchVisionBackend(TorchVisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Custom preprocessing for LLaVA: pad_to_square -> resize -> center_crop -> rescale_and_normalize.
-        """
-        # Apply pad_to_square first if needed (before resize)
-        if do_pad:
-            # Get background color from image_mean (converted to 0-255 range)
-            background_color = tuple(int(x * 255) for x in image_mean) if image_mean else 0
-            padded_images = []
-            for image in images:
-                padded_image = self.pad_to_square(image, background_color=background_color)
-                padded_images.append(padded_image)
-            images = padded_images
-
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_pad:
+                stacked_images = self.pad_to_square(
+                    images=stacked_images, background_color=tuple(int(x * 255) for x in self.image_mean)
+                )
+            resized_images_grouped[shape] = stacked_images
+        padded_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        # Group images by size for batched resizing
+        # Needed in case do_pad is False, or padding returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(padded_images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -142,17 +127,15 @@ class LlavaTorchVisionBackend(TorchVisionBackend):
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
             # Fused rescale and normalize
-            # Convert lists to tuples for lru_cache compatibility
-            image_mean_tuple = tuple(image_mean) if isinstance(image_mean, list) else image_mean
-            image_std_tuple = tuple(image_std) if isinstance(image_std, list) else image_std
-            stacked_images = self._rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean_tuple, image_std_tuple
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images
 
@@ -162,8 +145,6 @@ class LlavaTorchVisionBackend(TorchVisionBackend):
 
 
 class LlavaPythonBackend(PythonBackend):
-    """Python backend for LLaVA with custom pad_to_square and preprocessing order."""
-
     def pad_to_square(
         self,
         image: np.ndarray,
@@ -228,9 +209,6 @@ class LlavaPythonBackend(PythonBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Custom preprocessing for LLaVA: pad_to_square -> resize -> center_crop -> rescale -> normalize.
-        """
         processed_images = []
         for image in images:
             # Apply pad_to_square first if needed (before resize)
