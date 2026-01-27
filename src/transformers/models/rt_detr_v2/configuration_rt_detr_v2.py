@@ -199,10 +199,7 @@ class RTDetrV2Config(PreTrainedConfig):
         # backbone
         backbone_config=None,
         backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
         freeze_backbone_batch_norms=True,
-        backbone_kwargs=None,
         # encoder HybridEncoder
         encoder_hidden_dim=256,
         encoder_in_channels=[512, 1024, 2048],

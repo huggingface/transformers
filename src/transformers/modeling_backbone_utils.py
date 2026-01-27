@@ -307,8 +307,6 @@ def consolidate_backbone_kwargs_to_config(
         config_class = CONFIG_MAPPING[backbone_model_type]
         backbone_config = config_class.from_dict(backbone_config)
 
-    # if backbone_config is None:
-    #     raise ValueError(f"Failed to infer `backbone_config` for {self.__class__.__name__}")
     return backbone_config, kwargs
 
 

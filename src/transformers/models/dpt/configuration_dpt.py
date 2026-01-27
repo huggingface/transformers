@@ -200,8 +200,9 @@ class DPTConfig(PreTrainedConfig):
             )
             if readout_type != "project":
                 raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
-        elif backbone_config is not None:
+        elif backbone is not None or backbone_config is not None:
             backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+                backbone=backbone,
                 backbone_config=backbone_config,
                 **kwargs,
             )
