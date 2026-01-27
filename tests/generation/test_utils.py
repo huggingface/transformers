@@ -1603,7 +1603,9 @@ class GenerationTesterMixin:
                 )
 
             for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
-                self.assertTrue(has_similar_generate_outputs(dynamic_result, compiled_result))
+                # Increased tolerance for MoE models where small numerical differences in router scores
+                # can lead to different expert selection between eager and compiled execution
+                self.assertTrue(has_similar_generate_outputs(dynamic_result, compiled_result, atol=1e-3, rtol=1e-3))
 
     @pytest.mark.generate
     def test_generate_compilation_all_outputs(self):
