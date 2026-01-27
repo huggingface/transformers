@@ -215,6 +215,8 @@ class GlmImageTextConfig(Glm4vTextConfig):
             by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
         attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
 
     ```python
     >>> from transformers import GlmImageTextModel, GlmImageConfig
