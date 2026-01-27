@@ -32,7 +32,7 @@ COMMON_ENV_VARIABLES = {
     "DISABLE_SAFETENSORS_CONVERSION": True,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
-COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "vvv": None, "rsfE":None}
+COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "vvv": None, "rsfE":None, "random-order-bucket": "module", "random-order-seed": "${CIRCLE_BUILD_NUM:-0}"}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 # Strings that commonly appear in the output of flaky tests when they fail. These are used with `pytest-rerunfailures`
@@ -111,6 +111,8 @@ class CircleCIJob:
             self.install_steps = ["uv pip install ."]
         # Use a custom patched pytest to force exit the process at the end, to avoid `Too long with no output (exceeded 10m0s): context deadline exceeded`
         self.install_steps.append("uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh")
+        # Install pytest-random-order plugin for test randomization
+        self.install_steps.append("uv pip install pytest-random-order")
         if self.pytest_options is None:
             self.pytest_options = {}
         if isinstance(self.tests_to_run, str):
