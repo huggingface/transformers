@@ -3071,7 +3071,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def init_weights(self):
         """
-        Maybe initializes weights. If using a custom `PreTrainedModel`, you need to implement any
+        Initialize and tie the weights if needed. If using a custom `PreTrainedModel`, you need to implement any
         initialization logic in `_init_weights`.
         """
         # If we are initializing on meta device, there is no point in trying to run inits
