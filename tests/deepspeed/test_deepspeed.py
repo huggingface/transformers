@@ -493,9 +493,10 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
             # Without the fix, expert_params_to_check would be empty (all MISSING)
             self.assertGreater(
-                len(expert_params_to_check), 0,
+                len(expert_params_to_check),
+                0,
                 "No expert weights found - weight conversion failed! "
-                "Expected fused gate_up_proj and down_proj but found none."
+                "Expected fused gate_up_proj and down_proj but found none.",
             )
 
             with deepspeed.zero.GatheredParameters([param for _, param in expert_params_to_check], modifier_rank=0):
