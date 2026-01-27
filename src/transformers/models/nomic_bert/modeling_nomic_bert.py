@@ -171,12 +171,12 @@ class NomicBertRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (
+                self.inv_freq[None, :, None].to(device=x.device, dtype=x.dtype)
+                @ position_ids[:, None, :].to(dtype=x.dtype)
+            ).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
@@ -316,6 +316,8 @@ class NomicBertSelfAttention(nn.Module):
             cos, sin = position_ids
             query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
 
+        query_layer = query_layer * self.scaling
+
         # Handle KV Cache
         if past_key_values is not None:
             cache_kwargs = {}
@@ -347,7 +349,7 @@ class NomicBertSelfAttention(nn.Module):
                 value_layer,
                 attention_mask,
                 dropout=0.0 if not self.training else self.dropout.p,
-                scaling=self.scaling,
+                scaling=1.0,
                 **kwargs,
             )
 
@@ -1038,15 +1040,6 @@ class NomicBertModel(NomicBertPreTrainedModel):
             **kwargs,
         )
         sequence_output = encoder_outputs.last_hidden_state
-
-        if binary_mask is not None:
-            mask_expanded = binary_mask.unsqueeze(-1).to(sequence_output.dtype)
-
-            sequence_output = sequence_output * mask_expanded
-
-            if encoder_outputs.hidden_states is not None:
-                new_hidden_states = tuple(h * mask_expanded for h in encoder_outputs.hidden_states)
-                encoder_outputs.hidden_states = new_hidden_states
 
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
