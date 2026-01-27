@@ -34,7 +34,6 @@ from ...pytorch_utils import meshgrid
 from ...utils import (
     ModelOutput,
     auto_docstring,
-    is_timm_available,
     logging,
     torch_compilable_check,
 )
@@ -42,10 +41,6 @@ from .configuration_deformable_detr import DeformableDetrConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-if is_timm_available():
-    pass
 
 
 logger = logging.get_logger(__name__)

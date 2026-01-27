@@ -38,13 +38,15 @@ Initialize [`DetrConfig`] with the pre-trained DINOv3 ConvNext backbone. Use `nu
 ```py
 from transformers import DetrConfig, DetrForObjectDetection, AutoImageProcessor
 
+# Create a model with randomly initialized weights
 config = DetrConfig(backbone="facebook/dinov3-convnext-large-pretrain-lvd1689m",
-                    use_pretrained_backbone=True, use_timm_backbone=False,
                     num_labels=1, id2label={0: "license_plate"}, label2id={"license_plate": 0})
 model = DetrForObjectDetection(config)
 
-for param in model.model.backbone.parameters():
-    param.requires_grad = False
+# Load pretrained backbone weights and freeze them
+model.model.backbone = AutoBackbone.from_pretrained("facebook/dinov3-convnext-large-pretrain-lvd1689m")
+model.model.freeze_backbone()
+
 image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
 ```
 

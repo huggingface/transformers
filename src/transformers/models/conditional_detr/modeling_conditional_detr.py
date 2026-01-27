@@ -26,12 +26,8 @@ from ...modeling_backbone_utils import load_backbone
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, is_timm_available, logging
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_conditional_detr import ConditionalDetrConfig
-
-
-if is_timm_available():
-    pass
 
 
 logger = logging.get_logger(__name__)

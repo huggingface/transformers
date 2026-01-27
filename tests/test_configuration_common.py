@@ -232,11 +232,11 @@ class ConfigTester:
             raise ValueError(f"The following keys were not properly set in the config:\n{errors}")
 
     def run_common_tests(self):
-        # self.create_and_test_config_common_properties()
-        # self.create_and_test_config_to_json_string()
-        # self.create_and_test_config_to_json_file()
-        # self.create_and_test_config_from_and_save_pretrained()
-        # self.create_and_test_config_from_and_save_pretrained_subfolder()
+        self.create_and_test_config_common_properties()
+        self.create_and_test_config_to_json_string()
+        self.create_and_test_config_to_json_file()
+        self.create_and_test_config_from_and_save_pretrained()
+        self.create_and_test_config_from_and_save_pretrained_subfolder()
         self.create_and_test_config_from_and_save_pretrained_composite()
         self.create_and_test_config_with_num_labels()
         self.check_config_can_be_init_without_params()

@@ -29,14 +29,9 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
     auto_docstring,
-    is_timm_available,
     logging,
 )
 from .configuration_detr import DetrConfig
-
-
-if is_timm_available():
-    pass
 
 
 logger = logging.get_logger(__name__)

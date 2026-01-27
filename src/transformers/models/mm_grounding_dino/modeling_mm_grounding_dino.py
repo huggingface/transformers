@@ -27,7 +27,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...file_utils import ModelOutput, is_timm_available
+from ...file_utils import ModelOutput
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_backbone_utils import load_backbone
 from ...modeling_utils import PreTrainedModel
@@ -35,10 +35,6 @@ from ...pytorch_utils import meshgrid
 from ...utils import auto_docstring, torch_compilable_check
 from ..auto.modeling_auto import AutoModel
 from .configuration_mm_grounding_dino import MMGroundingDinoConfig
-
-
-if is_timm_available():
-    pass
 
 
 class MMGroundingDinoContrastiveEmbedding(nn.Module):
