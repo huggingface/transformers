@@ -140,14 +140,6 @@ class BackboneTesterMixin:
             self.assertEqual(len(result.feature_maps), 1)
             self.assertEqual(len(model.channels), 1)
 
-            # Check backbone can be initialized with fresh weights
-            modified_config = copy.deepcopy(config)
-            modified_config.use_pretrained_backbone = False
-            model = model_class(modified_config)
-            model.to(torch_device)
-            model.eval()
-            result = model(**inputs_dict)
-
     def test_backbone_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 

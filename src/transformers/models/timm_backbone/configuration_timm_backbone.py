@@ -15,13 +15,14 @@
 """Configuration for Backbone models"""
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class TimmBackboneConfig(PreTrainedConfig):
+class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration for a timm backbone [`TimmBackbone`].
 
@@ -70,13 +71,43 @@ class TimmBackboneConfig(PreTrainedConfig):
         output_stride=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.backbone = backbone
         self.num_channels = num_channels
         self.features_only = features_only
         self.out_indices = out_indices if out_indices is not None else [-1]
         self.output_stride = output_stride
         self.freeze_batch_norm_2d = freeze_batch_norm_2d
+
+        # self._out_features = kwargs.pop("out_features", None)
+        super().__init__(**kwargs)
+
+    @property
+    def out_indices(self):
+        return self._out_indices
+
+    @out_indices.setter
+    def out_indices(self, out_indices: tuple[int, ...] | list[int]):
+        """
+        Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
+        """
+        self._out_indices = list(out_indices) if out_indices is not None else out_indices
+        if getattr(self, "stage_names", None) is not None:
+            self._out_features = None
+            self.align_output_features_output_indices()
+
+    @property
+    def out_features(self):
+        return self._out_features
+
+    @out_features.setter
+    def out_features(self, out_features: list[str]):
+        """
+        Set the out_features attribute. This will also update the out_indices attribute to match the new out_features.
+        """
+        self._out_features = out_features
+        if getattr(self, "stage_names", None) is not None:
+            self._out_indices = None
+            self.align_output_features_output_indices()
 
 
 __all__ = ["TimmBackboneConfig"]

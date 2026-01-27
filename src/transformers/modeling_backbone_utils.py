@@ -14,6 +14,7 @@
 
 """Collection of utils to be used by backbones and their components."""
 
+import copy
 import enum
 import inspect
 
@@ -30,118 +31,34 @@ class BackboneType(enum.Enum):
     TRANSFORMERS = "transformers"
 
 
-class BackboneMixin:
-    backbone_type: BackboneType | None = None
-
-    # Attribute to indicate if the backbone has attention and can return attention outputs.
-    # Should be set to `False` for conv-based models to be able to run `forward_with_filtered_kwargs`
-    has_attentions: bool = True
-
-    def _init_timm_backbone(self, config) -> None:
-        """
-        Initialize the backbone model from timm The backbone must already be loaded to self._backbone
-        """
-
-        # These will diagree with the defaults for the transformers models e.g. for resnet50
-        # the transformer model has out_features = ['stem', 'stage1', 'stage2', 'stage3', 'stage4']
-        # the timm model has out_features = ['act', 'layer1', 'layer2', 'layer3', 'layer4']
-        self.stage_names = [stage["module"] for stage in self._backbone.feature_info.info]
-        self.num_features = [stage["num_chs"] for stage in self._backbone.feature_info.info]
-
-        # In some timm versions, out_indices reflects the input type of out_indices on the `create_model` call,
-        # in later versions >= 1, it is always a tuple
-        self.config._out_indices = list(self._backbone.feature_info.out_indices)
-        self.config._out_features = self._backbone.feature_info.module_name()
-        self.config.stage_names = self.stage_names
-
-        # We verify the out indices and out features are valid
-        self.config.verify_out_features_out_indices()
-
-    def _init_transformers_backbone(self, config) -> None:
-        self.stage_names = config.stage_names
-        self.config.align_output_features_output_indices()
-        # Number of channels for each stage. This is set in the transformer backbone model init
-        self.num_features = None
-
-    def _init_backbone(self, config) -> None:
-        """
-        Method to initialize the backbone. This method is called by the constructor of the base class after the
-        pretrained model weights have been loaded.
-        """
-        self.config = config
-        if getattr(self, "_backbone", None) is not None:
-            self.backbone_type = BackboneType.TIMM
-        else:
-            self.backbone_type = BackboneType.TRANSFORMERS
-
-        if self.backbone_type == BackboneType.TIMM:
-            self._init_timm_backbone(config)
-        elif self.backbone_type == BackboneType.TRANSFORMERS:
-            self._init_transformers_backbone(config)
-        else:
-            raise ValueError(f"backbone_type {self.backbone_type} not supported.")
-
-    @property
-    def out_features(self):
-        return self.config._out_features
-
-    @out_features.setter
-    def out_features(self, out_features: list[str]):
-        """
-        Set the out_features attribute. This will also update the out_indices attribute to match the new out_features.
-        """
-        self.config.out_features = out_features
-
-    @property
-    def out_indices(self):
-        return self.config._out_indices
-
-    @out_indices.setter
-    def out_indices(self, out_indices: tuple[int] | list[int]):
-        """
-        Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
-        """
-        self.config.out_indices = out_indices
-
-    @property
-    def out_feature_channels(self):
-        # the current backbones will output the number of channels for each stage
-        # even if that stage is not in the out_features list.
-        return {stage: self.num_features[i] for i, stage in enumerate(self.stage_names)}
-
-    @property
-    def channels(self):
-        return [self.out_feature_channels[name] for name in self.out_features]
-
-    def forward_with_filtered_kwargs(self, *args, **kwargs):
-        if not self.has_attentions:
-            kwargs.pop("output_attentions", None)
-        if self.backbone_type == BackboneType.TIMM:
-            signature = dict(inspect.signature(self.forward).parameters)
-            kwargs = {k: v for k, v in kwargs.items() if k in signature}
-        return self(*args, **kwargs)
-
-    def forward(
-        self,
-        pixel_values,
-        output_hidden_states: bool | None = None,
-        output_attentions: bool | None = None,
-        return_dict: bool | None = None,
-    ):
-        raise NotImplementedError("This method should be implemented by the derived class.")
-
-
 class BackboneConfigMixin:
     """
     A Mixin to support handling the `out_features` and `out_indices` attributes for the backbone configurations.
     """
 
-    def align_output_features_output_indices(
+    def set_output_features_output_indices(
         self,
-        out_features: list[str] | None = None,
-        out_indices: list[int] | tuple[int, ...] | None = None,
-        stage_names: list[str] | None = None,
+        stage_names: list | None = None,
+        out_features: list | None = None,
+        out_indices: list | None = None,
     ):
+        """
+        Sets output indices and features to new values and aligns them with the given `stage_names`.
+
+        Args:
+            out_features (`list[str]`, *optional*):
+                The names of the features for the backbone to output. Defaults to `config._out_features` if not provided.
+            out_indices (`list[int]` or `tuple[int]`, *optional*):
+                The indices of the features for the backbone to output. Defaults to `config._out_indices` if not provided.
+            stage_names (`list[str]`, *optional*):
+                The names of the stages of the backbone. Defaults to `config.stage_names` if not provided.
+        """
+        self.stage_names = stage_names if stage_names is not None else self.stage_names
+        self._out_features = out_features if out_features is not None else self._out_features
+        self._out_indices = out_indices if out_indices is not None else self._out_indices
+        self.align_output_features_output_indices()
+
+    def align_output_features_output_indices(self):
         """
         Finds the corresponding `out_features` and `out_indices` for the given `stage_names`.
 
@@ -152,27 +69,20 @@ class BackboneConfigMixin:
             `out_features`.
             - `out_indices` and `out_features` not set: `out_indices` and `out_features` are set to the last stage.
             - `out_indices` and `out_features` set: input `out_indices` and `out_features` are returned.
-
-        Args:
-            out_features (`list[str]`): The names of the features for the backbone to output.
-            out_indices (`list[int]` or `tuple[int]`): The indices of the features for the backbone to output.
-            stage_names (`list[str]`): The names of the stages of the backbone.
         """
-        stage_names = stage_names if stage_names is not None else self.stage_names
-        out_features = out_features if out_features is not None else self._out_features
-        out_indices = out_indices if out_indices is not None else self._out_indices
 
-        out_indices = list(out_indices) if isinstance(out_indices, tuple) else out_indices
         # First verify that the out_features and out_indices are valid
+        self._out_indices = list(self._out_indices) if isinstance(self._out_indices, tuple) else self._out_indices
         self.verify_out_features_out_indices()
 
+        out_features, out_indices = self._out_features, self._out_indices
         if out_indices is None and out_features is None:
-            out_indices = [len(stage_names) - 1]
-            out_features = [stage_names[-1]]
+            out_indices = [len(self.stage_names) - 1]
+            out_features = [self.stage_names[-1]]
         elif out_indices is None and out_features is not None:
-            out_indices = [stage_names.index(layer) for layer in out_features]
+            out_indices = [self.stage_names.index(layer) for layer in out_features]
         elif out_features is None and out_indices is not None:
-            out_features = [stage_names[idx] for idx in out_indices]
+            out_features = [self.stage_names[idx] for idx in out_indices]
 
         # Update values and verify that the aligned out_features and out_indices are valid
         self._out_features, self._out_indices = out_features, out_indices
@@ -260,9 +170,108 @@ class BackboneConfigMixin:
         include the `out_features` and `out_indices` attributes.
         """
         output = super().to_dict()
-        output["out_features"] = output.pop("_out_features")
-        output["out_indices"] = output.pop("_out_indices")
+        output["out_features"] = output.pop("_out_features", None)
+        output["out_indices"] = output.pop("_out_indices", None)
         return output
+
+
+class BackboneMixin:
+    backbone_type: BackboneType | None = None
+
+    # Attribute to indicate if the backbone has attention and can return attention outputs.
+    # Should be set to `False` for conv-based models to be able to run `forward_with_filtered_kwargs`
+    has_attentions: bool = True
+
+    def _init_timm_backbone(self, config) -> None:
+        """
+        Initialize the backbone model from timm The backbone must already be loaded to self._backbone
+        """
+
+        # These will diagree with the defaults for the transformers models e.g. for resnet50
+        # the transformer model has out_features = ['stem', 'stage1', 'stage2', 'stage3', 'stage4']
+        # the timm model has out_features = ['act', 'layer1', 'layer2', 'layer3', 'layer4']
+        self.stage_names = [stage["module"] for stage in self._backbone.feature_info.info]
+        self.num_features = [stage["num_chs"] for stage in self._backbone.feature_info.info]
+
+        self.config._out_indices = list(self._backbone.feature_info.out_indices)
+        self.config._out_features = self._backbone.feature_info.module_name()
+        self.config.stage_names = self.stage_names
+
+        # We verify the out indices and out features are valid
+        self.config.verify_out_features_out_indices()
+
+    def _init_transformers_backbone(self, config) -> None:
+        self.stage_names = config.stage_names
+        self.config.align_output_features_output_indices()
+        # Number of channels for each stage. This is set in the transformer backbone model init
+        self.num_features = None
+
+    def _init_backbone(self, config) -> None:
+        """
+        Method to initialize the backbone. This method is called by the constructor of the base class after the
+        pretrained model weights have been loaded.
+        """
+        self.config = config
+        if getattr(self, "_backbone", None) is not None:
+            self.backbone_type = BackboneType.TIMM
+        else:
+            self.backbone_type = BackboneType.TRANSFORMERS
+
+        if self.backbone_type == BackboneType.TIMM:
+            self._init_timm_backbone(config)
+        elif self.backbone_type == BackboneType.TRANSFORMERS:
+            self._init_transformers_backbone(config)
+        else:
+            raise ValueError(f"backbone_type {self.backbone_type} not supported.")
+
+    @property
+    def out_features(self):
+        return self.config._out_features
+
+    @out_features.setter
+    def out_features(self, out_features: list[str]):
+        """
+        Set the out_features attribute. This will also update the out_indices attribute to match the new out_features.
+        """
+        self.config.out_features = out_features
+
+    @property
+    def out_indices(self):
+        return self.config._out_indices
+
+    @out_indices.setter
+    def out_indices(self, out_indices: tuple[int] | list[int]):
+        """
+        Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
+        """
+        self.config.out_indices = out_indices
+
+    @property
+    def out_feature_channels(self):
+        # the current backbones will output the number of channels for each stage
+        # even if that stage is not in the out_features list.
+        return {stage: self.num_features[i] for i, stage in enumerate(self.stage_names)}
+
+    @property
+    def channels(self):
+        return [self.out_feature_channels[name] for name in self.out_features]
+
+    def forward_with_filtered_kwargs(self, *args, **kwargs):
+        if not self.has_attentions:
+            kwargs.pop("output_attentions", None)
+        if self.backbone_type == BackboneType.TIMM:
+            signature = dict(inspect.signature(self.forward).parameters)
+            kwargs = {k: v for k, v in kwargs.items() if k in signature}
+        return self(*args, **kwargs)
+
+    def forward(
+        self,
+        pixel_values,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
+    ):
+        raise NotImplementedError("This method should be implemented by the derived class.")
 
 
 def consolidate_backbone_kwargs_to_config(
@@ -324,6 +333,7 @@ def load_backbone(config):
     """
     from transformers import AutoBackbone
 
+    config = copy.deepcopy(config)
     backbone_config = getattr(config, "backbone_config", None)
 
     if backbone_config is None:
