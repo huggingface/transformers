@@ -571,12 +571,14 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
         Examples:
         ```python
         >>> import torch
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import HGNetV2ForImageClassification, AutoImageProcessor
         >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> model = HGNetV2ForImageClassification.from_pretrained("ustc-community/hgnet-v2")
         >>> processor = AutoImageProcessor.from_pretrained("ustc-community/hgnet-v2")

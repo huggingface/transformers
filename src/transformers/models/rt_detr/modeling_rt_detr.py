@@ -33,6 +33,7 @@ from ...utils import (
     ModelOutput,
     auto_docstring,
     logging,
+    torch_compilable_check,
     torch_int,
 )
 from .configuration_rt_detr import RTDetrConfig
@@ -719,10 +720,10 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
         total_elements = sum(height * width for height, width in spatial_shapes_list)
-        if total_elements != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
+        torch_compilable_check(
+            total_elements == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:
@@ -1615,10 +1616,12 @@ class RTDetrModel(RTDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, RTDetrModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
         >>> model = RTDetrModel.from_pretrained("PekingU/rtdetr_r50vd")
@@ -1866,11 +1869,13 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         ```python
         >>> from transformers import RTDetrImageProcessor, RTDetrForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
         >>> model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd")

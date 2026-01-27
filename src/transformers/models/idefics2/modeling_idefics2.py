@@ -26,11 +26,11 @@ from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils.generic import check_model_inputs, is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
 
@@ -146,29 +146,33 @@ class Idefics2VisionEmbeddings(nn.Module):
             size=(batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0, device=pixel_values.device
         )
 
-        for batch_idx, p_attn_mask in enumerate(patch_attention_mask):
-            nb_patches_h = p_attn_mask[:, 0].sum()
-            nb_patches_w = p_attn_mask[0].sum()
+        nb_patches_h = patch_attention_mask[:, :, 0].sum(dim=1)  # (batch_size,)
+        nb_patches_w = patch_attention_mask[:, 0, :].sum(dim=1)  # (batch_size,)
 
-            step_h = 1.0 / nb_patches_h
-            step_w = 1.0 / nb_patches_w
+        step_h = 1.0 / nb_patches_h  # (batch_size,)
+        step_w = 1.0 / nb_patches_w  # (batch_size,)
 
-            h_indices = torch.arange(nb_patches_h, device=position_ids.device, dtype=torch.float32)
-            w_indices = torch.arange(nb_patches_w, device=position_ids.device, dtype=torch.float32)
-            fractional_coords_h = h_indices * step_h
-            fractional_coords_w = w_indices * step_w
+        max_patches_h = patch_attention_mask.size(1)
+        max_patches_w = patch_attention_mask.size(2)
+        h_indices = torch.arange(max_patches_h, device=position_ids.device, dtype=torch.float32)
+        w_indices = torch.arange(max_patches_w, device=position_ids.device, dtype=torch.float32)
 
-            fractional_coords_h = torch.clamp(fractional_coords_h, max=(1.0 - 1e-6))
-            fractional_coords_w = torch.clamp(fractional_coords_w, max=(1.0 - 1e-6))
+        fractional_coords_h = h_indices[None, :] * step_h[:, None]
+        fractional_coords_w = w_indices[None, :] * step_w[:, None]
 
-            fractional_coords_h = fractional_coords_h.to(pixel_values.dtype)
-            fractional_coords_w = fractional_coords_w.to(pixel_values.dtype)
+        fractional_coords_h = torch.clamp(fractional_coords_h, max=(1.0 - 1e-6))
+        fractional_coords_w = torch.clamp(fractional_coords_w, max=(1.0 - 1e-6))
 
-            bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
-            bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
+        fractional_coords_h = fractional_coords_h.to(pixel_values.dtype)
+        fractional_coords_w = fractional_coords_w.to(pixel_values.dtype)
 
-            pos_ids = (bucket_coords_h[:, None] * self.num_patches_per_side + bucket_coords_w).flatten()
-            position_ids[batch_idx][p_attn_mask.view(-1)] = pos_ids
+        bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
+        bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
+
+        pos_ids = bucket_coords_h[:, :, None] * self.num_patches_per_side + bucket_coords_w[:, None, :]
+        pos_ids = pos_ids.reshape(batch_size, -1)
+
+        position_ids[patch_attention_mask.view(batch_size, -1)] = pos_ids[patch_attention_mask.view(batch_size, -1)]
 
         embeddings = embeddings + self.position_embedding(position_ids)
         return embeddings
@@ -488,9 +492,9 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         # The call to `_upad_input` in `_flash_attention_forward` is expensive
         # So when the `patch_attention_mask` is full of 1s (i.e. attending to the whole sequence),
         # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
-        if not torch.any(~patch_attention_mask):
+        if not is_torchdynamo_compiling() and not torch.any(~patch_attention_mask):
             patch_attention_mask = None
-        elif self.config._attn_implementation != "flash_attention_2":
+        elif not is_flash_attention_requested(self.config):
             patch_attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
 
         encoder_outputs: BaseModelOutput = self.encoder(
@@ -693,7 +697,7 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
     config: Idefics2PerceiverConfig
     input_modalities = ("image",)
     _supports_sdpa = True
-    _supports_flash_attention_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
 
     def __init__(self, config) -> None:
@@ -733,7 +737,7 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
         attention_mask = torch.cat([attention_mask, latent_attention_mask], dim=-1)
         attention_mask = (
             _prepare_4d_attention_mask(attention_mask, latents.dtype, tgt_len=self.n_latents)
-            if self.config._attn_implementation != "flash_attention_2"
+            if not is_flash_attention_requested(self.config)
             else attention_mask
         )
 
@@ -823,17 +827,19 @@ class Idefics2Model(Idefics2PreTrainedModel):
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
         return inputs_embeds
 
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, pixel_attention_mask: torch.LongTensor | None = None
-    ):
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            pixel_attention_mask (`torch.LongTensor`, *optional*):
-                The attention mask indicating padded regions in the image.
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_attention_mask: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        pixel_attention_mask (`torch.LongTensor`, *optional*):
+            The attention mask indicating padded regions in the image.
         """
         batch_size, num_images, num_channels, height, width = pixel_values.shape
         pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
@@ -861,15 +867,18 @@ class Idefics2Model(Idefics2PreTrainedModel):
         patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
         patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) == patch_size * patch_size).bool()
         # Get sequence from the vision encoder
-        image_hidden_states = self.vision_model(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
-        image_hidden_states = image_hidden_states.last_hidden_state
+        image_outputs = self.vision_model(
+            pixel_values=pixel_values, patch_attention_mask=patch_attention_mask, return_dict=True, **kwargs
+        )
+        image_hidden_states = image_outputs.last_hidden_state
 
         # Modality projection & resampling
-        image_hidden_states = self.connector(
+        image_features = self.connector(
             image_hidden_states, attention_mask=patch_attention_mask.view(pixel_values.size(0), -1)
         )
-        image_hidden_states = image_hidden_states.view(-1, image_hidden_states.shape[-1])
-        return image_hidden_states
+        image_outputs.pooler_output = image_features.view(-1, image_features.shape[-1])
+
+        return image_outputs
 
     @can_return_tuple
     @auto_docstring(
@@ -929,7 +938,9 @@ class Idefics2Model(Idefics2PreTrainedModel):
         if pixel_values is not None and image_hidden_states is not None:
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
-            image_hidden_states = self.get_image_features(pixel_values, pixel_attention_mask)
+            image_hidden_states = self.get_image_features(
+                pixel_values, pixel_attention_mask, return_dict=True
+            ).pooler_output
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
 
@@ -987,10 +998,22 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
     def set_input_embeddings(self, value):
         self.model.text_model.set_input_embeddings(value)
 
+    @auto_docstring
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, pixel_attention_mask: torch.LongTensor | None = None
-    ):
-        return self.model.get_image_features(pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask)
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_attention_mask: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        pixel_attention_mask (`torch.LongTensor`, *optional*):
+            The attention mask indicating padded regions in the image.
+        """
+        return self.model.get_image_features(
+            pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask, **kwargs
+        )
 
     @can_return_tuple
     @auto_docstring
@@ -1027,7 +1050,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         Example:
 
         ```python
-        >>> import requests
         >>> import torch
         >>> from PIL import Image
         >>> from io import BytesIO

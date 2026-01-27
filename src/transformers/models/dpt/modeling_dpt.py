@@ -956,10 +956,12 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("Intel/dpt-large")
         >>> model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large")
@@ -990,11 +992,12 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
+        kwargs["output_hidden_states"] = True
         if self.backbone is not None:
-            outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, output_hidden_states=True, **kwargs)
+            outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
             hidden_states = outputs.feature_maps
         else:
-            outputs = self.dpt(pixel_values, output_hidden_states=True, **kwargs)
+            outputs = self.dpt(pixel_values, **kwargs)
             hidden_states = outputs.hidden_states
             # only keep certain features based on config.backbone_out_indices
             # note that the hidden_states also include the initial embeddings
@@ -1104,10 +1107,12 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DPTForSemanticSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("Intel/dpt-large-ade")
         >>> model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade")
@@ -1123,9 +1128,8 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        outputs: BaseModelOutputWithPoolingAndIntermediateActivations = self.dpt(
-            pixel_values, output_hidden_states=True, **kwargs
-        )
+        kwargs["output_hidden_states"] = True
+        outputs: BaseModelOutputWithPoolingAndIntermediateActivations = self.dpt(pixel_values, **kwargs)
         hidden_states = outputs.hidden_states
 
         # only keep certain features based on config.backbone_out_indices

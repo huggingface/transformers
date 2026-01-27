@@ -54,7 +54,8 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_ipex_available, is_torchdynamo_exporting
+from transformers.utils import is_ipex_available, is_sklearn_available, is_torchdynamo_exporting
+from transformers.utils.generic import is_flash_attention_requested
 
 
 if is_torch_available():
@@ -106,8 +107,6 @@ if is_torch_available():
     from transformers.generation.utils import _speculative_sampling
 
 from unittest.mock import patch
-
-from transformers.utils import is_sklearn_available
 
 
 class GenerationTesterMixin:
@@ -617,12 +616,12 @@ class GenerationTesterMixin:
         config, _ = self.prepare_config_and_inputs_for_generate()
 
         # if no bos token id => cannot generate from None
-        if config.bos_token_id is None:
+        if config.get_text_config(decoder=True).bos_token_id is None:
             self.skipTest(reason="bos_token_id is None")
 
         # hack in case they are equal, otherwise the attn mask will be [0]
-        if config.bos_token_id == config.pad_token_id:
-            config.pad_token_id = None
+        if config.get_text_config(decoder=True).bos_token_id == config.get_text_config(decoder=True).pad_token_id:
+            config.get_text_config(decoder=True).pad_token_id = None
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config).to(torch_device)
@@ -1763,10 +1762,10 @@ class GenerationTesterMixin:
                     inputs_dict[input_name] = input_data
             main_input = inputs_dict[model_class.main_input_name]
 
-            # FA2 doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
+            # FA doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
             # attention masks at test time and, with generate, the mask will be appended with 1s on the right,
-            # resulting in a mask with holes (not supported properly by FA2).
-            if attn_implementation == "flash_attention_2":
+            # resulting in a mask with holes (not supported properly by FA).
+            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
                 for input_name in ("attention_mask", "decoder_attention_mask", "encoder_attention_mask"):
                     if input_name in inputs_dict:
                         inputs_dict[input_name] = torch.ones_like(inputs_dict[input_name])
@@ -2691,6 +2690,46 @@ class GenerationIntegrationTests(unittest.TestCase):
             model.generation_config.cache_implementation = "dynamic"
             model.generation_config.use_cache = None
             model.save_pretrained(tmpdirname)
+
+    def test_generation_config_deprecation(self):
+        import logging as pylogging
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        input_ids = tokenizer("Hello", return_tensors="pt").input_ids.to(torch_device)
+
+        logger = pylogging.getLogger("transformers")
+
+        class OnWarningHandler(pylogging.Handler):
+            def __init__(self):
+                super().__init__()
+                self.warnings = []
+
+            def emit(self, record):
+                msg = record.getMessage()
+                if "Passing `generation_config` together with" in msg:
+                    self.warnings.append(msg)
+
+        warningHandler = OnWarningHandler()
+        logger.addHandler(warningHandler)
+
+        try:
+            # Providing generation_config and kwargs is deprecated, so we expect a warning here.
+            #
+            # We're using logging_once, make sure that we emit this warning in any case by clearing the
+            # cache on warning_once
+            logging.warning_once.cache_clear()
+            generation_config = GenerationConfig(temperature=1.0)
+            _ = model.generate(input_ids, generation_config=generation_config, do_sample=False)
+            self.assertTrue(len(warningHandler.warnings) == 1)
+
+            # Providing no generation config, only kwargs is not deprecated. No further deprecation warnings
+            # should have been sent.
+            logging.warning_once.cache_clear()
+            _ = model.generate(input_ids, do_sample=False)
+            self.assertTrue(len(warningHandler.warnings) == 1)
+        finally:
+            logger.removeHandler(warningHandler)
 
     # TODO joao, manuel: remove in v4.62.0
     @slow

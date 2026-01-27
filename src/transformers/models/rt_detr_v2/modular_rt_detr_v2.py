@@ -19,7 +19,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
-from ...utils import is_torchdynamo_compiling, logging
+from ...utils import logging, torch_compilable_check
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoder,
@@ -173,6 +173,8 @@ class RTDetrV2Config(PreTrainedConfig):
             Scaling factor applied to the attention offsets in the decoder.
         decoder_method (`str`, *optional*, defaults to `"default"`):
             The method to use for the decoder: `"default"` or `"discrete"`.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -262,6 +264,7 @@ class RTDetrV2Config(PreTrainedConfig):
         decoder_n_levels=3,  # default value
         decoder_offset_scale=0.5,  # default value
         decoder_method="default",
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.initializer_range = initializer_range
@@ -355,6 +358,7 @@ class RTDetrV2Config(PreTrainedConfig):
         self.decoder_n_levels = decoder_n_levels
         self.decoder_offset_scale = decoder_offset_scale
         self.decoder_method = decoder_method
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
@@ -500,10 +504,10 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
-        if not is_torchdynamo_compiling() and (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
+        torch_compilable_check(
+            (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:

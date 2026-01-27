@@ -33,7 +33,7 @@ class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
     This is the configuration class to store the configuration of a [`LwDetrViTModel`]. It is used to instantiate an
     LW-DETR ViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the LW-DETR ViT
-    [stevenbucaille/lwdetr_small_60e_coco](https://huggingface.co/stevenbucaille/lwdetr_small_60e_coco) architecture.
+    [AnnaZhang/lwdetr_small_60e_coco](https://huggingface.co/AnnaZhang/lwdetr_small_60e_coco) architecture.
 
     LW-DETR ViT is the Vision Transformer backbone used in the LW-DETR model for real-time object detection. It features
     interleaved window and global attention mechanisms to reduce computational complexity while maintaining high performance.
@@ -171,7 +171,7 @@ class LwDetrConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`LwDetrModel`]. It is used to instantiate
     a LW-DETR model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the LW-DETR
-    [stevenbucaille/lwdetr_small_60e_coco](https://huggingface.co/stevenbucaille/lwdetr_small_60e_coco) architecture.
+    [AnnaZhang/lwdetr_small_60e_coco](https://huggingface.co/AnnaZhang/lwdetr_small_60e_coco) architecture.
 
     LW-DETR (Lightweight Detection Transformer) is a transformer-based object detection model designed for real-time
     detection tasks. It replaces traditional CNN-based detectors like YOLO with a more efficient transformer architecture
@@ -253,10 +253,10 @@ class LwDetrConfig(PreTrainedConfig):
     ```python
     >>> from transformers import LwDetrConfig, LwDetrModel
 
-    >>> # Initializing a LW-DETR stevenbucaille/lwdetr_small_60e_coco style configuration
+    >>> # Initializing a LW-DETR AnnaZhang/lwdetr_small_60e_coco style configuration
     >>> configuration = LwDetrConfig()
 
-    >>> # Initializing a model (with random weights) from the stevenbucaille/lwdetr_small_60e_coco style configuration
+    >>> # Initializing a model (with random weights) from the AnnaZhang/lwdetr_small_60e_coco style configuration
     >>> model = LwDetrModel(configuration)
 
     >>> # Accessing the model configuration

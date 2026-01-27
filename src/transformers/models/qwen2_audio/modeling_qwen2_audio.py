@@ -27,7 +27,7 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, is_torchdynamo_compiling, logging, torch_compilable_check
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_qwen2_audio import Qwen2AudioConfig, Qwen2AudioEncoderConfig
 
@@ -284,7 +284,6 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
 
         embed_dim = config.d_model
         self.num_mel_bins = config.num_mel_bins
-        self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
@@ -439,7 +438,9 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
 
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        self.pad_token_id = (
+            self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else -1
+        )
         self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
         self.post_init()
 
@@ -774,7 +775,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                 audio_tokens = input_ids == self.config.audio_token_id
                 legacy_processing = (audio_tokens[:, :-1] & audio_tokens[:, 1:]).sum() == 0
 
-                if legacy_processing:
+                if not is_torchdynamo_compiling() and legacy_processing:
                     logger.warning_once(
                         "Expanding inputs for audio tokens in Qwen2Audio should be done in processing."
                     )
@@ -789,11 +790,10 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
 
                     n_audio_tokens = (input_ids == self.config.audio_token_id).sum().item()
                     n_audio_features = audio_features.shape[0]
-
-                    if n_audio_tokens != n_audio_features:
-                        raise ValueError(
-                            f"Audio features and audio tokens do not match: tokens: {n_audio_tokens}, features {n_audio_features}"
-                        )
+                    torch_compilable_check(
+                        n_audio_tokens == n_audio_features,
+                        f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {n_audio_features}",
+                    )
                     special_audio_mask = (input_ids == self.config.audio_token_id).to(inputs_embeds.device)
                     special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds)
                     audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)

@@ -36,6 +36,7 @@ from ...utils import (
     is_scipy_available,
     logging,
     requires_backends,
+    torch_compilable_check,
 )
 from ...utils.generic import maybe_autocast
 from .configuration_oneformer import OneFormerConfig
@@ -987,10 +988,10 @@ class OneFormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
-        if (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
+        torch_compilable_check(
+            (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:
@@ -2855,12 +2856,14 @@ class OneFormerModel(OneFormerPreTrainedModel):
         ```python
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import OneFormerProcessor, OneFormerModel
 
         >>> # download texting image
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> # load processor for preprocessing the inputs
         >>> processor = OneFormerProcessor.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
@@ -3051,7 +3054,8 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         ```python
         >>> from transformers import OneFormerProcessor, OneFormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> # load OneFormer fine-tuned on ADE20k for universal segmentation
@@ -3061,7 +3065,8 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         >>> url = (
         ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
         ... )
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> # Semantic Segmentation
         >>> inputs = processor(image, ["semantic"], return_tensors="pt")

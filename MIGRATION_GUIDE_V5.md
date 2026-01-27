@@ -16,13 +16,6 @@ limitations under the License.
 
 # Version 5 Migration guide
 
-> [!NOTE] 
-> 👀 Welcome to the migration guide for the first release candidate! Nothing is final and things are still actively in 
-> movement. We have a section dedicated to what is planned for future release candidates, yet is known not to work in 
-> the RC0. Look for "Disclaimers for the RC0".
-> 
-> We'll be eagerly awaiting your feedback in our GitHub issues!
-
 ## Library-wide changes with widespread impact
 
 ### Removal of TensorFlow and Jax
@@ -104,10 +97,7 @@ class Llama5Tokenizer(TokenizersBackend):
         else:
             self._vocab = vocab
 
-        if merges is not None:
-            self._merges = merges or []
-        else:
-            self._merges = generate_merges(filtered_vocab)
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True)
@@ -313,7 +303,6 @@ model_inputs["labels"] = model_inputs.pop("input_ids_target")
 
 **Removed Methods:**
 - `create_token_type_ids_from_sequences()`: Removed from base class. Subclasses that need custom token type ID creation should implement this method directly.
-- `clean_up_tokenization()`: Removed from base class. Now defined at model class level for models that need it (e.g., PLBart, CLVP, Wav2Vec2).
 - `prepare_for_model()`, `build_inputs_with_special_tokens()`, `truncate_sequences()`: Moved from `tokenization_utils_base.py` to `tokenization_python.py` for `PythonBackend` tokenizers. `TokenizersBackend` provides model-ready input via `tokenize()` and `encode()`, so these methods are no longer needed in the base class.
 - `_switch_to_input_mode()`, `_switch_to_target_mode()`, `as_target_tokenizer()`: Removed from base class. Use `__call__()` with `text_target` parameter instead.
 
@@ -453,6 +442,37 @@ We dropped support for two torch APIs:
 
 Those APIs were deprecated by the PyTorch team, and we're instead focusing on the supported APIs `dynamo` and `export`.
 
+### Feature extraction helpers: `get_*_features`
+
+Many multi-modal models expose convenience methods such as `get_text_features`, `get_image_features`, `get_audio_features`, and `get_video_features` to run inference on a single modality without calling `model(**inputs)` directly.
+
+Starting with v5, these 4 helper methods now return a `BaseModelOutputWithPooling` (or a subclass) instead of only a pooled embedding tensor:
+
+- `last_hidden_state`: unpooled token/patch/frame embeddings for the requested modality.
+- `pooler_output`: pooled representation (what most models previously returned from `get_*_features`).
+- `hidden_states`: full hidden states for all layers when `output_hidden_states=True` is passed.
+- `attentions`: attention maps when `output_attentions=True` is passed.
+
+> [!IMPORTANT]
+> There is **no single universal shape** for `last_hidden_state` or `pooler_output`. It's recommended to inspect a small forward pass before making assumptions about shapes or semantics.
+
+If your code previously did something like this:
+
+```python
+text_embeddings = model.get_text_features(**inputs)
+```
+
+and you used `text_embeddings` as a tensor, you should now explicitly use `return_dict=True` take the `pooler_output` field from the returned `BaseModelOutputWithPooling`:
+
+```python
+outputs = model.get_text_features(**inputs, return_dict=True)
+text_embeddings = outputs.pooler_output
+```
+
+This will match the previous behavior in the large majority of cases. If your model-specific implementation returned a tuple of results before, those values should now be accessible as fields on the corresponding `BaseModelOutputWithPooling` subclass.
+
+Linked PR: https://github.com/huggingface/transformers/pull/42564
+
 ## Quantization changes
 
 We clean up the quantization API in transformers, and significantly refactor the weight loading as highlighted
@@ -558,7 +578,7 @@ Linked PRs:
 - `use_mps_device` -> mps will be used by default if detected
 - `fp16_backend` and `half_precision_backend` -> we will only rely on torch.amp as everything has been upstream to torch
 - `no_cuda` -> `use_cpu`
-- ` include_tokens_per_second` -> `include_num_input_tokens_seen`
+- `include_tokens_per_second` -> `include_num_input_tokens_seen`
 - `use_legacy_prediction_loop` -> we only use `evaluation_loop` function from now on
 
 ### Removing deprecated arguments in `Trainer`
@@ -574,12 +594,12 @@ Linked PRs:
 
 ###  New defaults for `Trainer`
 
-- `use_cache` in the model config will be set to `False`. You can still change the cache value through `TrainingArguments` `usel_cache` argument if needed. 
+- `use_cache` in the model config will be set to `False`. You can still change the cache value through `TrainingArguments` `use_cache` argument if needed. 
 
 ## Pipelines
 
-`Text2TextPipeline`, as well as the related `SummarizationPipeline` and `TranslationPipeline`, were deprecated and will now be removed.
-`pipeline` classes are intended as a high-level, beginner-friendly API, but for almost all text-to-text tasks, a modern chat model 
+`Text2TextGenerationPipeline`, as well as the related `SummarizationPipeline` and `TranslationPipeline`, were deprecated and will now be removed.
+`pipeline` classes are intended as a high-level beginner-friendly API, but for almost all text-to-text tasks a modern chat model 
 and `TextGenerationPipeline` will provide much higher quality output. As a result, we felt it was misleading for beginners to offer the older pipelines.
 
 If you were using these pipelines before, try using `TextGenerationPipeline` with a chat model instead. For example, for summarization:
@@ -597,6 +617,31 @@ message_history = [
     }
 ]
 print(summarizer(message_history)[0]["generated_text"][-1]["content"])
+```
+
+Similarly, the `image-to-text` pipeline has been removed. This pipeline was used for early image captioning models, but these
+no longer offer competitive performance. Instead, for image captioning tasks we recommend using a modern vision-language chat model
+via the `image-text-to-text` pipeline. For example:
+
+```python
+import torch
+from transformers import pipeline
+
+# Any other VLM will also work - if you're low on memory you can use a smaller one
+captioner = pipeline("image-text-to-text", model="Qwen/Qwen3-VL-4B-Instruct")
+message_history = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "image": "[IMAGE_URL_HERE]",
+            },
+            {"type": "text", "text": "Describe this image."},
+        ],
+    }
+]
+print(captioner(message_history)[0]["generated_text"][-1]["content"])
 ```
 
 - Image text to text pipelines will no longer accept images as a separate argument along with conversation chats. Image data has to be embedded in the chat's "content" field. See [#42359](https://github.com/huggingface/transformers/pull/42359)

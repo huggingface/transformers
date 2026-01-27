@@ -261,7 +261,6 @@ class OmDetTurboConfig(PreTrainedConfig):
         self.eval_size = eval_size
         self.learn_initial_query = learn_initial_query
         self.cache_size = cache_size
-        self.is_encoder_decoder = is_encoder_decoder
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 

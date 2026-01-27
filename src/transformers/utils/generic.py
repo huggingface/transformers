@@ -210,6 +210,31 @@ def is_mlx_array(x):
     return False if not _is_mlx_available else _is_mlx(x)
 
 
+def is_flash_attention_requested(config=None, requested_attention_implementation: str | None = None):
+    """
+    Checks whether some flavor of flash attention is requested or not.
+
+    This is checked against one of the two arguments, i.e. either the `config` or the directly passed value
+    `requested_attention_implementation`. Otherwise, an error will be raised (ambiguity).
+
+    The different versions of flash attention are usually
+    - Implementations based on the original flash attention repo: https://github.com/Dao-AILab/flash-attention
+    - Kernels implementations such as: https://huggingface.co/kernels-community/vllm-flash-attn3
+    """
+    if config is not None and requested_attention_implementation is not None:
+        raise ValueError(
+            "Requested attention implementation is ambiguous: "
+            "Please pass either the config or the name of the attention implementation, not both."
+        )
+
+    if config is not None:
+        checked_attention_implementation = config._attn_implementation
+    else:
+        checked_attention_implementation = requested_attention_implementation
+
+    return "flash" in checked_attention_implementation
+
+
 def to_py_obj(obj):
     """
     Convert a PyTorch tensor, Numpy array or python list to a python list.
@@ -850,34 +875,46 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
     def wrapped_fn(func):
         @wraps(func)
         def wrapper(self, *args, **kwargs):
-            use_cache_arg_index = None
-            if "use_cache" in func.__code__.co_varnames:
-                use_cache_arg_index = func.__code__.co_varnames.index("use_cache") - 1  # -1 for self
+            args_with_config_defaults = [
+                "use_cache",
+                "vision_feature_layer",
+                "vision_feature_select_strategy",
+                "vision_aspect_ratio",
+            ]
+            for arg_name in args_with_config_defaults:
+                arg_index = None
+                if arg_name in func.__code__.co_varnames:
+                    arg_index = func.__code__.co_varnames.index(arg_name) - 1  # -1 for self
 
-            if (
-                use_cache_arg_index is not None
-                and len(args) > use_cache_arg_index
-                and args[use_cache_arg_index] is not None
-            ):
-                use_cache = args[use_cache_arg_index]
-            elif kwargs.get("use_cache") is not None:
-                use_cache = kwargs["use_cache"]
-            else:
-                use_cache = getattr(self.config, "use_cache", None)
-
-            if use_cache is not None:
-                if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
-                    logger.warning_once(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-                    )
-                    use_cache = False
-
-                if use_cache_arg_index is not None and len(args) > use_cache_arg_index:
-                    args = list(args)
-                    args[use_cache_arg_index] = use_cache
-                    args = tuple(args)
+                if arg_index is not None and len(args) > arg_index and args[arg_index] is not None:
+                    arg_value = args[arg_index]
+                elif kwargs.get(arg_name) is not None:
+                    arg_value = kwargs[arg_name]
                 else:
-                    kwargs["use_cache"] = use_cache
+                    arg_value = getattr(self.config, arg_name, None)
+
+                if arg_value is not None:
+                    # Arg-specific handling
+                    if arg_name == "use_cache":
+                        if getattr(self, "gradient_checkpointing", False) and self.training and arg_value:
+                            logger.warning_once(
+                                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+                            )
+                            arg_value = False
+                    elif arg_name == "vision_feature_select_strategy":
+                        valid_strategies = ["default", "full"]
+                        if arg_value not in valid_strategies:
+                            raise ValueError(
+                                f"`Unexpected select feature strategy: {arg_value}. "
+                                f"Please select from {valid_strategies}."
+                            )
+
+                    if arg_index is not None and len(args) > arg_index:
+                        args = list(args)
+                        args[arg_index] = arg_value
+                        args = tuple(args)
+                    else:
+                        kwargs[arg_name] = arg_value
 
             return_dict = kwargs.pop("return_dict", None)
             if return_dict is None:

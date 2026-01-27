@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 from parameterized import parameterized
 
 from transformers import (
@@ -90,7 +91,6 @@ class GlmImageVisionText2TextModelTester:
             "depth": 2,
             "hidden_act": "gelu",
             "hidden_size": 32,
-            "out_hidden_size": 16,
             "intermediate_size": 22,
             "patch_size": 16,
             "spatial_merge_size": 1,
@@ -264,6 +264,10 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             loss = model(**inputs_dict).loss
             loss.backward()
 
+    @unittest.skip(reason="Reequires input ids AND image grid to generate")
+    def test_generate_without_input_ids(self):
+        pass
+
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Needs special input preparation. Not important test for model, skip for now")
     def test_eager_matches_sdpa_inference(
@@ -277,6 +281,30 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
     @unittest.skip(reason="Size mismatch")
     def test_multi_gpu_data_parallel_forward(self):
+        pass
+
+    @pytest.mark.xfail(
+        reason="GlmImage has a VQ module that uses `weight.data` directly in forward which prevent offloading on that module"
+    )
+    def test_disk_offload_safetensors(self):
+        pass
+
+    @pytest.mark.xfail(
+        reason="GlmImage has a VQ module that uses `weight.data` directly in forward which prevent offloading on that module"
+    )
+    def test_disk_offload_bin(self):
+        pass
+
+    @pytest.mark.xfail(
+        reason="GlmImage has a VQ module that uses `weight.data` directly in forward which prevent offloading on that module"
+    )
+    def test_cpu_offload(self):
+        pass
+
+    @pytest.mark.xfail(
+        reason="GlmImage has a VQ module that uses `weight.data` directly in forward which prevent offloading on that module"
+    )
+    def test_model_parallelism(self):
         pass
 
     @unittest.skip("Error with compilation")
@@ -305,7 +333,7 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         pass
 
     @unittest.skip(reason="GLM-Image can't do and does not need assisted generation. Not worth fixing!")
-    def test_prompt_lookup_decoding_matches_greedy_searc(self):
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
     @parameterized.expand([("random",), ("same",)])
@@ -333,6 +361,12 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
+
     @unittest.skip(reason="GlmImageVisionModel does not support training")
     def test_retain_grad_hidden_states_attentions(self):
         pass
@@ -340,6 +374,40 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     @unittest.skip(reason="GlmImage needs special input preparation to pass this test")
     def test_generate_compile_model_forward_fullgraph(self):
         pass
+
+    @unittest.skip(
+        reason="GlmImage is a multimodal model that requires pixel_values and image_grid_thw. "
+        "This test drops all inputs except input_ids which causes NoneType iteration error."
+    )
+    def test_flash_attention_2_continue_generate_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        reason="GlmImage is a multimodal model that requires pixel_values and image_grid_thw. "
+        "This test only uses input_ids and attention_mask which causes NoneType iteration error."
+    )
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip(
+        reason="GlmImage is a multimodal model that requires pixel_values and image_grid_thw. "
+        "This test only uses input_ids and attention_mask which causes NoneType iteration error."
+    )
+    def test_flash_attn_2_from_config(self):
+        pass
+
+    def _image_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only image-related inputs from the full set of inputs, for testing `get_image_features`.
+
+        GlmImage internally preprocesses the image_grid_thw input by slicing off the last entry,
+        so we need to prepare inputs accordingly for testing get_image_features. We also discard text-related inputs.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict["image_grid_thw"] = inputs_dict["image_grid_thw"][:-1]
+        del inputs_dict["input_ids"]
+        del inputs_dict["attention_mask"]
+        return config, inputs_dict
 
 
 @require_torch

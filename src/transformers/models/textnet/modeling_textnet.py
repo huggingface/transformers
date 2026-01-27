@@ -300,12 +300,14 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         Examples:
         ```python
         >>> import torch
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import TextNetForImageClassification, TextNetImageProcessor
         >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = TextNetImageProcessor.from_pretrained("czczup/textnet-base")
         >>> model = TextNetForImageClassification.from_pretrained("czczup/textnet-base")
@@ -366,12 +368,14 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
 
         ```python
         >>> import torch
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoImageProcessor, AutoBackbone
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("czczup/textnet-base")
         >>> model = AutoBackbone.from_pretrained("czczup/textnet-base")
