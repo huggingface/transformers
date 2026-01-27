@@ -145,6 +145,10 @@ class EomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin, un
         pass
 
     def test_training(self):
+        # We override this test because EoMT requires `mask_labels` and `class_labels` for training,
+        # which are not standard labels that `_prepare_for_class` can generate. We can't include
+        # these labels in `prepare_config_and_inputs_for_common` because that would break determinism
+        # tests (the Hungarian matching in the loss computation is non-deterministic).
         if not self.model_tester.is_training:
             self.skipTest(reason="ModelTester is not configured to run training tests")
 
