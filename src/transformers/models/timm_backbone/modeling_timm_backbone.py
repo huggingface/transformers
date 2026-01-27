@@ -117,15 +117,26 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         assume weights and persistent buffers will be part of checkpoint as we have no way to control timm inits)"""
         if hasattr(module, "init_non_persistent_buffers"):
             module.init_non_persistent_buffers()
-        elif (
-            isinstance(module, nn.BatchNorm2d)
-            and getattr(module, "running_mean", None) is not None
-            and module.running_mean.device.type == "meta"
-        ):
-            # Only initialize if on meta device (uninitialized), not if already loaded from pretrained
-            init.zeros_(module.running_mean)
-            init.ones_(module.running_var)
-            init.zeros_(module.num_batches_tracked)
+        elif isinstance(module, nn.BatchNorm2d):
+            running_mean = getattr(module, "running_mean", None)
+            running_var = getattr(module, "running_var", None)
+            num_batches_tracked = getattr(module, "num_batches_tracked", None)
+            if (
+                running_mean is not None
+                and running_var is not None
+                and (
+                    running_mean.device.type == "meta"
+                    or torch.isnan(running_var).any()
+                    or torch.isinf(running_var).any()
+                    or (running_var <= 0).any()
+                )
+            ):
+                # Only initialize if on meta device or if buffers contain invalid/uninitialized data (from to_empty())
+                # Do NOT initialize if already loaded from pretrained (valid positive variance values)
+                init.zeros_(running_mean)
+                init.ones_(running_var)
+                if num_batches_tracked is not None:
+                    init.zeros_(num_batches_tracked)
 
     def forward(
         self,
