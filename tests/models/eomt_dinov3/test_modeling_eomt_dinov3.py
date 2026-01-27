@@ -106,7 +106,6 @@ class EomtDinov3ForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMix
     pipeline_model_mapping = {"image-segmentation": EomtDinov3ForUniversalSegmentation} if is_torch_available() else {}
     is_encoder_decoder = False
     test_missing_keys = False
-    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = EomtDinov3ForUniversalSegmentationTester(self)

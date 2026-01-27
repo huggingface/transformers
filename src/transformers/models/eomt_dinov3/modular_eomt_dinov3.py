@@ -18,6 +18,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ... import initialization as init
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -102,8 +103,9 @@ class EomtDinov3Config(EomtConfig):
             Number of object queries in the Transformer.
         num_register_tokens (`int`, *optional*, defaults to 4):
             Number of learnable register tokens added to the transformer input.
-        rope_theta (`float`, *optional*, defaults to 100.0):
-            The base frequency for RoPE (Rotary Position Embedding).
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling.
         query_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in query projection.
         key_bias (`bool`, *optional*, defaults to `False`):
@@ -125,6 +127,7 @@ class EomtDinov3Config(EomtConfig):
     """
 
     model_type = "eomt_dinov3"
+    default_theta = 100.0
 
     def __init__(
         self,
@@ -153,7 +156,7 @@ class EomtDinov3Config(EomtConfig):
         importance_sample_ratio: float = 0.75,
         num_queries=200,
         num_register_tokens=4,
-        rope_theta: float = 100.0,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         query_bias: bool = True,
         key_bias: bool = False,
         value_bias: bool = True,
@@ -204,7 +207,9 @@ class EomtDinov3Config(EomtConfig):
         self.num_queries = num_queries
         self.num_register_tokens = num_register_tokens
 
-        self.rope_theta = rope_theta
+        if rope_parameters is None:
+            rope_parameters = {"rope_theta": self.default_theta}
+        self.rope_parameters = rope_parameters
         self.query_bias = query_bias
         self.key_bias = key_bias
         self.value_bias = value_bias
@@ -235,7 +240,20 @@ class EomtDinov3LayerScale(DINOv3ViTLayerScale):
 
 
 class EomtDinov3RopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
-    pass
+    inv_freq: Tensor
+
+    def __init__(self, config: EomtDinov3Config):
+        # Use rope_parameters pattern instead of rope_theta
+        nn.Module.__init__(self)
+
+        self.config = config
+        self.base = config.rope_parameters["rope_theta"]
+        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.num_patches_h = config.image_size // config.patch_size
+        self.num_patches_w = config.image_size // config.patch_size
+
+        inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
 
 
 class EomtDinov3Loss(EomtLoss):

@@ -247,7 +247,7 @@ def build_eomt_config(
         num_blocks=num_blocks,
         num_queries=num_queries,
         num_register_tokens=num_register_tokens,
-        rope_theta=base_config.get("rope_theta", 100.0),
+        rope_parameters={"rope_theta": base_config.get("rope_theta", 100.0)},
         query_bias=base_config.get("query_bias", True),
         key_bias=base_config.get("key_bias", False),
         value_bias=base_config.get("value_bias", True),

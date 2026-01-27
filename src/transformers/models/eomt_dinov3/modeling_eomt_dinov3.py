@@ -391,13 +391,14 @@ def augment_patches_center_coordinates(
 
 
 class EomtDinov3RopePositionEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: Tensor
 
     def __init__(self, config: EomtDinov3Config):
+        # Use rope_parameters pattern instead of rope_theta
         super().__init__()
 
         self.config = config
-        self.base = config.rope_theta
+        self.base = config.rope_parameters["rope_theta"]
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.num_patches_h = config.image_size // config.patch_size
         self.num_patches_w = config.image_size // config.patch_size

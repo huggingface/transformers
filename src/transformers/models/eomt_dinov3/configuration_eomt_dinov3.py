@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 
 
 class EomtDinov3Config(PreTrainedConfig):
@@ -82,8 +83,9 @@ class EomtDinov3Config(PreTrainedConfig):
             Number of object queries in the Transformer.
         num_register_tokens (`int`, *optional*, defaults to 4):
             Number of learnable register tokens added to the transformer input.
-        rope_theta (`float`, *optional*, defaults to 100.0):
-            The base frequency for RoPE (Rotary Position Embedding).
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling.
         query_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in query projection.
         key_bias (`bool`, *optional*, defaults to `False`):
@@ -105,6 +107,7 @@ class EomtDinov3Config(PreTrainedConfig):
     """
 
     model_type = "eomt_dinov3"
+    default_theta = 100.0
 
     def __init__(
         self,
@@ -133,7 +136,7 @@ class EomtDinov3Config(PreTrainedConfig):
         importance_sample_ratio: float = 0.75,
         num_queries=200,
         num_register_tokens=4,
-        rope_theta: float = 100.0,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         query_bias: bool = True,
         key_bias: bool = False,
         value_bias: bool = True,
@@ -174,7 +177,9 @@ class EomtDinov3Config(PreTrainedConfig):
 
         self.intermediate_size = intermediate_size
 
-        self.rope_theta = rope_theta
+        if rope_parameters is None:
+            rope_parameters = {"rope_theta": self.default_theta}
+        self.rope_parameters = rope_parameters
         self.query_bias = query_bias
         self.key_bias = key_bias
         self.value_bias = value_bias
