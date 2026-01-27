@@ -40,18 +40,6 @@ class PromptDepthAnythingConfig(PreTrainedConfig):
     Args:
         backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `Dinov2Config()`):
             The configuration of the backbone model.
-        backbone (`str`, *optional*):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone.
-        use_timm_backbone (`bool`, *optional*, defaults to `False`):
-            Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
-            API.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         patch_size (`int`, *optional*, defaults to 14):
             The size of the patches to extract from the backbone features.
         initializer_range (`float`, *optional*, defaults to 0.02):

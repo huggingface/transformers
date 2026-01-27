@@ -20,7 +20,7 @@ import torch.nn as nn
 from torch import Tensor
 
 from ...activations import ACT2CLS
-from ...configuration_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...modeling_backbone_utils import BackboneMixin
 from ...modeling_outputs import (
     BackboneOutput,
@@ -29,7 +29,7 @@ from ...modeling_outputs import (
     ImageClassifierOutputWithNoAttention,
 )
 from ...utils import auto_docstring, logging
-from ..models.textnet.configuration_textnet import TextNetConfig
+from .configuration_textnet import TextNetConfig
 
 
 logger = logging.get_logger(__name__)

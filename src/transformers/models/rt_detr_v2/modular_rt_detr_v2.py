@@ -57,20 +57,8 @@ class RTDetrV2Config(PreTrainedConfig):
             The epsilon used by the batch normalization layers.
         backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `RTDetrV2ResNetConfig()`):
             The configuration of the backbone model.
-        backbone (`str`, *optional*):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone.
-        use_timm_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
-            library.
         freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
             Whether to freeze the batch normalization layers in the backbone.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         encoder_hidden_dim (`int`, *optional*, defaults to 256):
             Dimension of the layers in hybrid encoder.
         encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
