@@ -1597,6 +1597,11 @@ def mask_to_box_coordinate(mask, dtype):
     """
 )
 class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
+    _tied_weights_keys = {
+        "decoder.class_embed": "enc_score_head",
+        "decoder.bbox_embed": "enc_bbox_head",
+    }
+
     def __init__(self, config: PPDocLayoutV3Config):
         super().__init__(config)
 
@@ -2063,10 +2068,6 @@ class PPDocLayoutV3ForObjectDetection(PPDocLayoutV3PreTrainedModel):
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
     _keys_to_ignore_on_load_missing = ["num_batches_tracked", "rel_pos_y_bias", "rel_pos_x_bias"]
-    _tied_weights_keys = {
-        "model.decoder.class_embed": "model.enc_score_head",
-        "model.decoder.bbox_embed": "model.enc_bbox_head",
-    }
 
     def __init__(self, config: PPDocLayoutV3Config):
         super().__init__(config)

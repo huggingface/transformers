@@ -1241,6 +1241,11 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
     """
 )
 class PPDocLayoutV3Model(RTDetrModel):
+    _tied_weights_keys = {
+        "decoder.class_embed": "enc_score_head",
+        "decoder.bbox_embed": "enc_bbox_head",
+    }
+
     def __init__(self, config: PPDocLayoutV3Config):
         super().__init__(config)
 
@@ -1602,10 +1607,6 @@ class PPDocLayoutV3ForObjectDetectionOutput(ModelOutput):
 )
 class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["num_batches_tracked", "rel_pos_y_bias", "rel_pos_x_bias"]
-    _tied_weights_keys = {
-        "model.decoder.class_embed": "model.enc_score_head",
-        "model.decoder.bbox_embed": "model.enc_bbox_head",
-    }
 
     def __init__(self, config: PPDocLayoutV3Config):
         super().__init__(config)
