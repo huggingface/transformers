@@ -26,7 +26,7 @@ pip install transformers
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 # Load model and tokenizer
-model_name = "your-org/RishAI-1B-7B"
+model_name = "RishAILabs/RLLM-Base"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(model_name)
 
@@ -48,7 +48,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 # Load model with specific configuration
 model = AutoModelForCausalLM.from_pretrained(
-    "your-org/RishAI-1B-7B",
+    "RishAILabs/RLLM-Base",
     torch_dtype=torch.bfloat16,  # For memory efficiency
     device_map="auto"  # Automatic device placement
 )
