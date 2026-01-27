@@ -36,7 +36,6 @@ from ...utils import (
     auto_docstring,
     is_timm_available,
     logging,
-    requires_backends,
     torch_compilable_check,
 )
 from .configuration_deformable_detr import DeformableDetrConfig
