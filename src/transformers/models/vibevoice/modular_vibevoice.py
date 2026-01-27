@@ -435,7 +435,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L407
         # Community repo has a version for TTS (no voice cloning):
         # https://github.com/vibevoice-community/VibeVoice/blob/493b186f5b973477cadab0f93f4a5dd290cc9125/vibevoice/finetune/train_vibevoice.py#L684
-        if input_values is not None and acoustic_loss_mask.sum().item() > 0:
+        if acoustic_loss_mask is not None:
             condition_features = hidden_states[acoustic_loss_mask]
             audio_len, latent_size = audio_features.shape
             
