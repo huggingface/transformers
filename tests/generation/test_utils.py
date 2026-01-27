@@ -109,8 +109,10 @@ if is_torch_available():
 
 from unittest.mock import patch
 
+
 def is_moe_model(config):
     return getattr(config, "_experts_implementation", None) is not None
+
 
 class GenerationTesterMixin:
     input_name = "input_ids"
