@@ -690,3 +690,20 @@ In summary:"""
         new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
         with self.subTest("Eager matches flash attention"):
             torch.testing.assert_close(generated_ids, new_generated_ids, rtol=1e-4, atol=1e-4)
+
+    def test_qwen3_greedy_determinism(self):
+        """
+        Ensures Qwen3 generate is deterministic when do_sample=False (greedy decoding as per HFs documentation).
+        """
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B-Base", use_fast=False)
+        model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-0.6B-Base", device_map="auto")
+        inputs = tokenizer("hello", return_tensors="pt")
+
+        cfg = GenerationConfig(do_sample=False, num_beams=1, max_new_tokens=20)
+
+        out1 = model.generate(**inputs, generation_config=cfg)
+        out2 = model.generate(**inputs, generation_config=cfg)
+
+        assert torch.equal(out1, out2), (
+            "Qwen3 should produce deterministic outputs with do_sample=False and num_beams=1"
+        )
