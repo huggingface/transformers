@@ -181,9 +181,6 @@ class TorchAoHfQuantizer(HfQuantizer):
             self.set_metadata(checkpoint_files)
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        if self.quantization_config.quant_type == "autoquant":
-            return False
-
         # check if the param_name is not in self.modules_to_not_convert
         if not should_convert_module(param_name, self.modules_to_not_convert):
             return False
@@ -213,19 +210,6 @@ class TorchAoHfQuantizer(HfQuantizer):
         return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        """No process required for torchao quantized model"""
-        if self.quantization_config.quant_type == "autoquant":
-            from torchao import autoquant
-            from torchao.quantization import ALL_AUTOQUANT_CLASS_LIST
-
-            model = torch.compile(model, mode="max-autotune")
-            model = autoquant(
-                model,
-                qtensor_class_list=ALL_AUTOQUANT_CLASS_LIST,
-                set_inductor_config=False,
-                **self.quantization_config.quant_type_kwargs,
-            )
-            return model
         return
 
     def is_serializable(self) -> bool:

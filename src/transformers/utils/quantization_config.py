@@ -1488,25 +1488,6 @@ class TorchAoConfig(QuantizationConfigMixin):
     # int4_weight_only quant is only working with *torch.bfloat16* dtype right now
     model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", dtype=torch.bfloat16, quantization_config=quantization_config)
 
-    # autoquant
-    # `autoquant` is a convenient way for users to search for the best quantization for each layer
-    # `min_sqnr` is an option to control the accuracy of the model, higher value means the model is more
-    # accurate, we can start with 30 and adjust it to larger or smaller (e.g. 40, 20)
-    # defaults to None, which means we'll try to get the best performing quantized model without
-    # considering accuracy
-    quantization_config = TorchAoConfig("autoquant", min_sqnr=30)
-    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", dtype=torch.bfloat16, quantization_config=quantization_config)
-    # run through example inputs, quantization methods will be selected based on the shape of example input
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    input_text = "What are we having for dinner?"
-    input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
-    MAX_NEW_TOKENS = 1000
-    model.generate(**input_ids, max_new_tokens=MAX_NEW_TOKENS, cache_implementation="static")
-    # manually ran finalize_autoquant if needed
-    if hasattr(quantized_model, "finalize_autoquant"):
-      print("finalizing autoquant")
-      quantized_model.finalize_autoquant()
-
     ```
     """
 
@@ -1583,7 +1564,6 @@ class TorchAoConfig(QuantizationConfigMixin):
     def _get_torchao_quant_type_to_method(self):
         """Get mapping of quant_type strings to their corresponding methods."""
         from torchao.quantization import (
-            autoquant,
             int4_weight_only,
             int8_dynamic_activation_int8_weight,
             int8_weight_only,
@@ -1593,7 +1573,6 @@ class TorchAoConfig(QuantizationConfigMixin):
             "int4_weight_only": int4_weight_only,
             "int8_weight_only": int8_weight_only,
             "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
-            "autoquant": autoquant,
         }
 
     def get_apply_tensor_subclass(self):
