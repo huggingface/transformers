@@ -334,7 +334,7 @@ class ImageTextToTextPipeline(Pipeline):
                 return_tensors="pt",
                 tokenize=True,
                 return_dict=True,
-            )
+            ).to(dtype=self.dtype)
             model_inputs["text"] = inputs
             return model_inputs
         # In case we only have text inputs
