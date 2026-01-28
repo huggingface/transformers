@@ -490,8 +490,7 @@ class VideoMAEDecoder(nn.Module):
         for layer_module in self.decoder_layers:
             hidden_states = layer_module(hidden_states)
 
-        if return_token_num > 0:
-            hidden_states = hidden_states[:, -return_token_num:]
+        hidden_states = hidden_states[:, -return_token_num:]
 
         # predictor projection
         hidden_states = self.norm(hidden_states)

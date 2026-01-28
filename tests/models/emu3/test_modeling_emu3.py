@@ -167,6 +167,7 @@ class Emu3Vision2TextModelTester:
         temporal_downsample_factor=1,
         base_channels=32,
         vq_channel_multiplier=[1, 2, 1],
+        vq_num_res_blocks=2,
         image_seq_length=12,
         vq_img_token_start_id=3,
     ):
@@ -189,6 +190,7 @@ class Emu3Vision2TextModelTester:
         self.codebook_size = codebook_size
         self.temporal_downsample_factor = temporal_downsample_factor
         self.vq_channel_multiplier = vq_channel_multiplier
+        self.vq_num_res_blocks = vq_num_res_blocks
         self.vq_img_token_start_id = vq_img_token_start_id
         self.base_channels = base_channels
         self.seq_length = seq_length + image_seq_length
@@ -289,6 +291,7 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         if is_torch_available()
         else {}
     )
+    skip_test_image_features_output_shape = True  # Emu3 uses index -3 for hidden_size instead of -1
 
     def setUp(self):
         self.model_tester = Emu3Vision2TextModelTester(self)
@@ -319,6 +322,21 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     @unittest.skip("Emu3 has dynamic control flow in vision backbone")
     def test_generate_with_static_cache(self):
         pass
+
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        # The number of Emu3VQVAEAttentionBlock instances in the encoder, assumes that attn_resolutions is empty (default)
+        # 0 via down due to attn_resolutions being empty, 1 via middle block, 0 via up due to attn_resolutions being empty
+        return 1
+
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        # The number of Emu3VQVAEResnetBlock and Emu3VQVAETemporalResnetBlock instances in the encoder, plus 1 for before the block
+        # up_down_blocks for down, 2 for middle, vq_num_res_blocks for Emu3VQVAETemporalResnetBlock
+        up_down_blocks = len(model_tester.vq_channel_multiplier) * model_tester.vq_num_res_blocks
+        return up_down_blocks + 2 + model_tester.vq_num_res_blocks + 1
 
 
 @require_torch

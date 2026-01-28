@@ -725,6 +725,8 @@
         title: RWKV
       - local: model_doc/seed_oss
         title: Seed-Oss
+      - local: model_doc/solar_open
+        title: SolarOpen
       - local: model_doc/splinter
         title: Splinter
       - local: model_doc/squeezebert
@@ -1095,6 +1097,8 @@
         title: glm4v
       - local: model_doc/glm4v_moe
         title: glm4v_moe
+      - local: model_doc/glm_ocr
+        title: GlmOcr
       - local: model_doc/got_ocr2
         title: GOT-OCR2
       - local: model_doc/granitevision
