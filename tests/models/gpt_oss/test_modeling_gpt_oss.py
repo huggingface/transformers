@@ -47,9 +47,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import (
-        GptOssModel,
-    )
+    from transformers import GptOssModel, Mxfp4Config
 
     NUM_GPUS = torch.cuda.device_count()
 
@@ -134,7 +132,7 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     """This is the function that will be executed by torchrun workers."""
     import os
 
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoModelForCausalLM, AutoTokenizer, Mxfp4Config
     from transformers.testing_utils import torch_device
 
     def generate_config_key(quantized, model, kernels, attn_impl, mode):
@@ -157,8 +155,9 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
         dtype="auto",
         tp_plan="auto",  # distributed inference
         use_kernels=kernels,
+        attn_implementation=attn_impl,
+        quantization_config=Mxfp4Config(dequantize=not quantized),
     ).to(torch_device)
-    model.set_attn_implementation(attn_impl)
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
     # Inference
@@ -234,32 +233,6 @@ class GptOssIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
-
-    # ------------------------
-    # Non-distributed inference
-    # ------------------------
-    @staticmethod
-    def load_and_forward(model_id, attn_implementation, input_text, mode="eval", **pretrained_kwargs):
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id,
-            dtype=torch.bfloat16,
-            device_map="auto",
-            attn_implementation=attn_implementation,
-            **pretrained_kwargs,
-        )
-
-        # Set the correct mode
-        if mode == "train":
-            model.train()
-        else:
-            model.eval()
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
-
-        inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(model.device)
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-        return output_text
 
     # ------------------------
     # Distributed inference using inspect
@@ -347,13 +320,25 @@ if __name__ == "__main__":
     @parameterized.expand(PARAMETERS)
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
         model_id = f"openai/gpt-oss-{model}"
-        output_texts = self.load_and_forward(
+        model_obj = AutoModelForCausalLM.from_pretrained(
             model_id,
-            attn_impl,
-            self.input_text,
-            mode=mode,
+            dtype="auto",
+            device_map="auto",
             use_kernels=kernels,
+            attn_implementation=attn_impl,
+            quantization_config=Mxfp4Config(dequantize=not quantized),
         )
+
+        # Set the correct mode
+        if mode == "train":
+            model_obj.train()
+        else:
+            model_obj.eval()
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(model_obj.device)
+        output_ids = model_obj.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_texts = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
         # Generate key to look up expected outputs
         key = self.generate_config_key(quantized, model, kernels, attn_impl, mode)
@@ -425,10 +410,11 @@ if __name__ == "__main__":
 
         model_obj = AutoModelForCausalLM.from_pretrained(
             model_id,
-            dtype=torch.bfloat16,
+            dtype="auto",
             device_map="auto",
-            attn_implementation=attn_impl,
             use_kernels=kernels,
+            attn_implementation=attn_impl,
+            quantization_config=Mxfp4Config(dequantize=True),
         )
         model_obj.train()
 
@@ -487,7 +473,7 @@ if __name__ == "__main__":
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            dtype=torch.bfloat16,
+            dtype="auto",
             device_map="auto",
             attn_implementation="eager",
         )
@@ -553,7 +539,7 @@ I am a language model, not a human being"""
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            dtype=torch.bfloat16,
+            dtype="auto",
             device_map="auto",
             attn_implementation="eager",
         )
