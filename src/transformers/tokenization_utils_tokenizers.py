@@ -377,7 +377,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 self._tokenizer,
                 self.init_kwargs.get("name_or_path", None),
                 init_kwargs=self.init_kwargs,
-                fix_mistral_regex=kwargs.get("fix_mistral_regex"),
+                fix_mistral_regex=kwargs.pop("fix_mistral_regex"),
                 **kwargs,
             )
 
