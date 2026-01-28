@@ -407,7 +407,31 @@ def get_cached_module_file(
         raise
 
     # Check we have all the requirements in our environment
-    modules_needed = check_imports(resolved_module_file)
+    def get_all_required_modules(entry_file):
+        visited = set()
+        all_modules = set()
+
+        def dfs(module_file):
+            if module_file in visited:
+                return
+            visited.add(module_file)
+
+            # Get direct dependencies
+            try:
+                dependencies = check_imports(os.path.join(pretrained_model_name_or_path, module_file + ".py"))
+            except Exception as e:
+                print(f"Error processing {module_file}: {e}")
+                dependencies = []
+
+            all_modules.update(dependencies)
+
+            for dep in dependencies:
+                dfs(dep)
+
+        dfs(entry_file)
+        return list(all_modules)
+    modules_needed = get_all_required_modules(os.path.splitext(os.path.basename(resolved_module_file))[0])
+
 
     # Now we move the module inside our cached dynamic modules.
     full_submodule = TRANSFORMERS_DYNAMIC_MODULE_NAME + os.path.sep + submodule
