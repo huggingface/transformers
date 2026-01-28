@@ -246,7 +246,6 @@ class GlmImageTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.vocab_size = vocab_size
         self.vision_vocab_size = vision_vocab_size
         self.attention_bias = attention_bias
-        self.pad_token_id = pad_token_id
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
