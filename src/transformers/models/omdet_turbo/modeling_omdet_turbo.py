@@ -32,7 +32,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, logging, torch_compilable_check
 from ...utils.backbone_utils import load_backbone
 from ..auto import AutoModel
 from .configuration_omdet_turbo import OmDetTurboConfig
@@ -352,10 +352,10 @@ class OmDetTurboMultiscaleDeformableAttention(nn.Module):
         batch_size, sequence_length, _ = encoder_hidden_states.shape
         # Ignore copy
         total_elements = sum(shape[0] * shape[1] for shape in spatial_shapes_list)
-        if total_elements != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
+        torch_compilable_check(
+            total_elements == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:
@@ -1539,7 +1539,8 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         Examples:
 
         ```python
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> from transformers import AutoProcessor, OmDetTurboForObjectDetection
@@ -1548,7 +1549,8 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         >>> model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-swin-tiny-hf")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> classes = ["cat", "remote"]
         >>> task = "Detect {}.".format(", ".join(classes))
         >>> inputs = processor(image, text=classes, task=task, return_tensors="pt")

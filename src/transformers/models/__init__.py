@@ -156,6 +156,7 @@ if TYPE_CHECKING:
     from .glm4v_moe import *
     from .glm46v import *
     from .glm_image import *
+    from .glm_ocr import *
     from .glmasr import *
     from .glpn import *
     from .got_ocr2 import *
@@ -354,6 +355,7 @@ if TYPE_CHECKING:
     from .siglip2 import *
     from .smollm3 import *
     from .smolvlm import *
+    from .solar_open import *
     from .speech_encoder_decoder import *
     from .speech_to_text import *
     from .speecht5 import *

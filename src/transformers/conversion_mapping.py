@@ -21,6 +21,7 @@ from .core_model_loading import (
     Chunk,
     Concatenate,
     ErnieFuseAndSplitTextVisionExperts,
+    Force16BytesAlignment,
     MergeModulelist,
     Transpose,
     WeightConverter,
@@ -38,8 +39,51 @@ if TYPE_CHECKING:
     from .quantizers import HfQuantizer
 
 
+_MODEL_TO_CONVERSION_PATTERN = {
+    # Mixtral-style MoE
+    "mixtral": "mixtral",
+    "minimax": "mixtral",
+    "minimax_m2": "mixtral",
+    # Qwen2-style MoE
+    "qwen2_moe": "qwen2_moe",
+    "deepseek_v2": "qwen2_moe",
+    "deepseek_v3": "qwen2_moe",
+    "dots1": "qwen2_moe",
+    "ernie4_5_moe": "qwen2_moe",
+    "glm4_moe": "qwen2_moe",
+    "glm4_moe_lite": "qwen2_moe",
+    "glm4v_moe": "qwen2_moe",
+    "longcat_flash": "qwen2_moe",
+    "solar_open": "qwen2_moe",
+    "qwen3_moe": "qwen2_moe",
+    "qwen3_omni_moe": "qwen2_moe",
+    "qwen3_omni_moe_thinker": "qwen2_moe",
+    "qwen3_next": "qwen2_moe",
+    "hunyuan_v1_moe": "qwen2_moe",
+    "flex_olmo": "qwen2_moe",
+    "olmoe": "qwen2_moe",
+}
+
+
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "gpt_oss": [
+            # NOTE: These converters are only applied if the model is being loaded from pre-dequantized checkpoint.
+            # If you are dequantizing the model on the fly, these converters will be ignored because the tensors
+            # that match these patterns are only created after dequantization.
+            # That's not an issue for now since the dequantization converters already ensure 16 bytes alignment
+            # by enforcing contiguity.
+            WeightConverter(
+                source_patterns="mlp.experts.gate_up_proj$",
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[Force16BytesAlignment()],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.down_proj$",
+                target_patterns="mlp.experts.down_proj",
+                operations=[Force16BytesAlignment()],
+            ),
+        ],
         "mixtral": [
             WeightRenaming(".block_sparse_moe.gate", ".mlp.gate"),
             WeightConverter(
@@ -82,17 +126,33 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
-        "phimoe": [
+        "qwen3_vl_moe": [
             WeightConverter(
                 source_patterns=[
-                    "mlp.experts.*.w1.weight",
-                    "mlp.experts.*.w3.weight",
+                    "mlp.experts.*.gate_proj.weight",
+                    "mlp.experts.*.up_proj.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1), Transpose(1, 2)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0), Transpose(1, 2)],
+            ),
+        ],
+        "phimoe": [
+            WeightRenaming(".block_sparse_moe.gate", ".mlp.router"),
+            WeightConverter(
+                source_patterns=[
+                    "block_sparse_moe.experts.*.w1.weight",
+                    "block_sparse_moe.experts.*.w3.weight",
                 ],
                 target_patterns="mlp.experts.gate_up_proj",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                source_patterns="mlp.experts.*.w2.weight",
+                source_patterns="block_sparse_moe.experts.*.w2.weight",
                 target_patterns="mlp.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
@@ -220,29 +280,19 @@ def _build_checkpoint_conversion_mapping():
             ),
         ]
 
-    mapping["deepseek_v2"] = mapping["qwen2_moe"].copy()
-    mapping["deepseek_v3"] = mapping["qwen2_moe"].copy()
-    mapping["dots1"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] += [
         WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
     ]
-    mapping["glm4_moe"] = mapping["qwen2_moe"].copy()
-    mapping["glm4_moe_lite"] = mapping["qwen2_moe"].copy()
-    mapping["glm4v_moe"] = mapping["qwen2_moe"].copy()
-    mapping["longcat_flash"] = mapping["qwen2_moe"].copy()
-    mapping["qwen3_moe"] = mapping["qwen2_moe"].copy()
-    mapping["qwen3_omni_moe"] = mapping["qwen2_moe"].copy()
-    mapping["qwen3_next"] = mapping["qwen2_moe"].copy()
-    mapping["qwen3_vl_moe"] = mapping["qwen2_moe"].copy()
-    mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
-    mapping["minimax"] = mapping["mixtral"].copy()
     mapping["minimax_m2"] = mapping["mixtral"].copy()
     mapping["minimax_m2"] += [
         WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),
     ]
-    mapping["flex_olmo"] = mapping["qwen2_moe"].copy()
-    mapping["olmoe"] = mapping["qwen2_moe"].copy()
+
+    for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
+        if model_type in mapping:
+            continue
+        mapping[model_type] = mapping[base_pattern].copy()
 
     return mapping
 
@@ -333,6 +383,13 @@ def get_model_conversion_mapping(
 
     # Add the ones from the quantizer as well if provided
     if hf_quantizer is not None:
+        # NOTE: Since get_weight_conversions() only serve to dequantize, we would normally want to apply them first.
+        # However, for now it's not possible to cascade converters (i.e., applying model-specific conversions on top
+        # of tensors created by the dequantization conversions)
+        # This means that if a model has model-specific conversions and is being dequantized, the model-specific conversion
+        # that relies on tensors created by dequantization conversions will not be applied.
+        # GptOss example: with Mxfp4Config(dequantize=True), Force16BytesAlignment converters are ignored because the tensors
+        # "mlp.experts.gate_up_proj$" and "mlp.experts.down_proj$" are only created after dequantization conversions are applied.
         weight_conversions.extend(hf_quantizer.get_weight_conversions())
 
     return weight_conversions
