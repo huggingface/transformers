@@ -26,7 +26,7 @@ from ...modeling_outputs import (
     Wav2Vec2BaseModelOutput,
     XVectorOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, get_torch_context_manager_or_global_device
 from ...utils import auto_docstring, is_peft_available, logging
 from .configuration_wavlm import WavLMConfig
 
@@ -1140,6 +1140,9 @@ class WavLMForCTC(WavLMPreTrainedModel):
 
         This method is **not** supposed to be called by the user and is prone to be changed in the future.
         """
+
+        if get_torch_context_manager_or_global_device() == torch.device("meta"):
+            return
 
         # Note that `tie_weights` is usually used to tie input and output embedding weights. The method is re-purposed to
         # correctly load adapter layers for WavLM so that we do not have to introduce a new API to
