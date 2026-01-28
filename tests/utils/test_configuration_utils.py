@@ -23,9 +23,26 @@ from pathlib import Path
 
 import httpx
 
-from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
+from transformers import (
+    AutoConfig,
+    BertConfig,
+    Florence2Config,
+    GPT2Config,
+    Sam2Config,
+    Sam3Config,
+    Sam3TrackerConfig,
+    logging,
+)
 from transformers.configuration_utils import PreTrainedConfig
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_torch
+from transformers.models.edgetam.configuration_edgetam import EdgeTamConfig
+from transformers.testing_utils import (
+    TOKEN,
+    CaptureLogger,
+    LoggingLevel,
+    TemporaryHubRepo,
+    is_staging_test,
+    require_torch,
+)
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
@@ -357,3 +374,62 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertIsInstance(new_config_instance.inf_positive, float)
         self.assertIsInstance(new_config_instance.inf_negative, float)
         self.assertIsInstance(new_config_instance.nan, float)
+
+    def test_compatible_model_types_suppresses_warning(self):
+        """Test that compatible_model_types suppresses the model type mismatch warning."""
+
+        # Create a config class that declares compatible_model_types
+        class CompatibleConfig(PreTrainedConfig):
+            model_type = "compatible_model"
+            compatible_model_types = ("other_model",)
+
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+
+        # Create a config class without compatible_model_types
+        class IncompatibleConfig(PreTrainedConfig):
+            model_type = "incompatible_model"
+
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+
+        # Create a config class to save with a specific model_type
+        class OtherModelConfig(PreTrainedConfig):
+            model_type = "other_model"
+
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Save a config with model_type "other_model"
+            config = OtherModelConfig()
+            config.save_pretrained(tmpdir)
+
+            logger = logging.get_logger("transformers.configuration_utils")
+
+            # Loading with CompatibleConfig should NOT produce a warning
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl:
+                    _ = CompatibleConfig.from_pretrained(tmpdir)
+            self.assertNotIn("You are using a model of type", cl.out)
+
+            # Loading with IncompatibleConfig SHOULD produce a warning
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl:
+                    _ = IncompatibleConfig.from_pretrained(tmpdir)
+            self.assertIn(
+                "You are using a model of type other_model to instantiate a model of type incompatible_model", cl.out
+            )
+
+    def test_sam2_sam3_edgetam_compatible_model_types(self):
+        """Test that SAM2, SAM3, EdgeTam, and Sam3Tracker configs have correct compatible_model_types."""
+        self.assertEqual(Sam2Config.compatible_model_types, ("sam2_video",))
+
+        # Sam3Config should be compatible with sam3_video (overrides inherited sam2_video)
+        self.assertEqual(Sam3Config.compatible_model_types, ("sam3_video",))
+
+        # Sam3TrackerConfig should be compatible with sam3_video
+        self.assertEqual(Sam3TrackerConfig.compatible_model_types, ("sam3_video",))
+
+        # EdgeTamConfig should be compatible with edgetam_video (overrides inherited sam2_video)
+        self.assertEqual(EdgeTamConfig.compatible_model_types, ("edgetam_video",))

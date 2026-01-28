@@ -408,6 +408,9 @@ class Sam2Config(PreTrainedConfig):
     ```"""
 
     model_type = "sam2"
+    # sam2_video checkpoints can be loaded with Sam2Model since sam2's weights
+    # are a subset of sam2_video's weights - only the model_type in config differs
+    compatible_model_types = ("sam2_video",)
     sub_configs = {
         "vision_config": AutoConfig,
         "prompt_encoder_config": Sam2PromptEncoderConfig,

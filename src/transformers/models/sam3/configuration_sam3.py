@@ -434,6 +434,9 @@ class Sam3Config(PreTrainedConfig):
     """
 
     model_type = "sam3"
+    # sam3_video checkpoints can be loaded with Sam3Model since sam3's weights
+    # are a subset of sam3_video's weights - only the model_type in config differs
+    compatible_model_types = ("sam3_video",)
     is_composition = True
     sub_configs = {
         "vision_config": Sam3VisionConfig,
