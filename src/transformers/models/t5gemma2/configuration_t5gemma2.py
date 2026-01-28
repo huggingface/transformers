@@ -632,4 +632,4 @@ class T5Gemma2Config(PreTrainedConfig):
         super().__setattr__(key, value)
 
 
-__all__ = ["T5Gemma2Config", "T5Gemma2TextConfig", "T5Gemma2EncoderConfig", "T5Gemma2DecoderConfig"]
+__all__ = ["T5Gemma2Config", "T5Gemma2TextConfig", "T5Gemma2DecoderConfig", "T5Gemma2EncoderConfig"]

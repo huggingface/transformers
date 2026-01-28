@@ -1621,10 +1621,12 @@ class T5Gemma2ForTokenClassification(T5Gemma2PreTrainedModel):
 __all__ = [
     "T5Gemma2Config",
     "T5Gemma2TextConfig",
-    "T5Gemma2EncoderConfig",
     "T5Gemma2DecoderConfig",
+    "T5Gemma2EncoderConfig",
     "T5Gemma2ForConditionalGeneration",
     "T5Gemma2Model",
+    "T5Gemma2Decoder",
+    "T5Gemma2Encoder",
     "T5Gemma2PreTrainedModel",
     "T5Gemma2ForSequenceClassification",
     "T5Gemma2ForTokenClassification",
