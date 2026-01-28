@@ -14,12 +14,18 @@
 import warnings
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor, nn
+from torch import Tensor
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging, torch_compilable_check
+from ...processing_utils import Unpack
+from ...utils import (
+    TransformersKwargs,
+    logging,
+    torch_compilable_check,
+)
 from ...utils.backbone_utils import (
     verify_backbone_config_arguments,
 )
@@ -507,7 +513,7 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
         spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
-        output_attentions: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         # Process inputs up to sampling locations calculation using parent class logic
         if position_embeddings is not None:
@@ -595,8 +601,8 @@ class RTDetrV2ForObjectDetection(RTDetrForObjectDetection, RTDetrV2PreTrainedMod
     _tied_weights_keys = {
         r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
         r"class_embed.(?![0])\d+": r"^class_embed.0",
-        "model.decoder.class_embed": "class_embed",
-        "model.decoder.bbox_embed": "bbox_embed",
+        "class_embed": "model.decoder.class_embed",
+        "bbox_embed": "model.decoder.bbox_embed",
     }
 
     def __init__(self, config: RTDetrV2Config):
@@ -608,7 +614,7 @@ class RTDetrV2ForObjectDetection(RTDetrForObjectDetection, RTDetrV2PreTrainedMod
         )
         self.bbox_embed = nn.ModuleList(
             [
-                RTDetrV2MLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
+                RTDetrV2MLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
                 for _ in range(config.decoder_layers)
             ]
         )

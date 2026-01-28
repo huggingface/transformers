@@ -406,7 +406,6 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                 recursive_check(tuple_output, dict_output)
 
         for model_class in self.all_model_classes:
-            print("Model class:", model_class)
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -534,10 +533,10 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 4)
             else:
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+                self.assertEqual(len(model.backbone.intermediate_channel_sizes), 4)
 
             self.assertTrue(outputs)
 
@@ -566,10 +565,10 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 4)
             else:
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+                self.assertEqual(len(model.backbone.intermediate_channel_sizes), 4)
 
             self.assertTrue(outputs)
 
@@ -697,18 +696,10 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
         expected_logits = torch.tensor(
-            [
-                [-6.7108, -4.3213, -6.3777],
-                [-8.9014, -6.1799, -6.7240],
-                [-6.9315, -4.4735, -6.2298],
-            ]
+            [[-6.7109, -4.3212, -6.3780], [-8.9010, -6.1812, -6.7245], [-6.9317, -4.4730, -6.2288]]
         ).to(torch_device)
         expected_boxes = torch.tensor(
-            [
-                [0.2583, 0.5499, 0.4683],
-                [0.7652, 0.9068, 0.4882],
-                [0.5490, 0.2763, 0.0564],
-            ]
+            [[0.2582, 0.5499, 0.4683], [0.7652, 0.9060, 0.4881], [0.5490, 0.2763, 0.0564]]
         ).to(torch_device)
 
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
@@ -743,10 +734,6 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
             torch.testing.assert_close(cpu_outputs[key], gpu_outputs[key].cpu(), atol=2e-2, rtol=2e-2)
 
         expected_logits = torch.tensor(
-            [
-                [-9.9051, -4.2541, -6.4852],
-                [-9.6947, -4.0854, -6.8033],
-                [-10.0665, -5.8470, -7.7003],
-            ]
+            [[-9.9160, -4.2876, -6.4985], [-9.6945, -4.0855, -6.8031], [-10.0665, -5.8471, -7.7001]]
         )
         assert torch.allclose(cpu_outputs.logits[0, :3, :3], expected_logits, atol=2e-4)

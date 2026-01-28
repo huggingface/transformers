@@ -508,8 +508,6 @@ class YolosMLPPredictionHead(nn.Module):
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
     height and width of a bounding box w.r.t. an image.
 
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-
     """
 
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
