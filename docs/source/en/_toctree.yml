@@ -945,6 +945,10 @@
         title: GLM-ASR
       - local: model_doc/granite_speech
         title: GraniteSpeech
+      - local: model_doc/higgs_audio_v2
+        title: Higgs Audio V2
+      - local: model_doc/higgs_audio_v2_tokenizer
+        title: Higgs Audio V2 Tokenizer
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/kyutai_speech_to_text
