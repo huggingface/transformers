@@ -15,7 +15,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tokenizers import normalizers
 
+from transformers.models.gemma.tokenization_gemma import GemmaTokenizer
 from transformers.models.siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from transformers.models.siglip.modeling_siglip import (
     BaseModelOutput,
@@ -42,6 +44,45 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.generic import check_model_inputs, is_flash_attention_requested
+
+
+class Siglip2Tokenizer(GemmaTokenizer):
+    """
+    Gemma tokenizer + SigLIP2 training default: lowercase normalization.
+    """
+
+    def __init__(
+        self,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
+        unk_token: str = "<unk>",
+        bos_token: str = "<bos>",
+        eos_token: str = "<eos>",
+        pad_token: str = "<pad>",
+        mask_token: str = "<mask>",
+        **kwargs,
+    ):
+        super().__init__(
+            vocab=vocab,
+            merges=merges,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            **kwargs,
+        )
+
+        # Persist for save/load + push_to_hub dynamic tokenizer test
+        if hasattr(self, "init_kwargs") and isinstance(self.init_kwargs, dict):
+            self.init_kwargs.setdefault("tokenizer_class", self.__class__.__name__)
+
+        backend = getattr(self, "_tokenizer", None)
+        if backend is not None and backend.normalizer is not None:
+            backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), backend.normalizer])
+
+    def _unk_id(self) -> int:
+        raise AttributeError("_unk_id is not needed for SigLIP2.")
 
 
 class Siglip2TextConfig(SiglipTextConfig):
@@ -614,4 +655,5 @@ __all__ = [
     "Siglip2TextModel",
     "Siglip2VisionModel",
     "Siglip2ForImageClassification",
+    "Siglip2Tokenizer",
 ]
