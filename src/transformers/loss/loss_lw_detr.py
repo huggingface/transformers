@@ -343,7 +343,7 @@ def LwDetrForObjectDetectionLoss(
         outputs_loss["auxiliary_outputs"] = auxiliary_outputs
     loss_dict = criterion(outputs_loss, labels)
     # Fourth: compute total loss, as a weighted sum of the various losses
-    weight_dict = {"loss_ce": 1, "loss_bbox": config.bbox_loss_coefficient}
+    weight_dict = {"loss_ce": config.class_loss_coefficient, "loss_bbox": config.bbox_loss_coefficient}
     weight_dict["loss_giou"] = config.giou_loss_coefficient
     if config.auxiliary_loss:
         aux_weight_dict = {}

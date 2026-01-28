@@ -328,6 +328,7 @@ if TYPE_CHECKING:
     from .regnet import *
     from .rembert import *
     from .resnet import *
+    from .rf_detr import *
     from .roberta import *
     from .roberta_prelayernorm import *
     from .roc_bert import *

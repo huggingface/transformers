@@ -358,6 +358,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("regnet", "RegNetModel"),
         ("rembert", "RemBertModel"),
         ("resnet", "ResNetModel"),
+        ("rf_detr", "RfDetrModel"),
         ("roberta", "RobertaModel"),
         ("roberta-prelayernorm", "RobertaPreLayerNormModel"),
         ("roc_bert", "RoCBertModel"),
@@ -870,6 +871,7 @@ MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         # Model for Instance Segmentation mapping
         # MaskFormerForInstanceSegmentation can be removed from this mapping in v5
         ("maskformer", "MaskFormerForInstanceSegmentation"),
+        ("rf_detr", "RfDetrForInstanceSegmentation"),
     ]
 )
 
@@ -1036,6 +1038,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         ("deformable_detr", "DeformableDetrForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
         ("lw_detr", "LwDetrForObjectDetection"),
+        ("rf_detr", "RfDetrForObjectDetection"),
         ("rt_detr", "RTDetrForObjectDetection"),
         ("rt_detr_v2", "RTDetrV2ForObjectDetection"),
         ("table-transformer", "TableTransformerForObjectDetection"),
@@ -1604,6 +1607,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("pixio", "PixioBackbone"),
         ("pvt_v2", "PvtV2Backbone"),
         ("resnet", "ResNetBackbone"),
+        ("rf_detr_dinov2", "RfDetrDinov2Backbone"),
         ("rt_detr_resnet", "RTDetrResNetBackbone"),
         ("swin", "SwinBackbone"),
         ("swinv2", "Swinv2Backbone"),
