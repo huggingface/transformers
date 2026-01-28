@@ -376,23 +376,6 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
                 # No conversion needed - add tensor directly to new_state_dict
                 # (this handles keys like embed_tokens, lm_head, layernorm, attention)
                 new_state_dict[renamed_key] = tensor
-        else:
-            if source_pattern is not None:
-                # Create a fresh converter for this layer to hold its tensors
-                # Share operations list (lightweight, no large data) but get new collected_tensors
-                converter = pattern_to_converter[source_pattern]
-                new_converter = WeightConverter(
-                    source_patterns=converter.source_patterns,
-                    target_patterns=converter.target_patterns,
-                    operations=converter.operations,
-                )
-                mapping = conversion_mapping.setdefault(renamed_key, new_converter)
-            else:
-                mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
-                source_pattern = original_key
-
-            # Add the tensor directly (not a Future, since it's already materialized)
-            mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
 
     # Apply the conversions and build the new state dict
     for renamed_key, mapping in conversion_mapping.items():
