@@ -1194,6 +1194,12 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         self.beit = BeitModel(config, add_pooling_layer=False)
 
         # FPNs
+        if self.config.out_indices is None:
+            raise ValueError(
+                f"BeitForSemanticSegmentation requires config.out_indices to be set. "
+                f"For a base model ({config.num_hidden_layers} layers), use: config.out_indices = [3, 5, 7, 11]. "
+                f"For a large model (24 layers), use: config.out_indices = [7, 11, 15, 23]."
+            )
         if len(self.config.out_indices) != 4:
             raise ValueError(
                 "BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers, "
@@ -1346,6 +1352,12 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
         self.encoder = BeitEncoder(config, window_size=self.embeddings.patch_embeddings.patch_shape)
 
         if config.add_fpn:
+            if self.config.out_indices is None:
+                raise ValueError(
+                    f"BeitBackbone with FPN requires config.out_indices to be set. "
+                    f"For a base model ({config.num_hidden_layers} layers), use: config.out_indices = [3, 5, 7, 11]. "
+                    f"For a large model (24 layers), use: config.out_indices = [7, 11, 15, 23]."
+                )
             if len(self.config.out_indices) != 4:
                 raise ValueError(
                     "BeitBackbone requires config.out_indices to be a list of 4 integers, "

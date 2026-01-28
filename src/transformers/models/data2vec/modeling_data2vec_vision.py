@@ -1121,6 +1121,12 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
         self.data2vec_vision = Data2VecVisionModel(config, add_pooling_layer=False)
 
         # FPNs
+        if self.config.out_indices is None:
+            raise ValueError(
+                f"Data2VecVisionForSemanticSegmentation requires config.out_indices to be set. "
+                f"For a base model ({config.num_hidden_layers} layers), use: config.out_indices = [3, 5, 7, 11]. "
+                f"For a large model (24 layers), use: config.out_indices = [7, 11, 15, 23]."
+            )
         if len(self.config.out_indices) != 4:
             raise ValueError(
                 "Data2VecVisionForSemanticSegmentation requires config.out_indices to be a list of 4 integers, "
