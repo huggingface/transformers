@@ -229,7 +229,7 @@ def load_model(
             kwargs = model_kwargs.copy()
 
             try:
-                model = model_class.from_pretrained(model, **kwargs)
+                model = model_class.from_pretrained(model, use_safetensors=None, **kwargs)
                 # Stop loading on the first successful load.
                 break
             except (OSError, ValueError, TypeError, RuntimeError):

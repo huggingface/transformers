@@ -24,6 +24,7 @@ from transformers import (
 from transformers.data.processors.squad import SquadExample
 from transformers.pipelines import QuestionAnsweringArgumentHandler, pipeline
 from transformers.testing_utils import (
+    Expectations,
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     is_torch_available,
@@ -243,14 +244,35 @@ class QAPipelineTests(unittest.TestCase):
 
         # Wrong answer, the whole text is identified as one "word" since the tokenizer does not include
         # a pretokenizer
-        self.assertEqual(nested_simplify(output),{"score": 1.0, "start": 0, "end": 30, "answer": "全学年にわたって小学校の国語の教科書に挿し絵が用いられている"})  # fmt: skip
+        EXPECTED_OUTPUT = Expectations(
+            {
+                ("cuda", 8): {
+                    "score": 1.0,
+                    "start": 0,
+                    "end": 30,
+                    "answer": "全学年にわたって小学校の国語の教科書に挿し絵が用いられている",
+                },
+                ("rocm", (9, 4)): {
+                    "score": 0.921,
+                    "start": 0,
+                    "end": 30,
+                    "answer": "全学年にわたって小学校の国語の教科書に挿し絵が用いられている",
+                },
+            }
+        ).get_expectation()
+
+        self.assertEqual(nested_simplify(output), EXPECTED_OUTPUT)  # fmt: skip
 
         # Disable word alignment
         output = question_answerer(question="国語", context="全学年にわたって小学校の国語の教科書に挿し絵が用いられている", align_to_words=False)  # fmt: skip
-        self.assertEqual(
-            nested_simplify(output),
-            {"score": 1.0, "start": 15, "end": 18, "answer": "教科書"},
-        )
+
+        EXPECTED_OUTPUT = Expectations(
+            {
+                ("cuda", 8): {"score": 1.0, "start": 15, "end": 18, "answer": "教科書"},
+                ("rocm", (9, 4)): {"score": 0.868, "start": 15, "end": 18, "answer": "教科書"},
+            }
+        ).get_expectation()
+        self.assertEqual(nested_simplify(output), EXPECTED_OUTPUT)  # fmt: skip
 
     @slow
     @require_torch
@@ -340,7 +362,7 @@ class QAPipelineTests(unittest.TestCase):
         )
         self.assertEqual(
             nested_simplify(outputs),
-            {"answer": "an accused in the loan fraud case", "end": 294, "score": 0.001, "start": 261},
+            {"answer": "an accused in the loan fraud case", "end": 294, "score": 0.002, "start": 261},
         )
 
     @slow

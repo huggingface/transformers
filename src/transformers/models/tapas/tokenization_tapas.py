@@ -229,6 +229,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             extra spaces.
     """
 
+    model_input_names = ["input_ids", "attention_mask", "token_type_ids"]
     vocab_files_names = VOCAB_FILES_NAMES
 
     def __init__(

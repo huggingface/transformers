@@ -386,7 +386,7 @@ class AnyToAnyPipeline(Pipeline):
             text = inputs.pop("text")
 
             # Feature extractor do not load audio files and expect a decode array
-            if "audio" in inputs and hasattr(self.processor, "feature_extractor"):
+            if inputs.get("audio", None) is not None and hasattr(self.processor, "feature_extractor"):
                 inputs["audio"] = self.processor.feature_extractor.fetch_audio(inputs["audio"])
 
         # If batched text inputs, we set padding to True unless specified otherwise
