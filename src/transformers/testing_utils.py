@@ -89,6 +89,7 @@ from .utils import (
     is_cython_available,
     is_decord_available,
     is_detectron2_available,
+    is_diffusers_available,
     is_essentia_available,
     is_faiss_available,
     is_fbgemm_gpu_available,
@@ -1176,6 +1177,13 @@ def require_wandb(test_case):
 
     """
     return unittest.skipUnless(is_wandb_available(), "test requires wandb")(test_case)
+
+
+def require_diffusers(test_case):
+    """
+    Decorator marking a test that requires diffusers
+    """
+    return unittest.skipUnless(is_diffusers_available(), "test requires diffusers")(test_case)
 
 
 def require_clearml(test_case):

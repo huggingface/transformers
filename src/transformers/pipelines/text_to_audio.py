@@ -47,9 +47,8 @@ class TextToAudioPipeline(Pipeline):
     Text-to-audio generation pipeline using any `AutoModelForTextToWaveform` or `AutoModelForTextToSpectrogram`. This
     pipeline generates an audio file from an input text and optional other conditional inputs.
 
-    Unless the model you're using explicitly sets these generation parameters in its configuration files
-    (`generation_config.json`), the following default values will be used:
-    - max_new_tokens: 256
+    Unless the model you're using explicitly sets generation parameters in `generation_config.json`, the default values
+    from `generation.configuration_utils.py._get_default_generation_params()` will be used.
 
     Example:
 
@@ -102,9 +101,7 @@ class TextToAudioPipeline(Pipeline):
     _load_tokenizer = True
 
     # Make sure the docstring is updated when the default generation config is changed
-    _default_generation_config = GenerationConfig(
-        max_new_tokens=256,
-    )
+    _default_generation_config = GenerationConfig()
 
     def __init__(self, *args, vocoder=None, sampling_rate=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -169,6 +166,7 @@ class TextToAudioPipeline(Pipeline):
                 text.messages,
                 tokenize=True,
                 return_dict=True,
+                sampling_rate=self.sampling_rate,
                 **kwargs,
             )
         else:
@@ -178,6 +176,8 @@ class TextToAudioPipeline(Pipeline):
             if self.model.config.model_type == "dia":
                 text = [f"[S1] {t}" if not t.startswith("[") else t for t in text]
             output = preprocessor(text, **kwargs, return_tensors="pt")
+        model_dtype = next(self.model.parameters()).dtype
+        output = output.to(dtype=model_dtype)
 
         return output
 
