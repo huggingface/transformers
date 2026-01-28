@@ -544,13 +544,15 @@ def _process_flash_attention_kwargs(
     # Note 'window_size' in supports_mapping maps to our 'sliding_window' param
     for k, v in user_kwargs.items():
         if not supports_mapping[k] and v is not None:
-            raise ValueError(f"Parameter `{k}` is not supported by this Flash Attention implementation but was set, please use a different attentionimplementation.")
+            raise ValueError(
+                f"Parameter `{k}` is not supported by this Flash Attention implementation but was set, please use a different attentionimplementation."
+            )
 
     flash_kwargs = {
         "causal": is_causal and not (use_top_left_mask and query_length == 1),
         "softmax_scale": softmax_scale,
     }
-    
+
     if supports_mapping["dropout_p"]:
         flash_kwargs["dropout_p"] = dropout
 
