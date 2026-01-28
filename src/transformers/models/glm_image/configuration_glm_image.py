@@ -19,7 +19,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
 class GlmImageVQVAEConfig(PreTrainedConfig):
@@ -138,7 +138,7 @@ class GlmImageVisionConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
 
-class GlmImageTextConfig(PreTrainedConfig):
+class GlmImageTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`GlmImageTextModel`]. It is used to instantiate a
     GLM-Image model according to the specified arguments, defining the model architecture. Instantiating a

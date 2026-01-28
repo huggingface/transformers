@@ -18,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
 class Glm4vVisionConfig(PreTrainedConfig):
@@ -114,7 +114,7 @@ class Glm4vVisionConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class Glm4vTextConfig(PreTrainedConfig):
+class Glm4vTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
     GLM-4.1V model according to the specified arguments, defining the model architecture. Instantiating a

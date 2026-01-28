@@ -311,3 +311,86 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
             "In this image, we see a cat that is lying on its side on a cat bed.",
         ]
         self.assertListEqual(generated_texts, expected_generated_text)
+
+
+@require_torch_accelerator
+@slow
+class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        self.processor = AutoProcessor.from_pretrained("LiquidAI/LFM2.5-VL-1.6B")
+        self.processor.tokenizer.padding_side = "left"
+        self.image = Image.open(
+            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+        )
+        self.image2 = Image.open(
+            BytesIO(
+                requests.get(
+                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                ).content
+            )
+        )
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def test_integration_test(self):
+        model = Lfm2VlForConditionalGeneration.from_pretrained(
+            "LiquidAI/LFM2.5-VL-1.6B",
+            dtype=torch.bfloat16,
+            device_map="auto",
+        )
+
+        # Create inputs
+        text = "<image>In this image, we see"
+        images = self.image
+        inputs = self.processor(text=text, images=images, return_tensors="pt")
+        inputs.to(device=torch_device, dtype=torch.bfloat16)
+
+        generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        expected_generated_text = (
+            "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a"
+        )
+        self.assertEqual(generated_texts[0], expected_generated_text)
+
+    def test_integration_test_high_resolution(self):
+        model = Lfm2VlForConditionalGeneration.from_pretrained(
+            "LiquidAI/LFM2.5-VL-1.6B",
+            dtype=torch.bfloat16,
+            device_map="auto",
+        )
+
+        # Create inputs
+        text = "<image>In this image, we see"
+        images = self.image2
+        inputs = self.processor(text=text, images=images, return_tensors="pt")
+        inputs.to(device=torch_device, dtype=torch.bfloat16)
+
+        generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        expected_generated_text = "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands on Liberty Island in"
+        self.assertEqual(generated_texts[0], expected_generated_text)
+
+    def test_integration_test_batched(self):
+        model = Lfm2VlForConditionalGeneration.from_pretrained(
+            "LiquidAI/LFM2.5-VL-1.6B",
+            dtype=torch.bfloat16,
+            device_map="auto",
+        )
+
+        # Create inputs
+        text = ["<image>In this image, we see", "<image>In this image, we see"]
+        images = [[self.image2], [self.image]]
+        inputs = self.processor(text=text, images=images, return_tensors="pt", padding=True)
+        inputs.to(device=torch_device, dtype=torch.bfloat16)
+
+        generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        expected_generated_text = [
+            "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands on Liberty Island in",
+            "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
+        ]
+        self.assertListEqual(generated_texts, expected_generated_text)

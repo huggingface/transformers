@@ -30,7 +30,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -160,7 +160,7 @@ class Glm4vVisionConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class Glm4vTextConfig(PreTrainedConfig):
+class Glm4vTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
     GLM-4.1V model according to the specified arguments, defining the model architecture. Instantiating a

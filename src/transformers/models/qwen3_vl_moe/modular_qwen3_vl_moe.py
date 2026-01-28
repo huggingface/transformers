@@ -20,7 +20,7 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, can_return_tuple, logging
@@ -50,7 +50,7 @@ from ..qwen3_vl.modeling_qwen3_vl import (
 logger = logging.get_logger(__name__)
 
 
-class Qwen3VLMoeTextConfig(PreTrainedConfig):
+class Qwen3VLMoeTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3VLMoeTextModel`]. It is used to instantiate a
     Qwen3-VL-MOE model according to the specified arguments, defining the model architecture. Instantiating a configuration
