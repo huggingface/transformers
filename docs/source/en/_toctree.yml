@@ -1267,6 +1267,8 @@
         title: Time Series Transformer
       - local: model_doc/timesfm
         title: TimesFM
+      - local: model_doc/timesfm_2p5
+        title: TimesFm2p5
       title: Time series models
     title: Models
   - sections:

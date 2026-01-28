@@ -414,6 +414,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("textnet", "TextNetModel"),
         ("time_series_transformer", "TimeSeriesTransformerModel"),
         ("timesfm", "TimesFmModel"),
+        ("timesfm_2p5", "Timesfm2P5Model"),
         ("timesformer", "TimesformerModel"),
         ("timm_backbone", "TimmBackbone"),
         ("timm_wrapper", "TimmWrapperModel"),

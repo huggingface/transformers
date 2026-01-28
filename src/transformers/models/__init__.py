@@ -378,6 +378,7 @@ if TYPE_CHECKING:
     from .textnet import *
     from .time_series_transformer import *
     from .timesfm import *
+    from .timesfm_2p5 import *
     from .timesformer import *
     from .timm_backbone import *
     from .timm_wrapper import *
