@@ -1,0 +1,74 @@
+# Enforces completeness checks for new model PRs.
+# Detection of "new model" is delegated to utils/pr_slow_ci_models.py
+name: New model PR completeness
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - "src/transformers/models/**"
+      - "tests/**"
+      - "docs/source/en/**"
+      - "utils/pr_slow_ci_models.py"
+      - ".github/workflows/**"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check-new-model:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install gitpython
+
+      - name: Detect new model(s) in this PR
+        id: detect
+        shell: python
+        run: |
+          import json
+          import os
+          import subprocess
+          import sys
+
+          base = "${{ github.event.pull_request.base.sha }}"
+          head = "${{ github.event.pull_request.head.sha }}"
+
+          # Run pr_slow_ci_models.py to detect new models
+          result = subprocess.run(
+              ["python", "utils/pr_slow_ci_models.py", "--base", base, "--head", head, "--print-new-models"],
+              capture_output=True,
+              text=True,
+              check=True,
+          )
+          models_json = result.stdout.strip()
+          models = json.loads(models_json)
+
+          # Set outputs
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"models_json={models_json}\n")
+              f.write(f"models={' '.join(models)}\n")
+              f.write(f"run={'true' if models else 'false'}\n")
+
+          if models:
+              print(f"Detected new model(s): {', '.join(models)}")
+          else:
+              print("No new models detected in this PR.")
+
+      - name: Validate required artifacts for new model(s)
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          python utils/check_new_model_pr.py \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}" \
+            --models ${{ steps.detect.outputs.models }}
