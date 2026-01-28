@@ -880,6 +880,9 @@ def common_partial_suffix(str1: str, str2: str) -> str:
     return common_suffix
 
 
+WHITELISTED_CLASSES = ("RotaryEmbeddingConfigMixin",)
+
+
 def replace_class_node(
     mapper: ModelFileMapper, modular_class_node: cst.ClassDef, renamed_super_class: str, original_super_class: str
 ) -> cst.ClassDef:
@@ -938,6 +941,17 @@ def replace_class_node(
                     new_base = original_base.with_changes(value=new_name_node)
                     break
         new_class_bases.append(new_base)
+
+    # Check for additional classes that may not be inherited as the parent does not use
+    # the whitelisted class (but is recognized explicitly in modular)
+    if len(additional_bases) > 0:
+        existing_base_names = {get_full_attribute_name(b.value) for b in new_class_bases}
+        for whitelisted_additional_class in WHITELISTED_CLASSES:
+            if (
+                whitelisted_additional_class not in existing_base_names
+                and whitelisted_additional_class in additional_bases
+            ):
+                new_class_bases.append(cst.Arg(value=cst.Name(whitelisted_additional_class)))
 
     # Use class decorators redefined in modular file if any
     new_class_decorators = (
