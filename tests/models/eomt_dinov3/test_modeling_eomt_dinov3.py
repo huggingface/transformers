@@ -273,16 +273,15 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         # fmt: on
 
         torch.testing.assert_close(
-            outputs.class_queries_logits[0, :3, :3].float(), expected_class_logits_slice, rtol=1e-2, atol=1e-2
+            outputs.class_queries_logits[0, :3, :3].float(), expected_class_logits_slice, rtol=1e-3, atol=1e-3
         )
         torch.testing.assert_close(
-            outputs.masks_queries_logits[0, 0, :3, :3].float(), expected_masks_logits_slice, rtol=1e-2, atol=1e-2
+            outputs.masks_queries_logits[0, 0, :3, :3].float(), expected_masks_logits_slice, rtol=1e-3, atol=1e-3
         )
 
     @slow
-    @unittest.skip(reason="No semantic segmentation checkpoint available yet")
     def test_semantic_segmentation_inference(self):
-        model_id = "tue-mps/eomt-dinov3-ade20k-semantic-large-512"
+        model_id = "tue-mps/eomt-dinov3-ade-semantic-large-512"
         model = EomtDinov3ForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_id)
 
@@ -293,30 +292,50 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         with torch.inference_mode():
             outputs = model(**inputs)
 
-        self.assertTrue(outputs.class_queries_logits.shape == (2, 100, 151))
-        self.assertTrue(outputs.masks_queries_logits.shape == (2, 100, 128, 128))
+        self.assertEqual(outputs.class_queries_logits.shape, (1, 100, 151))
+        self.assertEqual(outputs.masks_queries_logits.shape, (1, 100, 128, 128))
+
+        # fmt: off
+        expected_class_logits_slice = torch.tensor([
+            [-0.8800, -3.2201, -3.5216],
+            [-0.8505, -4.5393, -4.2739],
+            [ 2.5497, -4.1265, -3.1123]
+        ], device=model.device)
+        expected_masks_logits_slice = torch.tensor([
+            [-37.6607, -37.7116, -38.9986],
+            [-38.3159, -51.5591, -51.5634],
+            [-42.4789, -53.8530, -66.7880]
+        ], device=model.device)
+        # fmt: on
+
+        torch.testing.assert_close(
+            outputs.class_queries_logits[0, :3, :3].float(), expected_class_logits_slice, rtol=1e-3, atol=1e-3
+        )
+        torch.testing.assert_close(
+            outputs.masks_queries_logits[0, 0, :3, :3].float(), expected_masks_logits_slice, rtol=1e-3, atol=1e-3
+        )
 
         preds = processor.post_process_semantic_segmentation(outputs, target_sizes=[(image.size[1], image.size[0])])[0]
 
-        self.assertTrue(preds.shape == (image.size[1], image.size[0]))
+        self.assertEqual(preds.shape, (image.size[1], image.size[0]))
 
         # fmt: off
-        EXPECTED_SLICE = torch.tensor([
-            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
-            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
-            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
-            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
-            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
-            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
-            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
-            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
-            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
-            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39]
+        expected_preds_slice = torch.tensor([
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         ], device=model.device)
         # fmt: on
 
         output_slice = preds[:10, :10]
-        torch.testing.assert_close(output_slice, EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(output_slice, expected_preds_slice, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_panoptic_segmentation_inference(self):
