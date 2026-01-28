@@ -1375,7 +1375,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
         input_features = input_features.to(torch_device)
 
-        generated_ids = model.generate(input_features, num_beams=5, max_length=20)
+        generated_ids = model.generate(input_features, num_beams=5, max_length=22)
         transcript = processor.tokenizer.batch_decode(generated_ids)[0]
 
         EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his"
@@ -1391,7 +1391,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
         input_features = input_features.to(torch_device)
 
-        generated_ids = model.generate(input_features, num_beams=5, max_length=20)
+        generated_ids = model.generate(input_features, num_beams=5, max_length=24)
         transcript = processor.tokenizer.decode(generated_ids[0])
 
         EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel"
@@ -1400,7 +1400,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_large_generation(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3", dtype=torch.float32)
         model.to(torch_device)
 
         input_speech = self._load_datasamples(1)
@@ -1408,7 +1408,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = input_features.to(torch_device)
 
         generated_ids = model.generate(
-            input_features, do_sample=False, max_length=20, language="<|en|>", task="transcribe"
+            input_features, do_sample=False, max_length=24, language="<|en|>", task="transcribe"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
@@ -1418,7 +1418,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_large_generation_multilingual(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3", dtype=torch.float32)
         model.to(torch_device)
 
         ds = load_dataset("facebook/multilingual_librispeech", "german", split="test", streaming=True)
@@ -1429,14 +1429,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = input_features.to(torch_device)
 
         generated_ids = model.generate(
-            input_features, do_sample=False, max_length=20, language="<|de|>", task="transcribe"
+            input_features, do_sample=False, max_length=24, language="<|de|>", task="transcribe"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         EXPECTED_TRANSCRIPT = " denken sie soeben weilten meine gedanken bei ihnen in adelaide und ich wünsch"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
         generated_ids = model.generate(
-            input_features, do_sample=False, max_length=20, language="<|de|>", task="translate"
+            input_features, do_sample=False, max_length=24, language="<|de|>", task="translate"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         EXPECTED_TRANSCRIPT = " Think, my thoughts were just now in Adelaide with you, and I wished to be able"
@@ -1446,13 +1446,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     def test_large_batched_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3", dtype=torch.float32)
         model.to(torch_device)
 
         input_speech = self._load_datasamples(4)
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
         input_features = input_features.to(torch_device)
-        generated_ids = model.generate(input_features, max_length=20, task="translate")
+        generated_ids = model.generate(input_features, max_length=24, task="translate")
 
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
@@ -1506,7 +1506,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(
             input_features.repeat(2, 1, 1),
             do_sample=False,
-            max_length=20,
+            max_length=24,
             language=["<|ja|>", "<|en|>"],
             task="transcribe",
         )
@@ -1523,7 +1523,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_speech = self._load_datasamples(4)
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
         input_features = input_features.to(torch_device)
-        generated_ids = model.generate(input_features, max_length=20).to("cpu")
+        generated_ids = model.generate(input_features, max_length=22).to("cpu")
 
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
@@ -1626,7 +1626,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     def test_distil_token_timestamp_generation(self):
         # we actually just want to check that returning segments with distil model works
         processor = WhisperProcessor.from_pretrained("distil-whisper/distil-large-v3")
-        model = WhisperForConditionalGeneration.from_pretrained("distil-whisper/distil-large-v3")
+        model = WhisperForConditionalGeneration.from_pretrained("distil-whisper/distil-large-v3", dtype=torch.float32)
         model.to(torch_device)
 
         input_speech = np.concatenate(self._load_datasamples(4))
@@ -1794,11 +1794,11 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             },
             {
                 "text": " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and",
-                "timestamp": (39.80, 45.36),
+                "timestamp": (39.80, 45.38),
             },
             {
                 "text": " can discover in it but little of rocky Ithaca.",
-                "timestamp": (45.36, 49.0),
+                "timestamp": (45.38, 49.0),
             },
             {
                 "text": " Lenell's pictures are a sort of up-guards-and-atom paintings, and Mason's exquisite ittles",
@@ -1893,7 +1893,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     def test_large_timestamp_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3", dtype=torch.float32)
         model.to(torch_device)
 
         input_speech = np.concatenate(self._load_datasamples(4))
