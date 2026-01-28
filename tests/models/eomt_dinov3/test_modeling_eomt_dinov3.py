@@ -75,6 +75,7 @@ class EomtDinov3ForUniversalSegmentationTester:
             "num_register_tokens": self.num_register_tokens,
             "num_queries": self.num_queries,
             "num_blocks": 1,
+            "rope_parameters": {"rope_theta": 100.0},
         }
         return EomtDinov3Config(**config)
 

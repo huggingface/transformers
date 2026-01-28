@@ -394,7 +394,6 @@ class EomtDinov3RopePositionEmbedding(nn.Module):
     inv_freq: Tensor
 
     def __init__(self, config: EomtDinov3Config):
-        # Use rope_parameters pattern instead of rope_theta
         super().__init__()
 
         self.config = config
@@ -405,6 +404,7 @@ class EomtDinov3RopePositionEmbedding(nn.Module):
 
         inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
@@ -1071,6 +1071,7 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
         elif isinstance(module, EomtDinov3RopePositionEmbedding):
             inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
             init.copy_(module.inv_freq, inv_freq)
+            init.copy_(module.original_inv_freq, inv_freq.clone())
         elif isinstance(module, EomtDinov3ForUniversalSegmentation):
             init.ones_(module.attn_mask_probs)
 
@@ -1209,7 +1210,7 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
     def get_loss(self, loss_dict: dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

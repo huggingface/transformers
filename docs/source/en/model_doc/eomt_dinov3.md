@@ -57,12 +57,12 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import AutoImageProcessor, EomtDinov3ForUniversalSegmentation
+from transformers import AutoImageProcessor, AutoModelForUniversalSegmentation
 
 
 model_id = "tue-mps/eomt-dinov3-coco-panoptic-base-640"
 processor = AutoImageProcessor.from_pretrained(model_id)
-model = EomtDinov3ForUniversalSegmentation.from_pretrained(model_id).to("cuda" if torch.cuda.is_available() else "cpu")
+model = AutoModelForUniversalSegmentation.from_pretrained(model_id).to("cuda" if torch.cuda.is_available() else "cpu")
 
 image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
