@@ -62,6 +62,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "hunyuan_v1_moe": "qwen2_moe",
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
+    "nomic_bert": "nomic_bert",
 }
 
 
@@ -255,6 +256,43 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="LayerNorm.bias",
             ),
         ],
+        "nomic_bert": [
+            # 1. Embeddings & Pooler (No 'bert.' prefix)
+            WeightRenaming("embeddings.word_embeddings.weight", "embeddings.word_embeddings.weight"),
+            WeightRenaming("embeddings.token_type_embeddings.weight", "embeddings.token_type_embeddings.weight"),
+            WeightRenaming("emb_ln.weight", "embeddings.LayerNorm.weight"),
+            WeightRenaming("emb_ln.bias", "embeddings.LayerNorm.bias"),
+            WeightRenaming("pooler.dense.weight", "pooler.dense.weight"),
+            WeightRenaming("pooler.dense.bias", "pooler.dense.bias"),
+
+            # 2. Encoder Layers Renaming (Regex works here for name changes)
+            WeightRenaming(r"encoder\.layers\.(\d+)\.attn\.out_proj\.weight", r"encoder.layer.\1.attention.output.dense.weight"),
+            WeightRenaming(r"encoder\.layers\.(\d+)\.attn\.out_proj\.bias", r"encoder.layer.\1.attention.output.dense.bias"),
+            WeightRenaming(r"encoder\.layers\.(\d+)\.mlp\.fc11\.weight", r"encoder.layer.\1.intermediate.gate_proj.weight"),
+            WeightRenaming(r"encoder\.layers\.(\d+)\.mlp\.fc11\.bias", r"encoder.layer.\1.intermediate.gate_proj.bias"),
+            WeightRenaming(r"encoder\.layers\.(\d+)\.mlp\.fc12\.weight", r"encoder.layer.\1.intermediate.up_proj.weight"),
+            WeightRenaming(r"encoder\.layers\.(\d+)\.mlp\.fc12\.bias", r"encoder.layer.\1.intermediate.up_proj.bias"),
+            WeightRenaming(r"encoder\.layers\.(\d+)\.mlp\.fc2\.weight", r"encoder.layer.\1.output.dense.weight"),
+            WeightRenaming(r"encoder\.layers\.(\d+)\.mlp\.fc2\.bias", r"encoder.layer.\1.output.dense.bias"),
+            WeightRenaming(r"encoder\.layers\.(\d+)\.norm1\.weight", r"encoder.layer.\1.attention.output.LayerNorm.weight"),
+            WeightRenaming(r"encoder\.layers\.(\d+)\.norm1\.bias", r"encoder.layer.\1.attention.output.LayerNorm.bias"),
+            WeightRenaming(r"encoder\.layers\.(\d+)\.norm2\.weight", r"encoder.layer.\1.output.LayerNorm.weight"),
+            WeightRenaming(r"encoder\.layers\.(\d+)\.norm2\.bias", r"encoder.layer.\1.output.LayerNorm.bias"),
+
+            # 3. Explicit QKV Splits (Manually listed to avoid \1 or * errors)
+            WeightConverter(source_patterns="encoder.layers.0.attn.Wqkv.weight", target_patterns=["encoder.layer.0.attention.self.q_proj.weight", "encoder.layer.0.attention.self.k_proj.weight", "encoder.layer.0.attention.self.v_proj.weight"], operations=[Chunk(dim=0)]),
+            WeightConverter(source_patterns="encoder.layers.1.attn.Wqkv.weight", target_patterns=["encoder.layer.1.attention.self.q_proj.weight", "encoder.layer.1.attention.self.k_proj.weight", "encoder.layer.1.attention.self.v_proj.weight"], operations=[Chunk(dim=0)]),
+            WeightConverter(source_patterns="encoder.layers.2.attn.Wqkv.weight", target_patterns=["encoder.layer.2.attention.self.q_proj.weight", "encoder.layer.2.attention.self.k_proj.weight", "encoder.layer.2.attention.self.v_proj.weight"], operations=[Chunk(dim=0)]),
+            WeightConverter(source_patterns="encoder.layers.3.attn.Wqkv.weight", target_patterns=["encoder.layer.3.attention.self.q_proj.weight", "encoder.layer.3.attention.self.k_proj.weight", "encoder.layer.3.attention.self.v_proj.weight"], operations=[Chunk(dim=0)]),
+            WeightConverter(source_patterns="encoder.layers.4.attn.Wqkv.weight", target_patterns=["encoder.layer.4.attention.self.q_proj.weight", "encoder.layer.4.attention.self.k_proj.weight", "encoder.layer.4.attention.self.v_proj.weight"], operations=[Chunk(dim=0)]),
+            WeightConverter(source_patterns="encoder.layers.5.attn.Wqkv.weight", target_patterns=["encoder.layer.5.attention.self.q_proj.weight", "encoder.layer.5.attention.self.k_proj.weight", "encoder.layer.5.attention.self.v_proj.weight"], operations=[Chunk(dim=0)]),
+            WeightConverter(source_patterns="encoder.layers.6.attn.Wqkv.weight", target_patterns=["encoder.layer.6.attention.self.q_proj.weight", "encoder.layer.6.attention.self.k_proj.weight", "encoder.layer.6.attention.self.v_proj.weight"], operations=[Chunk(dim=0)]),
+            WeightConverter(source_patterns="encoder.layers.7.attn.Wqkv.weight", target_patterns=["encoder.layer.7.attention.self.q_proj.weight", "encoder.layer.7.attention.self.k_proj.weight", "encoder.layer.7.attention.self.v_proj.weight"], operations=[Chunk(dim=0)]),
+            WeightConverter(source_patterns="encoder.layers.8.attn.Wqkv.weight", target_patterns=["encoder.layer.8.attention.self.q_proj.weight", "encoder.layer.8.attention.self.k_proj.weight", "encoder.layer.8.attention.self.v_proj.weight"], operations=[Chunk(dim=0)]),
+            WeightConverter(source_patterns="encoder.layers.9.attn.Wqkv.weight", target_patterns=["encoder.layer.9.attention.self.q_proj.weight", "encoder.layer.9.attention.self.k_proj.weight", "encoder.layer.9.attention.self.v_proj.weight"], operations=[Chunk(dim=0)]),
+            WeightConverter(source_patterns="encoder.layers.10.attn.Wqkv.weight", target_patterns=["encoder.layer.10.attention.self.q_proj.weight", "encoder.layer.10.attention.self.k_proj.weight", "encoder.layer.10.attention.self.v_proj.weight"], operations=[Chunk(dim=0)]),
+            WeightConverter(source_patterns="encoder.layers.11.attn.Wqkv.weight", target_patterns=["encoder.layer.11.attention.self.q_proj.weight", "encoder.layer.11.attention.self.k_proj.weight", "encoder.layer.11.attention.self.v_proj.weight"], operations=[Chunk(dim=0)]),
+        ],
     }
     if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
         mapping["legacy"] += [
@@ -287,6 +325,7 @@ def _build_checkpoint_conversion_mapping():
     mapping["minimax_m2"] += [
         WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),
     ]
+
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:

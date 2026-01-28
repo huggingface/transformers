@@ -26,7 +26,7 @@ limitations under the License.
 The NomicBERT model currently has no academic papers specifically written about it, however, the [nomic-embed-text-v1.5](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5) card clearly describes the model’s architecture and training approach: it extends BERT to a 2048 token context length, and modifies the BERT training procedure. Notable changes include: 
 
 - Use [Rotary Position Embeddings](https://huggingface.co/papers/2104.09864.pdf) to allow for context length extrapolation.
-- Use SwiGLU activations, which have [been shown](https://huggingface.co/papers/2002.05202) to [improve model performance](https://www.databricks.com/blog/mosaicbert)
+- Use SiLU activations, which have [been shown](https://huggingface.co/papers/2002.05202) to [improve model performance](https://www.databricks.com/blog/mosaicbert)
 - No dropout
 
 > [!TIP]
@@ -90,7 +90,7 @@ print(f"The predicted token is: {predicted_token}")
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model nomic-ai/nomic-bert-2048 --device 0
+echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model nomic-ai/nomic-embed-text-v1.5 --device 0
 ```
 
 </hfoption>
@@ -98,7 +98,7 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 ## Notes
 
-- For extremely long sequences, consider batching or gradient checkpointing to save memory.
+- For extremely long sequences, consider batching (gradient checkpointing is currently not supported) to save memory.
 
 ## NomicBertConfig
 
