@@ -12,7 +12,7 @@ from transformers.utils.import_utils import is_cuda_platform, is_rocm_platform
 
 
 if is_cuda_platform():
-    import gpustat
+    import pynvml
 
 if is_rocm_platform():
     import amdsmi
@@ -100,11 +100,12 @@ def get_intel_xpu_stats() -> tuple[int, float]:
     return utilization, memory_used_gb
 
 
-def get_nvidia_gpu_stats() -> tuple[int, float]:
-    """Returns the utilization and memory used of an NVIDIA GPU, both in percent"""
-    gpu_stats = gpustat.GPUStatCollection.new_query()
-    gpu_stats = gpu_stats[0]
-    return int(gpu_stats["utilization.gpu"]), float(gpu_stats["memory.used"]) / 1024**3
+def get_nvidia_gpu_stats(device_handle) -> tuple[int, float]:
+    """Returns the utilization and memory used of an NVIDIA GPU using pynvml."""
+    utilization = pynvml.nvmlDeviceGetUtilizationRates(device_handle).gpu
+    memory_info = pynvml.nvmlDeviceGetMemoryInfo(device_handle)
+    memory_used_gb = memory_info.used / 1024**3
+    return int(utilization), float(memory_used_gb)
 
 
 # Simple data classes to hold the raw GPU metrics
@@ -152,7 +153,7 @@ class GPURawMetrics:
 class GPUMonitor:
     """Monitor GPU utilization during benchmark execution using a separate process."""
 
-    def __init__(self, sample_interval_sec: float = 0.1, logger: Logger | None = None):
+    def __init__(self, sample_interval_sec: float = 0.05, logger: Logger | None = None):
         self.sample_interval_sec = sample_interval_sec
         self.logger = logger if logger is not None else logging.getLogger(__name__)
 
@@ -185,6 +186,9 @@ class GPUMonitor:
         if gpu_type == "amd":
             amdsmi.amdsmi_init()
             device_handle = amdsmi.amdsmi_get_processor_handles()[0]
+        elif gpu_type == "nvidia":
+            pynvml.nvmlInit()
+            device_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
 
         # Signal ready
         try:
@@ -199,7 +203,7 @@ class GPUMonitor:
                 if gpu_type == "amd":
                     utilization, memory_used = get_amd_gpu_stats(device_handle)
                 elif gpu_type == "nvidia":
-                    utilization, memory_used = get_nvidia_gpu_stats()
+                    utilization, memory_used = get_nvidia_gpu_stats(device_handle)
                 elif gpu_type == "intel":
                     utilization, memory_used = get_intel_xpu_stats()
                 else:
@@ -217,6 +221,11 @@ class GPUMonitor:
         if gpu_type == "amd":
             try:
                 amdsmi.amdsmi_shut_down()
+            except Exception:
+                pass
+        elif gpu_type == "nvidia":
+            try:
+                pynvml.nvmlShutdown()
             except Exception:
                 pass
 
