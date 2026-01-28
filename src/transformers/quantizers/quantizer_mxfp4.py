@@ -73,6 +73,19 @@ class Mxfp4HfQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Using mxfp4 requires Accelerate: `pip install accelerate`")
 
+        device = torch.accelerator.current_accelerator() or torch.device("cpu")
+        if device.type not in ["cuda", "xpu", "cpu"]:
+            if self.pre_quantized:
+                logger.warning_once(
+                    f"Using MXFP4 quantized models requires model on cuda/xpu/cpu, but found {device}, we will default to dequantizing the model to bf16. To use mxfp4, please disable the current accelerator."
+                )
+                self.quantization_config.dequantize = True
+                return
+            else:
+                raise RuntimeError(
+                    f"Quantizing a model using MXFP4 requires model on cuda/xpu/cpu, but found {device}. To use mxfp4, please disable the current accelerator."
+                )
+
         if torch.xpu.is_available():
             is_device_supported_mxfp4 = True
             kernels_available = is_triton_available("3.5.0") and is_kernels_available()
