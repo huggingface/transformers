@@ -209,6 +209,7 @@ else:
             ("tvp", ("TvpImageProcessor", "TvpImageProcessorFast")),
             ("udop", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
             ("upernet", ("SegformerImageProcessor", "SegformerImageProcessorFast")),
+            ("uvdoc", ("UVDocImageProcessor", "UVDocImageProcessorFast")),
             ("video_llama_3", ("VideoLlama3ImageProcessor", "VideoLlama3ImageProcessorFast")),
             ("video_llava", ("VideoLlavaImageProcessor", None)),
             ("videomae", ("VideoMAEImageProcessor", None)),

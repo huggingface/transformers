@@ -907,6 +907,8 @@
         title: Timm Wrapper
       - local: model_doc/upernet
         title: UperNet
+      - local: model_doc/uvdoc
+        title: UVDoc
       - local: model_doc/vit
         title: Vision Transformer (ViT)
       - local: model_doc/vitdet
