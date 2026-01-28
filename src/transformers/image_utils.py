@@ -86,11 +86,6 @@ class AnnotationFormat(ExplicitEnum):
     COCO_PANOPTIC = "coco_panoptic"
 
 
-class AnnotionFormat(ExplicitEnum):
-    COCO_DETECTION = AnnotationFormat.COCO_DETECTION.value
-    COCO_PANOPTIC = AnnotationFormat.COCO_PANOPTIC.value
-
-
 AnnotationType = dict[str, int | str | list[dict]]
 
 
