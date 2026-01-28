@@ -981,7 +981,7 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
             pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
         sequence_output = encoder_outputs.last_hidden_state
-        pooled_output = self.contrastive_vision_pooler(sequence_output, **kwargs).pooled_output
+        pooled_output = self.contrastive_vision_pooler(sequence_output, **kwargs)[0]
         logits = self.classifier(pooled_output)
         loss = None
         if labels is not None:
