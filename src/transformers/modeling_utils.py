@@ -1321,12 +1321,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # when a different component (e.g. language_model) is used.
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
         self._keep_in_fp32_modules_strict = copy.copy(self.__class__._keep_in_fp32_modules_strict)
+        # dtype_plan will be populated during from_pretrained based on target dtype
+        # See _build_dtype_plan_for_loading() method
         self.dtype_plan = {}
-
-        if isinstance(self._keep_in_fp32_modules, list):
-            self.dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules, torch.float32))
-        if isinstance(self._keep_in_fp32_modules_strict, list):
-            self.dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules_strict, torch.float32))
 
         self._no_split_modules = self._no_split_modules or []
         _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
@@ -1361,6 +1358,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Maybe initialize the weights and tie the keys
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
+
+    def _build_dtype_plan_for_loading(self, dtype: torch.dtype) -> dict:
+        """
+        Builds dtype_plan based on target dtype and keep_in_fp32 module settings.
+        """
+
+        # Add _keep_in_fp32_modules only for FP16 loading
+        if isinstance(self._keep_in_fp32_modules, list) and dtype == torch.float16:
+            self.dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules, torch.float32))
+
+        # Add _keep_in_fp32_modules_strict for both FP16 and BF16
+        if isinstance(self._keep_in_fp32_modules_strict, list) and dtype in (torch.float16, torch.bfloat16):
+            self.dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules_strict, torch.float32))
+
+        return self.dtype_plan
 
     @property
     def tp_plan(self) -> dict[str, str]:
@@ -4079,6 +4091,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     checkpoint_files=checkpoint_files,
                     use_kernels=use_kernels,
                 )
+
+        # Build dtype_plan based on target dtype and keep_in_fp32 module settings
+        model.dtype_plan = model._build_dtype_plan_for_loading(dtype)
 
         # Obtain the weight conversion mapping for this model if any are registered
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)

@@ -879,6 +879,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                 "batch_size": batch_size,
                 "max_cache_len": max_cache_length,
             },
+            eos_token_id=model.generation_config.eos_token_id,
         )
         self.exported_encoder = None
         self.exported_decoder = None
