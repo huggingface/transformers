@@ -19,6 +19,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -48,6 +49,7 @@ class GraniteMoeTopKGating(JetMoeTopKGating):
     pass
 
 
+@use_kernel_forward_from_hub("ScatterMoEGatedMLP")
 class GraniteMoeMoE(nn.Module):
     """
     A Sparsely gated mixture of experts layer with 1-layer Feed-Forward networks as experts.
