@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,7 @@ import argparse
 import copy
 import os
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 
@@ -84,15 +83,15 @@ class CircleCIJob:
     additional_env: dict[str, Any] = None
     docker_image: list[dict[str, str]] = None
     install_steps: list[str] = None
-    marker: Optional[str] = None
-    parallelism: Optional[int] = 0
+    marker: str | None = None
+    parallelism: int | None = 0
     pytest_num_workers: int = 8
     pytest_options: dict[str, Any] = None
-    resource_class: Optional[str] = "xlarge"
-    tests_to_run: Optional[list[str]] = None
-    num_test_files_per_worker: Optional[int] = 10
+    resource_class: str | None = "xlarge"
+    tests_to_run: list[str] | None = None
+    num_test_files_per_worker: int | None = 10
     # This should be only used for doctest job!
-    command_timeout: Optional[int] = None
+    command_timeout: int | None = None
 
     def __post_init__(self):
         # Deal with defaults for mutable attributes.
