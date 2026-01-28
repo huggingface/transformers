@@ -34,7 +34,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs, maybe_autocast
-from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
+from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig, ParakeetTDTConfig
 
 
 @dataclass
@@ -612,6 +612,7 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
             position_embeddings, p=self.dropout_positions, training=self.training
         )
 
+        output_mask = None
         if attention_mask is not None:
             output_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
             attention_mask = output_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
@@ -635,7 +636,8 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
                 )
 
         return ParakeetEncoderModelOutput(
-            last_hidden_state=hidden_states, attention_mask=output_mask.int() if output_attention_mask else None
+            last_hidden_state=hidden_states,
+            attention_mask=output_mask.int() if output_attention_mask and output_mask is not None else None,
         )
 
 
@@ -810,4 +812,471 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
         return sequences
 
 
-__all__ = ["ParakeetForCTC", "ParakeetEncoder", "ParakeetPreTrainedModel"]
+@dataclass
+class ParakeetTDTOutput(ModelOutput):
+    """
+    Output type of [`ParakeetForTDT`].
+
+    Args:
+        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            The generated token sequences.
+        timestamps (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            The timestamps (in seconds) for each generated token.
+        token_scores (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            The confidence scores for each generated token.
+        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            The last hidden state of the encoder.
+        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*):
+            Encoder attention weights.
+    """
+
+    sequences: torch.LongTensor
+    timestamps: torch.FloatTensor | None = None
+    token_scores: torch.FloatTensor | None = None
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+    encoder_attentions: tuple[torch.FloatTensor] | None = None
+
+
+class ParakeetTDTDecoder(nn.Module):
+    """
+    LSTM-based prediction network for TDT (Token Duration Transducer).
+
+    The decoder maintains language model context across token predictions.
+    It takes the previous token embedding and outputs a hidden representation
+    that is combined with the encoder output in the joint network.
+
+    Key insight: The decoder only needs to be updated when emitting non-blank tokens,
+    as blank tokens (silence) don't contribute to language context.
+    """
+
+    def __init__(self, config: ParakeetTDTConfig):
+        super().__init__()
+        self.config = config
+
+        # Token embedding layer
+        self.embedding = nn.Embedding(config.vocab_size + 1, config.decoder_hidden_size)  # +1 for blank
+
+        # LSTM prediction network
+        self.lstm = nn.LSTM(
+            input_size=config.decoder_hidden_size,
+            hidden_size=config.decoder_hidden_size,
+            num_layers=config.decoder_num_layers,
+            batch_first=True,
+        )
+
+        # Output projection
+        self.output_proj = nn.Linear(config.decoder_hidden_size, config.joint_hidden_size)
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        hidden_state: tuple[torch.Tensor, torch.Tensor] | None = None,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        """
+        Args:
+            input_ids: Previous token IDs of shape (batch_size, 1)
+            hidden_state: Tuple of (h, c) LSTM states, each of shape
+                         (num_layers, batch_size, hidden_size)
+
+        Returns:
+            output: Decoder output of shape (batch_size, 1, joint_hidden_size)
+            hidden_state: Updated (h, c) tuple
+        """
+        # Get token embeddings
+        embeddings = self.embedding(input_ids)  # (batch, 1, decoder_hidden)
+
+        # Run through LSTM
+        lstm_out, hidden_state = self.lstm(embeddings, hidden_state)  # (batch, 1, decoder_hidden)
+
+        # Project to joint network dimension
+        output = self.output_proj(lstm_out)  # (batch, 1, joint_hidden)
+
+        return output, hidden_state
+
+    def init_state(
+        self, batch_size: int, device: torch.device, dtype: torch.dtype = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Initialize LSTM hidden and cell states to zeros."""
+        hidden_state = torch.zeros(
+            self.config.decoder_num_layers,
+            batch_size,
+            self.config.decoder_hidden_size,
+            device=device,
+            dtype=dtype,
+        )
+        cell_state = torch.zeros(
+            self.config.decoder_num_layers,
+            batch_size,
+            self.config.decoder_hidden_size,
+            device=device,
+            dtype=dtype,
+        )
+        return (hidden_state, cell_state)
+
+
+class ParakeetTDTJointNetwork(nn.Module):
+    """
+    Joint network that combines encoder and decoder outputs to predict tokens and durations.
+
+    The joint network takes:
+    - Encoder frame output at time t
+    - Decoder output based on previous token(s)
+
+    And produces:
+    - Token logits (vocab_size + 1 for blank)
+    - Duration logits (num_duration_bins)
+    """
+
+    def __init__(self, config: ParakeetTDTConfig):
+        super().__init__()
+        self.config = config
+
+        # Encoder projection to joint hidden size
+        self.encoder_proj = nn.Linear(config.encoder_config.hidden_size, config.joint_hidden_size)
+
+        # Joint activation (NeMo uses relu in joint network)
+        self.activation = ACT2FN["relu"]
+
+        # Output heads
+        self.token_head = nn.Linear(config.joint_hidden_size, config.vocab_size + 1)  # +1 for blank
+        self.duration_head = nn.Linear(config.joint_hidden_size, config.num_duration_bins)
+
+    def forward(
+        self,
+        encoder_output: torch.Tensor,
+        decoder_output: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            encoder_output: Encoder frame of shape (batch_size, 1, encoder_hidden_size)
+            decoder_output: Decoder output of shape (batch_size, 1, joint_hidden_size)
+
+        Returns:
+            token_logits: Shape (batch_size, vocab_size + 1)
+            duration_logits: Shape (batch_size, num_duration_bins)
+        """
+        # Project encoder output
+        encoder_proj = self.encoder_proj(encoder_output)  # (batch, 1, joint_hidden)
+
+        # Combine encoder and decoder outputs (additive joint)
+        joint_out = encoder_proj + decoder_output  # (batch, 1, joint_hidden)
+        joint_out = self.activation(joint_out)
+
+        # Predict token and duration
+        token_logits = self.token_head(joint_out).squeeze(1)  # (batch, vocab+1)
+        duration_logits = self.duration_head(joint_out).squeeze(1)  # (batch, num_bins)
+
+        return token_logits, duration_logits
+
+
+class ParakeetTDTPreTrainedModel(PreTrainedModel):
+    """Base class for TDT models with TDT-specific config."""
+
+    config: ParakeetTDTConfig
+    config_class = ParakeetTDTConfig
+    base_model_prefix = "model"
+    main_input_name = "input_features"
+    input_modalities = "audio"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["ParakeetEncoderBlock"]
+    _supports_flat_attention_mask = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_flash_attn = False
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+
+        if isinstance(module, nn.Linear):
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=std)
+        elif isinstance(module, nn.LSTM):
+            for name, param in module.named_parameters():
+                if "weight" in name:
+                    init.normal_(param, mean=0.0, std=std)
+                elif "bias" in name:
+                    init.zeros_(param)
+        elif isinstance(module, ParakeetForTDT):
+            # Initialize duration_bins buffer
+            duration_bins = torch.arange(self.config.num_duration_bins, dtype=torch.long)
+            init.copy_(module.duration_bins, duration_bins)
+
+    def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
+        encoder_config = self.config.encoder_config
+
+        kernel_size = encoder_config.subsampling_conv_kernel_size
+        stride = encoder_config.subsampling_conv_stride
+        num_layers = int(math.log2(encoder_config.subsampling_factor))
+
+        all_paddings = (kernel_size - 1) // 2 * 2
+        add_pad = all_paddings - kernel_size
+        lengths = input_lengths
+
+        for _ in range(num_layers):
+            lengths = torch.div(lengths.to(dtype=torch.float) + add_pad, stride) + 1.0
+            lengths = torch.floor(lengths)
+
+        return lengths.to(dtype=torch.int)
+
+    def _get_output_attention_mask(self, attention_mask: torch.Tensor, target_length: int | None = None):
+        output_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
+        max_length = target_length if target_length is not None else output_lengths.max()
+        attention_mask = torch.arange(max_length, device=attention_mask.device) < output_lengths[:, None]
+        return attention_mask
+
+
+@auto_docstring(
+    custom_intro="""
+    Parakeet model with TDT (Token Duration Transducer) head for speech recognition.
+
+    TDT jointly predicts tokens and their durations, enabling efficient decoding with
+    accurate word-level timestamps. Unlike CTC, TDT can skip multiple frames at once
+    based on the predicted duration.
+    """
+)
+class ParakeetForTDT(ParakeetTDTPreTrainedModel):
+    config: ParakeetTDTConfig
+
+    # Frame duration in seconds (after 8x subsampling: 80ms per frame)
+    _frame_duration_seconds = 0.08
+
+    def __init__(self, config: ParakeetTDTConfig):
+        super().__init__(config)
+        self.encoder = ParakeetEncoder(config.encoder_config)
+        self.decoder = ParakeetTDTDecoder(config)
+        self.joint = ParakeetTDTJointNetwork(config)
+
+        # Duration bins mapping: index -> number of frames to skip
+        self.register_buffer(
+            "duration_bins",
+            torch.arange(config.num_duration_bins, dtype=torch.long),
+            persistent=False,
+        )
+
+        self.post_init()
+
+    @auto_docstring
+    @can_return_tuple
+    def forward(
+        self,
+        input_features: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ParakeetEncoderModelOutput:
+        r"""
+        Returns the encoder outputs. For TDT decoding, use the `generate` method.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, ParakeetForTDT
+        >>> from datasets import load_dataset, Audio
+
+        >>> model_id = "nvidia/parakeet-tdt-0.6b-v3"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = ParakeetForTDT.from_pretrained(model_id)
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+
+        >>> inputs = processor(ds[0]["audio"]["array"])
+        >>> encoder_outputs = model(**inputs)
+
+        >>> print(encoder_outputs.last_hidden_state.shape)
+        ```
+        """
+        encoder_outputs = self.encoder(
+            input_features=input_features,
+            attention_mask=attention_mask,
+            output_attention_mask=True,
+            **kwargs,
+        )
+
+        return encoder_outputs
+
+    @torch.no_grad()
+    def generate(
+        self,
+        input_features: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        return_timestamps: bool = False,
+        return_dict_in_generate: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ParakeetTDTOutput | torch.LongTensor:
+        r"""
+        Perform TDT greedy decoding to generate token sequences.
+
+        Args:
+            input_features (`torch.Tensor`):
+                Mel spectrogram features of shape `(batch_size, num_mel_bins, sequence_length)`.
+            attention_mask (`torch.Tensor`, *optional*):
+                Attention mask for the input features.
+            return_timestamps (`bool`, *optional*, defaults to `False`):
+                Whether to return timestamps for each token.
+            return_dict_in_generate (`bool`, *optional*, defaults to `False`):
+                Whether to return a `ParakeetTDTOutput` instead of just sequences.
+
+        Returns:
+            `ParakeetTDTOutput` or `torch.LongTensor`: Generated sequences and optional metadata.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, ParakeetForTDT
+        >>> from datasets import load_dataset, Audio
+
+        >>> model_id = "nvidia/parakeet-tdt-0.6b-v3"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = ParakeetForTDT.from_pretrained(model_id)
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+
+        >>> inputs = processor(ds[0]["audio"]["array"])
+        >>> output = model.generate(**inputs, return_timestamps=True, return_dict_in_generate=True)
+
+        >>> transcription = processor.batch_decode(output.sequences, skip_special_tokens=True)
+        >>> print(transcription)
+        ```
+        """
+        blank_id = self.config.blank_token_id
+        device = input_features.device
+        batch_size = input_features.shape[0]
+
+        # Get encoder outputs
+        encoder_outputs = self.encoder(
+            input_features=input_features,
+            attention_mask=attention_mask,
+            output_attention_mask=True,
+            **kwargs,
+        )
+        encoder_hidden = encoder_outputs.last_hidden_state  # (batch, time, hidden)
+        encoder_mask = encoder_outputs.attention_mask  # (batch, time) or None
+
+        num_frames = encoder_hidden.shape[1]
+        if encoder_mask is not None:
+            # Get valid lengths per batch item
+            valid_lengths = encoder_mask.sum(dim=1).int()  # (batch,)
+        else:
+            valid_lengths = torch.full((batch_size,), num_frames, dtype=torch.int, device=device)
+
+        # Initialize decoder state with same dtype as encoder output
+        decoder_state = self.decoder.init_state(batch_size, device, dtype=encoder_hidden.dtype)
+
+        # Initialize with blank token
+        prev_tokens = torch.full((batch_size, 1), blank_id, dtype=torch.long, device=device)
+
+        # Prime the decoder with initial blank
+        decoder_out, decoder_state = self.decoder(prev_tokens, decoder_state)
+
+        # Output storage (will be padded/truncated at the end)
+        all_tokens = [[] for _ in range(batch_size)]
+        all_timestamps = [[] for _ in range(batch_size)]
+        all_scores = [[] for _ in range(batch_size)]
+
+        # Frame indices for each batch item
+        time_indices = torch.zeros(batch_size, dtype=torch.long, device=device)
+
+        # Active mask - which batch items are still being processed
+        active_mask = time_indices < valid_lengths
+
+        while active_mask.any():
+            # Get current encoder frames for active items
+            # We process all items but only use results for active ones
+            safe_time_indices = torch.clamp(time_indices, max=num_frames - 1)
+            encoder_frames = encoder_hidden[torch.arange(batch_size, device=device), safe_time_indices].unsqueeze(
+                1
+            )  # (batch, 1, hidden)
+
+            # Run joint network
+            token_logits, duration_logits = self.joint(encoder_frames, decoder_out)
+
+            # Greedy selection
+            tokens = token_logits.argmax(dim=-1)  # (batch,)
+            token_probs = torch.softmax(token_logits, dim=-1)
+            token_scores = token_probs.gather(1, tokens.unsqueeze(1)).squeeze(1)  # (batch,)
+
+            durations = duration_logits.argmax(dim=-1)  # (batch,)
+            # Map to actual frame counts using duration bins
+            duration_frames = self.duration_bins[durations]  # (batch,)
+
+            # Ensure minimum duration of 1 to prevent infinite loops
+            # In trained models, duration 0 means "emit and stay" for multi-token words
+            # But with random weights, this causes infinite loops
+            is_blank = tokens == blank_id
+            duration_frames = torch.clamp(duration_frames, min=1)
+
+            # Process non-blank tokens for active items
+            emit_mask = active_mask & ~is_blank
+
+            for i in range(batch_size):
+                if emit_mask[i]:
+                    all_tokens[i].append(tokens[i].item())
+                    all_timestamps[i].append(time_indices[i].item() * self._frame_duration_seconds)
+                    all_scores[i].append(token_scores[i].item())
+
+            # Update decoder for items that emitted tokens
+            if emit_mask.any():
+                # Only update decoder state for items that emitted non-blank
+                new_prev_tokens = tokens.unsqueeze(1)  # (batch, 1)
+                new_decoder_out, new_decoder_state = self.decoder(new_prev_tokens, decoder_state)
+
+                # Selectively update decoder output and state
+                # For items that emitted, use new state; otherwise keep old
+                emit_mask_expanded = emit_mask.view(batch_size, 1, 1)
+                decoder_out = torch.where(emit_mask_expanded, new_decoder_out, decoder_out)
+
+                # Update LSTM states selectively
+                h_old, c_old = decoder_state
+                h_new, c_new = new_decoder_state
+                emit_mask_state = emit_mask.view(1, batch_size, 1)
+                decoder_state = (
+                    torch.where(emit_mask_state, h_new, h_old),
+                    torch.where(emit_mask_state, c_new, c_old),
+                )
+
+            # Advance time indices by duration
+            time_indices = time_indices + duration_frames
+
+            # Update active mask
+            active_mask = time_indices < valid_lengths
+
+        # Pad sequences to same length
+        max_len = max(len(seq) for seq in all_tokens) if all_tokens[0] else 0
+        if max_len == 0:
+            max_len = 1  # At least one token
+
+        sequences = torch.full((batch_size, max_len), self.config.pad_token_id, dtype=torch.long, device=device)
+        timestamps = torch.zeros(batch_size, max_len, dtype=torch.float, device=device)
+        scores = torch.zeros(batch_size, max_len, dtype=torch.float, device=device)
+
+        for i in range(batch_size):
+            seq_len = len(all_tokens[i])
+            if seq_len > 0:
+                sequences[i, :seq_len] = torch.tensor(all_tokens[i], dtype=torch.long, device=device)
+                timestamps[i, :seq_len] = torch.tensor(all_timestamps[i], dtype=torch.float, device=device)
+                scores[i, :seq_len] = torch.tensor(all_scores[i], dtype=torch.float, device=device)
+
+        if return_dict_in_generate:
+            return ParakeetTDTOutput(
+                sequences=sequences,
+                timestamps=timestamps if return_timestamps else None,
+                token_scores=scores if return_timestamps else None,
+                encoder_last_hidden_state=encoder_hidden,
+                encoder_attentions=encoder_outputs.attentions,
+            )
+
+        return sequences
+
+
+__all__ = [
+    "ParakeetForCTC",
+    "ParakeetForTDT",
+    "ParakeetEncoder",
+    "ParakeetPreTrainedModel",
+    "ParakeetTDTPreTrainedModel",
+]

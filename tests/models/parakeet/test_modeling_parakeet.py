@@ -37,6 +37,8 @@ if is_torch_available():
         ParakeetEncoder,
         ParakeetEncoderConfig,
         ParakeetForCTC,
+        ParakeetForTDT,
+        ParakeetTDTConfig,
     )
 
 
@@ -373,3 +375,395 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
         predicted_transcripts = self.processor.batch_decode(predicted_ids, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
+
+
+class ParakeetForTDTModelTester:
+    def __init__(
+        self,
+        parent,
+        encoder_kwargs=None,
+        is_training=True,
+        vocab_size=128,
+        decoder_hidden_size=64,
+        decoder_num_layers=1,
+        joint_hidden_size=64,
+        num_duration_bins=5,
+        blank_token_id=128,  # Must equal vocab_size for embedding table
+        pad_token_id=128,
+    ):
+        if encoder_kwargs is None:
+            encoder_kwargs = {}
+
+        self.parent = parent
+        self.encoder_model_tester = ParakeetEncoderModelTester(parent, **encoder_kwargs)
+        self.is_training = is_training
+
+        self.batch_size = self.encoder_model_tester.batch_size
+        self.output_seq_length = self.encoder_model_tester.output_seq_length
+        self.num_hidden_layers = self.encoder_model_tester.num_hidden_layers
+        self.hidden_size = self.encoder_model_tester.hidden_size
+
+        self.vocab_size = vocab_size
+        self.seq_length = vocab_size  # Required by test_hidden_states_output
+        self.decoder_hidden_size = decoder_hidden_size
+        self.decoder_num_layers = decoder_num_layers
+        self.joint_hidden_size = joint_hidden_size
+        self.num_duration_bins = num_duration_bins
+        self.blank_token_id = blank_token_id
+        self.pad_token_id = pad_token_id
+
+    def prepare_config_and_inputs(self):
+        _, input_features, attention_mask = self.encoder_model_tester.prepare_config_and_inputs()
+        config = self.get_config()
+        return config, input_features, attention_mask
+
+    def get_config(self):
+        return ParakeetTDTConfig(
+            encoder_config=self.encoder_model_tester.get_config().to_dict(),
+            vocab_size=self.vocab_size,
+            decoder_hidden_size=self.decoder_hidden_size,
+            decoder_num_layers=self.decoder_num_layers,
+            joint_hidden_size=self.joint_hidden_size,
+            num_duration_bins=self.num_duration_bins,
+            blank_token_id=self.blank_token_id,
+            pad_token_id=self.pad_token_id,
+        )
+
+    def create_and_check_model(self, config, input_features, attention_mask):
+        model = ParakeetForTDT(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(input_features, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
+        )
+
+    def create_and_check_generate(self, config, input_features, attention_mask):
+        model = ParakeetForTDT(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model.generate(
+                input_features, attention_mask=attention_mask, return_dict_in_generate=True, return_timestamps=True
+            )
+        # Check sequences shape - batch size should match
+        self.parent.assertEqual(result.sequences.shape[0], self.batch_size)
+        # Check timestamps are returned
+        self.parent.assertIsNotNone(result.timestamps)
+        self.parent.assertEqual(result.timestamps.shape[0], self.batch_size)
+
+    def prepare_config_and_inputs_for_common(self):
+        config, input_features, attention_mask = self.prepare_config_and_inputs()
+        inputs_dict = {
+            "input_features": input_features,
+            "attention_mask": attention_mask,
+        }
+        return config, inputs_dict
+
+
+@require_torch
+class ParakeetForTDTModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (ParakeetForTDT,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": ParakeetEncoder,
+            "automatic-speech-recognition": ParakeetForTDT,
+        }
+        if is_torch_available()
+        else {}
+    )
+
+    test_attention_outputs = False
+    test_resize_embeddings = False
+    test_torch_exportable = True
+
+    _is_composite = True
+
+    def setUp(self):
+        self.model_tester = ParakeetForTDTModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ParakeetTDTConfig)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_generate(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_generate(*config_and_inputs)
+
+    def test_generate_returns_valid_output(self):
+        """Test that generate() returns valid sequences and timestamps."""
+        config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = ParakeetForTDT(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        with torch.no_grad():
+            output = model.generate(
+                input_features,
+                attention_mask=attention_mask,
+                return_dict_in_generate=True,
+                return_timestamps=True,
+            )
+
+        batch_size = input_features.shape[0]
+
+        # Check output structure
+        self.assertIsNotNone(output.sequences)
+        self.assertIsNotNone(output.timestamps)
+        self.assertEqual(output.sequences.shape[0], batch_size)
+        self.assertEqual(output.timestamps.shape[0], batch_size)
+
+        # Check timestamps are non-negative
+        self.assertTrue(torch.all(output.timestamps >= 0))
+
+        # Check tokens are within valid range (0 to vocab_size, excluding blank which is vocab_size)
+        non_pad_mask = output.sequences != config.pad_token_id
+        if non_pad_mask.any():
+            valid_tokens = output.sequences[non_pad_mask]
+            self.assertTrue(torch.all(valid_tokens >= 0))
+            self.assertTrue(torch.all(valid_tokens < config.vocab_size))
+
+    def test_generate_timestamps_are_monotonic(self):
+        """Test that timestamps are monotonically non-decreasing within each sequence."""
+        config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = ParakeetForTDT(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        with torch.no_grad():
+            output = model.generate(
+                input_features,
+                attention_mask=attention_mask,
+                return_dict_in_generate=True,
+                return_timestamps=True,
+            )
+
+        # For each sequence, check timestamps are monotonically non-decreasing
+        for i in range(output.timestamps.shape[0]):
+            seq_timestamps = output.timestamps[i]
+            # Get non-zero timestamps (zero padding at end)
+            non_zero_mask = seq_timestamps > 0
+            if non_zero_mask.sum() > 1:
+                valid_timestamps = seq_timestamps[non_zero_mask]
+                # Check monotonicity: each timestamp >= previous
+                diffs = valid_timestamps[1:] - valid_timestamps[:-1]
+                self.assertTrue(torch.all(diffs >= 0), f"Timestamps not monotonic for batch {i}")
+
+    def test_generate_without_timestamps(self):
+        """Test that timestamps are None when not requested."""
+        config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = ParakeetForTDT(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        with torch.no_grad():
+            output = model.generate(
+                input_features,
+                attention_mask=attention_mask,
+                return_dict_in_generate=True,
+                return_timestamps=False,
+            )
+
+        self.assertIsNone(output.timestamps)
+        self.assertIsNotNone(output.sequences)
+
+    def test_generate_returns_tensor_without_dict(self):
+        """Test that generate() returns just sequences when return_dict_in_generate=False."""
+        config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = ParakeetForTDT(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        with torch.no_grad():
+            output = model.generate(
+                input_features,
+                attention_mask=attention_mask,
+                return_dict_in_generate=False,
+            )
+
+        # Should return just the tensor, not a dataclass
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertEqual(output.shape[0], input_features.shape[0])
+
+    def test_generate_batch_independence(self):
+        """Test that batched inference produces same results as individual inference."""
+        config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = ParakeetForTDT(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # Run batched inference
+        with torch.no_grad():
+            batched_output = model.generate(
+                input_features,
+                attention_mask=attention_mask,
+                return_dict_in_generate=True,
+                return_timestamps=True,
+            )
+
+        # Run individual inference for first item
+        with torch.no_grad():
+            single_output = model.generate(
+                input_features[0:1],
+                attention_mask=attention_mask[0:1] if attention_mask is not None else None,
+                return_dict_in_generate=True,
+                return_timestamps=True,
+            )
+
+        # Results should match for the first item
+        min_len = min(batched_output.sequences.shape[1], single_output.sequences.shape[1])
+        torch.testing.assert_close(
+            batched_output.sequences[0, :min_len],
+            single_output.sequences[0, :min_len],
+        )
+
+    @unittest.skip(reason="ParakeetForTDT does not use inputs_embeds")
+    def test_model_get_set_embeddings(self):
+        pass
+
+    # Override to handle composite model SDPA dispatch
+    def test_sdpa_can_dispatch_composite_models(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        if not self._is_composite:
+            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(tmpdirname)
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
+                model_eager = model_eager.eval().to(torch_device)
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
+
+                for name, submodule in model_eager.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        raise ValueError("The eager model should not have SDPA attention layers")
+
+
+@require_torch
+class ParakeetForTDTIntegrationTest(unittest.TestCase):
+    _dataset = None
+
+    @classmethod
+    def setUp(cls):
+        # TODO: Change to "nvidia/parakeet-tdt-0.6b-v3" once NVIDIA adds HF format to their repo
+        cls.checkpoint_name = "MaksL/parakeet-tdt-0.6b-v3"
+        cls.dtype = torch.bfloat16
+        cls.processor = AutoProcessor.from_pretrained("MaksL/parakeet-tdt-0.6b-v3")
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls._dataset is None:
+            cls._dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+            cls._dataset = cls._dataset.cast_column(
+                "audio", Audio(sampling_rate=cls.processor.feature_extractor.sampling_rate)
+            )
+
+    def _load_datasamples(self, num_samples):
+        self._load_dataset()
+        ds = self._dataset
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
+        return [x["array"] for x in speech_samples]
+
+    @slow
+    def test_tdt_model_integration(self):
+        """
+        Test TDT model inference on a single sample.
+        Tests that the model produces valid sequences and timestamps.
+
+        Fixture generated by: python tests/models/parakeet/generate_tdt_fixtures.py
+        """
+        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/parakeet/expected_results_tdt_single.json"
+        with open(RESULTS_PATH, "r") as f:
+            raw_data = json.load(f)
+        EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
+        EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
+
+        samples = self._load_datasamples(1)
+        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device)
+        model.eval()
+        model.to(torch_device)
+
+        # -- apply
+        inputs = self.processor(samples)
+        inputs.to(torch_device, dtype=self.dtype)
+
+        with torch.no_grad():
+            output = model.generate(
+                **inputs,
+                return_dict_in_generate=True,
+                return_timestamps=True,
+            )
+
+        # Check sequences match expected
+        torch.testing.assert_close(output.sequences.cpu(), EXPECTED_TOKEN_IDS)
+        predicted_transcripts = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
+        self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
+
+        # Validate timestamps are monotonically non-decreasing
+        timestamps = output.timestamps[0].cpu()
+        non_zero_mask = timestamps > 0
+        if non_zero_mask.sum() > 1:
+            valid_timestamps = timestamps[non_zero_mask]
+            diffs = valid_timestamps[1:] - valid_timestamps[:-1]
+            self.assertTrue(torch.all(diffs >= 0), "Timestamps should be monotonically non-decreasing")
+
+    @slow
+    def test_tdt_model_integration_batched(self):
+        """
+        Test TDT model inference on a batch of samples.
+
+        Fixture generated by: python tests/models/parakeet/generate_tdt_fixtures.py
+        """
+        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/parakeet/expected_results_tdt_batch.json"
+        with open(RESULTS_PATH, "r") as f:
+            raw_data = json.load(f)
+        EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
+        EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
+
+        samples = self._load_datasamples(5)
+        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device)
+        model.eval()
+        model.to(torch_device)
+
+        # -- apply
+        inputs = self.processor(samples)
+        inputs.to(torch_device, dtype=self.dtype)
+
+        with torch.no_grad():
+            output = model.generate(
+                **inputs,
+                return_dict_in_generate=True,
+                return_timestamps=True,
+            )
+
+        # Check sequences match expected
+        torch.testing.assert_close(output.sequences.cpu(), EXPECTED_TOKEN_IDS)
+        predicted_transcripts = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
+        self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
+
+        # Validate timestamps for all samples in batch
+        for i in range(output.timestamps.shape[0]):
+            timestamps = output.timestamps[i].cpu()
+            non_zero_mask = timestamps > 0
+            if non_zero_mask.sum() > 1:
+                valid_timestamps = timestamps[non_zero_mask]
+                diffs = valid_timestamps[1:] - valid_timestamps[:-1]
+                self.assertTrue(torch.all(diffs >= 0), f"Timestamps not monotonic for sample {i}")

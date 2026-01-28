@@ -315,6 +315,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("paligemma", "PaliGemmaModel"),
         ("parakeet_ctc", "ParakeetForCTC"),
         ("parakeet_encoder", "ParakeetEncoder"),
+        ("parakeet_tdt", "ParakeetForTDT"),
         ("patchtsmixer", "PatchTSMixerModel"),
         ("patchtst", "PatchTSTModel"),
         ("pe_audio", "PeAudioModel"),

@@ -229,4 +229,113 @@ class ParakeetCTCConfig(PreTrainedConfig):
         return cls(encoder_config=encoder_config.to_dict(), **kwargs)
 
 
-__all__ = ["ParakeetCTCConfig", "ParakeetEncoderConfig"]
+class ParakeetTDTConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`ParakeetForTDT`]. It is used to instantiate a
+    Parakeet TDT (Token Duration Transducer) model according to the specified arguments, defining the model architecture.
+
+    TDT models jointly predict tokens and their durations, enabling accurate speech recognition with word-level
+    timestamps. Unlike CTC which only provides character-level timing, TDT predicts how many frames each token spans.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 8192):
+            Vocabulary size of the model (SentencePiece tokenizer). TDT uses a larger vocabulary than CTC.
+        decoder_hidden_size (`int`, *optional*, defaults to 640):
+            Hidden size of the LSTM prediction network (decoder).
+        decoder_num_layers (`int`, *optional*, defaults to 1):
+            Number of LSTM layers in the prediction network.
+        joint_hidden_size (`int`, *optional*, defaults to 640):
+            Hidden size of the joint network that combines encoder and decoder outputs.
+        num_duration_bins (`int`, *optional*, defaults to 5):
+            Number of duration bins for predicting token durations. Each bin represents how many frames
+            to advance (e.g., [0, 1, 2, 3, 4] means 0-4 frames).
+        encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
+            The config object or dictionary of the encoder. TDT reuses the same FastConformer encoder as CTC.
+        blank_token_id (`int`, *optional*, defaults to 8192):
+            Token ID for the blank symbol. In TDT, blank indicates "no token emission, advance frames".
+        pad_token_id (`int`, *optional*, defaults to 8192):
+            Padding token id. Defaults to blank_token_id.
+
+    Example:
+        ```python
+        >>> from transformers import ParakeetForTDT, ParakeetTDTConfig
+
+        >>> # Initializing a Parakeet TDT configuration
+        >>> configuration = ParakeetTDTConfig()
+
+        >>> # Initializing a model from the configuration
+        >>> model = ParakeetForTDT(configuration)
+
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
+        ```
+
+    This configuration class is based on the Parakeet TDT architecture from NVIDIA NeMo. TDT (Token Duration
+    Transducer) extends RNN-T by jointly predicting token durations, enabling efficient frame skipping during
+    decoding. You can find more details and pre-trained models at:
+    - [nvidia/parakeet-tdt-0.6b-v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) (English)
+    - [nvidia/parakeet-tdt-0.6b-v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) (25 languages)
+
+    References:
+        - TDT Paper: https://arxiv.org/abs/2304.06795
+        - FastConformer Paper: https://arxiv.org/abs/2305.05084
+    """
+
+    model_type = "parakeet_tdt"
+    sub_configs = {"encoder_config": ParakeetEncoderConfig}
+
+    def __init__(
+        self,
+        vocab_size=8192,
+        decoder_hidden_size=640,
+        decoder_num_layers=1,
+        joint_hidden_size=640,
+        num_duration_bins=5,
+        encoder_config: dict | ParakeetEncoderConfig = None,
+        blank_token_id=8192,
+        pad_token_id=8192,
+        **kwargs,
+    ):
+        self.vocab_size = vocab_size
+        self.decoder_hidden_size = decoder_hidden_size
+        self.decoder_num_layers = decoder_num_layers
+        self.joint_hidden_size = joint_hidden_size
+        self.num_duration_bins = num_duration_bins
+        self.blank_token_id = blank_token_id
+
+        if blank_token_id != vocab_size:
+            logger.warning(
+                f"blank_token_id ({blank_token_id}) should equal vocab_size ({vocab_size}) "
+                "for correct embedding table sizing. The embedding table size is vocab_size + 1 "
+                "to accommodate the blank token at index vocab_size."
+            )
+
+        if isinstance(encoder_config, dict):
+            self.encoder_config = ParakeetEncoderConfig(**encoder_config)
+        elif encoder_config is None:
+            self.encoder_config = ParakeetEncoderConfig()
+        else:
+            self.encoder_config = encoder_config
+
+        self.initializer_range = self.encoder_config.initializer_range
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            **kwargs,
+        )
+
+    @classmethod
+    def from_encoder_config(cls, encoder_config: ParakeetEncoderConfig, **kwargs):
+        r"""
+        Instantiate a [`ParakeetTDTConfig`] (or a derived class) from parakeet encoder model configuration.
+
+        Returns:
+            [`ParakeetTDTConfig`]: An instance of a configuration object
+        """
+        return cls(encoder_config=encoder_config.to_dict(), **kwargs)
+
+
+__all__ = ["ParakeetCTCConfig", "ParakeetEncoderConfig", "ParakeetTDTConfig"]
