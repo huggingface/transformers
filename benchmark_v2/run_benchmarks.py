@@ -26,6 +26,7 @@ import uuid
 
 from framework.benchmark_config import BenchmarkConfig, adapt_configs, get_config_by_level
 from framework.benchmark_runner import BenchmarkRunner
+from framework.hardware_metrics import get_device_name_and_memory_total
 
 
 if __name__ == "__main__":
@@ -58,6 +59,11 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--no-gpu-monitoring", action="store_true", help="Disables GPU monitoring during benchmark runs"
+    )
+    parser.add_argument(
+        "--force-gpu-monitoring",
+        action="store_true",
+        help="Force enable GPU monitoring even on AMD GPUs (not recommended because it causes significant overhead)",
     )
 
     parser.add_argument(
@@ -107,6 +113,16 @@ if __name__ == "__main__":
         # Otherwise, get the configs for the given coverage level
         configs = get_config_by_level(args.level)
 
+    # Disable GPU monitoring on AMD GPUs due to rocm-smi overhead causing ~2-3x slowdown
+    gpu_monitoring_enabled = not args.no_gpu_monitoring
+    device_name, _ = get_device_name_and_memory_total()
+    if gpu_monitoring_enabled and "amd" in device_name.lower() and not args.force_gpu_monitoring:
+        logger.warning(
+            "AMD GPU detected. Disabling GPU monitoring because it causes significant overhead "
+            "(~2-3x slowdown during benchmarks). Use --force-gpu-monitoring to override."
+        )
+        gpu_monitoring_enabled = False
+
     # Adapt the configs to the given arguments
     configs = adapt_configs(
         configs,
@@ -115,7 +131,7 @@ if __name__ == "__main__":
         args.batch_size,
         args.sequence_length,
         args.num_tokens_to_generate,
-        not args.no_gpu_monitoring,
+        gpu_monitoring_enabled,
     )
 
     runner = BenchmarkRunner(logger, args.output_dir, args.branch_name, args.commit_id, args.commit_message)
