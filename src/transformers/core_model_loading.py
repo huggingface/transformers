@@ -1251,7 +1251,7 @@ def convert_and_load_state_dict_in_model(
     # Close the pool, independently of whether the code was interrupted or finished successfully
     finally:
         if thread_pool is not None:
-            # `cancel_futures=True` in case the program was interupted, to avoid wasting time on exit
+            # `cancel_futures=True` in case the program was interrupted, to avoid wasting time on exit
             thread_pool.shutdown(wait=False, cancel_futures=True)
 
     # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
