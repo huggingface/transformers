@@ -277,7 +277,6 @@ Refer to the table below to help you choose the right backend for your training 
 | ofi | uses TorchScripts [optimize_for_inference](https://pytorch.org/docs/stable/generated/torch.jit.optimize_for_inference.html#torch-jit-optimize-for-inference) | inference |
 | fx2trt | uses [Torch-TensorRT](https://pytorch.org/TensorRT/tutorials/getting_started_with_fx_path.html) | inference |
 | onnxrt | uses [ONNX-RT](https://onnxruntime.ai/) for CPU and GPU inference | inference |
-| ipex | uses [IPEX](https://github.com/intel/intel-extension-for-pytorch) for CPU inference | inference |
 
 ### Scaled dot production attention
 

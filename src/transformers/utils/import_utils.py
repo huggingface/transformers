@@ -241,25 +241,21 @@ def is_torch_npu_available(check_device=False) -> bool:
 @lru_cache
 def is_torch_xpu_available(check_device: bool = False) -> bool:
     """
-    Checks if XPU acceleration is available either via native PyTorch (>=2.6),
-    `intel_extension_for_pytorch` or via stock PyTorch (>=2.4) and potentially
-    if a XPU is in the environment.
+    Checks if XPU acceleration is available via stock PyTorch (>=2.6) and
+    potentially if a XPU is in the environment.
     """
     if not is_torch_available():
         return False
 
     torch_version = version.parse(get_torch_version())
     if torch_version.major == 2 and torch_version.minor < 6:
-        if is_ipex_available():
-            import intel_extension_for_pytorch  # noqa: F401
-        elif torch_version.major == 2 and torch_version.minor < 4:
-            return False
+        return False
 
     import torch
 
     if check_device:
         try:
-            # Will raise a RuntimeError if no XPU  is found
+            # Will raise a RuntimeError if no XPU is found
             _ = torch.xpu.device_count()
             return torch.xpu.is_available()
         except RuntimeError:
@@ -849,29 +845,6 @@ def is_ninja_available() -> bool:
 
 
 @lru_cache
-def is_ipex_available(min_version: str = "") -> bool:
-    def get_major_and_minor_from_version(full_version):
-        return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
-
-    ipex_available, ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
-
-    if not is_torch_available() or not ipex_available:
-        return False
-
-    torch_major_and_minor = get_major_and_minor_from_version(get_torch_version())
-    ipex_major_and_minor = get_major_and_minor_from_version(ipex_version)
-    if torch_major_and_minor != ipex_major_and_minor:
-        logger.warning_once(
-            f"Intel Extension for PyTorch {ipex_major_and_minor} needs to work with PyTorch {ipex_major_and_minor}.*,"
-            f" but PyTorch {get_torch_version()} is found. Please switch to the matching version and run again."
-        )
-        return False
-    if min_version:
-        return version.parse(ipex_version) >= version.parse(min_version)
-    return True
-
-
-@lru_cache
 def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bool:
     is_available, bitsandbytes_version = _is_package_available("bitsandbytes", return_version=True)
     return is_available and version.parse(bitsandbytes_version) >= version.parse(min_version)
@@ -1159,11 +1132,6 @@ def is_phonemizer_available() -> bool:
 @lru_cache
 def is_uroman_available() -> bool:
     return _is_package_available("uroman")
-
-
-@lru_cache
-def is_ccl_available() -> bool:
-    return _is_package_available("torch_ccl") or _is_package_available("oneccl_bindings_for_pytorch")
 
 
 @lru_cache
@@ -1775,13 +1743,6 @@ runtime after installation.
 """
 
 # docstyle-ignore
-CCL_IMPORT_ERROR = """
-{0} requires the torch ccl library but it was not found in your environment. You can install it with pip:
-`pip install oneccl_bind_pt -f https://developer.intel.com/ipex-whl-stable`
-Please note that you may need to restart your runtime after installation.
-"""
-
-# docstyle-ignore
 ESSENTIA_IMPORT_ERROR = """
 {0} requires essentia library. But that was not found in your environment. You can install them with pip:
 `pip install essentia==2.1b6.dev1034`
@@ -1869,7 +1830,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
-        ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
         ("rjieba", (is_rjieba_available, RJIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),

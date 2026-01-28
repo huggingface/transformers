@@ -516,7 +516,7 @@ Alternative backends may also require the replacement of device-specific functio
 
 ```python
 import torch
-import torch_npu # for xpu, replace it with `import intel_extension_for_pytorch`
+import torch_npu
 # !! Further additional imports can be added here !!
 
 # Specify the device name (eg. 'cuda', 'cpu', 'npu', 'xpu', 'mps')

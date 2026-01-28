@@ -2313,7 +2313,7 @@ class Trainer:
 
         # as the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases such as
-        # FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
+        # FSDP-XLA, SageMaker MP/DP, DataParallel
         use_accelerator_prepare = model is self.model
 
         if use_accelerator_prepare and self.is_fsdp_enabled:

@@ -20,7 +20,6 @@ _import_structure = {
     "aqlm": ["replace_with_aqlm_linear"],
     "awq": [
         "post_init_awq_exllama_modules",
-        "post_init_awq_ipex_modules",
         "replace_quantization_scales",
         "replace_with_awq_linear",
     ],
@@ -173,7 +172,6 @@ if TYPE_CHECKING:
     from .aqlm import replace_with_aqlm_linear
     from .awq import (
         post_init_awq_exllama_modules,
-        post_init_awq_ipex_modules,
         replace_quantization_scales,
         replace_with_awq_linear,
     )
