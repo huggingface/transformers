@@ -1495,22 +1495,66 @@ class MimiModel(MimiPreTrainedModel):
         Encodes the given input using the underlying VQVAE. The padding mask is required to compute the correct scale.
         """
 
-        # TODO: @eustlb, let's make the encoder support padding_mask so that batched inputs are supported.
-        embeddings = self.encoder(input_values, padding_cache=padding_cache)
+        if padding_mask is not None:
+            padding_mask_2d = padding_mask.any(dim=1) if padding_mask.dim() == 3 else padding_mask
+            input_lengths = padding_mask_2d.sum(dim=-1)
+            batch_size = input_values.shape[0]
 
-        # TODO: @eustlb, convert the padding mask to attention mask.
+            embeddings_list = []
+            output_lengths_list = []
+            for i in range(batch_size):
+                actual_len = input_lengths[i].item()
+                sample_emb = self.encoder(input_values[i : i + 1, :, :actual_len], padding_cache=padding_cache)
+                embeddings_list.append(sample_emb)
+
+                out_len = actual_len
+                for layer_name in self.encoder._mimiconv1d_layer_names:
+                    conv_layer = self.encoder.get_submodule(layer_name)
+                    out_len = conv_layer._get_output_length(
+                        torch.tensor([out_len], device=conv_layer.stride.device, dtype=torch.int64)
+                    ).item()
+                output_lengths_list.append(out_len)
+
+            max_len = max(output_lengths_list)
+            embeddings = torch.cat(
+                [torch.nn.functional.pad(emb, (0, max_len - emb.shape[-1])) for emb in embeddings_list], dim=0
+            )
+
+            output_lengths = torch.tensor(output_lengths_list, device=embeddings.device)
+            mask = torch.arange(max_len, device=embeddings.device).expand(batch_size, -1) < output_lengths.unsqueeze(1)
+            attention_mask = mask.view(batch_size, 1, 1, -1).to(embeddings.dtype)
+            attention_mask = (1.0 - attention_mask) * torch.finfo(embeddings.dtype).min
+        else:
+            embeddings = self.encoder(input_values, padding_cache=padding_cache)
+            attention_mask = None
+
         encoder_outputs = self.encoder_transformer(
-            embeddings.transpose(1, 2), past_key_values=past_key_values, return_dict=return_dict
+            embeddings.transpose(1, 2),
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            return_dict=return_dict,
         )
-        if return_dict:
-            past_key_values = encoder_outputs.get("past_key_values")
-        elif len(encoder_outputs) > 1:
-            past_key_values = encoder_outputs[1]
+        past_key_values = (
+            encoder_outputs.get("past_key_values")
+            if return_dict
+            else (encoder_outputs[1] if len(encoder_outputs) > 1 else None)
+        )
         embeddings = encoder_outputs[0].transpose(1, 2)
-        embeddings = self.downsample(embeddings, padding_cache=padding_cache)
 
-        codes = self.quantizer.encode(embeddings, num_quantizers)
-        codes = codes.transpose(0, 1)
+        if padding_mask is not None:
+            codes_list = []
+            for i, out_len in enumerate(output_lengths_list):
+                sample_emb = self.downsample(embeddings[i : i + 1, :, :out_len], padding_cache=padding_cache)
+                codes_list.append(self.quantizer.encode(sample_emb, num_quantizers))
+
+            max_code_len = max(c.shape[-1] for c in codes_list)
+            codes = torch.cat(
+                [torch.nn.functional.pad(c, (0, max_code_len - c.shape[-1])) for c in codes_list], dim=1
+            ).transpose(0, 1)
+        else:
+            embeddings = self.downsample(embeddings, padding_cache=padding_cache)
+            codes = self.quantizer.encode(embeddings, num_quantizers).transpose(0, 1)
+
         return codes, past_key_values, padding_cache
 
     def get_encoded_length(self, input_length: torch.LongTensor) -> torch.LongTensor:
