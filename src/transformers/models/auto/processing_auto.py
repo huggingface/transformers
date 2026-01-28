@@ -147,7 +147,6 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("speech_to_text", "Speech2TextProcessor"),
         ("speecht5", "SpeechT5Processor"),
         ("t5gemma2", "Gemma3Processor"),
-        ("t5gemma2_decoder", "Gemma3Processor"),
         ("t5gemma2_encoder", "Gemma3Processor"),
         ("trocr", "TrOCRProcessor"),
         ("tvp", "TvpProcessor"),
