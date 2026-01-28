@@ -236,7 +236,7 @@ class TrainingArguments:
                 - An integer: exact number of warmup steps
                 - A float in range [0, 1): interpreted as ratio of total training steps
 
-        ## Optimizer
+        > Optimizer
 
         optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch"` (for torch>=2.8 `"adamw_torch_fused"`)):
             The optimizer to use. Common options:
