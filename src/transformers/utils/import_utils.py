@@ -751,11 +751,6 @@ def is_flute_available() -> bool:
 
 
 @lru_cache
-def is_ftfy_available() -> bool:
-    return _is_package_available("ftfy")
-
-
-@lru_cache
 def is_g2p_en_available() -> bool:
     return _is_package_available("g2p_en")
 
@@ -1421,16 +1416,18 @@ def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: 
 
     if not callable(msg):
         # torch._check requires msg to be a callable but we want to keep the API simple for users
-        def msg():
+        def msg_callable():
             return msg
+    else:
+        msg_callable = msg
 
     if callable(cond):
         cond = cond()
 
     if isinstance(cond, torch.Tensor):
-        torch._check_tensor_all_with(error_type, cond, msg)
+        torch._check_tensor_all_with(error_type, cond, msg_callable)
     else:
-        torch._check_with(error_type, cond, msg)
+        torch._check_with(error_type, cond, msg_callable)
 
 
 @lru_cache
@@ -1640,13 +1637,6 @@ that match your environment. Please note that you may need to restart your runti
 """
 
 
-# docstyle-ignore
-FTFY_IMPORT_ERROR = """
-{0} requires the ftfy library but it was not found in your environment. Check out the instructions on the
-installation section: https://github.com/rspeer/python-ftfy/tree/master#installing and follow the ones
-that match your environment. Please note that you may need to restart your runtime after installation.
-"""
-
 LEVENSHTEIN_IMPORT_ERROR = """
 {0} requires the python-Levenshtein library but it was not found in your environment. You can install it with pip: `pip
 install python-Levenshtein`. Please note that you may need to restart your runtime after installation.
@@ -1853,7 +1843,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("essentia", (is_essentia_available, ESSENTIA_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
-        ("ftfy", (is_ftfy_available, FTFY_IMPORT_ERROR)),
         ("g2p_en", (is_g2p_en_available, G2P_EN_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),

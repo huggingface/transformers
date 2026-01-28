@@ -20,10 +20,11 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, can_return_tuple, logging
+from ...utils.generic import OutputRecorder
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
     Qwen3MoeExperts,
@@ -39,6 +40,8 @@ from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLModel,
     Qwen3VLTextAttention,
     Qwen3VLTextModel,
+    Qwen3VLVisionAttention,
+    Qwen3VLVisionBlock,
     Qwen3VLVisionModel,
     Qwen3VLVisionRotaryEmbedding,
 )
@@ -47,7 +50,7 @@ from ..qwen3_vl.modeling_qwen3_vl import (
 logger = logging.get_logger(__name__)
 
 
-class Qwen3VLMoeTextConfig(PreTrainedConfig):
+class Qwen3VLMoeTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3VLMoeTextModel`]. It is used to instantiate a
     Qwen3-VL-MOE model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -109,6 +112,8 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
             with longer `max_position_embeddings`.
         head_dim (`int`, *optional*):
             The dimension of the head. If not specified, will default to `hidden_size // num_attention_heads`.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
 
     ```python
     >>> from transformers import Qwen3VLMoeForConditionalGeneration, Qwen3VLMoeConfig
@@ -165,6 +170,7 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         mlp_only_layers: list[int] | None = None,
         rope_parameters: RopeParameters | None = None,
         head_dim: int | None = None,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -194,6 +200,7 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
+        self.pad_token_id = pad_token_id
 
         super().__init__(
             ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
@@ -314,8 +321,20 @@ class Qwen3VLMoeVisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
     pass
 
 
-class Qwen3VLMoeVisionModel(Qwen3VLVisionModel):
+class Qwen3VLMoeVisionAttention(Qwen3VLVisionAttention):
     pass
+
+
+class Qwen3VLMoeVisionBlock(Qwen3VLVisionBlock):
+    pass
+
+
+class Qwen3VLMoeVisionModel(Qwen3VLVisionModel):
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name="mlp.gate", index=0),
+        "hidden_states": Qwen3VLMoeVisionBlock,
+        "attentions": Qwen3VLMoeVisionAttention,
+    }
 
 
 class Qwen3VLMoeTextModel(Qwen3VLTextModel):
@@ -361,7 +380,8 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
         Example:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Qwen3VLMoeForConditionalGeneration
 
         >>> model = Qwen3VLMoeForConditionalGeneration.from_pretrained("Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto")

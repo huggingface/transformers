@@ -14,14 +14,14 @@
 """Mixtral model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MixtralConfig(PreTrainedConfig):
+class MixtralConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`MixtralModel`]. It is used to instantiate an
     Mixtral model according to the specified arguments, defining the model architecture. Instantiating a configuration

@@ -881,6 +881,7 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             {
                 (None, None): [-40.2445, -37.4300, -38.1577],
                 ("cuda", 8): [-14.1195, -17.2663, -13.7805],
+                ("xpu", None): [-14.1195, -17.2663, -13.7805],
             }
         )
         EXPECTED_MASKS = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -1004,15 +1005,15 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             images=[raw_image, raw_image],
             input_points=input_points,
             input_labels=input_labels,
-            images_kwargs={"point_pad_value": -10},
+            point_pad_value=-10,
             return_tensors="pt",
         ).to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[0][-1], torch.tensor(0.4482), atol=1e-4))
-        self.assertTrue(torch.allclose(scores[1][-1], torch.tensor(0.4482), atol=1e-4))
+        self.assertTrue(torch.allclose(scores[0][-1], torch.tensor(0.8858), atol=1e-4))
+        self.assertTrue(torch.allclose(scores[1][-1], torch.tensor(0.9092), atol=1e-4))
 
     def test_inference_mask_generation_one_box(self):
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")
