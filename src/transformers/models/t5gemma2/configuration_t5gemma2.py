@@ -307,6 +307,23 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
 
         super().__init__(**kwargs)
 
+    def __setattr__(self, key, value):
+        shared_attr_with_submodules = [
+            "output_hidden_states",
+            "output_attentions",
+            "_attn_implementation_internal",
+            "dropout_rate",
+            "attention_dropout",
+            "vocab_size",
+            "dtype",
+            "return_dict",
+        ]
+
+        if key in shared_attr_with_submodules:
+            setattr(self.text_config, key, value)
+            setattr(self.vision_config, key, value)
+        super().__setattr__(key, value)
+
 
 class T5Gemma2DecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
@@ -625,8 +642,6 @@ class T5Gemma2Config(PreTrainedConfig):
         ]
 
         if key in shared_attr_with_submodules:
-            setattr(self.encoder.text_config, key, value)
-            setattr(self.encoder.vision_config, key, value)
             setattr(self.decoder, key, value)
             setattr(self.encoder, key, value)
         super().__setattr__(key, value)
