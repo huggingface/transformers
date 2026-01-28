@@ -713,7 +713,6 @@ PIPELINE_INIT_ARGS = build_pipeline_init_args(
 SUPPORTED_PEFT_TASKS = {
     "document-question-answering": ["PeftModelForQuestionAnswering"],
     "feature-extraction": ["PeftModelForFeatureExtraction", "PeftModel"],
-    "question-answering": ["PeftModelForQuestionAnswering"],
     "summarization": ["PeftModelForSeq2SeqLM"],
     "table-question-answering": ["PeftModelForQuestionAnswering"],
     "text2text-generation": ["PeftModelForSeq2SeqLM"],

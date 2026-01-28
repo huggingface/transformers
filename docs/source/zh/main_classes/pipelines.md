@@ -328,12 +328,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
-### ImageToImagePipeline
-
-[[autodoc]] ImageToImagePipeline
-    - __call__
-    - all
-
 ### ObjectDetectionPipeline
 
 [[autodoc]] ObjectDetectionPipeline
@@ -373,12 +367,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 [[autodoc]] NerPipeline
 
 See [`TokenClassificationPipeline`] for all details.
-
-### QuestionAnsweringPipeline
-
-[[autodoc]] QuestionAnsweringPipeline
-    - __call__
-    - all
 
 ### TableQuestionAnsweringPipeline
 
@@ -440,12 +428,6 @@ See [`TokenClassificationPipeline`] for all details.
 ### MaskGenerationPipeline
 
 [[autodoc]] MaskGenerationPipeline
-    - __call__
-    - all
-
-### VisualQuestionAnsweringPipeline
-
-[[autodoc]] VisualQuestionAnsweringPipeline
     - __call__
     - all
 

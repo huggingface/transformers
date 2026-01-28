@@ -901,7 +901,6 @@ PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS = OrderedDict(
         ("zero-shot-object-detection", ZERO_SHOT_OBJECT_DETECTION_SAMPLE),
         ("object-detection", OBJECT_DETECTION_SAMPLE),
         ("image-segmentation", IMAGE_SEGMENTATION_SAMPLE),
-        ("image-to-image", IMAGE_TO_IMAGE_SAMPLE),
         ("image-feature-extraction", IMAGE_FEATURE_EXTRACTION_SAMPLE),
         ("text-generation", TEXT_GENERATION_SAMPLE),
         ("table-question-answering", TABLE_QUESTION_ANSWERING_SAMPLE),
@@ -939,7 +938,6 @@ MODELS_TO_PIPELINE = OrderedDict(
         ("MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES", "zero-shot-object-detection"),
         ("MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES", "object-detection"),
         ("MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES", "image-segmentation"),
-        ("MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES", "image-to-image"),
         ("MODEL_FOR_IMAGE_MAPPING_NAMES", "image-feature-extraction"),
         # Text/tokens
         ("MODEL_FOR_CAUSAL_LM_MAPPING_NAMES", "text-generation"),

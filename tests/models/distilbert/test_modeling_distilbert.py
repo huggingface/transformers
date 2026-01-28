@@ -215,7 +215,6 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         {
             "feature-extraction": DistilBertModel,
             "fill-mask": DistilBertForMaskedLM,
-            "question-answering": DistilBertForQuestionAnswering,
             "text-classification": DistilBertForSequenceClassification,
             "token-classification": DistilBertForTokenClassification,
             "zero-shot": DistilBertForSequenceClassification,

@@ -381,7 +381,6 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         {
             "feature-extraction": RobertaPreLayerNormModel,
             "fill-mask": RobertaPreLayerNormForMaskedLM,
-            "question-answering": RobertaPreLayerNormForQuestionAnswering,
             "text-classification": RobertaPreLayerNormForSequenceClassification,
             "text-generation": RobertaPreLayerNormForCausalLM,
             "token-classification": RobertaPreLayerNormForTokenClassification,

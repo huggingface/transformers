@@ -384,7 +384,6 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         {
             "feature-extraction": RobertaModel,
             "fill-mask": RobertaForMaskedLM,
-            "question-answering": RobertaForQuestionAnswering,
             "text-classification": RobertaForSequenceClassification,
             "text-generation": RobertaForCausalLM,
             "token-classification": RobertaForTokenClassification,

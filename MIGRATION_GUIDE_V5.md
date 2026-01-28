@@ -598,9 +598,11 @@ Linked PRs:
 
 ## Pipelines
 
-`Text2TextGenerationPipeline`, as well as the related `SummarizationPipeline` and `TranslationPipeline`, were deprecated and will now be removed.
-`pipeline` classes are intended as a high-level beginner-friendly API, but for almost all text-to-text tasks a modern chat model 
-and `TextGenerationPipeline` will provide much higher quality output. As a result, we felt it was misleading for beginners to offer the older pipelines.
+### Text pipelines that should just be LLMs
+
+`question-answering` and `Text2TextGenerationPipeline`, including its related `SummarizationPipeline` and `TranslationPipeline`, were deprecated and will now be removed. `pipeline` classes are intended as a high-level beginner-friendly API,
+but for almost all text-to-text or question-answering tasks a modern chat model and `TextGenerationPipeline` will provide much higher quality output. 
+As a result, we felt it was misleading for beginners to offer the older pipelines.
 
 If you were using these pipelines before, try using `TextGenerationPipeline` with a chat model instead. For example, for summarization:
 
@@ -619,9 +621,12 @@ message_history = [
 print(summarizer(message_history)[0]["generated_text"][-1]["content"])
 ```
 
-Similarly, the `image-to-text` pipeline has been removed. This pipeline was used for early image captioning models, but these
-no longer offer competitive performance. Instead, for image captioning tasks we recommend using a modern vision-language chat model
-via the `image-text-to-text` pipeline. For example:
+The above example can be adapted for other tasks, e.g. translation or question answering, simply by changing the prompt.
+
+### Vision pipelines that should just be VLMs
+
+Similarly, the `image-to-text` and `visual-question-answering` pipelines have been removed. For image captioning or question answering
+tasks we recommend using a modern vision-language chat model via the `image-text-to-text` pipeline. For example:
 
 ```python
 import torch
@@ -643,6 +648,15 @@ message_history = [
 ]
 print(captioner(message_history)[0]["generated_text"][-1]["content"])
 ```
+
+The above example can be adapted for visual question answering simply by asking the question in the prompt.
+
+### Other removed pipelines
+
+The `image-to-image` pipeline has been removed, as it was rarely updated or used. For most image generation tasks, you
+probably want [🤗 Diffusers](https://huggingface.co/docs/diffusers/index) instead!
+
+### Other changes
 
 - Image text to text pipelines will no longer accept images as a separate argument along with conversation chats. Image data has to be embedded in the chat's "content" field. See [#42359](https://github.com/huggingface/transformers/pull/42359)
 

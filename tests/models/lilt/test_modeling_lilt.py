@@ -232,7 +232,6 @@ class LiltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "feature-extraction": LiltModel,
-            "question-answering": LiltForQuestionAnswering,
             "text-classification": LiltForSequenceClassification,
             "token-classification": LiltForTokenClassification,
             "zero-shot": LiltForSequenceClassification,

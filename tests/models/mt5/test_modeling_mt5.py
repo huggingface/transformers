@@ -466,11 +466,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     pipeline_model_mapping = (
         {
             "feature-extraction": MT5Model,
-            "question-answering": MT5ForQuestionAnswering,
-            "summarization": MT5ForConditionalGeneration,
             "text-classification": MT5ForSequenceClassification,
-            "text2text-generation": MT5ForConditionalGeneration,
-            "translation": MT5ForConditionalGeneration,
             "zero-shot": MT5ForSequenceClassification,
         }
         if is_torch_available()

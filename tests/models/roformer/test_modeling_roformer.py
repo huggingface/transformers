@@ -384,7 +384,6 @@ class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         {
             "feature-extraction": RoFormerModel,
             "fill-mask": RoFormerForMaskedLM,
-            "question-answering": RoFormerForQuestionAnswering,
             "text-classification": RoFormerForSequenceClassification,
             "text-generation": RoFormerForCausalLM,
             "token-classification": RoFormerForTokenClassification,

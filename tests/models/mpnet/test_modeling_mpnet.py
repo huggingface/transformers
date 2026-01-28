@@ -204,7 +204,6 @@ class MPNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": MPNetModel,
             "fill-mask": MPNetForMaskedLM,
-            "question-answering": MPNetForQuestionAnswering,
             "text-classification": MPNetForSequenceClassification,
             "token-classification": MPNetForTokenClassification,
             "zero-shot": MPNetForSequenceClassification,

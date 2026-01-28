@@ -409,12 +409,8 @@ class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         {
             "feature-extraction": MvpModel,
             "fill-mask": MvpForConditionalGeneration,
-            "question-answering": MvpForQuestionAnswering,
-            "summarization": MvpForConditionalGeneration,
             "text-classification": MvpForSequenceClassification,
             "text-generation": MvpForCausalLM,
-            "text2text-generation": MvpForConditionalGeneration,
-            "translation": MvpForConditionalGeneration,
             "zero-shot": MvpForSequenceClassification,
         }
         if is_torch_available()

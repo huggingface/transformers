@@ -375,7 +375,6 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         {
             "feature-extraction": XmodModel,
             "fill-mask": XmodForMaskedLM,
-            "question-answering": XmodForQuestionAnswering,
             "text-classification": XmodForSequenceClassification,
             "text-generation": XmodForCausalLM,
             "token-classification": XmodForTokenClassification,

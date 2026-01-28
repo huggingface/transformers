@@ -375,7 +375,6 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         {
             "feature-extraction": XLMRobertaXLModel,
             "fill-mask": XLMRobertaXLForMaskedLM,
-            "question-answering": XLMRobertaXLForQuestionAnswering,
             "text-classification": XLMRobertaXLForSequenceClassification,
             "text-generation": XLMRobertaXLForCausalLM,
             "token-classification": XLMRobertaXLForTokenClassification,

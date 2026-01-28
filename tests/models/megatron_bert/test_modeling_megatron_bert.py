@@ -279,7 +279,6 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         {
             "feature-extraction": MegatronBertModel,
             "fill-mask": MegatronBertForMaskedLM,
-            "question-answering": MegatronBertForQuestionAnswering,
             "text-classification": MegatronBertForSequenceClassification,
             "text-generation": MegatronBertForCausalLM,
             "token-classification": MegatronBertForTokenClassification,

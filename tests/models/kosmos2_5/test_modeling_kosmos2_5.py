@@ -294,7 +294,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     pipeline_model_mapping = (
         {
             "feature-extraction": Kosmos2_5Model,
-            "image-to-text": Kosmos2_5ForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -304,7 +303,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     test_attention_outputs = False
     _is_composite = True
 
-    # TODO: `image-to-text` pipeline for this model needs Processor.
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_casse_name,

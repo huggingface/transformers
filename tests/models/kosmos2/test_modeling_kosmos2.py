@@ -262,7 +262,6 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     pipeline_model_mapping = (
         {
             "feature-extraction": Kosmos2Model,
-            "image-to-text": Kosmos2ForConditionalGeneration,
             "image-text-to-text": Kosmos2ForConditionalGeneration,
         }
         if is_torch_available()
@@ -273,7 +272,6 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     test_attention_outputs = False
     _is_composite = True
 
-    # TODO: `image-to-text` pipeline for this model needs Processor.
     # TODO: Tiny model needs fixing for `image-text-to-text` (latent_query_num=3 not compatible with num_image_tokens=64).
     def is_pipeline_test_to_skip(
         self,
