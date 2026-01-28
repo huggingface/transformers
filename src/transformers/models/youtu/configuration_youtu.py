@@ -24,10 +24,10 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class YoutuConfig(PreTrainedConfig):
+class YoutuConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`YoutuModel`]. It is used to instantiate an Youtu
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
