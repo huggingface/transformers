@@ -62,7 +62,7 @@ class GlmImageVisionText2TextModelTester:
         image_size=128,
         image_start_token_id=85,
         image_end_token_id=86,
-        image_token_id=7,
+        image_token_id=87,
         is_training=True,
         text_config={
             "vocab_size": 99,
@@ -319,11 +319,9 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip(reason="GLM-Image has special image token IDs that get clamped when vocab is resized smaller")
     def test_resize_embeddings_untied(self):
         pass
 
-    @unittest.skip(reason="GLM-Image has special image token IDs that get clamped when vocab is resized smaller")
     def test_resize_tokens_embeddings(self):
         pass
 
@@ -524,14 +522,24 @@ class GlmImageIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         # Generate image tokens
-        output = model.generate(**inputs, max_new_tokens=10)
+        output = model.generate(**inputs, max_new_tokens=50)
 
         # Output should be longer than input (generated tokens)
         self.assertGreater(output.shape[1], inputs["input_ids"].shape[1])
         # Generated tokens should be within vision vocabulary range
         generated_tokens = output[0, inputs["input_ids"].shape[1] :]
-        # Vision tokens are in range [image_start_token_id, image_end_token_id)
+        # Vision tokens are in range [0, vision_vocab_size)
         self.assertTrue(all(t.item() < model.config.text_config.vision_vocab_size for t in generated_tokens))
+        
+        # Check actual token values (first 30 tokens) to catch implementation errors
+        expected_tokens = torch.tensor(
+            [10863, 4815, 15424, 2523, 3940, 12820, 9931, 7140, 7987, 13703, 13163, 8939, 14729, 8237, 4328, 6810, 13539, 12226, 5655, 16151, 16044, 8466, 2960, 1050, 1869, 9370, 11576, 8513, 14092, 10314],
+            device=torch_device,
+        )
+        self.assertTrue(
+            torch.equal(generated_tokens[:30], expected_tokens),
+            f"Expected first 30 tokens:\n{expected_tokens.tolist()}\nGot:\n{generated_tokens[:30].tolist()}",
+        )
 
     def test_image_to_image_generation(self):
         """Test image-to-image generation produces valid image tokens."""
@@ -541,10 +549,23 @@ class GlmImageIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         # Generate image tokens
-        output = model.generate(**inputs, max_new_tokens=10)
+        output = model.generate(**inputs, max_new_tokens=50)
 
         # Output should be longer than input (generated tokens)
         self.assertGreater(output.shape[1], inputs["input_ids"].shape[1])
+        # Generated tokens should be within vision vocabulary range
+        generated_tokens = output[0, inputs["input_ids"].shape[1] :]
+        self.assertTrue(all(t.item() < model.config.text_config.vision_vocab_size for t in generated_tokens))
+        
+        # Check actual token values (first 30 tokens) to catch implementation errors
+        expected_tokens = torch.tensor(
+            [15926, 12131, 8275, 9299, 6688, 14548, 1869, 11887, 2960, 11576, 16228, 11146, 10622, 11576, 10863, 11146, 6810, 5655, 6688, 16044, 4328, 13539, 5655, 4815, 2960, 12131, 3940, 14092, 11887, 8275],
+            device=torch_device,
+        )
+        self.assertTrue(
+            torch.equal(generated_tokens[:30], expected_tokens),
+            f"Expected first 30 tokens:\n{expected_tokens.tolist()}\nGot:\n{generated_tokens[:30].tolist()}",
+        )
 
     @run_first
     @require_flash_attn
