@@ -825,6 +825,8 @@
         title: EfficientNet
       - local: model_doc/eomt
         title: EoMT
+      - local: model_doc/eomt_dinov3
+        title: EoMT-DINOv3
       - local: model_doc/focalnet
         title: FocalNet
       - local: model_doc/glpn
