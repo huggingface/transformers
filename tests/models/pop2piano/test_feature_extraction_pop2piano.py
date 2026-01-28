@@ -50,6 +50,9 @@ class Pop2PianoFeatureExtractionTester:
     def __init__(
         self,
         parent,
+        batch_size=3,
+        min_seq_length=800,
+        max_seq_length=1200,
         n_bars=2,
         sample_rate=22050,
         use_mel=True,
@@ -60,6 +63,10 @@ class Pop2PianoFeatureExtractionTester:
         vocab_size_time=100,
     ):
         self.parent = parent
+        self.batch_size = batch_size
+        self.min_seq_length = min_seq_length
+        self.max_seq_length = max_seq_length
+        self.seq_length_diff = (self.max_seq_length - self.min_seq_length) // max(self.batch_size - 1, 1)
         self.n_bars = n_bars
         self.sample_rate = sample_rate
         self.use_mel = use_mel
@@ -68,6 +75,8 @@ class Pop2PianoFeatureExtractionTester:
         self.vocab_size_note = vocab_size_note
         self.vocab_size_velocity = vocab_size_velocity
         self.vocab_size_time = vocab_size_time
+        # Raw audio inputs are 1-D float sequences.
+        self.feature_size = 1
 
     def prepare_feat_extract_dict(self):
         return {
@@ -80,6 +89,19 @@ class Pop2PianoFeatureExtractionTester:
             "vocab_size_velocity": self.vocab_size_velocity,
             "vocab_size_time": self.vocab_size_time,
         }
+
+    def prepare_inputs_for_common(self, equal_length: bool = False, numpify: bool = False):
+        """Create synthetic raw audio inputs for the common BatchFeature tests."""
+        if equal_length:
+            speech_inputs = [[0.1] * self.max_seq_length for _ in range(self.batch_size)]
+        else:
+            speech_inputs = [
+                [0.1] * length
+                for length in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
+            ]
+        if numpify:
+            speech_inputs = [np.asarray(x) for x in speech_inputs]
+        return speech_inputs
 
 
 @require_torch
