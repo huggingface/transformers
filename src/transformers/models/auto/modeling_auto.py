@@ -1036,6 +1036,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         ("deformable_detr", "DeformableDetrForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
         ("lw_detr", "LwDetrForObjectDetection"),
+        ("pp_doclayout_v2", "PPDocLayoutV2ForObjectDetection"),
         ("rt_detr", "RTDetrForObjectDetection"),
         ("rt_detr_v2", "RTDetrV2ForObjectDetection"),
         ("table-transformer", "TableTransformerForObjectDetection"),
