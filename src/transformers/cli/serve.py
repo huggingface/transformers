@@ -47,7 +47,6 @@ from transformers.utils.import_utils import (
 )
 
 from .. import (
-    LogitsProcessorList,
     TextIteratorStreamer,
 )
 from ..utils import logging
@@ -817,9 +816,6 @@ class Serve:
             self.running_continuous_batching_manager = model.init_continuous_batching(
                 generation_config=generation_config
             )
-
-            # TODO (Joao, Lysandre): the logits processors should be fixed in continuous batching and correctly applied in non-cb
-            self.running_continuous_batching_manager.logit_processor = LogitsProcessorList()
             self.running_continuous_batching_manager.start()
 
         # TODO (Joao, Lysandre): this should also work with tool support
@@ -1826,8 +1822,18 @@ class Serve:
         architecture = getattr(transformers, config.architectures[0])
         model = architecture.from_pretrained(model_id, **model_kwargs)
 
+        # Default `max_length` is 20.
+        # Some configs keep it None.
+        # Still means "unset".
+        # Ensure `max_new_tokens` set.
+        # Avoid None stop crash.
         has_default_max_length = (
-            model.generation_config.max_new_tokens is None and model.generation_config.max_length == 20
+            model.generation_config.max_new_tokens is None
+            and model.generation_config.max_length
+            in (
+                None,
+                20,
+            )
         )
         has_short_max_new_tokens = (
             model.generation_config.max_new_tokens is not None and model.generation_config.max_new_tokens < 1024
