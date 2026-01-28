@@ -12,9 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 from collections.abc import Callable
+from typing import Literal
 
 import torch
 from torch import nn
@@ -27,7 +27,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -45,7 +45,7 @@ from ..modernbert.modeling_modernbert import (
 logger = logging.get_logger(__name__)
 
 
-class ModernBertDecoderConfig(PreTrainedConfig):
+class ModernBertDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`ModernBertDecoderModel`]. It is used to instantiate a ModernBert
     decoder model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -121,10 +121,9 @@ class ModernBertDecoderConfig(PreTrainedConfig):
             `global_attn_every_n_layers`. Should contain "full_attention" or "sliding_attention".
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
+        rope_parameters (`dict`, *optional*):
+            Dictionary mapping attention patterns (`"full_attention"`, `"sliding_attention"`) to `RopeParameters`.
+            Each value should be a dictionary containing `rope_type` and optional scaling parameters.
 
     Examples:
 
@@ -177,7 +176,7 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         global_attn_every_n_layers: int | None = 3,
         layer_types: list[str] | None = None,
         tie_word_embeddings: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        rope_parameters: dict[Literal["full_attention", "sliding_attention"], RopeParameters] | None = None,
         **kwargs,
     ):
         self.pad_token_id = pad_token_id
@@ -240,9 +239,15 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
             self.rope_parameters["sliding_attention"].update(rope_scaling)
+
+        # Set default values if not present
+        if self.rope_parameters.get("full_attention") is None:
+            self.rope_parameters["full_attention"] = {"rope_type": "default"}
         self.rope_parameters["full_attention"].setdefault(
             "rope_theta", kwargs.pop("global_rope_theta", self.default_theta["global"])
         )
+        if self.rope_parameters.get("sliding_attention") is None:
+            self.rope_parameters["sliding_attention"] = {"rope_type": "default"}
         self.rope_parameters["sliding_attention"].setdefault(
             "rope_theta", kwargs.pop("local_rope_theta", self.default_theta["local"])
         )
