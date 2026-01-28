@@ -210,8 +210,6 @@ class GlmImageTextConfig(Glm4vTextConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        pad_token_id (`int`, *optional*):
-            The id of the padding token.
         vision_vocab_size (`int`, *optional*, defaults to 16512):
             Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented
             by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
@@ -238,22 +236,29 @@ class GlmImageTextConfig(Glm4vTextConfig):
     def __init__(
         self,
         vocab_size: int = 168064,
+        max_position_embeddings: int = 131072,
         vision_vocab_size: int = 16512,
         attention_bias: bool = True,
         pad_token_id: int = 167841,
         eos_token_id: int = 16385,
-        max_position_embeddings: int = 131072,
         **super_kwargs,
     ):
         super().__init__(
             vocab_size=vocab_size,
             max_position_embeddings=max_position_embeddings,
+            pad_token_id=pad_token_id,
             **super_kwargs,
         )
         self.vision_vocab_size = vision_vocab_size
         self.attention_bias = attention_bias
-        self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
+
+    @property
+    def mrope_section(self) -> list[int]:
+        """Return mrope_section from rope_parameters for vLLM MROPE detection."""
+        if self.rope_parameters is not None:
+            return self.rope_parameters.get("mrope_section", [8, 12, 12])
+        return [8, 12, 12]
 
 
 class GlmImageConfig(PreTrainedConfig):
