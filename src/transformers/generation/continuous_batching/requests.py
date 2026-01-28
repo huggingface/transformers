@@ -22,6 +22,10 @@ from ...utils.logging import logging
 from ...utils.metrics import traced
 
 
+# This is a temporary token ID used to represent a token that is not yet generated
+TMP_TOKEN_ID = -1
+
+
 # We centralize the logger here to coordinate between logging and progress bar
 logger = logging.getLogger("ContinuousBatchingLogger")
 
@@ -49,7 +53,7 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         reserved_memory = 0  # MPS does not track reserved separately
     else:
         device = torch.device("cpu")
-        total_memory = None
+        total_memory = 0
         reserved_memory = 0
         allocated_memory = 0
     return device, total_memory, reserved_memory, allocated_memory
@@ -79,6 +83,7 @@ class GenerationOutput:
         error (Optional[str]): Any error message associated with the request. When None, the request was successful.
         status (RequestStatus): The status of the request.
         created_time (float): The time the request was created.
+        lifespan (tuple[float, float]): The time the request was no longer pending and the time the request finished.
     """
 
     request_id: str
@@ -88,6 +93,7 @@ class GenerationOutput:
     error: str | None = None
     status: RequestStatus = RequestStatus.PENDING
     created_time: float = field(default_factory=time.perf_counter)
+    lifespan: tuple[float, float] = (-1, -1)  # (time request was no longer pending, time request finished)
     timestamps: list[float] | None = None  # Timestamps of the generated tokens
 
     def is_finished(self) -> bool:
@@ -124,7 +130,7 @@ class RequestState:
     record_timestamps: bool = False  # Whether to record timestamps for the generated tokens
     num_children: int = 0  # Number of children requests
     # Internal fields
-    tokens_to_process: list[int] | None = None  # Tokens IDs currently being processed
+    tokens_to_process: list[int] = field(default_factory=list)  # Tokens IDs currently being processed
     remaining_prefill_tokens: list[int] = field(default_factory=list)  # For split requests, prefill left to process
     generated_tokens: list[int] = field(default_factory=list)  # Generated tokens
     allocated_blocks: int = 0  # Number of blocks allocated to the request
@@ -193,18 +199,23 @@ class RequestState:
         if self.record_timestamps:
             self._timestamps.append(time.perf_counter())
 
+        # Stop if we reached an EOS token
         is_eos = token_id == self.eos_token_id and self.eos_token_id != -1
-        is_max_len = self.generated_len() >= self.max_new_tokens
+        current_len = self.generated_len() - 1  # do not count the temporary token
 
-        # Only add the token if we're not finishing due to max length
+        # Replace the temporary token if we're not finishing due to max length
         # (EOS tokens should still be added to the output)
-        if not (is_max_len and not is_eos):
-            self.generated_tokens.extend([token_id])
+        if is_eos or (current_len < self.max_new_tokens):
+            self.generated_tokens[-1] = token_id
+            current_len += 1
+        else:
+            logger.warning(f"Request {self.request_id} generated a useless token: {token_id}")
+            self.generated_tokens.pop()
 
-        if is_eos or is_max_len:
+        if is_eos or current_len >= self.max_new_tokens:
             self.status = RequestStatus.FINISHED
             return True
-        return False
+        return False  # We still need to process more tokens
 
     def __repr__(self):
         msg = [
@@ -222,16 +233,20 @@ class RequestState:
 
     def to_generation_output(self):
         """Convert the request state to a GenerationOutput object."""
+        if self.generated_tokens and self.generated_tokens[-1] == TMP_TOKEN_ID:
+            self.generated_tokens.pop()
         if self._true_initial_tokens:
             self.generated_tokens = self.initial_tokens[self._true_initial_tokens :] + self.generated_tokens
             self.initial_tokens = self.initial_tokens[: self._true_initial_tokens]
         return GenerationOutput(
             request_id=self.request_id,
             prompt_ids=self.initial_tokens,
-            status=self.status,
             generated_tokens=self.generated_tokens,
             logprobs=[],
             error=self.error,
+            status=self.status,
+            created_time=self.created_time,
+            lifespan=self.lifespan,
             timestamps=self.timestamps,
         )
 
@@ -253,7 +268,7 @@ class RequestState:
             streaming=self.streaming,
             created_time=t,
             lifespan=(t, -1),
-            _timestamps=None if self.timestamps is None else self.timestamps[:],
+            _timestamps=[],
             error=self.error,
             record_timestamps=self.record_timestamps,
         )
@@ -263,6 +278,9 @@ class RequestState:
         """Creates an equivalent new request by removing the generated tokens and adding them to the initial prompt. The
         created request has THE SAME request_id. Notably, we can retrieve the original request from the created one with
         the _true_initial_tokens attribute."""
+        # Remove the temporary token if it exists
+        if self.generated_tokens and self.generated_tokens[-1] == TMP_TOKEN_ID:
+            self.generated_tokens.pop()
         new_state = RequestState(
             request_id=self.request_id,
             initial_tokens=self.initial_tokens + self.generated_tokens,
