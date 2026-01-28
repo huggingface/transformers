@@ -154,9 +154,9 @@ class DogeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.mlp.router_gate": "colwise_rep",
-        "layers.*.mlp.down_embed": "rowwise_rep",
-        "layers.*.mlp.up_embed": "rowwise_rep",
+        "layers.*.mlp.router_gate": "colwise_gather_output",
+        "layers.*.mlp.down_embed": "rowwise_split_input",
+        "layers.*.mlp.up_embed": "rowwise_split_input",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

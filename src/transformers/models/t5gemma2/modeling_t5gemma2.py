@@ -1192,7 +1192,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     _tied_weights_keys = {
         "lm_head.out_proj.weight": "model.encoder.embed_tokens.weight",
     }
-    _tp_plan = {"lm_head.out_proj": "colwise_rep"}
+    _tp_plan = {"lm_head.out_proj": "colwise_gather_output"}
     _pp_plan = {"lm_head.out_proj": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: T5Gemma2Config):

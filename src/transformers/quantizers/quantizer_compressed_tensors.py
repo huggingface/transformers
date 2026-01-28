@@ -84,13 +84,15 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         ) or self.quantization_config.is_sparsification_compressed:
             self.compressor.decompress_model(model=model)
 
+    # NOTE: TP plan override for compressed tensors removed - unsupported styles were used.
+    # TODO: Implement proper TP support for compressed tensors quantization
     def update_tp_plan(self, config):
         additional_plan = {
-            "layers.*.feed_forward.experts.*.gate_proj.weight": "local_colwise",
-            "layers.*.feed_forward.experts.*.gate_proj.weight_scale": "local_colwise",
-            "layers.*.feed_forward.experts.*.up_proj.weight": "local_colwise",
-            "layers.*.feed_forward.experts.*.up_proj.weight_scale": "local_colwise",
-            "layers.*.feed_forward.experts.*.down_proj.weight": "local_rowwise",
+            "layers.*.feed_forward.experts.*.gate_proj.weight": "lcolwise",
+            "layers.*.feed_forward.experts.*.gate_proj.weight_scale": "colwise",
+            "layers.*.feed_forward.experts.*.up_proj.weight": "colwise",
+            "layers.*.feed_forward.experts.*.up_proj.weight_scale": "colwise",
+            "layers.*.feed_forward.experts.*.down_proj.weight": "rowwise",
         }
         if config.get_text_config() is not None and config.get_text_config().base_model_tp_plan is not None:
             config.get_text_config().base_model_tp_plan.update(additional_plan)

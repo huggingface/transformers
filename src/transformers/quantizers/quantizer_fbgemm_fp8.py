@@ -133,13 +133,13 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 # We are using a different tp plan with local_colwise and local_rowwise for the attention because fbgemm operations cannot be parallelized
                 # With local_colwise and local_rowwise, all the operations are done locally, and we add a gather operation to gather the results instead of
                 # using dtensors
-                "layers.*.self_attn.q_proj.weight": "local_colwise",
-                "layers.*.self_attn.q_proj.weight_scale": "local_colwise",
-                "layers.*.self_attn.k_proj.weight": "local_colwise",
-                "layers.*.self_attn.k_proj.weight_scale": "local_colwise",
-                "layers.*.self_attn.v_proj.weight": "local_colwise",
-                "layers.*.self_attn.v_proj.weight_scale": "local_colwise",
-                "layers.*.self_attn.o_proj.weight": "local_rowwise",
+                "layers.*.self_attn.q_proj.weight": "colwise",
+                "layers.*.self_attn.q_proj.weight_scale": "colwise",
+                "layers.*.self_attn.k_proj.weight": "colwise",
+                "layers.*.self_attn.k_proj.weight_scale": "colwise",
+                "layers.*.self_attn.v_proj.weight": "colwise",
+                "layers.*.self_attn.v_proj.weight_scale": "colwise",
+                "layers.*.self_attn.o_proj.weight": "rowwise",
                 "layers.*.self_attn": "gather",
                 # We keep the same sequence_parallel plan for layernorms
                 "layers.*.input_layernorm.weight": "sequence_parallel",
@@ -148,23 +148,21 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 # We keep the same local_colwise and local_rowwise plan for the feed forward shared expert
                 # We also add scales for the shared expert, for local_colwise the scale is also local_colwise
                 # For local_rowwise the scale is replicated, so we don't need to add it
-                "layers.*.feed_forward.shared_expert.gate_proj.weight": "local_colwise",
-                "layers.*.feed_forward.shared_expert.gate_proj.weight_scale": "local_colwise",
-                "layers.*.feed_forward.shared_expert.up_proj.weight": "local_colwise",
-                "layers.*.feed_forward.shared_expert.up_proj.weight_scale": "local_colwise",
-                "layers.*.feed_forward.shared_expert.down_proj.weight": "local_rowwise",
-                "layers.*.feed_forward.experts": "local",
-                "layers.*.feed_forward": "gather",
-                "layers.*.feed_forward.experts.*.gate_proj.weight": "local_colwise",
-                "layers.*.feed_forward.experts.*.gate_proj.weight_scale": "local_colwise",
-                "layers.*.feed_forward.experts.*.up_proj.weight": "local_colwise",
-                "layers.*.feed_forward.experts.*.up_proj.weight_scale": "local_colwise",
-                "layers.*.feed_forward.experts.*.down_proj.weight": "local_rowwise",
+                "layers.*.feed_forward.shared_expert.gate_proj.weight": "colwise",
+                "layers.*.feed_forward.shared_expert.gate_proj.weight_scale": "colwise",
+                "layers.*.feed_forward.shared_expert.up_proj.weight": "colwise",
+                "layers.*.feed_forward.shared_expert.up_proj.weight_scale": "colwise",
+                "layers.*.feed_forward.shared_expert.down_proj.weight": "rowwise",
+                "layers.*.feed_forward.experts.*.gate_proj.weight": "colwise",
+                "layers.*.feed_forward.experts.*.gate_proj.weight_scale": "colwise",
+                "layers.*.feed_forward.experts.*.up_proj.weight": "colwise",
+                "layers.*.feed_forward.experts.*.up_proj.weight_scale": "colwise",
+                "layers.*.feed_forward.experts.*.down_proj.weight": "rowwise",
                 # For Fused implementation we use local_packed_rowwise for the gate_up_proj, and the same for the packed scales
                 # We use local_colwise for the down_proj, and the scales are replicated so we don't add them
-                "layers.*.feed_forward.experts.gate_up_proj": "local_packed_rowwise",
-                "layers.*.feed_forward.experts.gate_up_proj_scale": "local_packed_rowwise",
-                "layers.*.feed_forward.experts.down_proj": "local_colwise",
+                "layers.*.feed_forward.experts.gate_up_proj": "packed_rowwise",
+                "layers.*.feed_forward.experts.gate_up_proj_scale": "packed_rowwise",
+                "layers.*.feed_forward.experts.down_proj": "colwise",
             }
             if config.get_text_config() is not None:
                 config.get_text_config().base_model_tp_plan = text_plan
