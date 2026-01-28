@@ -209,7 +209,7 @@ class Exaone4Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        if "sliding_window" in self.layer_types:
+        if "sliding_attention" in self.layer_types:
             self.cache_implementation = "hybrid"
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
