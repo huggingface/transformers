@@ -8,6 +8,8 @@ from transformers.testing_utils import _run_pipeline_tests, _run_staging
 from transformers.utils.import_utils import is_mistral_common_available
 
 
+httpx._config.DEFAULT_TIMEOUT_CONFIG = httpx.Timeout(timeout=60.0)
+
 URLS_FOR_TESTING_DATA = [
     "http://images.cocodataset.org/val2017/000000000139.jpg",
     "http://images.cocodataset.org/val2017/000000000285.jpg",
