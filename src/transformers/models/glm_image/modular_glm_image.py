@@ -1529,14 +1529,14 @@ class GlmImageProcessor(ProcessorMixin):
         # Format: [sample0_source_grids..., sample0_target_grids, sample1_source_grids..., sample1_target_grids, ...]
         # Note: In i2i mode, batches are homogeneous (same number of source images per sample)
         num_source_images = images_per_sample[0] if images_per_sample else 0
-        
+
         # Validate homogeneity for i2i mode
         if not is_text_to_image and images_per_sample and len(set(images_per_sample)) != 1:
             raise ValueError(
                 f"In image-to-image mode, all samples must have the same number of source images. "
                 f"Got different counts: {images_per_sample}"
             )
-        
+
         all_grids = []
         for i in range(batch_size):
             text[i], token_h, token_w, prev_h, prev_w = self._build_prompt_with_target_shape(
