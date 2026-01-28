@@ -645,6 +645,8 @@
         title: ModernBert
       - local: model_doc/modernbert-decoder
         title: ModernBERTDecoder
+      - local: model_doc/modernvbert
+        title: ModernVBert
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt
@@ -1057,6 +1059,8 @@
         title: Code World Model (CWM)
       - local: model_doc/cohere2_vision
         title: Cohere2Vision
+      - local: model_doc/colmodernvbert
+        title: ColModernVBert
       - local: model_doc/colpali
         title: ColPali
       - local: model_doc/colqwen2
