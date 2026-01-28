@@ -365,6 +365,19 @@ class TrainingArguments:
             Whether to track the number of input tokens seen. Must be one of ["all", "non_padding", "no"] or a boolean value which map to "all" or "no".
             May be slower in distributed training as gather operations must be called.
         
+        ## Logging
+
+        log_level (`str`, *optional*, defaults to `passive`):
+            Logger log level to use on the main process. Possible choices are the log levels as strings: 'debug',
+            'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and keeps the
+            current log level for the Transformers library (which will be `"warning"` by default).
+        log_level_replica (`str`, *optional*, defaults to `"warning"`):
+            Logger log level to use on replicas. Same choices as `log_level`"
+        disable_tqdm (`bool`, *optional*):
+            Whether or not to disable the tqdm progress bars and table of metrics produced by
+            [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
+            set to warn or lower (default), `False` otherwise.
+
         ## Experiment Tracking Integration
          
         report_to (`str` or `list[str]`, *optional*, defaults to `"none"`):
@@ -415,20 +428,7 @@ class TrainingArguments:
             Number of predictions steps to accumulate the output tensors for, before moving the results to the CPU. If
             left unset, the whole predictions are accumulated on the device accelerator before being moved to the CPU (faster but
             requires more memory).
-
-        ## Logging
-
-        log_level (`str`, *optional*, defaults to `passive`):
-            Logger log level to use on the main process. Possible choices are the log levels as strings: 'debug',
-            'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and keeps the
-            current log level for the Transformers library (which will be `"warning"` by default).
-        log_level_replica (`str`, *optional*, defaults to `"warning"`):
-            Logger log level to use on replicas. Same choices as `log_level`"
-        disable_tqdm (`bool`, *optional*):
-            Whether or not to disable the tqdm progress bars and table of metrics produced by
-            [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
-            set to warn or lower (default), `False` otherwise.
-    
+        
         ## Metrics Computation
         
         include_for_metrics (`list[str]`, *optional*, defaults to `[]`):
@@ -519,7 +519,7 @@ class TrainingArguments:
             Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
         hub_revision (`str`, *optional*):
             The revision to use when pushing to the Hub. Can be a branch name, a tag, or a commit hash.
-            
+
         ## Best Model Tracking
         
         load_best_model_at_end (`bool`, *optional*, defaults to `False`):
@@ -544,6 +544,34 @@ class TrainingArguments:
             - `True` if `metric_for_best_model` is set to a value that doesn't end in `"loss"`.
             - `False` if `metric_for_best_model` is not set, or set to a value that ends in `"loss"`.
 
+        ## Resuming Training
+
+        ignore_data_skip (`bool`, *optional*, defaults to `False`):
+            When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
+            stage as in the previous training. If set to `True`, the training will begin faster (as that skipping step
+            can take a long time) but will not yield the same results as the interrupted training would have.
+        restore_callback_states_from_checkpoint (`bool`, *optional*, defaults to `False`):
+            Whether to restore the callback states from the checkpoint. If `True`, will override
+            callbacks passed to the `Trainer` if they exist in the checkpoint."
+
+        ## Reproducibility
+        
+        full_determinism (`bool`, *optional*, defaults to `False`)
+            If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
+            distributed training. Important: this will negatively impact the performance, so only use it for debugging.
+        seed (`int`, *optional*, defaults to 42):
+            Random seed that will be set at the beginning of training. To ensure reproducibility across runs, use the
+            [`~Trainer.model_init`] function to instantiate the model if it has some randomly initialized parameters.
+        data_seed (`int`, *optional*):
+            Random seed to be used with data samplers. If not set, random generators for data sampling will use the
+            same seed as `seed`. This can be used to ensure reproducibility of data sampling, independent of the model
+            seed.
+        
+        ## Hardware Configuration
+        
+        use_cpu (`bool`, *optional*, defaults to `False`):
+            Whether or not to use cpu. If set to False, we will use the available torch device/backend.
+            
         ## Accelerate Configuration
         
         accelerator_config (`str`, `dict`, or `AcceleratorConfig`, *optional*):
@@ -717,33 +745,18 @@ class TrainingArguments:
                 *after* initializing the `TrainingArguments`, else it will not be applied.
             </Tip>
         
-        ## Resuming Training
-        ignore_data_skip (`bool`, *optional*, defaults to `False`):
-            When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
-            stage as in the previous training. If set to `True`, the training will begin faster (as that skipping step
-            can take a long time) but will not yield the same results as the interrupted training would have.
-        restore_callback_states_from_checkpoint (`bool`, *optional*, defaults to `False`):
-            Whether to restore the callback states from the checkpoint. If `True`, will override
-            callbacks passed to the `Trainer` if they exist in the checkpoint."
-
-        ## Reproducibility
+        ## Debugging & Profiling (Experimental)
         
-        full_determinism (`bool`, *optional*, defaults to `False`)
-            If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
-            distributed training. Important: this will negatively impact the performance, so only use it for debugging.
-        seed (`int`, *optional*, defaults to 42):
-            Random seed that will be set at the beginning of training. To ensure reproducibility across runs, use the
-            [`~Trainer.model_init`] function to instantiate the model if it has some randomly initialized parameters.
-        data_seed (`int`, *optional*):
-            Random seed to be used with data samplers. If not set, random generators for data sampling will use the
-            same seed as `seed`. This can be used to ensure reproducibility of data sampling, independent of the model
-            seed.
-        
-        ## Hardware Configuration
-        
-        use_cpu (`bool`, *optional*, defaults to `False`):
-            Whether or not to use cpu. If set to False, we will use the available torch device/backend.
-        
+        debug (`str` or list of [`~debug_utils.DebugOption`], *optional*, defaults to `""`):
+            Enable one or more debug features. This is an experimental feature.
+            Possible options are:
+            - "underflow_overflow": detects overflow in model's input/outputs and reports the last frames that led to
+              the event
+            - "tpu_metrics_debug": print debug metrics on TPU
+        skip_memory_metrics (`bool`, *optional*, defaults to `True`):
+            Whether to skip adding of memory profiler reports to metrics. This is skipped by default because it slows
+            down the training and evaluation speed.
+            
         ## External Script Flags (not used by Trainer)
         
         do_train (`bool`, *optional*, defaults to `False`):
@@ -763,18 +776,6 @@ class TrainingArguments:
             The path to a folder with a valid checkpoint for your model. This argument is not directly used by
             [`Trainer`], it's intended to be used by your training/evaluation scripts instead. See the [example
             scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
-        
-        ## Debugging & Profiling (Experimental)
-        
-        debug (`str` or list of [`~debug_utils.DebugOption`], *optional*, defaults to `""`):
-            Enable one or more debug features. This is an experimental feature.
-            Possible options are:
-            - "underflow_overflow": detects overflow in model's input/outputs and reports the last frames that led to
-              the event
-            - "tpu_metrics_debug": print debug metrics on TPU
-        skip_memory_metrics (`bool`, *optional*, defaults to `True`):
-            Whether to skip adding of memory profiler reports to metrics. This is skipped by default because it slows
-            down the training and evaluation speed.
     """
 
     # Sometimes users will pass in a `str` repr of a dict in the CLI
