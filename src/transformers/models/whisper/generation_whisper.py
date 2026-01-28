@@ -1969,7 +1969,7 @@ class WhisperGenerationMixin(GenerationMixin):
         # don't remove the eos token logprob! it counts in avg_logprob calculation in the original implementation
         sum_logprobs = sum(logprobs[i][tokens[i]] for i in range(logprobs.shape[0]))
 
-        avg_logprobs = sum_logprobs / len(tokens)
+        avg_logprobs = sum_logprobs / (len(tokens) + 1)
         return avg_logprobs
 
     @staticmethod
