@@ -149,50 +149,50 @@ class GlmImageTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 168064):
-            Vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GlmImageModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 13696):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 40):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 2):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 131072):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        vision_vocab_size (`int`, *optional*, defaults to 16512):
-            Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
-        attention_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        pad_token_id (`int`, *optional*, defaults to 167841):
-            The id of the padding token.
-        eos_token_id (`int`, *optional*, defaults to 16385):
-            The id of the end of sequence token.
+            vocab_size (`int`, *optional*, defaults to 168064):
+                Vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented by the
+                `inputs_ids` passed when calling [`GlmImageModel`]
+            hidden_size (`int`, *optional*, defaults to 4096):
+                Dimension of the hidden representations.
+            intermediate_size (`int`, *optional*, defaults to 13696):
+                Dimension of the MLP representations.
+            num_hidden_layers (`int`, *optional*, defaults to 40):
+                Number of hidden layers in the Transformer encoder.
+            num_attention_heads (`int`, *optional*, defaults to 32):
+                Number of attention heads for each attention layer in the Transformer encoder.
+            num_key_value_heads (`int`, *optional*, defaults to 2):
+                This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+                `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+                `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+                converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+                by meanpooling all the original heads within that group. For more details checkout [this
+                paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
+            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+                The non-linear activation function (function or string) in the decoder.
+            max_position_embeddings (`int`, *optional*, defaults to 131072):
+                The maximum sequence length that this model might ever be used with.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+                The epsilon used by the rms normalization layers.
+            use_cache (`bool`, *optional*, defaults to `True`):
+                Whether or not the model should return the last key/values attentions (not used by all models). Only
+                relevant if `config.is_decoder=True`.
+            attention_dropout (`float`, *optional*, defaults to 0.0):
+                The dropout ratio for the attention probabilities.
+            rope_parameters (`RopeParameters`, *optional*):
+                Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+                a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+                with longer `max_position_embeddings`.
+            pad_token_id (`int`, *optional*, defaults to 167841):
+                The id of the padding token.
+            vision_vocab_size (`int`, *optional*, defaults to 16512):
+                Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented
+                by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
+            attention_bias (`bool`, *optional*, defaults to `True`):
+                Whether to add a bias to the queries, keys and values.
+            eos_token_id (`int`, *optional*, defaults to 16385):
+                The id of the end of sequence token.
 
     ```python
     >>> from transformers import GlmImageTextModel, GlmImageConfig
