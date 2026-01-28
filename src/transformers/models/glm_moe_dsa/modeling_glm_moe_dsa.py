@@ -243,9 +243,6 @@ class GlmMoeDsaAttention(nn.Module):
         self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        print(self.config)
-        print("===")
-        print(self.config.rope_parameters)
         if self.config.rope_parameters.get("rope_type", "default") != "default":
             mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
             scaling_factor = self.config.rope_parameters["factor"]
@@ -633,7 +630,7 @@ class GlmMoeDsaRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
 
     def __init__(self, config: GlmMoeDsaConfig):
         super().__init__(config)

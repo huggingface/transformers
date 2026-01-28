@@ -382,7 +382,7 @@ class GlmMoeDsaPreTrainedModel(Glm4MoePreTrainedModel):
 
 
 class GlmMoeDsaModel(Glm4MoeModel):
-    pass
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
 
 
 class GlmMoeDsaForCausalLM(Glm4MoeForCausalLM):
