@@ -27,7 +27,6 @@ from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .generation.configuration_utils import GenerationConfig
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
-from .modeling_rope_utils import RotaryEmbeddingConfigMixin
 from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
@@ -54,7 +53,7 @@ _FLOAT_TAG_KEY = "__float__"
 _FLOAT_TAG_VALUES = {"Infinity": float("inf"), "-Infinity": float("-inf"), "NaN": float("nan")}
 
 
-class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
+class PreTrainedConfig(PushToHubMixin):
     # no-format
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as

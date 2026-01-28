@@ -14,14 +14,14 @@
 """Qwen3MoE model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Qwen3MoeConfig(PreTrainedConfig):
+class Qwen3MoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3MoeModel`]. It is used to instantiate a
     Qwen3MoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -117,6 +117,10 @@ class Qwen3MoeConfig(PreTrainedConfig):
 
     model_type = "qwen3_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
+
+    attribute_map = {
+        "num_experts": "num_local_experts",
+    }
 
     # Default tensor parallel plan for base model `Qwen3Moe`
     base_model_tp_plan = {

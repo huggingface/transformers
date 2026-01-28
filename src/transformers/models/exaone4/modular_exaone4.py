@@ -28,7 +28,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import (
@@ -56,7 +56,7 @@ _CHECKPOINT_FOR_DOC = "LGAI-EXAONE/EXAONE-4.0-32B"
 _CONFIG_FOR_DOC = "Exaone4Config"
 
 
-class Exaone4Config(PreTrainedConfig):
+class Exaone4Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Exaone4Model`]. It is used to
     instantiate a EXAONE 4.0 model according to the specified arguments, defining the model architecture. Instantiating a
