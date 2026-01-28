@@ -64,7 +64,7 @@ class Scheduler(ABC):
     @traced
     def has_pending_requests(self) -> bool:
         """Checks if there are requests ready to be processed."""
-        return len(self.active_requests) or len(self.waiting_requests)
+        return bool(len(self.active_requests) or len(self.waiting_requests))
 
     @traced
     def finish_request(self, request_id: str, evict_from_cache: bool = True) -> None:
@@ -160,9 +160,11 @@ class Scheduler(ABC):
         request_ids_to_remove_from_waiting: set[str],
     ) -> None:
         """Schedules a request for the current batch, updating the request's status according to the token budget left.
+        After a request is scheduled, it is part of the next batch unless there is an error.
         If the request has children (for parallel decoding), it ensures at least one token remains before the request is
         forked."""
         # If the request has one or more children we make sure not to prefill it entirely
+        # This does not check the request state, but DECODING request already have children set to 0.
         if state.num_children > 0 and token_budget >= len(request_tokens) - 1:
             token_budget = len(request_tokens) - 1
             self._requests_to_fork.append(state)
