@@ -131,5 +131,98 @@ class TestMask2FormerScenario(unittest.TestCase):
         self.assertEqual(result[0][3].shape[0], 4)  # Fourth image: 4 instances
 
 
+class TestDistributedScenario(unittest.TestCase):
+    """Test simulating distributed training with gather_object."""
+
+    def test_distributed_gather_simulation(self):
+        """
+        Simulate distributed evaluation where gather_object returns
+        list of labels from each GPU process.
+
+        In distributed setup:
+        - GPU0 processes images 0, 2, 4, ...
+        - GPU1 processes images 1, 3, 5, ...
+        - gather_object returns [labels_gpu0, labels_gpu1, ...]
+        """
+        # Simulate 2 GPUs, each processing 2 images per batch
+        # GPU0's batch
+        gpu0_labels = (
+            [torch.randn(5, 256, 256), torch.randn(3, 256, 256)],
+            [torch.randint(0, 10, (5,)), torch.randint(0, 10, (3,))]
+        )
+        # GPU1's batch
+        gpu1_labels = (
+            [torch.randn(7, 256, 256), torch.randn(4, 256, 256)],
+            [torch.randint(0, 10, (7,)), torch.randint(0, 10, (4,))]
+        )
+
+        # gather_object returns list of labels from each process
+        gathered = [gpu0_labels, gpu1_labels]
+
+        # Simulate Trainer accumulation: extend (not append)
+        per_sample_nested_labels = []
+        per_sample_nested_labels.extend(gathered)
+
+        # flatten_per_sample_nested_batches handles this correctly
+        result = flatten_per_sample_nested_batches(per_sample_nested_labels, num_samples=4)
+
+        # Should have 4 images total (2 from each GPU)
+        self.assertEqual(len(result[0]), 4)
+        self.assertEqual(len(result[1]), 4)
+
+        # Instance counts should be preserved
+        self.assertEqual(result[0][0].shape[0], 5)  # GPU0 image 1
+        self.assertEqual(result[0][1].shape[0], 3)  # GPU0 image 2
+        self.assertEqual(result[0][2].shape[0], 7)  # GPU1 image 1
+        self.assertEqual(result[0][3].shape[0], 4)  # GPU1 image 2
+
+    def test_distributed_multiple_iterations(self):
+        """Test multiple evaluation iterations in distributed setup."""
+        per_sample_nested_labels = []
+
+        # Iteration 1: gather_object returns labels from 2 GPUs
+        iter1_gathered = [
+            ([torch.randn(5, 64), torch.randn(3, 64)], [torch.arange(5), torch.arange(3)]),  # GPU0
+            ([torch.randn(7, 64), torch.randn(4, 64)], [torch.arange(7), torch.arange(4)]),  # GPU1
+        ]
+        per_sample_nested_labels.extend(iter1_gathered)
+
+        # Iteration 2: another batch from 2 GPUs
+        iter2_gathered = [
+            ([torch.randn(2, 64)], [torch.arange(2)]),  # GPU0
+            ([torch.randn(6, 64)], [torch.arange(6)]),  # GPU1
+        ]
+        per_sample_nested_labels.extend(iter2_gathered)
+
+        # Total: 4 batches (2 GPUs x 2 iterations), 6 images
+        # Dataset has 5 images, so truncate to 5
+        result = flatten_per_sample_nested_batches(per_sample_nested_labels, num_samples=5)
+
+        self.assertEqual(len(result[0]), 5)
+        self.assertEqual(len(result[1]), 5)
+
+    def test_distributed_remainder_one(self):
+        """
+        Test the critical remainder=1 scenario in distributed setup.
+        This was causing class_labels to be completely lost before the fix.
+        """
+        # Single image split across processes (edge case)
+        gathered = [
+            ([torch.randn(3, 64)], [torch.arange(3)]),  # GPU0: 1 image
+        ]
+
+        per_sample_nested_labels = []
+        per_sample_nested_labels.extend(gathered)
+
+        result = flatten_per_sample_nested_batches(per_sample_nested_labels, num_samples=1)
+
+        # Both label types should be preserved
+        self.assertEqual(len(result), 2)
+        self.assertEqual(len(result[0]), 1)
+        self.assertEqual(len(result[1]), 1)
+        # Instance count preserved
+        self.assertEqual(result[0][0].shape[0], 3)
+
+
 if __name__ == "__main__":
     unittest.main()

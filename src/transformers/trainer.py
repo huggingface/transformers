@@ -4519,8 +4519,10 @@ class Trainer:
                     all_preds.add(logits)
             if labels is not None:
                 if labels_are_per_sample_nested:
-                    # Per-sample nested: accumulate in separate list, flatten later
-                    per_sample_nested_labels.append(labels)
+                    # Per-sample nested: gather from all processes, then accumulate
+                    # Use gather_object directly to avoid incorrect truncation in gather_for_metrics
+                    gathered_labels = self.accelerator.gather_object(labels)
+                    per_sample_nested_labels.extend(gathered_labels)
                 else:
                     labels = self.gather_function(labels)
                     if not self.args.batch_eval_metrics or description == "Prediction":
