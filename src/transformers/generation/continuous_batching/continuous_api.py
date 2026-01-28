@@ -721,7 +721,7 @@ class ContinuousBatchProcessor:
         batch_data = self.get_model_kwargs(padded_q, padded_read_index_size)
 
         # If we are not using cuda graphs, we perform the generation step and return
-        if self._graphs in [None, {}]:
+        if self._graphs is None or not torch.cuda.is_available():
             self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
             return None
 
