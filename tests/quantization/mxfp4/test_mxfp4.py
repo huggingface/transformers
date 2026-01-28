@@ -41,6 +41,8 @@ if torch.cuda.is_available():
     REQUIRE_TRITON_MXFP4 = require_triton(min_version="3.4.0")
 elif hasattr(torch, "xpu") and torch.xpu.is_available():
     REQUIRE_TRITON_MXFP4 = require_triton(min_version="3.5.0")
+elif torch_device == "cpu":
+    REQUIRE_TRITON_MXFP4 = require_triton(min_version="3.5.0")
 else:
     REQUIRE_TRITON_MXFP4 = unittest.skip("test requires CUDA or XPU")
 
@@ -129,9 +131,8 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             config = Mxfp4Config()
             quantizer = Mxfp4HfQuantizer(config)
             quantizer.pre_quantized = False
-
-            with self.assertRaises(RuntimeError):
-                quantizer.validate_environment()
+            # CPU already supported MXFP4
+            quantizer.validate_environment()
 
     @require_torch_gpu
     def test_quantizer_validation_low_compute_capability(self):
@@ -193,8 +194,8 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             quantizer = Mxfp4HfQuantizer(config)
             quantizer.pre_quantized = False
 
-            with self.assertRaises(RuntimeError):
-                quantizer.validate_environment()
+            # CPU already supported MXFP4
+            quantizer.validate_environment()
 
     def test_quantizer_validation_missing_triton(self):
         """Test quantizer validation when triton is not available"""
@@ -278,7 +279,7 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         quantizer = Mxfp4HfQuantizer(config)
 
         # Create dummy weight tensor
-        device = "xpu" if (hasattr(torch, "xpu") and torch.xpu.is_available()) else "cuda"
+        device = torch_device
         w = torch.randn(32, 64, 128, dtype=torch.bfloat16, device=torch.device(device))
 
         quantized_w, w_scale = quantize_to_mxfp4(w, quantizer._lazy_import_kernels())
@@ -369,9 +370,8 @@ class Mxfp4ModelTest(unittest.TestCase):
         quantizer = Mxfp4HfQuantizer(config)
         quantizer.pre_quantized = False
 
-        # Test with CPU in device map (should raise error for non-pre-quantized)
-        with self.assertRaises(ValueError):
-            quantizer.validate_environment(device_map={"": "cpu"})
+        # Test with CPU in device map (CPU already support mxfp4)
+        quantizer.validate_environment(device_map={"": "cpu"})
 
     def test_memory_footprint_comparison(self):
         """Test memory footprint differences between quantized and unquantized models"""

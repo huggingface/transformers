@@ -70,30 +70,37 @@ class Mxfp4HfQuantizer(HfQuantizer):
         if self.quantization_config.dequantize:
             return
 
-        if not torch.cuda.is_available() and not torch.xpu.is_available():
+        if not is_accelerate_available():
+            raise ImportError("Using mxfp4 requires Accelerate: `pip install accelerate`")
+
+        device = torch.accelerator.current_accelerator() or torch.device("cpu")
+        if device.type not in ["cuda", "xpu", "cpu"]:
             if self.pre_quantized:
                 logger.warning_once(
-                    "Using MXFP4 quantized models requires a GPU, we will default to dequantizing the model to bf16"
+                    f"Using MXFP4 quantized models requires model on cuda/xpu/cpu, but found {device}, we will default to dequantizing the model to bf16. To use mxfp4, please disable the current accelerator."
                 )
                 self.quantization_config.dequantize = True
                 return
             else:
-                raise RuntimeError("Quantizing a model using MXFP4 requires a GPU")
-
-        if not is_accelerate_available():
-            raise ImportError("Using mxfp4 requires Accelerate: `pip install accelerate`")
+                raise RuntimeError(
+                    f"Quantizing a model using MXFP4 requires model on cuda/xpu/cpu, but found {device}. To use mxfp4, please disable the current accelerator."
+                )
 
         if torch.xpu.is_available():
-            gpu_is_supported = True
+            is_device_supported_mxfp4 = True
             kernels_available = is_triton_available("3.5.0") and is_kernels_available()
-        else:
+        elif torch.cuda.is_available():
             compute_capability = torch.cuda.get_device_capability()
-            gpu_is_supported = compute_capability >= (7, 5)
+            is_device_supported_mxfp4 = compute_capability >= (7, 5)
             kernels_available = is_triton_available("3.4.0") and is_kernels_available()
+        elif device.type == "cpu":
+            # CPU support mxfp4 in kernels
+            is_device_supported_mxfp4 = True
+            kernels_available = is_triton_available("3.5.0") and is_kernels_available()
 
         if self.pre_quantized:
             # On unsupported GPUs or without kernels, we will dequantize the model to bf16
-            if not gpu_is_supported:
+            if not is_device_supported_mxfp4:
                 logger.warning_once(
                     "MXFP4 quantization is only supported on GPUs with compute capability >= 7.5 (e.g T4, A100, L4, H100, or B200) or XPUs (e.g Intel® Data Center GPU Max Series) "
                     "We will default to dequantizing the model to bf16."
@@ -107,32 +114,27 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 )
                 self.quantization_config.dequantize = True
                 return
-        elif not gpu_is_supported:
+        elif not is_device_supported_mxfp4:
             # we can't quantize the model in this case so we raise an error
             raise ValueError(
-                "MXFP4 quantization is only supported on GPUs with compute capability >= 7.5 (e.g T4, A100, L4, H100, or B200) or XPUs (e.g Intel® Data Center GPU Max Series) "
+                "MXFP4 quantization is only supported on GPUs with compute capability >= 7.5 (e.g T4, A100, L4, H100, or B200) or XPUs (e.g Intel® Data Center GPU Max Series) or CPU"
             )
         elif not kernels_available:
             # we can't quantize the model in this case so we raise an error
             raise ValueError(
-                "MXFP4 quantization requires Triton and kernels installed: CUDA requires Triton >= 3.4.0, XPU requires Triton >= 3.5.0"
+                "MXFP4 quantization requires Triton and kernels installed: CUDA requires Triton >= 3.4.0, XPU/CPU requires Triton >= 3.5.0"
             )
 
         if not self.pre_quantized:
             self._lazy_import_kernels()
 
         device_map = kwargs.get("device_map")
-        if device_map is None:
-            logger.warning_once(
-                "You have loaded an FP4 model on CPU and have a CUDA/XPU device available, make sure to set "
-                "your model on a GPU/XPU device in order to run your model. To remove this warning, pass device_map = 'cuda' or device_map = 'xpu'. "
-            )
-        elif isinstance(device_map, dict):
-            if not self.pre_quantized and ("cpu" in device_map.values() or "disk" in device_map.values()):
+        if device_map is not None and isinstance(device_map, dict):
+            if not self.pre_quantized and "disk" in device_map.values():
                 raise ValueError(
-                    "You are attempting to load an FP4 model with a device_map that contains a CPU or disk device."
+                    "You are attempting to load an FP4 model with a device_map that contains a disk device."
                     "This is not supported when the model is quantized on the fly. "
-                    "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
+                    "Please use a quantized checkpoint or remove the disk device from the device_map."
                 )
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:

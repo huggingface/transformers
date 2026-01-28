@@ -35,7 +35,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_kernels,
     require_torch,
-    require_torch_accelerator,
     require_torch_gpu,
     slow,
     torch_device,
@@ -217,7 +216,6 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
 
 
 @slow
-@require_torch_accelerator
 class GptOssIntegrationTest(unittest.TestCase):
     input_text = [
         "Roses are red, violets",
@@ -238,8 +236,13 @@ class GptOssIntegrationTest(unittest.TestCase):
     # ------------------------
     # Non-distributed inference
     # ------------------------
-    @staticmethod
-    def load_and_forward(model_id, attn_implementation, input_text, mode="eval", **pretrained_kwargs):
+    def load_and_forward(self, model_id, attn_implementation, input_text, mode="eval", **pretrained_kwargs):
+        if torch_device == "cpu":
+            if attn_implementation == "kernels-community/vllm-flash-attn3":
+                self.skipTest("vllm-flash-attn3 is not supported on CPU.")
+            if pretrained_kwargs.get("kernels", False) and mode == "train":
+                self.skipTest("CPU kernels only support inference.")
+
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             dtype=torch.bfloat16,
@@ -346,6 +349,12 @@ if __name__ == "__main__":
     # ------------------------
     @parameterized.expand(PARAMETERS)
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
+        if torch_device == "cpu":
+            if attn_impl == "kernels-community/vllm-flash-attn3":
+                self.skipTest("vllm-flash-attn3 is not supported on CPU.")
+            if kernels and mode == "train":
+                self.skipTest("CPU kernels only support inference.")
+
         model_id = f"openai/gpt-oss-{model}"
         output_texts = self.load_and_forward(
             model_id,
@@ -408,6 +417,13 @@ if __name__ == "__main__":
     # ------------------------
     @parameterized.expand(PARAMETERS)
     def test_model_outputs_distributed(self, quantized, model, kernels, attn_impl, mode):
+        if torch_device == "cpu":
+            self.skipTest("Skip TP on CPU until verified.")
+            # if attn_impl == "kernels-community/vllm-flash-attn3":
+            #     self.skipTest("vllm-flash-attn3 is not supported on CPU.")
+            # if kernels and mode == "train":
+            #     self.skipTest("CPU kernels only support inference.")
+
         self.run_distributed_test(quantized, model, kernels, attn_impl, mode)
 
     # ------------------------
@@ -415,6 +431,12 @@ if __name__ == "__main__":
     # ------------------------
     @parameterized.expand(PARAMETERS)
     def test_training_step(self, quantized, model, kernels, attn_impl, mode):
+        if torch_device == "cpu":
+            if attn_impl == "kernels-community/vllm-flash-attn3":
+                self.skipTest("vllm-flash-attn3 is not supported on CPU.")
+            if kernels and mode == "train":
+                self.skipTest("CPU kernels only support inference.")
+
         if mode != "train":
             self.skipTest("This test is only for training mode.")
 
