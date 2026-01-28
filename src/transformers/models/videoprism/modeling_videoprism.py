@@ -653,7 +653,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
         self.dim = int(self.config.intermediate_size / self.config.num_attention_heads)
         self.per_dim_scale = nn.Parameter(torch.zeros(self.dim))
         r_softplus_0 = 1.442695041
-        scale = torch.tensor(r_softplus_0 / (self.dim**0.5))
+        scale = torch.tensor(r_softplus_0 / (self.dim**0.5), device=self.per_dim_scale.device)
         softplus = nn.functional.softplus(self.per_dim_scale)
         scale = scale * softplus
         self.register_buffer("scale", scale)
