@@ -1,6 +1,6 @@
 numpy>=1.21.0
 psutil>=5.8.0
-pynvml>=11.0.0
+nvidia-ml-py>=12.0.0
 torch>=2.0.0
 datasets>=2.10.0
 huggingface_hub>=0.16.0
