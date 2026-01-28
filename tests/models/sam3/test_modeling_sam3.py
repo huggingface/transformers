@@ -70,7 +70,7 @@ class Sam3VisionModelTester:
         fpn_hidden_size=32,
         scale_factors=None,
         batch_size=2,
-        is_training=False,
+        is_training=True,
     ):
         if global_attn_indexes is None:
             global_attn_indexes = [0, 1]
@@ -268,7 +268,7 @@ class Sam3ModelTester:
         detr_decoder_num_queries=5,  # Reduced from 10 to 5
         mask_decoder_hidden_size=32,
         batch_size=2,
-        is_training=False,
+        is_training=True,
     ):
         if global_attn_indexes is None:
             global_attn_indexes = [0, 1]
