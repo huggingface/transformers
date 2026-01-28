@@ -316,6 +316,8 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel, EomtForUnive
 
         self.post_init()
 
+    # We redefine forward here because EoMT-DINOv3 uses DINOv3 backbone components (RoPE embeddings, layers)
+    # which require different integration than the base EoMT model that uses a separate encoder.
     @check_model_inputs()
     @auto_docstring
     def forward(
