@@ -32,7 +32,7 @@ from transformers.models.pixtral.modeling_pixtral import PixtralAttention, rotat
 
 from ... import initialization as init
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
@@ -377,9 +377,6 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
-
     @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
@@ -408,6 +405,9 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         pooled_output = sequence_output[:, 0, :]
 
         return BaseModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)
+
+    def get_input_embeddings(self):
+        return self.embeddings.patch_embeddings
 
 
 @auto_docstring
@@ -482,4 +482,62 @@ class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
         return output
 
 
-__all__ = ["DINOv3ViTModel", "DINOv3ViTPreTrainedModel", "DINOv3ViTBackbone"]
+@auto_docstring(
+    custom_intro="""
+    DINOv3ViT Model transformer with an image classification head on top (a linear layer on top of the final hidden state
+    of the [CLS] token) e.g. for ImageNet.
+    """
+)
+class DINOv3ViTForImageClassification(DINOv3ViTPreTrainedModel):
+    def __init__(self, config: DINOv3ViTConfig) -> None:
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.dinov3_vit = DINOv3ViTModel(config)
+
+        # Classifier head
+        self.classifier = (
+            nn.Linear(config.hidden_size * 2, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.dinov3_vit.embeddings.patch_embeddings
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ImageClassifierOutput:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        outputs: BaseModelOutputWithPooling = self.dinov3_vit(pixel_values, **kwargs)
+
+        sequence_output = outputs.last_hidden_state  # batch_size, sequence_length, hidden_size
+        cls_token = sequence_output[:, 0]
+        patch_tokens = sequence_output[:, 1 + self.config.num_register_tokens :]
+        linear_input = torch.cat([cls_token, patch_tokens.mean(dim=1)], dim=1)
+        logits = self.classifier(linear_input)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(labels, logits, self.config, **kwargs)
+
+        return ImageClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+__all__ = ["DINOv3ViTModel", "DINOv3ViTPreTrainedModel", "DINOv3ViTBackbone", "DINOv3ViTForImageClassification"]
