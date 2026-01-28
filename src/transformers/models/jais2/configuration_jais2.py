@@ -20,10 +20,10 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class Jais2Config(PreTrainedConfig):
+class Jais2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Jais2Model`]. It is used to instantiate a Jais2
     model according to the specified arguments, defining the model architecture.
