@@ -21,7 +21,7 @@
 import math
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
 class Phi4MultimodalVisionConfig(PreTrainedConfig):
@@ -242,7 +242,7 @@ class Phi4MultimodalAudioConfig(PreTrainedConfig):
         self.nemo_final_size = length
 
 
-class Phi4MultimodalConfig(PreTrainedConfig):
+class Phi4MultimodalConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Phi4MultimodalModel`]. It is used to instantiate a
     Phi4Multimodal model according to the specified arguments, defining the model architecture. Instantiating a configuration

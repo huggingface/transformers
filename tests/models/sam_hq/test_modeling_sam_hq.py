@@ -881,6 +881,7 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             {
                 (None, None): [-40.2445, -37.4300, -38.1577],
                 ("cuda", 8): [-14.1195, -17.2663, -13.7805],
+                ("xpu", None): [-14.1195, -17.2663, -13.7805],
             }
         )
         EXPECTED_MASKS = torch.tensor(expectations.get_expectation()).to(torch_device)
