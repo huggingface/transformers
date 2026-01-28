@@ -102,9 +102,6 @@ class GlmMoeDsaConfig(PreTrainedConfig):
             issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        first_k_dense_replace (`int`, *optional*, defaults to 3):
-            Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
-                                                            \--k dense layers--/
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
@@ -117,6 +114,12 @@ class GlmMoeDsaConfig(PreTrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        first_k_dense_replace (`int`, *optional*, defaults to 3):
+            Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
+                                                            \--k dense layers--/
+        index_topk (`int`, *optional*, defaults to 2048): <fill_docstring>
+        index_head_dim (`int`, *optional*, defaults to 128): <fill_docstring>
+        index_n_heads (`int`, *optional*, defaults to 32): <fill_docstring>
 
     ```python
     >>> from transformers import Glm4MoeLiteModel, Glm4MoeLiteConfig
@@ -186,6 +189,8 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         attention_dropout: float | None = 0.0,
         first_k_dense_replace: int | None = 3,
         index_topk: int | None = 2048,
+        index_head_dim: int | None = 128,
+        index_n_heads: int | None = 32,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -208,6 +213,8 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.initializer_range = initializer_range
         self.index_topk = index_topk
+        self.index_head_dim = index_head_dim
+        self.index_n_heads = index_n_heads
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
