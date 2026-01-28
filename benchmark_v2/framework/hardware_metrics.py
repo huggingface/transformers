@@ -156,12 +156,15 @@ class GPUMonitor:
     def __init__(self, sample_interval_sec: float = 0.05, logger: Logger | None = None):
         self.sample_interval_sec = sample_interval_sec
         self.logger = logger if logger is not None else logging.getLogger(__name__)
+        self.gpu_type = None
+        self.process = None
 
         device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
         torch_accelerator_module = getattr(torch, device_type, torch.cuda)
         self.num_available_gpus = torch_accelerator_module.device_count()
         if self.num_available_gpus == 0:
-            raise RuntimeError(f"No GPUs detected by torch.{device_type}.device_count().")
+            self.logger.warning(f"No GPUs detected by torch.{device_type}.device_count().")
+            return
 
         # Determine GPU type
         device_name, _ = get_device_name_and_memory_total()
@@ -172,7 +175,7 @@ class GPUMonitor:
         elif "intel" in device_name.lower() or device_type == "xpu":
             self.gpu_type = "intel"
         else:
-            raise RuntimeError(f"Unsupported GPU: {device_name}")
+            self.logger.warning(f"Unsupported GPU for monitoring: {device_name}")
 
     @staticmethod
     def _monitor_worker(gpu_type: str, sample_interval_sec: float, connection: Connection):
@@ -239,6 +242,10 @@ class GPUMonitor:
 
     def start(self):
         """Start monitoring GPU metrics in a separate process."""
+        if self.gpu_type is None:
+            self.logger.debug("GPU monitoring skipped (no supported GPU)")
+            return
+
         self.child_connection, self.parent_connection = Pipe()
         self.process = Process(
             target=GPUMonitor._monitor_worker,
@@ -254,18 +261,30 @@ class GPUMonitor:
 
     def stop_and_collect(self) -> GPURawMetrics:
         """Stop monitoring and return collected metrics."""
-        # Signal stop
-        if self.process.is_alive():
-            self.parent_connection.send(0)
+        # No GPU available or unsupported GPU
+        if self.process is None:
+            return GPURawMetrics(
+                utilization=[],
+                memory_used=[],
+                timestamps=[],
+                timestamp_0=0.0,
+                monitoring_status=GPUMonitoringStatus.NO_GPUS_AVAILABLE,
+            )
 
-        # Get results
-        if self.process.is_alive():
+        # Process crashed before we could collect results
+        process_failed = False
+        if not self.process.is_alive():
+            process_failed = True
+            gpu_utilization, gpu_memory_used, timestamps = [], [], []
+        else:
+            # Signal stop
+            self.parent_connection.send(0)
+            # Get results
             try:
                 gpu_utilization, gpu_memory_used, timestamps = self.parent_connection.recv()
             except Exception:
+                process_failed = True
                 gpu_utilization, gpu_memory_used, timestamps = [], [], []
-        else:
-            gpu_utilization, gpu_memory_used, timestamps = [], [], []
 
         self.parent_connection.close()
         self.process.join(timeout=2.0)
@@ -282,6 +301,15 @@ class GPUMonitor:
                 monitoring_status=GPUMonitoringStatus.SUCCESS,
             )
             self.logger.debug(f"GPU monitoring completed: {len(gpu_utilization)} samples collected")
+        elif process_failed:
+            metrics = GPURawMetrics(
+                utilization=[],
+                memory_used=[],
+                timestamps=[],
+                timestamp_0=0.0,
+                monitoring_status=GPUMonitoringStatus.FAILED,
+            )
+            self.logger.warning("GPU monitoring failed (process crashed or timed out)")
         else:
             metrics = GPURawMetrics(
                 utilization=[],
