@@ -21,11 +21,11 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...modeling_backbone_utils import BackboneMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
 from .configuration_vitdet import VitDetConfig
 
 

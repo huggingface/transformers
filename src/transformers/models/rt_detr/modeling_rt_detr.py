@@ -25,6 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...integrations import use_kernel_forward_from_hub
+from ...modeling_backbone_utils import load_backbone
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
@@ -35,7 +36,6 @@ from ...utils import (
     torch_compilable_check,
     torch_int,
 )
-from ...utils.backbone_utils import load_backbone
 from .configuration_rt_detr import RTDetrConfig
 
 

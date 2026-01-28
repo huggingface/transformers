@@ -14,8 +14,9 @@
 """ZoeDepth model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import consolidate_backbone_kwargs_to_config
 from ...utils import logging
-from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
+from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -38,15 +39,6 @@ class ZoeDepthConfig(PreTrainedConfig):
     Args:
         backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `BeitConfig()`):
             The configuration of the backbone model.
-        backbone (`str`, *optional*):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
@@ -137,9 +129,6 @@ class ZoeDepthConfig(PreTrainedConfig):
     def __init__(
         self,
         backbone_config=None,
-        backbone=None,
-        use_pretrained_backbone=False,
-        backbone_kwargs=None,
         hidden_act="gelu",
         initializer_range=0.02,
         batch_norm_eps=1e-05,
@@ -174,36 +163,24 @@ class ZoeDepthConfig(PreTrainedConfig):
         if attractor_kind not in ["mean", "sum"]:
             raise ValueError("Attractor_kind must be one of ['mean', 'sum']")
 
-        if use_pretrained_backbone:
-            raise ValueError("Pretrained backbones are not supported yet.")
-
-        if backbone_config is not None and backbone is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
-
-        if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `BEiT` backbone.")
-            backbone_config = CONFIG_MAPPING["beit"](
-                image_size=384,
-                num_hidden_layers=24,
-                hidden_size=1024,
-                intermediate_size=4096,
-                num_attention_heads=16,
-                use_relative_position_bias=True,
-                reshape_hidden_states=False,
-                out_features=["stage6", "stage12", "stage18", "stage24"],
-            )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-
-        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=backbone_config,
+            default_config_type="beit",
+            default_config_kwargs={
+                "image_size": 384,
+                "num_hidden_layers": 24,
+                "hidden_size": 1024,
+                "intermediate_size": 4096,
+                "num_attention_heads": 16,
+                "use_relative_position_bias": True,
+                "reshape_hidden_states": False,
+                "out_features": ["stage6", "stage12", "stage18", "stage24"],
+            },
+            **kwargs,
+        )
 
         self.backbone_config = backbone_config
-        self.backbone = backbone
         self.hidden_act = hidden_act
-        self.use_pretrained_backbone = use_pretrained_backbone
         self.initializer_range = initializer_range
         self.batch_norm_eps = batch_norm_eps
         self.readout_type = readout_type

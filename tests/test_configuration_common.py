@@ -133,7 +133,8 @@ class ConfigTester:
             for sub_config_key, sub_class in sub_configs.items():
                 if general_config_dict[sub_config_key] is not None:
                     if sub_class.__name__ == "AutoConfig":
-                        sub_class = sub_class.for_model(**general_config_dict[sub_config_key]).__class__
+                        sub_config_dict = copy.deepcopy(general_config_dict[sub_config_key])
+                        sub_class = sub_class.for_model(**sub_config_dict).__class__
                         sub_config_loaded = sub_class.from_pretrained(tmpdirname)
                     else:
                         sub_config_loaded = sub_class.from_pretrained(tmpdirname)

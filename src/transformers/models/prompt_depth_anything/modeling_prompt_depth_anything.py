@@ -22,10 +22,10 @@ import torch.nn as nn
 
 from transformers.utils.generic import torch_int
 
+from ...modeling_backbone_utils import load_backbone
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
-from ...utils.backbone_utils import load_backbone
 from .configuration_prompt_depth_anything import PromptDepthAnythingConfig
 
 

@@ -140,7 +140,7 @@ DETR モデルをインスタンス化するには 3 つの方法があります
 オプション 3: バックボーン + トランスフォーマーのランダムに初期化された重みを使用して DETR をインスタンス化します。
 
 ```py
->>> config = DetrConfig(use_pretrained_backbone=False)
+>>> config = DetrConfig()
 >>> model = DetrForObjectDetection(config)
 ```
 

@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 
 from tests.test_modeling_common import floats_tensor
-from transformers import AutoModelForImageClassification, Mask2FormerConfig, is_torch_available, is_vision_available
+from transformers import Mask2FormerConfig, is_torch_available, is_vision_available
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import (
     Expectations,
@@ -323,14 +323,16 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_backbone_selection(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
-        config.backbone_config = None
-        config.backbone_kwargs = {"out_indices": [1, 2, 3]}
-        config.use_pretrained_backbone = True
+        config_dict = config.to_dict()
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"out_indices": [1, 2, 3]}
+        config_dict["use_pretrained_backbone"] = True
 
         # Load a timm backbone
         # We can't load transformer checkpoint with timm backbone, as we can't specify features_only and out_indices
-        config.backbone = "resnet18"
-        config.use_timm_backbone = True
+        config_dict["backbone"] = "resnet18"
+        config_dict["use_timm_backbone"] = True
+        config = config.__class__(**config_dict)
 
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device).eval()
@@ -340,8 +342,13 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                 self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
 
         # Load a HF backbone
-        config.backbone = "microsoft/resnet-18"
-        config.use_timm_backbone = False
+        config_dict = config.to_dict()
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"out_indices": [1, 2, 3]}
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["backbone"] = "microsoft/resnet-18"
+        config_dict["use_timm_backbone"] = False
+        config = config.__class__(**config_dict)
 
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device).eval()
@@ -349,38 +356,6 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                 self.assertEqual(model.pixel_level_module.encoder.out_indices, [1, 2, 3])
             elif model.__class__.__name__ == "Mask2FormerForUniversalSegmentation":
                 self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
-
-    def test_initialization_pretrained_backbone(self):
-        backbone_name = "microsoft/resnet-18"
-
-        # load Mask2Former config with a pretrained backbone
-        config = Mask2FormerConfig(
-            backbone=backbone_name,
-            use_pretrained_backbone=True,
-        )
-
-        # load pretrained backbone
-        backbone_model = AutoModelForImageClassification.from_pretrained(backbone_name, device_map=torch_device)
-
-        def params_match(params1, params2):
-            return all((p1 == p2).all() for p1, p2 in zip(params1, params2))
-
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device).eval()
-            if model.__class__.__name__ == "Mask2FormerModel":
-                self.assertTrue(
-                    params_match(
-                        backbone_model.base_model.encoder.parameters(),
-                        model.pixel_level_module.encoder.encoder.parameters(),
-                    )
-                )
-            elif model.__class__.__name__ == "Mask2FormerForUniversalSegmentation":
-                self.assertTrue(
-                    params_match(
-                        backbone_model.base_model.encoder.parameters(),
-                        model.model.pixel_level_module.encoder.encoder.parameters(),
-                    )
-                )
 
 
 TOLERANCE = 2e-4

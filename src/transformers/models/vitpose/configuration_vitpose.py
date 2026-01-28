@@ -14,9 +14,9 @@
 """VitPose model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import consolidate_backbone_kwargs_to_config
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
+from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -35,18 +35,6 @@ class VitPoseConfig(PreTrainedConfig):
     Args:
         backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `VitPoseBackboneConfig()`):
             The configuration of the backbone model. Currently, only `backbone_config` with `vitpose_backbone` as `model_type` is supported.
-        backbone (`str`, *optional*):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone.
-        use_timm_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
-            library.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         scale_factor (`int`, *optional*, defaults to 4):
@@ -76,44 +64,19 @@ class VitPoseConfig(PreTrainedConfig):
     def __init__(
         self,
         backbone_config: PreTrainedConfig | None = None,
-        backbone: str | None = None,
-        use_pretrained_backbone: bool = False,
-        use_timm_backbone: bool = False,
-        backbone_kwargs: dict | None = None,
         initializer_range: float = 0.02,
         scale_factor: int = 4,
         use_simple_decoder: bool = True,
         **kwargs,
     ):
-        if use_pretrained_backbone:
-            logger.info(
-                "`use_pretrained_backbone` is `True`. For the pure inference purpose of VitPose weight do not set this value."
-            )
-        if use_timm_backbone:
-            raise ValueError("use_timm_backbone set `True` is not supported at the moment.")
-
-        if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `VitPose` backbone.")
-            backbone_config = CONFIG_MAPPING["vitpose_backbone"](out_indices=[4])
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            default_config_type="vitpose_backbone",
+            default_config_kwargs={"out_indices": [4]},
+            **kwargs,
         )
 
         self.backbone_config = backbone_config
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs
-
         self.initializer_range = initializer_range
         self.scale_factor = scale_factor
         self.use_simple_decoder = use_simple_decoder

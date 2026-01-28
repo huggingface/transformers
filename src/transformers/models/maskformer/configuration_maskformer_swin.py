@@ -14,8 +14,8 @@
 """MaskFormer Swin Transformer model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_backbone_utils import BackboneConfigMixin
 from ...utils import logging
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -144,9 +144,9 @@ class MaskFormerSwinConfig(BackboneConfigMixin, PreTrainedConfig):
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
+        out_indices = list(out_indices) if out_indices is not None else None
+        self._out_features, self._out_indices = out_features, out_indices
+        self.align_output_features_output_indices()
 
 
 __all__ = ["MaskFormerSwinConfig"]
