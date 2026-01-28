@@ -370,6 +370,45 @@ def nested_truncate(tensors, limit):
     return tensors[:limit]
 
 
+def is_per_sample_nested(tensors) -> bool:
+    """
+    Check if tensors is a "per-sample nested structure" like tuple[list[Tensor], list[Tensor]].
+
+    This structure is used by models like Mask2Former where labels are:
+    - tuple of (mask_labels, class_labels)
+    - Each is a list of tensors, one per image
+    - Tensors may have different shapes (different instances per image)
+    """
+    if not (isinstance(tensors, tuple) and len(tensors) > 0):
+        return False
+    for t in tensors:
+        if not (isinstance(t, list) and len(t) > 0 and isinstance(t[0], (torch.Tensor, np.ndarray))):
+            return False
+    return True
+
+
+def flatten_per_sample_nested_batches(batches, num_samples):
+    """
+    Flatten a list of per-sample nested batches and truncate to num_samples.
+
+    Args:
+        batches: List of batches, each is tuple[list[Tensor], ...]
+        num_samples: Number of samples to keep
+
+    Returns:
+        Single tuple with concatenated lists, truncated to num_samples
+    """
+    if not batches:
+        return None
+    num_label_types = len(batches[0])
+    result = tuple([] for _ in range(num_label_types))
+    for batch in batches:
+        for i, label_list in enumerate(batch):
+            result[i].extend(label_list)
+    # Truncate to actual dataset size
+    return tuple(lst[:num_samples] for lst in result)
+
+
 @dataclass
 class LabelSmoother:
     """

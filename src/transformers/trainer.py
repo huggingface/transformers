@@ -96,9 +96,11 @@ from .trainer_pt_utils import (
     distributed_broadcast_scalars,
     distributed_concat,
     find_batch_size,
+    flatten_per_sample_nested_batches,
     get_model_param_count,
     get_module_class_from_name,
     get_parameter_names,
+    is_per_sample_nested,
     nested_detach,
     nested_xla_mesh_reduce,
     reissue_pt_warnings,
@@ -4456,6 +4458,8 @@ class Trainer:
         all_preds = EvalLoopContainer(self.args.eval_do_concat_batches, padding_index=-100)
         all_labels = EvalLoopContainer(self.args.eval_do_concat_batches, padding_index=-100)
         all_inputs = EvalLoopContainer(self.args.eval_do_concat_batches, padding_index=-100)
+        # Separate list for per-sample nested labels (e.g., Mask2Former)
+        per_sample_nested_labels = []
 
         metrics = None
         eval_set_kwargs = {}
@@ -4492,7 +4496,9 @@ class Trainer:
                 inputs_decode = self.gather_function(inputs_decode)
                 if not self.args.batch_eval_metrics or description == "Prediction":
                     all_inputs.add(inputs_decode)
-            if labels is not None:
+            # Check if labels have per-sample nested structure (e.g., Mask2Former's tuple[list[Tensor], ...])
+            labels_are_per_sample_nested = labels is not None and is_per_sample_nested(labels)
+            if labels is not None and not labels_are_per_sample_nested:
                 # Pad labels here, preparing for preprocess_logits_for_metrics in next logits block.
                 labels = self.accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
             if logits is not None:
@@ -4503,9 +4509,15 @@ class Trainer:
                 if not self.args.batch_eval_metrics or description == "Prediction":
                     all_preds.add(logits)
             if labels is not None:
-                labels = self.gather_function(labels)
-                if not self.args.batch_eval_metrics or description == "Prediction":
-                    all_labels.add(labels)
+                if labels_are_per_sample_nested:
+                    # Per-sample nested: gather from all processes, then accumulate
+                    # Use gather_object directly to avoid incorrect truncation in gather_for_metrics
+                    gathered_labels = self.accelerator.gather_object(labels)
+                    per_sample_nested_labels.extend(gathered_labels)
+                else:
+                    labels = self.gather_function(labels)
+                    if not self.args.batch_eval_metrics or description == "Prediction":
+                        all_labels.add(labels)
 
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
@@ -4556,6 +4568,10 @@ class Trainer:
                 num_samples = observed_num_examples
         if num_samples == 0 and observed_num_examples > 0:
             num_samples = observed_num_examples
+
+        # Handle per-sample nested labels (e.g., Mask2Former)
+        if per_sample_nested_labels:
+            all_labels = flatten_per_sample_nested_batches(per_sample_nested_labels, num_samples)
 
         # Metrics!
         if (
