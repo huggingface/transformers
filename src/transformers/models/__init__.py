@@ -393,6 +393,7 @@ if TYPE_CHECKING:
     from .video_llama_3 import *
     from .video_llava import *
     from .videomae import *
+    from .videoprism import *
     from .vilt import *
     from .vipllava import *
     from .vision_encoder_decoder import *

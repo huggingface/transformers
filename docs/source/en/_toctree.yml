@@ -1021,6 +1021,8 @@
         title: V-JEPA 2
       - local: model_doc/videomae
         title: VideoMAE
+      - local: model_doc/videoprism
+        title: VideoPrism
       - local: model_doc/vivit
         title: ViViT
       title: Video models
