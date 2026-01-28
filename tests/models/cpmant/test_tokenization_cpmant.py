@@ -25,7 +25,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_rjieba
 class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "openbmb/cpm-ant-10b"
+    from_pretrained_id = "Rocketknight1/cpm-ant-10b-testing"
     tokenizer_class = CpmAntTokenizer
     test_rust_tokenizer = False
 
