@@ -81,6 +81,9 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
         super().__init__(size=size, **kwargs)
+        # Maintain backward compatibility by setting min_pixels/max_pixels attributes
+        self.min_pixels = self.size.get("shortest_edge")
+        self.max_pixels = self.size.get("longest_edge")
 
     def _further_process_kwargs(
         self,
