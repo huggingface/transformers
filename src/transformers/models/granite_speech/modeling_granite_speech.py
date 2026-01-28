@@ -297,9 +297,7 @@ class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
         self.post_init()
 
     @check_model_inputs
-    def forward(
-        self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         hidden_states = self.input_linear(hidden_states)
         for idx, layer in enumerate(self.layers, start=1):
             hidden_states = layer(hidden_states, attention_dists=self.attention_dists)
@@ -361,7 +359,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
     @auto_docstring
     def get_audio_features(
         self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         audio_outputs = self.encoder(input_features, return_dict=True, **kwargs)
         projected_embeds = self.projector(audio_outputs.last_hidden_state)
         audio_outputs.pooler_output = projected_embeds

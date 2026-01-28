@@ -1413,7 +1413,7 @@ class xLSTMModel(xLSTMPreTrainedModel):
         use_cache: bool | None = None,
         output_hidden_states: bool | None = None,
         **kwargs,
-    ) -> tuple | xLSTMOutput:
+    ) -> xLSTMOutput:
         r"""
         cache_params (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.
@@ -1549,7 +1549,7 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         output_hidden_states: bool | None = None,
         **kwargs,
-    ) -> tuple | xLSTMCausalLMOutput:
+    ) -> xLSTMCausalLMOutput:
         r"""
         cache_params (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.

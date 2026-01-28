@@ -728,7 +728,7 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Sam2HieraDetModelOutput:
+    ) -> Sam2HieraDetModelOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -780,7 +780,7 @@ class Sam2VisionModel(Sam2PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Sam2VisionEncoderOutput:
+    ) -> Sam2VisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -1247,7 +1247,7 @@ class Sam2Model(SamModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Sam2VisionEncoderOutput:
+    ) -> Sam2VisionEncoderOutput:
         r"""
         pixel_values (`torch.FloatTensor`):
             Input pixel values of shape `(batch_size, num_channels, height, width)`.

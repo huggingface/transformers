@@ -550,7 +550,7 @@ class Sam3TrackerVideoModel(Sam2VideoModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Sam3TrackerVideoVisionEncoderOutput:
+    ) -> Sam3TrackerVideoVisionEncoderOutput:
         r"""
         pixel_values (`torch.FloatTensor`):
             Input pixel values of shape `(batch_size, num_channels, height, width)`.

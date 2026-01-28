@@ -310,7 +310,7 @@ class LightOnOcrModel(Mistral3Model):
     @auto_docstring
     def get_image_features(
         self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         image_outputs = self.vision_encoder(pixel_values, image_sizes=image_sizes, return_dict=True, **kwargs)
         image_features = image_outputs.last_hidden_state
         image_features = self.vision_projection(image_features.squeeze(0), image_sizes)
@@ -340,7 +340,7 @@ class LightOnOcrModel(Mistral3Model):
         cache_position: torch.LongTensor | None = None,
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | LightOnOcrModelOutputWithPast:
+    ) -> LightOnOcrModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

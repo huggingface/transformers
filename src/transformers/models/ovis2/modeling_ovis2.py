@@ -343,7 +343,7 @@ class Ovis2VisionTransformer(nn.Module):
         pixel_values,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
-    ):
+    ) -> BaseModelOutput:
         hidden_states = self.embeddings(pixel_values)
 
         encoder_outputs: BaseModelOutput = self.encoder(
@@ -421,7 +421,7 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
     @check_model_inputs
     def forward(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
+    ) -> BaseModelOutputWithVisualIndicatorFeatures:
         outputs = self.transformer(pixel_values, **kwargs)
         last_hidden_state = outputs[0]
         if self.config.hidden_stride > 1:
@@ -493,7 +493,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
+    ) -> BaseModelOutputWithVisualIndicatorFeatures:
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         image_features = image_outputs.pooler_output
         batch_size, img_seq_len, _ = image_features.shape
@@ -559,7 +559,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> tuple | Ovis2ModelOutputWithPast:
+    ) -> Ovis2ModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -666,7 +666,7 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> tuple | Ovis2CausalLMOutputWithPast:
+    ) -> Ovis2CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

@@ -401,7 +401,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
     @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, bool_masked_pos: torch.BoolTensor | None = None, **kwargs
-    ) -> tuple | InternVLVisionModelOutputWithPooling:
+    ) -> InternVLVisionModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -494,7 +494,7 @@ class InternVLModel(LlavaModel):
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
             The tensors corresponding to the input images.
@@ -548,7 +548,7 @@ class InternVLModel(LlavaModel):
         vision_feature_select_strategy: str | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | InternVLModelOutputWithPast:
+    ) -> InternVLModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

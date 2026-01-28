@@ -526,7 +526,7 @@ class PeVideoEncoder(PeVideoPreTrainedModel):
         pixel_values_videos: torch.Tensor,
         padding_mask_videos: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         inputs_embeds, padding_mask = self.embedder(pixel_values_videos, padding_mask=padding_mask_videos)
         inputs_embeds, attention_mask = self.patch_embedder(inputs_embeds, padding_mask=padding_mask)
 
@@ -577,7 +577,7 @@ class PeVideoModel(PeVideoPreTrainedModel):
             input_ids: torch.Tensor,
             attention_mask: torch.Tensor | None = None,
             **kwargs: Unpack[TransformersKwargs],
-        ) -> tuple | BaseModelOutputWithPooling:
+        ) -> BaseModelOutputWithPooling:
             text_outputs: BaseModelOutputWithPooling = self.text_model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -594,7 +594,7 @@ class PeVideoModel(PeVideoPreTrainedModel):
             pixel_values_videos: torch.Tensor,
             padding_mask_videos: torch.Tensor | None = None,
             **kwargs: Unpack[TransformersKwargs],
-        ) -> tuple | BaseModelOutputWithPooling:
+        ) -> BaseModelOutputWithPooling:
             video_outputs: BaseModelOutputWithPooling = self.video_encoder(
                 pixel_values_videos=pixel_values_videos,
                 padding_mask_videos=padding_mask_videos,

@@ -329,7 +329,7 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         cache_position: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple | Seq2SeqLMOutput:
+    ) -> Seq2SeqLMOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.

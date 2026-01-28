@@ -180,7 +180,7 @@ class FastVlmModel(LlavaModel):
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
@@ -215,7 +215,7 @@ class FastVlmModel(LlavaModel):
         vision_feature_select_strategy: str | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | FastVlmModelOutputWithPast:
+    ) -> FastVlmModelOutputWithPast:
         r"""
         vision_feature_layer (`Union[int, list[int], NoneType]`, *optional*):
             The index of the layer to select the vision feature. If multiple indices are provided, the vision feature of the
@@ -288,7 +288,7 @@ class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | FastVlmCausalLMOutputWithPast:
+    ) -> FastVlmCausalLMOutputWithPast:
         r"""
         vision_feature_layer (`Union[int, list[int], NoneType]`, *optional*):
             The index of the layer to select the vision feature. If multiple indices are provided, the vision feature of the

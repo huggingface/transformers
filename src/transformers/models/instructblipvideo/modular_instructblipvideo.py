@@ -192,7 +192,7 @@ class InstructBlipVideoModel(InstructBlipModel):
         interpolate_pos_encoding: bool = False,
         use_cache: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple | InstructBlipVideoForConditionalGenerationModelOutput:
+    ) -> InstructBlipVideoForConditionalGenerationModelOutput:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # step 1: forward the images through the vision encoder,
@@ -294,7 +294,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         qformer_attention_mask: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithVisionQformerOutputs:
+    ) -> BaseModelOutputWithVisionQformerOutputs:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
@@ -393,7 +393,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         interpolate_pos_encoding: bool = False,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | InstructBlipVideoForConditionalGenerationModelOutput:
+    ) -> InstructBlipVideoForConditionalGenerationModelOutput:
         r"""
         qformer_input_ids (`torch.LongTensor` of shape (batch_size, sequence_length)):
             The sequence used as a prompt to be fed to the Q-Former module.

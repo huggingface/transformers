@@ -487,7 +487,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         return_dict: bool | None = None,
         *args,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple | BaseModelOutput:
+    ) -> BaseModelOutput:
         if image_sizes is None:
             batch_size, _, height, width = pixel_values.shape
             image_sizes = [(height, width)] * batch_size
