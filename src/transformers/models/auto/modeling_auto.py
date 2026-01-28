@@ -409,7 +409,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("t5", "T5Model"),
         ("t5gemma", "T5GemmaModel"),
         ("t5gemma2", "T5Gemma2Model"),
-        ("t5gemma2_encoder", "T5Gemma2Encoder"),
         ("table-transformer", "TableTransformerModel"),
         ("tapas", "TapasModel"),
         ("textnet", "TextNetModel"),
