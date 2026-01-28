@@ -1071,8 +1071,7 @@ def _get_cache_dict(cache: DynamicCache):
         logging.warning("DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions.")
 
     return {
-        "key_cache": [layer.keys for layer in cache.layers if layer.keys is not None],
-        "value_cache": [layer.values for layer in cache.layers if layer.values is not None],
+        "cache": [(layer.keys, layer.values) for layer in cache.layers if layer.keys is not None],
     }
 
 
@@ -1080,10 +1079,7 @@ def _unflatten_dynamic_cache(values, context: torch.utils._pytree.Context):
     dictionary = torch.utils._pytree._dict_unflatten(values, context)
     cache = DynamicCache()
     # Reconstruct layers from keys and values lists
-    key_list = dictionary.get("key_cache", [])
-    value_list = dictionary.get("value_cache", [])
-    for idx in range(max(len(key_list), len(value_list))):
-        key = key_list[idx] if idx < len(key_list) else None
-        value = value_list[idx] if idx < len(value_list) else None
-        cache.update(key, value, idx)
+    cache_list = dictionary.get("cache", [])
+    for i, (key, value) in enumerate(cache_list):
+        cache.update(key, value, i)
     return cache
