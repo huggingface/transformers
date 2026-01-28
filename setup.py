@@ -153,6 +153,8 @@ _deps = [
     "libcst",
     "rich",
     "opentelemetry-api",
+    "opentelemetry-exporter-otlp",
+    "opentelemetry-sdk",
     "mistral-common[image]>=1.8.8",
 ]
 
@@ -223,32 +225,32 @@ class DepsTableUpdateCommand(Command):
 extras = {}
 
 extras["torch"] = deps_list("torch", "accelerate")
-extras["sklearn"] = deps_list("scikit-learn")
-extras["accelerate"] = deps_list("accelerate")
-extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich")
-extras["retrieval"] = deps_list("faiss-cpu", "datasets")
-extras["sagemaker"] = deps_list("sagemaker")
-extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
-extras["optuna"] = deps_list("optuna")
-extras["ray"] = deps_list("ray[tune]")
-extras["hub-kernels"] = deps_list("kernels")
-extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"]
-extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"]
-extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
-extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
-extras["vision"] = deps_list("Pillow")
-extras["timm"] = deps_list("timm")
-extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
-extras["natten"] = deps_list("natten")
-extras["codecarbon"] = deps_list("codecarbon")
+extras["vision"] = deps_list("torchvision", "Pillow")
+extras["audio"] = deps_list("torchaudio", "librosa", "pyctcdecode", "phonemizer", "kenlm")
 extras["video"] = deps_list("av")
-extras["num2words"] = deps_list("num2words")
+extras["timm"] = deps_list("timm")
+extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich")
+extras["kernels"] = deps_list("kernels")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["mistral-common"] = deps_list("mistral-common[image]")
 extras["chat_template"] = deps_list("jinja2", "jmespath")
+extras["sklearn"] = deps_list("scikit-learn")
+extras["accelerate"] = deps_list("accelerate")
+extras["retrieval"] = deps_list("faiss-cpu", "datasets")
+extras["sagemaker"] = deps_list("sagemaker")
+extras["deepspeed"] = deps_list("deepspeed", "accelerate")
+extras["optuna"] = deps_list("optuna")
+extras["ray"] = deps_list("ray[tune]")
+extras["codecarbon"] = deps_list("codecarbon")
+extras["integrations"] = deps_list("kernels", "optuna", "ray[tune]", "codecarbon")
+extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"]
+extras["natten"] = deps_list("natten")
+extras["num2words"] = deps_list("num2words")
 extras["benchmark"] = deps_list("optimum-benchmark")
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
+# OpenTelemetry dependencies for metrics collection in continuous batching
+extras["open-telemetry"] = deps_list("opentelemetry-api", "opentelemetry-exporter-otlp", "opentelemetry-sdk")
 
 extras["testing"] = (
     deps_list(
@@ -259,64 +261,41 @@ extras["testing"] = (
         "pytest-xdist",
         "pytest-order",
         "pytest-rerunfailures",
+        "pytest-timeout",
         "timeout-decorator",
         "parameterized",
         "psutil",
-        "datasets",
         "dill",
         "evaluate",
-        "pytest-timeout",
-        "ruff",
         "rouge-score",
         "nltk",
-        "GitPython",
         "sacremoses",
         "rjieba",
         "beautifulsoup4",
         "tensorboard",
-        "pydantic",
-        "sentencepiece",
         "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
-        "libcst",
     )
+    + extras["quality"]
     + extras["retrieval"]
+    + extras["sentencepiece"]
     + extras["mistral-common"]
     + extras["serving"]
 )
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
-
 extras["all"] = (
     extras["torch"]
-    + extras["torch-speech"]
-    + extras["torch-vision"]
-    + extras["sentencepiece"]
-    + extras["integrations"]
-    + extras["timm"]
-    + extras["codecarbon"]
+    + extras["vision"]
+    + extras["audio"]
     + extras["video"]
-    + extras["num2words"]
+    + extras["kernels"]
+    + extras["timm"]
+    + extras["sentencepiece"]
+    + extras["tiktoken"]
     + extras["mistral-common"]
     + extras["chat_template"]
-)
-extras["dev-torch"] = (
-    extras["testing"]
-    + extras["torch"]
-    + extras["sentencepiece"]
-    + extras["torch-speech"]
-    + extras["integrations"]
-    + extras["timm"]
-    + extras["torch-vision"]
-    + extras["codecarbon"]
-    + extras["quality"]
-    + extras["ja"]
-    + extras["sklearn"]
     + extras["num2words"]
 )
-extras["dev"] = extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["sklearn"]
-
-# OpenTelemetry dependencies for metrics collection in continuous batching
-# TODO: refactor this to split API and SDK; SDK and exporter should only be needed to run code that collects metrics whereas API is what people will need to instrument their code and handle exporter themselves
-extras["open-telemetry"] = deps_list("opentelemetry-api") + ["opentelemetry-exporter-otlp", "opentelemetry-sdk"]
+extras["dev"] = extras["all"] + extras["testing"] + extras["ja"] + extras["sklearn"]
 
 
 install_requires = [
@@ -327,6 +306,7 @@ install_requires = [
     deps["pyyaml"],  # used for the model cards metadata
     deps["regex"],  # for OpenAI GPT
     deps["tokenizers"],
+    deps["typer-slim"],  # CLI utilities. In practice, already a dependency of huggingface_hub but we use it as well
     deps["safetensors"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]

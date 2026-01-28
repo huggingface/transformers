@@ -88,5 +88,7 @@ deps = {
     "libcst": "libcst",
     "rich": "rich",
     "opentelemetry-api": "opentelemetry-api",
+    "opentelemetry-exporter-otlp": "opentelemetry-exporter-otlp",
+    "opentelemetry-sdk": "opentelemetry-sdk",
     "mistral-common[image]": "mistral-common[image]>=1.8.8",
 }
