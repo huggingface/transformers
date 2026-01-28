@@ -283,7 +283,6 @@ class ContinuousBatchProcessor:
         """Setup the static tensors that are used for storage during the generation step. No other tensor will be
         allowed for the inputs or the outputs of the generation step."""
         self.num_pages = self.cache.num_blocks * self.cache.block_size
-        self.tensor_metadata = {"dtype": torch.int32, "device": self.model_device}
 
         # Some tensors always have the same shape regardless of the model
         self.input_ids = torch.empty((1, self.max_batch_tokens), dtype=torch.int32, device=self.model_device)
@@ -613,7 +612,7 @@ class ContinuousBatchProcessor:
         logits_indices: list[int],
     ) -> None:
         """Builds the actual tensors for the current batch, by modifying the already allocated tensors in place."""
-        to_tensor = partial(torch.tensor, **self.tensor_metadata)
+        to_tensor = partial(torch.tensor, dtype=torch.int32, device=self.model_device)
 
         # Those kwargs always have the same type regardless of the model
         self.input_ids[:, : len(input_ids)] = to_tensor(input_ids)
