@@ -34,7 +34,8 @@ from transformers.generation.continuous_batching.cache import (
     SlidingAttentionCacheAllocator,
     group_layers_by_attn_type,
 )
-from transformers.generation.continuous_batching.continuous_api import ContinuousBatchProcessor, build_attention_mask
+from transformers.generation.continuous_batching.continuous_api import ContinuousBatchProcessor
+from transformers.generation.continuous_batching.input_ouputs import build_attention_mask
 from transformers.testing_utils import (
     Expectations,
     require_deterministic_for_xpu,
@@ -152,19 +153,17 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
         cumulative_seqlens_q: list[int],
         cumulative_seqlens_k: list[int],
         sliding_window: int,  # the sliding window size, 1 means no sliding window
-        str_expected_mask: list[str],  # the attention mask, broken down by line as a string of 0s and 1s
+        str_expected_mask_lines: list[str],  # the attention mask, broken down by line as a string of 0s and 1s
     ) -> None:
         """Tests the correctness of the attention mask used in the continuous batching API."""
         # Build expected mask
         minus_inf = torch.finfo(torch.float32).min
         expected_mask = torch.empty((cumulative_seqlens_q[-1], cumulative_seqlens_k[-1]), dtype=torch.float32)
-        for i, line in enumerate(str_expected_mask):
+        for i, line in enumerate(str_expected_mask_lines):
             expected_mask[i, :] = torch.tensor([minus_inf if c == "0" else 0 for c in line])
         # Build actual mask
         actual_mask = torch.full_like(expected_mask, minus_inf)  # function modifies in place
-        build_attention_mask(
-            actual_mask, torch.tensor(cumulative_seqlens_q), torch.tensor(cumulative_seqlens_k), sliding_window
-        )
+        build_attention_mask(actual_mask, cumulative_seqlens_q, cumulative_seqlens_k, sliding_window)
         # Check that the actual mask matches the expected mask
         matches = (expected_mask == actual_mask).all()
         # If it doesn't match, print the masks in a readable form and fail the test
@@ -173,7 +172,7 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
                 "".join("1" if x == 0 else "0" for x in token_attn_vector) for token_attn_vector in actual_mask
             ]
             str_mask = "\n".join(str_mask)
-            str_expected_mask = "\n".join(str_expected_mask)
+            str_expected_mask = "\n".join(str_expected_mask_lines)
             self.fail(
                 f"Test failed for: {cumulative_seqlens_q = }, {cumulative_seqlens_k = }, {sliding_window = }\n"
                 f"Expected mask:\n{str_expected_mask}\n"
@@ -227,6 +226,10 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
     ) -> None:
         """Test the will_allocation_be_successful method of PagedAttentionCache, overloading the elevant attributes of
         a dummy cache."""
+
+        if torch_device is None:  # this check which should always pass and helps with type checking
+            raise ValueError(f"This requires a torch accelerator, yet {torch_device = } and the test was not skipped.")
+
         # Create the cache
         cache = PagedAttentionCache(
             config=AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B", attn_implementation="sdpa"),
@@ -240,7 +243,7 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
         cache.max_sliding_window_blocks_per_request = max_sliding_window_blocks_per_request
 
         # Overload the cache get_num_free_blocks method
-        cache.get_num_free_blocks = lambda: num_free_blocks
+        cache.get_num_free_blocks = lambda: num_free_blocks  # type: ignore[assignment]
 
         # Test the method
         result = cache.will_allocation_be_successful(num_requested_blocks, allocated_blocks)
@@ -299,7 +302,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         # Generation with continuous batching
         model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, dtype=dtype)
-        model = model.to(torch_device).eval()
+        model = model.to(torch_device).eval()  # type: ignore[assignment] <- torch_device is always w/ the decorator
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
         model.generation_config.use_cuda_graph = use_cuda_graph
@@ -325,7 +328,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         # Generation without continuous batching
         model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, dtype=dtype)
-        model = model.to(torch_device).eval()
+        model = model.to(torch_device).eval()  # type: ignore[assignment] <- torch_device is always w/ the decorator
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
         model.generation_config.use_cuda_graph = use_cuda_graph
@@ -516,6 +519,9 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             num_fa = expected_layer_types["full_attention"]
             num_sw = expected_layer_types["sliding_window"]
 
+            if manager.batch_processor is None:
+                raise RuntimeError("Batch processor is None even after a request was added.")
+
             hash_table = manager.batch_processor.cache._block_manager._hash_to_id
             self.assertEqual(
                 len(hash_table),
@@ -617,7 +623,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         # Generation with continuous batching
         model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="flash_attention_2")
-        model = model.to(torch_device).eval()
+        model = model.to(torch_device).eval()  # type: ignore[assignment] <- torch_device is always w/ the decorator
         model.generation_config.max_new_tokens = 30
         model.generation_config.do_sample = False
 
