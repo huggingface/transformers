@@ -2081,10 +2081,12 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, AutoModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> text = "a cat."
 
         >>> processor = AutoProcessor.from_pretrained("IDEA-Research/grounding-dino-tiny")
@@ -2487,7 +2489,8 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         Examples:
 
         ```python
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> import torch
         >>> from PIL import Image
@@ -2499,8 +2502,9 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
 
-        >>> image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(image_url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> # Check for cats and remote controls
         >>> text_labels = [["a cat", "a remote control"]]
 

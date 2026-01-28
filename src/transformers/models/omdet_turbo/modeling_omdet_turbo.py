@@ -1541,7 +1541,8 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         Examples:
 
         ```python
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> from transformers import AutoProcessor, OmDetTurboForObjectDetection
@@ -1550,7 +1551,8 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         >>> model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-swin-tiny-hf")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> classes = ["cat", "remote"]
         >>> task = "Detect {}.".format(", ".join(classes))
         >>> inputs = processor(image, text=classes, task=task, return_tensors="pt")

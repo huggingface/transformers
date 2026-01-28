@@ -23,10 +23,11 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
+from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_video_llava import VideoLlavaConfig
 
@@ -169,86 +170,82 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @check_model_inputs(tie_last_hidden_states=False)
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values_images: torch.FloatTensor,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-    ):
+        output_hidden_states: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_images (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+            The tensors corresponding to the input images.
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
+        vision_feature_select_strategy (`str`, *optional*):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`
         """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values_images (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-               The tensors corresponding to the input images.
-            vision_feature_layer (`Union[int, list[int]]`, *optional*):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-            vision_feature_select_strategy (`str`, *optional*):
-                The feature selection strategy used to select the vision feature from the vision backbone.
-                Can be one of `"default"` or `"full"`
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
-        """
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+        image_outputs = self.image_tower(
+            pixel_values_images,
+            output_hidden_states=True,  # Ignore arg on purpose
+            return_dict=True,
+            **kwargs,
         )
-        vision_feature_select_strategy = (
-            vision_feature_select_strategy
-            if vision_feature_select_strategy is not None
-            else self.config.vision_feature_select_strategy
-        )
-
-        if vision_feature_select_strategy not in ["default", "full"]:
-            raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
-
-        image_outputs = self.image_tower(pixel_values_images, output_hidden_states=True)
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
         if isinstance(vision_feature_layer, int):
-            image_outputs = image_outputs.hidden_states[vision_feature_layer]
+            selected_hidden_state = image_outputs.hidden_states[vision_feature_layer]
             if vision_feature_select_strategy == "default":
-                image_outputs = image_outputs[:, 1:]
+                selected_hidden_state = selected_hidden_state[:, 1:]
         else:
             hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
             # For default; crop CLS from each hidden state in the hidden state pool
             if vision_feature_select_strategy == "default":
                 hs_pool = [hs[:, 1:] for hs in hs_pool]
-            image_outputs = torch.cat(hs_pool, dim=-1)
+            selected_hidden_state = torch.cat(hs_pool, dim=-1)
 
-        image_features = self.multi_modal_projector(image_outputs)
+        image_features = self.multi_modal_projector(selected_hidden_state)
+        image_outputs.pooler_output = image_features
 
-        return image_features
+        return image_outputs
 
+    @check_model_inputs(tie_last_hidden_states=False)
+    @auto_docstring(
+        custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         vision_feature_layer: int | list[int] | None = None,
-    ):
+        output_hidden_states: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
+            The tensors corresponding to the input videos.
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
         """
-        Obtains video last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values_videos (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
-               The tensors corresponding to the input videos.
-            vision_feature_layer (`Union[int, list[int]]`, *optional*):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-        Returns:
-            video_features (`torch.Tensor`): Video feature tensor of shape `(num_videos * num_frames, image_length, embed_dim)`).
-            frames (`int`): Number of frames the videos have.
-        """
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
-        )
-
         batch_size_vid, num_frames, channels, height, width = pixel_values_videos.shape
 
         pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
-        video_outputs = self.video_tower(pixel_values, output_hidden_states=True)
+        video_outputs = self.video_tower(
+            pixel_values,
+            output_hidden_states=True,  # Ignore arg on purpose
+            return_dict=True,
+            **kwargs,
+        )
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
@@ -259,8 +256,9 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             video_features = torch.cat(hs_pool, dim=-1)
 
         video_features = self.multi_modal_projector(video_features)
+        video_outputs.pooler_output = video_features
 
-        return video_features, num_frames
+        return video_outputs
 
     def get_placeholder_mask(
         self,
@@ -303,7 +301,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             )
         return special_image_mask, special_video_mask
 
-    @can_return_tuple
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -334,14 +332,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
-        )
-        vision_feature_select_strategy = (
-            vision_feature_select_strategy
-            if vision_feature_select_strategy is not None
-            else self.config.vision_feature_select_strategy
-        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -354,7 +344,8 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
                 pixel_values_images,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -362,9 +353,9 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         if pixel_values_videos is not None:
-            video_features, num_frames = self.get_video_features(
-                pixel_values_videos=pixel_values_videos, vision_feature_layer=vision_feature_layer
-            )
+            video_features = self.get_video_features(
+                pixel_values_videos=pixel_values_videos, vision_feature_layer=vision_feature_layer, return_dict=True
+            ).pooler_output
             video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
@@ -424,19 +415,33 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values_images: torch.FloatTensor,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_images (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+            The tensors corresponding to the input images.
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
+        vision_feature_select_strategy (`str`, *optional*):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`
+        """
         return self.model.get_image_features(
             pixel_values_images=pixel_values_images,
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
+            **kwargs,
         )
 
-    @can_return_tuple
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -472,12 +477,12 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import numpy as np
         >>> import av
         >>> from huggingface_hub import hf_hub_download
         >>> from transformers import VideoLlavaProcessor, VideoLlavaForConditionalGeneration
-
 
         >>> def read_video_pyav(container, indices):
         ...     '''
@@ -520,7 +525,8 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
 
         >>> # to generate from image and video mix
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> prompt = [
         ...     "USER: <image>\nHow many cats do you see? ASSISTANT:",
         ...     "USER: <video>\nWhy is this video funny? ASSISTANT:"
@@ -539,14 +545,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
-        )
-        vision_feature_select_strategy = (
-            vision_feature_select_strategy
-            if vision_feature_select_strategy is not None
-            else self.config.vision_feature_select_strategy
-        )
 
         outputs = self.model(
             input_ids=input_ids,

@@ -44,8 +44,8 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
@@ -72,6 +72,17 @@ from .configuration_qwen3_omni_moe import (
     Qwen3OmniMoeThinkerConfig,
     Qwen3OmniMoeVisionEncoderConfig,
 )
+
+
+@dataclass
+@auto_docstring
+class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
+    r"""
+    deepstack_features (`List[torch.FloatTensor]`, *optional*):
+        List of hidden-states (feature maps) from deepstack layers.
+    """
+
+    deepstack_features: list[torch.FloatTensor] | None = None
 
 
 class SinusoidsPositionEmbedding(nn.Module):
@@ -676,6 +687,10 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
     input_modalities = "audio"
     _no_split_modules = ["Qwen3OmniMoeAudioEncoderLayer"]
     _supports_sdpa = True
+    _can_record_outputs = {
+        "hidden_states": Qwen3OmniMoeAudioEncoderLayer,
+        "attentions": Qwen3OmniMoeAudioAttention,
+    }
 
     def __init__(self, config: Qwen3OmniMoeAudioEncoderConfig):
         super().__init__(config)
@@ -736,6 +751,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
             attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
         return attention_mask
 
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -805,7 +821,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         hidden_states = self.proj1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.proj2(hidden_states)
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
     def padded_and_mask_function(self, tensor_list, tensor_len, padding_value=0, padding_side="right"):
         """
@@ -998,6 +1014,25 @@ class Qwen3OmniMoeVisionRotaryEmbedding(nn.Module):
         return freqs
 
 
+class Qwen3OmniMoeTextTopKRouter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
+        router_logits = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
+        router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
+        router_top_value = router_top_value.to(router_logits.dtype)
+        router_scores = router_top_value
+        return router_logits, router_scores, router_indices
+
+
 class Qwen3OmniMoeVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1009,26 +1044,6 @@ class Qwen3OmniMoeVisionMLP(nn.Module):
 
     def forward(self, hidden_state):
         return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
-
-
-class Qwen3OmniMoeVisionPatchEmbed(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        self.patch_size = config.patch_size
-        self.temporal_patch_size = config.temporal_patch_size
-        self.in_channels = config.in_channels
-        self.embed_dim = config.hidden_size
-
-        kernel_size = [self.temporal_patch_size, self.patch_size, self.patch_size]
-        self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=True)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        target_dtype = self.proj.weight.dtype
-        hidden_states = hidden_states.view(
-            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
-        )
-        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
-        return hidden_states
 
 
 class Qwen3OmniMoeVisionBlock(GradientCheckpointingLayer):
@@ -1058,9 +1073,34 @@ class Qwen3OmniMoeVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+class Qwen3OmniMoeVisionPatchEmbed(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.patch_size = config.patch_size
+        self.temporal_patch_size = config.temporal_patch_size
+        self.in_channels = config.in_channels
+        self.embed_dim = config.hidden_size
+
+        kernel_size = [self.temporal_patch_size, self.patch_size, self.patch_size]
+        self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=True)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        target_dtype = self.proj.weight.dtype
+        hidden_states = hidden_states.view(
+            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
+        )
+        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
+        return hidden_states
+
+
 class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
     config: Qwen3OmniMoeVisionEncoderConfig
     _no_split_modules = ["Qwen3OmniMoeVisionBlock"]
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Qwen3OmniMoeTextTopKRouter, layer_name="mlp.gate", index=0),
+        "hidden_states": Qwen3OmniMoeVisionBlock,
+        "attentions": Qwen3OmniMoeVisionAttention,
+    }
 
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -1198,7 +1238,10 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
         patch_pos_embeds = torch.cat(patch_pos_embeds_permute)
         return patch_pos_embeds
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+    @check_model_inputs
+    def forward(
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
@@ -1246,9 +1289,13 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
                 )
                 deepstack_feature_lists.append(deepstack_feature)
 
-        hidden_states = self.merger(hidden_states)
+        merged_hidden_states = self.merger(hidden_states)
 
-        return hidden_states, deepstack_feature_lists
+        return BaseModelOutputWithDeepstackFeatures(
+            last_hidden_state=hidden_states,
+            pooler_output=merged_hidden_states,
+            deepstack_features=deepstack_feature_lists,
+        )
 
     @property
     def deepstack_merger_list(self):
@@ -1935,52 +1982,56 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @can_return_tuple
+    @auto_docstring
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: torch.LongTensor | None = None
-    ):
-        """
-        Encodes videos into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input videos.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
-        return video_embeds
+        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
-        return image_embeds
+        return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
 
+    @can_return_tuple
+    @auto_docstring
     def get_audio_features(
         self,
         input_features: torch.FloatTensor,
         feature_attention_mask: torch.LongTensor | None = None,
         audio_feature_lengths: torch.LongTensor | None = None,
-    ):
-        """
-        Encodes audios into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            input_features (`torch.FloatTensor`):
-                The tensors corresponding to the input audios.
-            feature_attention_mask (`torch.LongTensor`, *optional*):
-                Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
-            audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-                The length of feature shape of each audio in LLM.
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        input_features (`torch.FloatTensor`):
+            The tensors corresponding to the input audios.
+        feature_attention_mask (`torch.LongTensor`, *optional*):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+            The length of feature shape of each audio in LLM.
         """
         if feature_attention_mask is not None:
             audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)
@@ -1992,10 +2043,11 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         audio_outputs = self.audio_tower(
             input_features,
             feature_lens=feature_lens,
+            return_dict=True,
+            **kwargs,
         )
-        audio_features = audio_outputs.last_hidden_state
 
-        return audio_features
+        return audio_outputs
 
     def get_placeholder_mask(
         self,
@@ -2144,13 +2196,18 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
                 input_features,
                 feature_attention_mask=feature_attention_mask,
                 audio_feature_lengths=audio_feature_lengths,
-            )
+                return_dict=True,
+            ).last_hidden_state
             audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
 
         if pixel_values is not None:
-            image_embeds, image_embeds_multiscale = self.get_image_features(pixel_values, image_grid_thw)
+            image_outputs: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True
+            )
+            image_embeds = image_outputs.pooler_output
+            image_embeds_multiscale = image_outputs.deepstack_features
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -2158,7 +2215,9 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds, video_embeds_multiscale = self.get_video_features(pixel_values_videos, video_grid_thw)
+            video_embeds, video_embeds_multiscale = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True
+            ).pooler_output
 
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask, _ = self.get_placeholder_mask(

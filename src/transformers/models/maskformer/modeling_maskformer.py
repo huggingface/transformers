@@ -1510,14 +1510,16 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/maskformer-swin-base-ade")
         >>> model = MaskFormerModel.from_pretrained("facebook/maskformer-swin-base-ade")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = image_processor(image, return_tensors="pt")
 
@@ -1692,7 +1694,8 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/maskformer-swin-base-ade")
@@ -1701,7 +1704,8 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         >>> url = (
         ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
         ... )
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> outputs = model(**inputs)
@@ -1725,14 +1729,16 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on COCO panoptic segmentation
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/maskformer-swin-base-coco")
         >>> model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-coco")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> outputs = model(**inputs)

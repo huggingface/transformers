@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 import torch
 import torch.nn as nn
@@ -23,7 +23,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
     RopeParameters,
@@ -121,10 +121,9 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
             Scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*):
             Scaling factor when applying tanh softcapping on the attention scores.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
+        rope_parameters (`dict`, *optional*):
+            Dictionary mapping attention patterns (`"full_attention"`, `"sliding_attention"`) to `RopeParameters`.
+            Each value should be a dictionary containing `rope_type` and optional scaling parameters.
         use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
             If True, the model will attend to all text tokens instead of using a causal mask. This does not change
             behavior for vision tokens.
@@ -169,7 +168,7 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
         layer_types: list[str] | None = None,
         final_logit_softcapping: float | None = None,
         attn_logit_softcapping: float | None = None,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        rope_parameters: dict[Literal["full_attention", "sliding_attention"], RopeParameters] | None = None,
         use_bidirectional_attention: bool | None = False,
         tie_word_embeddings: bool | None = True,
         **kwargs,
@@ -227,9 +226,15 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
+
+        # Set default values if not present
+        if self.rope_parameters.get("full_attention") is None:
+            self.rope_parameters["full_attention"] = {"rope_type": "default"}
         self.rope_parameters["full_attention"].setdefault(
             "rope_theta", kwargs.pop("rope_theta", self.default_theta["global"])
         )
+        if self.rope_parameters.get("sliding_attention") is None:
+            self.rope_parameters["sliding_attention"] = {"rope_type": "default"}
         self.rope_parameters["sliding_attention"].setdefault(
             "rope_theta", kwargs.pop("rope_local_base_freq", self.default_theta["local"])
         )
@@ -799,19 +804,16 @@ class Gemma3Model(PaliGemmaModel):
         super().__init__(config)
         del self.text_config_dtype
 
-    def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        """
-        Projects the last hidden state from the vision model into language model space.
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
+        last_hidden_state = vision_outputs.last_hidden_state
+        vision_outputs.pooler_output = self.multi_modal_projector(last_hidden_state)
 
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-               The tensors corresponding to the input images.
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
-        """
-        vision_outputs = self.vision_tower(pixel_values=pixel_values).last_hidden_state
-        image_features = self.multi_modal_projector(vision_outputs)
-        return image_features
+        return vision_outputs
 
     @can_return_tuple
     @auto_docstring
@@ -851,7 +853,7 @@ class Gemma3Model(PaliGemmaModel):
 
         # Merge text and images
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values)
+            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -924,7 +926,8 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
         >>> model = Gemma3ForConditionalGeneration.from_pretrained("google/gemma-3-4b-it")

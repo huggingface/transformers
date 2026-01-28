@@ -1427,10 +1427,12 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, RTDetrV2Model
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/RTDetrV2_r50vd")
         >>> model = RTDetrV2Model.from_pretrained("PekingU/RTDetrV2_r50vd")
@@ -1761,11 +1763,13 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         ```python
         >>> from transformers import RTDetrV2ImageProcessor, RTDetrV2ForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = RTDetrV2ImageProcessor.from_pretrained("PekingU/RTDetrV2_r50vd")
         >>> model = RTDetrV2ForObjectDetection.from_pretrained("PekingU/RTDetrV2_r50vd")
