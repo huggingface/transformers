@@ -45,7 +45,23 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class GlmAsrProcessorKwargs(AudioFlamingo3ProcessorKwargs): ...
+class GlmAsrProcessorKwargs(AudioFlamingo3ProcessorKwargs): 
+        _defaults = {
+        "text_kwargs": {
+            "padding": True,
+        },
+        "audio_kwargs": {
+            "sampling_rate": 16000,
+            "chunk_length": 30.0,
+            "return_attention_mask": True,
+            "padding": "max_length",
+            "device": "cpu",
+        },
+        "common_kwargs": {
+            "return_tensors": "pt",
+            "padding_side": "left",
+        },
+    }
 
 
 class GlmAsrProcessor(AudioFlamingo3Processor):
