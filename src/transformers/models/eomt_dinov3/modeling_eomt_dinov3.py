@@ -1230,13 +1230,10 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
             list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
         """
         masks_queries_logits_per_layer, class_queries_logits_per_layer = (), ()
-        attention_mask = None
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.dropout(self.embeddings(pixel_values))
         position_embeddings = self.rope_embeddings(pixel_values)
+        attention_mask = None
 
         for idx, layer_module in enumerate(self.layers):
             if idx == self.num_hidden_layers - self.config.num_blocks:

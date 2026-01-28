@@ -17,11 +17,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class EomtDinov3Config(PreTrainedConfig):
+class EomtDinov3Config(PretrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`EomtDinov3ForUniversalSegmentation`]. It is used to instantiate an EoMT-DINOv3 model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -147,7 +147,6 @@ class EomtDinov3Config(PreTrainedConfig):
         pos_embed_rescale: float | None = 2.0,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.intermediate_size = intermediate_size
         self.attention_dropout = attention_dropout
         self.layerscale_value = layerscale_value
@@ -173,17 +172,18 @@ class EomtDinov3Config(PreTrainedConfig):
         self.pos_embed_shift = pos_embed_shift
         self.pos_embed_jitter = pos_embed_jitter
         self.pos_embed_rescale = pos_embed_rescale
-
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
+        self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["EomtDinov3Config"]

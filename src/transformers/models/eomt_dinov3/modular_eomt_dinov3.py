@@ -18,6 +18,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ... import initialization as init
+from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -33,7 +34,6 @@ from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTLayerScale,
     DINOv3ViTRopePositionEmbedding,
 )
-from ..eomt.configuration_eomt import EomtConfig
 from ..eomt.modeling_eomt import (
     EomtForUniversalSegmentation,
     EomtForUniversalSegmentationOutput,
@@ -42,7 +42,7 @@ from ..eomt.modeling_eomt import (
 )
 
 
-class EomtDinov3Config(EomtConfig, RotaryEmbeddingConfigMixin):
+class EomtDinov3Config(PretrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`EomtDinov3ForUniversalSegmentation`]. It is used to instantiate an EoMT-DINOv3 model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -193,20 +193,18 @@ class EomtDinov3Config(EomtConfig, RotaryEmbeddingConfigMixin):
         self.pos_embed_shift = pos_embed_shift
         self.pos_embed_jitter = pos_embed_jitter
         self.pos_embed_rescale = pos_embed_rescale
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
 
-        super().__init__(
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            hidden_dropout_prob=hidden_dropout_prob,
-            hidden_act=hidden_act,
-            initializer_range=initializer_range,
-            layer_norm_eps=layer_norm_eps,
-            image_size=image_size,
-            patch_size=patch_size,
-            num_channels=num_channels,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 class EomtDinov3Attention(DINOv3ViTAttention):
@@ -326,13 +324,10 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel, EomtForUnive
             list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
         """
         masks_queries_logits_per_layer, class_queries_logits_per_layer = (), ()
-        attention_mask = None
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.dropout(self.embeddings(pixel_values))
         position_embeddings = self.rope_embeddings(pixel_values)
+        attention_mask = None
 
         for idx, layer_module in enumerate(self.layers):
             if idx == self.num_hidden_layers - self.config.num_blocks:
