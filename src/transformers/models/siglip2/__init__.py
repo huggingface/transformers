@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from .image_processing_siglip2_fast import *
     from .modeling_siglip2 import *
     from .processing_siglip2 import *
+    from .tokenization_siglip2 import *
 else:
     import sys
 
