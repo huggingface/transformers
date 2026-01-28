@@ -1389,7 +1389,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --predict_with_generate
             --save_steps 0
             --eval_steps {eval_steps}
-            --group_by_length
+            --train_sampling_strategy group_by_length
             --label_smoothing_factor 0.1
             --source_lang en
             --target_lang ro
