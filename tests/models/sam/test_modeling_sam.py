@@ -68,6 +68,7 @@ class SamVisionModelTester:
         num_pos_feats=16,
         mlp_dim=None,
         batch_size=2,
+        is_training=True,
     ):
         self.parent = parent
         self.hidden_size = hidden_size
@@ -95,6 +96,7 @@ class SamVisionModelTester:
         self.num_pos_feats = num_pos_feats
         self.mlp_dim = mlp_dim
         self.batch_size = batch_size
+        self.is_training = is_training
 
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -225,26 +227,6 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
                 list(expected_attention_shape),
             )
 
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
-    @unittest.skip(reason="SamVisionModel does not support training")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
     @unittest.skip(reason="Hidden_states is tested in create_and_check_model tests")
     def test_hidden_states_output(self):
         pass
@@ -366,6 +348,7 @@ class SamModelTester:
         num_pos_feats=16,
         mlp_dim=None,
         batch_size=2,
+        is_training=True,
     ):
         self.parent = parent
         self.image_size = image_size
@@ -393,6 +376,7 @@ class SamModelTester:
         self.num_pos_feats = num_pos_feats
         self.mlp_dim = mlp_dim
         self.batch_size = batch_size
+        self.is_training = is_training
 
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -612,26 +596,6 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 list(mask_decoder_attentions[0].shape[-4:]),
                 list(expected_mask_decoder_attention_shape),
             )
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
-    @unittest.skip(reason="SamModel does not support training")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
 
     @unittest.skip(reason="Hidden_states is tested in create_and_check_model tests")
     def test_hidden_states_output(self):
