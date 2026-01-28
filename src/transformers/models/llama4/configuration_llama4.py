@@ -56,15 +56,22 @@ class Llama4VisionConfig(PreTrainedConfig):
             The size (resolution) of each patch.
         norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
-        vision_feature_select_strategy (`int`, *optional*, defaults to `"default"`): TODO
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
+            Controls which vision tokens are kept from the backbone. `"default"` drops the CLS token and `"full"` keeps all tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        pixel_shuffle_ratio (`int`, *optional*, defaults to 0.5): TODO
-        projector_input_dim (`int`, *optional*, defaults to 4096): TODO
-        projector_output_dim (`int`, *optional*, defaults to 4096): TODO
-        multi_modal_projector_bias (`int`, *optional*, defaults to `False`): TODO
-        projector_dropout (`int`, *optional*, defaults to 0.0): TODO
-        attention_dropout (`int`, *optional*, defaults to 0.0): TODO
+        pixel_shuffle_ratio (`float`, *optional*, defaults to 0.5):
+            Pixel-shuffle ratio for downsampling patch tokens. Smaller values produce fewer tokens (more downsampling).
+        projector_input_dim (`int`, *optional*, defaults to 4096):
+            Width of the vision adapter MLP before pixel shuffle. Larger value increases capacity and compute.
+        projector_output_dim (`int`, *optional*, defaults to 4096):
+            Output width of the vision adapter. Larger value yields higher-dimensional image features.
+        multi_modal_projector_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in the multi-modal projector layers.
+        projector_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout rate inside the vision adapter MLP. Higher value adds more regularization.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout rate on vision attention probabilities. Higher value adds more regularization.
         rope_parameters (`RopeParameters`, *optional*):
             RoPE Parameters
     """
@@ -147,7 +154,8 @@ class Llama4TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             Dimensionality of the embeddings and hidden states.
         intermediate_size (`int`, *optional*, defaults to 8192):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        intermediate_size_mlp (`int`, *optional*, defaults to 16384): TODO
+        intermediate_size_mlp (`int`, *optional*, defaults to 16384):
+            Intermediate size of dense MLP layers. Larger value increases FFN capacity and compute.
         num_hidden_layers (`int`, *optional*, defaults to 48):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 40):
@@ -155,7 +163,8 @@ class Llama4TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If not
             specified, will default to `num_attention_heads`.
-        head_dim (`int`, *optional*, defaults to 128): TODO
+        head_dim (`int`, *optional*, defaults to 128):
+            Per-head attention dimension. Larger value increases head width and compute.
         hidden_act (`str` or `Callable`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler.
         max_position_embeddings (`int`, *optional*, defaults to 131072):
@@ -174,21 +183,28 @@ class Llama4TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             The id of the end of sentence token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        attention_dropout (`int`, *optional*, defaults to 0.0): TODO
-        num_experts_per_tok (`int`, *optional*, defaults to 1): TODO
-        num_local_experts (`int`, *optional*, defaults to 16): TODO
-        moe_layers (`int`, *optional*): TODO
-        interleave_moe_layer_step (`int`, *optional*, defaults to 1): TODO
-        use_qk_norm (`int`, *optional*, defaults to `True`): TODO
-        output_router_logits (`int`, *optional*, defaults to `False`): TODO
-        router_aux_loss_coef (`int`, *optional*, defaults to 0.001): TODO
-        router_jitter_noise (`int`, *optional*, defaults to 0.0): TODO
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout rate on vision attention probabilities. Higher value adds more regularization.
+        num_experts_per_tok (`int`, *optional*, defaults to 1):
+            Top-k experts routed per token. Higher value uses more experts per token and more compute.
+        num_local_experts (`int`, *optional*, defaults to 16):
+            Number of experts in each MoE layer. Higher value increases capacity and routing choices.
+        moe_layers (`list[int]`, *optional*):
+            List of layer indices that use MoE. Overrides `interleave_moe_layer_step` when set.
+        interleave_moe_layer_step (`int`, *optional*, defaults to 1):
+            Spacing between MoE layers when `moe_layers` is `None`. Larger value means fewer MoE layers.
+        use_qk_norm (`bool`, *optional*, defaults to `True`):
+            Whether to L2-normalize queries/keys on RoPE layers. Can stabilize attention when enabled.
+        output_router_logits (`bool`, *optional*, defaults to `False`):
+            Whether to return router logits (and auxiliary loss) in outputs.
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
+            Weight for the router auxiliary loss. Higher value makes routing loss contribute more to total loss.
+        router_jitter_noise (`float`, *optional*, defaults to 0.0):
+            Amount of noise added to router logits during training. Higher value increases exploration.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-            <TODO>
-            <TODO>
         no_rope_layers (`list[int]`, *optional*):
             List with at least the same length as the number of layers in the model.
             A `1` at an index position indicates that the corresponding layer will use RoPE,
@@ -197,14 +213,16 @@ class Llama4TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             If `no_rope_layers` is `None`, it will be created using a NoPE layer every
             `no_rope_layer_interval` layers.
         attention_chunk_size (`int`, *optional*, defaults to 8192):
-            <TODO>
+            Chunk size for the attention computation. Smaller value enforces more local attention and lowers memory.
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
         attn_temperature_tuning (`bool`, *optional*, defaults to `True`):
             Whether to dynamically scale the attention temperature for each query token based on sequence length.
             Recommended for long sequences (e.g., >32k tokens) to maintain stable output results.
-        floor_scale (`int`, *optional*, defaults to 8192): TODO
-        attn_scale (`int`, *optional*, defaults to 0.1): TODO
+        floor_scale (`int`, *optional*, defaults to 8192):
+            Base scale (in tokens) for attention temperature tuning. Larger value delays scaling to longer positions.
+        attn_scale (`float`, *optional*, defaults to 0.1):
+            Strength of attention temperature tuning. Larger value increases scaling at long positions.
 
     Example:
     """
@@ -328,7 +346,13 @@ class Llama4TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.moe_layers = (
             moe_layers
             if moe_layers is not None
-            else list(range(interleave_moe_layer_step - 1, num_hidden_layers, interleave_moe_layer_step))
+            else list(
+                range(
+                    interleave_moe_layer_step - 1,
+                    num_hidden_layers,
+                    interleave_moe_layer_step,
+                )
+            )
         )
         self.attention_chunk_size = attention_chunk_size
 
