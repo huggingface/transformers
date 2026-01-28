@@ -630,7 +630,7 @@ def main():
     )
 
     # On TPU, the tie weights in our model have been disconnected, so we need to restore the ties.
-    if accelerator.distributed_type == DistributedType.TPU:
+    if accelerator.distributed_type == DistributedType.XLA:
         model.tie_weights()
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
