@@ -208,7 +208,7 @@ class TrainingArguments:
         output_dir (`str`, *optional*, defaults to `"trainer_output"`):
             The output directory where the model predictions and checkpoints will be written.
 
-        ## Training Duration and Batch Size
+        > Training Duration and Batch Size
 
         per_device_train_batch_size (`int`, *optional*, defaults to 8):
             The batch size *per device*. The **global batch size** is computed as:
@@ -221,7 +221,7 @@ class TrainingArguments:
             For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
             `max_steps` is reached.
 
-        ## Learning Rate & Scheduler
+        > Learning Rate & Scheduler
 
         learning_rate (`float`, *optional*, defaults to 5e-5):
             The initial learning rate for the optimizer. This is typically the peak learning rate when using a scheduler with warmup.
@@ -269,7 +269,7 @@ class TrainingArguments:
             See GaLore implementation (https://github.com/jiaweizzhao/GaLore) and APOLLO implementation (https://github.com/zhuhanqing/APOLLO) for more details.
             You need to make sure to pass a valid GaLore or APOLLO optimizer, e.g., one of: "apollo_adamw", "galore_adamw", "galore_adamw_8bit", "galore_adafactor" and make sure that the target modules are `nn.Linear` modules only.
 
-        ## Regularization & Training Stability
+        > Regularization & Training Stability
 
         gradient_accumulation_steps (`int`, *optional*, defaults to 1):
             Number of update steps to accumulate gradients before performing a backward/update pass.
@@ -294,7 +294,7 @@ class TrainingArguments:
             targets: 0 becomes `ε/num_labels` and 1 becomes `1 - ε + ε/num_labels`, where
             ε = `label_smoothing_factor`. Zero means no smoothing. Typical range: 0.0 to 0.1.
 
-        ## Performance: Mixed Precision Training
+        > Performance: Mixed Precision Training
 
         bf16 (`bool`, *optional*, defaults to `False`):
             Enable bfloat16 (BF16) mixed precision training
@@ -314,7 +314,7 @@ class TrainingArguments:
             negligible accuracy loss. Default depends on PyTorch version. See
             [TF32 docs](https://huggingface.co/docs/transformers/perf_train_gpu_one#tf32).
 
-        ## Performance: Gradient Checkpointing
+        > Performance: Gradient Checkpointing
 
         gradient_checkpointing (`bool`, *optional*, defaults to `False`):
             Enable gradient checkpointing to trade compute for memory. Reduces memory usage by
@@ -323,7 +323,7 @@ class TrainingArguments:
         gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
             Keyword arguments passed to `gradient_checkpointing_enable()`.
 
-        ## Performance: Compilation
+        > Performance: Compilation
 
         torch_compile (`bool`, *optional*, defaults to `False`):
             Compile the model using PyTorch 2.0's `torch.compile()` for faster training. Can provide
@@ -338,7 +338,7 @@ class TrainingArguments:
             Options: `"default"`, `"reduce-overhead"` (minimize Python overhead), `"max-autotune"`
             (aggressive optimization, slower compile time).
 
-        ## Performance: Kernels
+        > Performance: Kernels
 
         use_liger_kernel (`bool`, *optional*, defaults to `False`):
             Enable [Liger Kernel](https://github.com/linkedin/Liger-Kernel) optimizations. Increases
@@ -349,7 +349,7 @@ class TrainingArguments:
             Options typically include: `"rope"`, `"swiglu"`, `"cross_entropy"`,
             `"fused_linear_cross_entropy"`, `"rms_norm"`. If `None`, uses default configuration.
 
-        ## Performance: Additional Optimizations
+        > Performance: Additional Optimizations
 
         use_cache (`bool`, *optional*, defaults to `False`):
             Whether or not to enable cache for the model. For training, this is usually not needed apart from some PEFT methods that uses `past_key_values`.
@@ -365,7 +365,7 @@ class TrainingArguments:
             Whether to find a batch size that will fit into memory automatically through exponential decay, avoiding
             CUDA Out-of-Memory errors.
 
-        ## Logging & Monitoring Training
+        > Logging & Monitoring Training
 
         logging_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"steps"`):
             The logging strategy to adopt during training. Possible values are:
@@ -387,7 +387,7 @@ class TrainingArguments:
             Whether to track the number of input tokens seen. Must be one of ["all", "non_padding", "no"] or a boolean value which map to "all" or "no".
             May be slower in distributed training as gather operations must be called.
 
-        ## Logging
+        > Logging
 
         log_level (`str`, *optional*, defaults to `passive`):
             Logging level for the main process. Options: `"debug"`, `"info"`, `"warning"`, `"error"`,
@@ -398,7 +398,7 @@ class TrainingArguments:
         disable_tqdm (`bool`, *optional*):
             Disable tqdm progress bars. Defaults to `True` if `log_level` is warning or lower, `False` otherwise.
 
-        ## Experiment Tracking Integration
+        > Experiment Tracking Integration
 
         report_to (`str` or `list[str]`, *optional*, defaults to `"none"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
@@ -418,7 +418,7 @@ class TrainingArguments:
             Note that this Space will be public unless you set `hub_private_repo=True` or your organization's default
             is to create private Spaces."
 
-        ## Evaluation
+        > Evaluation
 
         eval_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
             When to run evaluation. Options:
@@ -449,7 +449,7 @@ class TrainingArguments:
             left unset, the whole predictions are accumulated on the device accelerator before being moved to the CPU (faster but
             requires more memory).
 
-        ## Metrics Computation
+        > Metrics Computation
 
         include_for_metrics (`list[str]`, *optional*, defaults to `[]`):
             Include additional data in the `compute_metrics` function if needed for metrics computation.
@@ -462,7 +462,7 @@ class TrainingArguments:
             that takes a boolean argument `compute_result`, which when passed `True`, will trigger the final global
             summary statistics from the batch-level summary statistics you've accumulated over the evaluation set.
 
-        ## Checkpointing & Saving
+        > Checkpointing & Saving
 
         save_only_model (`bool`, *optional*, defaults to `False`):
             Save only model weights, not optimizer/scheduler/RNG state. Significantly reduces
@@ -494,7 +494,7 @@ class TrainingArguments:
             (default 30s is usually insufficient). For Slurm, use `--signal=USR1@<seconds>`.
             Required grace period ≥ longest iteration time + checkpoint save time.
 
-        ## Hugging Face Hub Integration
+        > Hugging Face Hub Integration
 
         push_to_hub (`bool`, *optional*, defaults to `False`):
             Whether or not to push the model to the Hub every time the model is saved. If this is activated,
@@ -525,7 +525,7 @@ class TrainingArguments:
         hub_revision (`str`, *optional*):
             The revision to use when pushing to the Hub. Can be a branch name, a tag, or a commit hash.
 
-        ## Best Model Tracking
+        > Best Model Tracking
 
         load_best_model_at_end (`bool`, *optional*, defaults to `False`):
             Load the best checkpoint at the end of training. Requires `eval_strategy` to be set.
@@ -543,7 +543,7 @@ class TrainingArguments:
             Whether higher metric values are better. Defaults based on `metric_for_best_model`:
             `True` if the metric name doesn't end in `"loss"`, `False` otherwise.
 
-        ## Resuming Training
+        > Resuming Training
 
         ignore_data_skip (`bool`, *optional*, defaults to `False`):
             When resuming training, skip fast-forwarding through the dataset to reach the previous
@@ -554,7 +554,7 @@ class TrainingArguments:
             Restore callback states from checkpoint when resuming. If `True`, will override callbacks
             passed to Trainer if they exist in the checkpoint.
 
-        ## Reproducibility
+        > Reproducibility
 
         full_determinism (`bool`, *optional*, defaults to `False`)
             If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
@@ -567,12 +567,12 @@ class TrainingArguments:
             same seed as `seed`. This can be used to ensure reproducibility of data sampling, independent of the model
             seed.
 
-        ## Hardware Configuration
+        > Hardware Configuration
 
         use_cpu (`bool`, *optional*, defaults to `False`):
             Whether or not to use cpu. If set to False, we will use the available torch device/backend.
 
-        ## Accelerate Configuration
+        > Accelerate Configuration
 
         accelerator_config (`str`, `dict`, or `AcceleratorConfig`, *optional*):
             Configuration for the internal Accelerate integration. Can be:
@@ -594,7 +594,10 @@ class TrainingArguments:
                     `AcceleratorState`/`PartialState` instead of creating new one. May cause issues with
                     hyperparameter tuning.
 
-        ## Dataloader
+        parallelism_config (`ParallelismConfig`, *optional*):
+            Parallelism configuration for the training run. Requires Accelerate `1.10.1`
+
+        > Dataloader
 
         dataloader_drop_last (`bool`, *optional*, defaults to `False`):
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
@@ -627,12 +630,7 @@ class TrainingArguments:
             than computing them on train startup. Ignored unless `group_by_length` is `True` and the dataset is an
             instance of `Dataset`.
 
-        ## Distributed Training Configuration
-
-        parallelism_config (`ParallelismConfig`, *optional*):
-            Parallelism configuration for the training run. Requires Accelerate `1.10.1`
-
-        ## Distributed Training: DDP (DistributedDataParallel)
+        > Distributed Training: DDP (DistributedDataParallel)
 
         ddp_find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
@@ -650,7 +648,7 @@ class TrainingArguments:
             (https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) for more
             information.
 
-        ## Distributed Training: FSDP (Fully Sharded Data Parallel)
+        > Distributed Training: FSDP (Fully Sharded Data Parallel)
 
         fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `None`):
             Enable PyTorch Fully Sharded Data Parallel (FSDP) for distributed training. Options:
@@ -722,7 +720,7 @@ class TrainingArguments:
                     used when the xla flag is set to true, and an auto wrapping policy is specified through
                     fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
 
-        ## Distributed Training: DeepSpeed
+        > Distributed Training: DeepSpeed
 
         deepspeed (`str` or `dict`, *optional*):
              Enable [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) integration. Value is either:
@@ -733,7 +731,7 @@ class TrainingArguments:
           `TrainingArguments`, otherwise ZeRO won't be applied.
           </Tip>
 
-        ## Debugging & Profiling (Experimental)
+        > Debugging & Profiling (Experimental)
 
         debug (`str` or list of [`~debug_utils.DebugOption`], *optional*, defaults to `""`):
             Enable one or more debug features. This is an experimental feature.
@@ -745,7 +743,7 @@ class TrainingArguments:
             Whether to skip adding of memory profiler reports to metrics. This is skipped by default because it slows
             down the training and evaluation speed.
 
-        ## External Script Flags (not used by Trainer)
+        > External Script Flags (not used by Trainer)
 
         do_train (`bool`, *optional*, defaults to `False`):
             Whether to run training or not. This argument is not directly used by [`Trainer`], it's intended to be used
