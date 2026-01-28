@@ -909,6 +909,10 @@ def set_param_for_module(
     module_path, _, param_name = target_name.rpartition(".")
     module_obj = model.get_submodule(module_path) if module_path else model
 
+    if param_name == torch.nn.modules.module._EXTRA_STATE_KEY_SUFFIX:
+        module_obj.set_extra_state(param_value)
+        return
+
     ref = getattr(module_obj, param_name)
     if ref is None:
         unexpected_keys.add(target_name)
