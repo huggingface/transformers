@@ -29,7 +29,6 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
-from packaging import version
 from parameterized import parameterized
 from pytest import mark
 from safetensors.torch import load_file
@@ -664,11 +663,6 @@ def _deepspeed_zero3(ds_config):
 
 
 def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
-    if version.parse(torch.__version__).release < version.parse("2.3").release:
-        return torch.backends.cuda.sdp_kernel(
-            enable_flash=enable_flash, enable_math=enable_math, enable_mem_efficient=enable_mem_efficient
-        )
-
     backends = []
     if enable_flash:
         backends += [torch.nn.attention.SDPBackend.FLASH_ATTENTION]
@@ -3745,9 +3739,6 @@ class ModelTesterMixin:
     @pytest.mark.torch_compile_test
     @slow
     def test_flash_attn_2_can_compile_with_attention_mask_None_without_graph_break(self):
-        if version.parse(torch.__version__) < version.parse("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
         if not hasattr(self, "_torch_compile_train_cls"):
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_train_cls`.")
 
@@ -3909,9 +3900,6 @@ class ModelTesterMixin:
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
     def test_torch_compile_for_training(self):
-        if version.parse(torch.__version__) < version.parse("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
         if getattr(self, "_torch_compile_train_cls", None) is None:
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_train_cls`.")
 

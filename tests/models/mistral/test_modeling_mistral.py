@@ -17,7 +17,6 @@ import gc
 import unittest
 
 import pytest
-from packaging import version
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, BitsAndBytesConfig, DynamicCache, is_torch_available, set_seed
@@ -239,11 +238,6 @@ class MistralIntegrationTest(unittest.TestCase):
     @pytest.mark.torch_compile_test
     @slow
     def test_compile_static_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
         if self.device_properties[0] == "cuda" and self.device_properties[1] == 7:
             self.skipTest(reason="This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
 

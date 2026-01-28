@@ -4,7 +4,6 @@ import unittest
 import httpx
 import numpy as np
 import pytest
-from packaging import version
 
 from transformers.image_utils import SizeDict
 from transformers.testing_utils import (
@@ -234,8 +233,6 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_can_compile_fast_image_processor(self):
         if self.fast_image_processing_class is None:
             self.skipTest("Skipping compilation test as fast image processor is not defined")
-        if version.parse(torch.__version__) < version.parse("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         torch.compiler.reset()
         input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)

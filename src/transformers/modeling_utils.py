@@ -267,8 +267,7 @@ def get_torch_context_manager_or_global_device():
     is not "cpu". This is used to infer the correct device to load the model on, in case `device_map` is not provided.
     """
     device_in_context = torch.tensor([]).device
-    # `get_default_device` was only introduced in torch>=2.3 - use cpu otherwise to align the behavior
-    default_device = torch.get_default_device() if is_torch_greater_or_equal("2.3") else torch.device("cpu")
+    default_device = torch.get_default_device()
     # This case means no context manager was used -> we still check if the default that was potentially set is not cpu
     if device_in_context == default_device:
         if default_device != torch.device("cpu"):
@@ -296,21 +295,18 @@ str_to_torch_dtype = {
     "U8": torch.uint8,
     "I8": torch.int8,
     "I16": torch.int16,
+    "U16": torch.uint16,
     "F16": torch.float16,
     "BF16": torch.bfloat16,
     "I32": torch.int32,
+    "U32": torch.uint32,
     "F32": torch.float32,
     "F64": torch.float64,
     "I64": torch.int64,
+    "U64": torch.uint64,
     "F8_E4M3": torch.float8_e4m3fn,
     "F8_E5M2": torch.float8_e5m2,
 }
-
-
-if is_torch_greater_or_equal("2.3.0"):
-    str_to_torch_dtype["U16"] = torch.uint16
-    str_to_torch_dtype["U32"] = torch.uint32
-    str_to_torch_dtype["U64"] = torch.uint64
 
 
 def load_state_dict(

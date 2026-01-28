@@ -19,7 +19,6 @@ import pytest
 
 from transformers import DPTConfig
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -389,8 +388,6 @@ class DPTModelIntegrationTest(unittest.TestCase):
     def test_export(self):
         for strict in [True, False]:
             with self.subTest(strict=strict):
-                if not is_torch_greater_or_equal_than_2_4:
-                    self.skipTest(reason="This test requires torch >= 2.4 to run.")
                 model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade").to(torch_device).eval()
                 image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large-ade")
                 image = prepare_img()
