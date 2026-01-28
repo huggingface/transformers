@@ -1300,9 +1300,18 @@ class GlmImageModel(GlmImagePreTrainedModel):
                 batch_size, seq_length, _ = inputs_embeds.shape
                 # Per-sample decode position lookup
                 # _cached_decode_position_ids shape: [batch_size, 3, max_decode_len]
-                step = cache_position[0].item() - self._prefill_len
-                # Get position ids for all samples at once, then transpose to [3, batch_size, seq_length]
-                position_ids = self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
+                if self._cached_decode_position_ids is not None:
+                    step = cache_position[0].item() - self._prefill_len
+                    # Get position ids for all samples at once, then transpose to [3, batch_size, seq_length]
+                    position_ids = self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
+                else:
+                    # Fallback for text-to-image or cases without cached decode positions
+                    # Use simple incremental positions
+                    start_pos = cache_position[0].item()
+                    position_ids = torch.arange(
+                        start_pos, start_pos + seq_length, device=inputs_embeds.device, dtype=torch.long
+                    )
+                    position_ids = position_ids.unsqueeze(0).repeat(3, batch_size, 1)
 
         outputs = self.language_model(
             input_ids=None,

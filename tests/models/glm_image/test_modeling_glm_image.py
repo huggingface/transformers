@@ -530,10 +530,41 @@ class GlmImageIntegrationTest(unittest.TestCase):
         generated_tokens = output[0, inputs["input_ids"].shape[1] :]
         # Vision tokens are in range [0, vision_vocab_size)
         self.assertTrue(all(t.item() < model.config.text_config.vision_vocab_size for t in generated_tokens))
-        
+
         # Check actual token values (first 30 tokens) to catch implementation errors
         expected_tokens = torch.tensor(
-            [10863, 4815, 15424, 2523, 3940, 12820, 9931, 7140, 7987, 13703, 13163, 8939, 14729, 8237, 4328, 6810, 13539, 12226, 5655, 16151, 16044, 8466, 2960, 1050, 1869, 9370, 11576, 8513, 14092, 10314],
+            [
+                10863,
+                4815,
+                15424,
+                2523,
+                3940,
+                12820,
+                9931,
+                7140,
+                7987,
+                13703,
+                13163,
+                8939,
+                14729,
+                8237,
+                4328,
+                6810,
+                13539,
+                12226,
+                5655,
+                16151,
+                16044,
+                8466,
+                2960,
+                1050,
+                1869,
+                9370,
+                11576,
+                8513,
+                14092,
+                10314,
+            ],
             device=torch_device,
         )
         self.assertTrue(
@@ -556,10 +587,41 @@ class GlmImageIntegrationTest(unittest.TestCase):
         # Generated tokens should be within vision vocabulary range
         generated_tokens = output[0, inputs["input_ids"].shape[1] :]
         self.assertTrue(all(t.item() < model.config.text_config.vision_vocab_size for t in generated_tokens))
-        
+
         # Check actual token values (first 30 tokens) to catch implementation errors
         expected_tokens = torch.tensor(
-            [15926, 12131, 8275, 9299, 6688, 14548, 1869, 11887, 2960, 11576, 16228, 11146, 10622, 11576, 10863, 11146, 6810, 5655, 6688, 16044, 4328, 13539, 5655, 4815, 2960, 12131, 3940, 14092, 11887, 8275],
+            [
+                15926,
+                12131,
+                8275,
+                9299,
+                6688,
+                14548,
+                1869,
+                11887,
+                2960,
+                11576,
+                16228,
+                11146,
+                10622,
+                11576,
+                10863,
+                11146,
+                6810,
+                5655,
+                6688,
+                16044,
+                4328,
+                13539,
+                5655,
+                4815,
+                2960,
+                12131,
+                3940,
+                14092,
+                11887,
+                8275,
+            ],
             device=torch_device,
         )
         self.assertTrue(
