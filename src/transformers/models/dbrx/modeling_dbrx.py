@@ -712,8 +712,8 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
         ```python
         >> from transformers import AutoTokenizer, DbrxForCausalLM
 
-        >> model = DbrxForCausalLM.from_pretrained("databricks/dbrx-instruct")
-        >> tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct")
+        >> model = DbrxForCausalLM.from_pretrained("transformers-community/dbrx-instruct")
+        >> tokenizer = AutoTokenizer.from_pretrained("transformers-community/dbrx-instruct")
 
         >> prompt = "Hey, are you conscious? Can you talk to me?"
         >> inputs = tokenizer(prompt, return_tensors="pt")
