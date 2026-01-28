@@ -32,6 +32,7 @@ from transformers.core_model_loading import (
     WeightRenaming,
     convert_and_load_state_dict_in_model,
 )
+from transformers.modeling_utils import LoadStateDictConfig
 
 
 # Mapping of model names to their checkpoint files
@@ -54,21 +55,25 @@ HOSTED_MODELS = {
 }
 
 # Model configurations for different sizes
+BASE_BACKBONE_CONFIG = {
+    "attention_probs_dropout_prob": 0.0,
+    "drop_path_rate": 0.0,
+    "hidden_act": "gelu",
+    "hidden_dropout_prob": 0.0,
+    "initializer_range": 0.02,
+    "layer_norm_eps": 1e-06,
+    "layerscale_value": 1.0,
+    "mlp_ratio": 4,
+    "num_channels": 3,
+    "num_hidden_layers": 12,
+    "qkv_bias": True,
+    "use_swiglu_ffn": False,
+}
+
 BACKBONE_CONFIGS = {
     "rf-detr-nano": {
-        "attention_probs_dropout_prob": 0.0,
-        "drop_path_rate": 0.0,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.0,
-        "initializer_range": 0.02,
-        "layer_norm_eps": 1e-06,
-        "layerscale_value": 1.0,
-        "mlp_ratio": 4,
+        **BASE_BACKBONE_CONFIG,
         "num_attention_heads": 6,
-        "num_channels": 3,
-        "num_hidden_layers": 12,
-        "qkv_bias": True,
-        "use_swiglu_ffn": False,
         "out_features": ["stage3", "stage6", "stage9", "stage12"],
         "hidden_size": 384,
         "patch_size": 16,
@@ -76,19 +81,8 @@ BACKBONE_CONFIGS = {
         "image_size": 384,
     },
     "rf-detr-small": {
-        "attention_probs_dropout_prob": 0.0,
-        "drop_path_rate": 0.0,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.0,
-        "initializer_range": 0.02,
-        "layer_norm_eps": 1e-06,
-        "layerscale_value": 1.0,
-        "mlp_ratio": 4,
+        **BASE_BACKBONE_CONFIG,
         "num_attention_heads": 6,
-        "num_channels": 3,
-        "num_hidden_layers": 12,
-        "qkv_bias": True,
-        "use_swiglu_ffn": False,
         "out_features": ["stage3", "stage6", "stage9", "stage12"],
         "hidden_size": 384,
         "patch_size": 16,
@@ -96,19 +90,8 @@ BACKBONE_CONFIGS = {
         "image_size": 512,
     },
     "rf-detr-base": {
-        "attention_probs_dropout_prob": 0.0,
-        "drop_path_rate": 0.0,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.0,
-        "initializer_range": 0.02,
-        "layer_norm_eps": 1e-06,
-        "layerscale_value": 1.0,
-        "mlp_ratio": 4,
+        **BASE_BACKBONE_CONFIG,
         "num_attention_heads": 6,
-        "num_channels": 3,
-        "num_hidden_layers": 12,
-        "qkv_bias": True,
-        "use_swiglu_ffn": False,
         "out_features": ["stage2", "stage5", "stage8", "stage11"],
         "hidden_size": 384,
         "patch_size": 14,
@@ -116,19 +99,8 @@ BACKBONE_CONFIGS = {
         "image_size": 518,
     },
     "rf-detr-medium": {
-        "attention_probs_dropout_prob": 0.0,
-        "drop_path_rate": 0.0,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.0,
-        "initializer_range": 0.02,
-        "layer_norm_eps": 1e-06,
-        "layerscale_value": 1.0,
-        "mlp_ratio": 4,
+        **BASE_BACKBONE_CONFIG,
         "num_attention_heads": 6,
-        "num_channels": 3,
-        "num_hidden_layers": 12,
-        "qkv_bias": True,
-        "use_swiglu_ffn": False,
         "out_features": ["stage3", "stage6", "stage9", "stage12"],
         "hidden_size": 384,
         "patch_size": 16,
@@ -136,19 +108,8 @@ BACKBONE_CONFIGS = {
         "image_size": 576,
     },
     "rf-detr-large-deprecated": {
-        "attention_probs_dropout_prob": 0.0,
-        "drop_path_rate": 0.0,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.0,
-        "initializer_range": 0.02,
-        "layer_norm_eps": 1e-06,
-        "layerscale_value": 1.0,
-        "mlp_ratio": 4,
+        **BASE_BACKBONE_CONFIG,
         "num_attention_heads": 12,
-        "num_channels": 3,
-        "num_hidden_layers": 12,
-        "qkv_bias": True,
-        "use_swiglu_ffn": False,
         "out_features": ["stage2", "stage5", "stage8", "stage11"],
         "hidden_size": 768,
         "patch_size": 14,
@@ -156,19 +117,8 @@ BACKBONE_CONFIGS = {
         "image_size": 518,
     },
     "rf-detr-large": {
-        "attention_probs_dropout_prob": 0.0,
-        "drop_path_rate": 0.0,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.0,
-        "initializer_range": 0.02,
-        "layer_norm_eps": 1e-06,
-        "layerscale_value": 1.0,
-        "mlp_ratio": 4,
+        **BASE_BACKBONE_CONFIG,
         "num_attention_heads": 6,
-        "num_channels": 3,
-        "num_hidden_layers": 12,
-        "qkv_bias": True,
-        "use_swiglu_ffn": False,
         "out_features": ["stage3", "stage6", "stage9", "stage12"],
         "hidden_size": 384,
         "patch_size": 16,
@@ -176,19 +126,8 @@ BACKBONE_CONFIGS = {
         "image_size": 704,
     },
     "rf-detr-xlarge": {
-        "attention_probs_dropout_prob": 0.0,
-        "drop_path_rate": 0.0,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.0,
-        "initializer_range": 0.02,
-        "layer_norm_eps": 1e-06,
-        "layerscale_value": 1.0,
-        "mlp_ratio": 4,
+        **BASE_BACKBONE_CONFIG,
         "num_attention_heads": 12,
-        "num_channels": 3,
-        "num_hidden_layers": 12,
-        "qkv_bias": True,
-        "use_swiglu_ffn": False,
         "out_features": ["stage2", "stage5", "stage8", "stage11"],
         "hidden_size": 768,
         "patch_size": 20,
@@ -196,19 +135,8 @@ BACKBONE_CONFIGS = {
         "image_size": 700,
     },
     "rf-detr-xxlarge": {
-        "attention_probs_dropout_prob": 0.0,
-        "drop_path_rate": 0.0,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.0,
-        "initializer_range": 0.02,
-        "layer_norm_eps": 1e-06,
-        "layerscale_value": 1.0,
-        "mlp_ratio": 4,
+        **BASE_BACKBONE_CONFIG,
         "num_attention_heads": 12,
-        "num_channels": 3,
-        "num_hidden_layers": 12,
-        "qkv_bias": True,
-        "use_swiglu_ffn": False,
         "out_features": ["stage2", "stage5", "stage8", "stage11"],
         "hidden_size": 768,
         "patch_size": 20,
@@ -216,19 +144,8 @@ BACKBONE_CONFIGS = {
         "image_size": 880,
     },
     "rf-detr-seg-preview": {
-        "attention_probs_dropout_prob": 0.0,
-        "drop_path_rate": 0.0,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.0,
-        "initializer_range": 0.02,
-        "layer_norm_eps": 1e-06,
-        "layerscale_value": 1.0,
-        "mlp_ratio": 4,
+        **BASE_BACKBONE_CONFIG,
         "num_attention_heads": 6,
-        "num_channels": 3,
-        "num_hidden_layers": 12,
-        "qkv_bias": True,
-        "use_swiglu_ffn": False,
         "out_features": ["stage3", "stage6", "stage9", "stage12"],
         "hidden_size": 384,
         "patch_size": 12,
@@ -236,19 +153,8 @@ BACKBONE_CONFIGS = {
         "image_size": 432,
     },
     "rf-detr-seg-nano": {
-        "attention_probs_dropout_prob": 0.0,
-        "drop_path_rate": 0.0,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.0,
-        "initializer_range": 0.02,
-        "layer_norm_eps": 1e-06,
-        "layerscale_value": 1.0,
-        "mlp_ratio": 4,
+        **BASE_BACKBONE_CONFIG,
         "num_attention_heads": 6,
-        "num_channels": 3,
-        "num_hidden_layers": 12,
-        "qkv_bias": True,
-        "use_swiglu_ffn": False,
         "out_features": ["stage3", "stage6", "stage9", "stage12"],
         "hidden_size": 384,
         "patch_size": 12,
@@ -256,19 +162,8 @@ BACKBONE_CONFIGS = {
         "image_size": 312,
     },
     "rf-detr-seg-small": {
-        "attention_probs_dropout_prob": 0.0,
-        "drop_path_rate": 0.0,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.0,
-        "initializer_range": 0.02,
-        "layer_norm_eps": 1e-06,
-        "layerscale_value": 1.0,
-        "mlp_ratio": 4,
+        **BASE_BACKBONE_CONFIG,
         "num_attention_heads": 6,
-        "num_channels": 3,
-        "num_hidden_layers": 12,
-        "qkv_bias": True,
-        "use_swiglu_ffn": False,
         "out_features": ["stage3", "stage6", "stage9", "stage12"],
         "hidden_size": 384,
         "patch_size": 12,
@@ -276,19 +171,8 @@ BACKBONE_CONFIGS = {
         "image_size": 384,
     },
     "rf-detr-seg-medium": {
-        "attention_probs_dropout_prob": 0.0,
-        "drop_path_rate": 0.0,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.0,
-        "initializer_range": 0.02,
-        "layer_norm_eps": 1e-06,
-        "layerscale_value": 1.0,
-        "mlp_ratio": 4,
+        **BASE_BACKBONE_CONFIG,
         "num_attention_heads": 6,
-        "num_channels": 3,
-        "num_hidden_layers": 12,
-        "qkv_bias": True,
-        "use_swiglu_ffn": False,
         "out_features": ["stage3", "stage6", "stage9", "stage12"],
         "hidden_size": 384,
         "patch_size": 12,
@@ -296,19 +180,8 @@ BACKBONE_CONFIGS = {
         "image_size": 432,
     },
     "rf-detr-seg-large": {
-        "attention_probs_dropout_prob": 0.0,
-        "drop_path_rate": 0.0,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.0,
-        "initializer_range": 0.02,
-        "layer_norm_eps": 1e-06,
-        "layerscale_value": 1.0,
-        "mlp_ratio": 4,
+        **BASE_BACKBONE_CONFIG,
         "num_attention_heads": 6,
-        "num_channels": 3,
-        "num_hidden_layers": 12,
-        "qkv_bias": True,
-        "use_swiglu_ffn": False,
         "out_features": ["stage3", "stage6", "stage9", "stage12"],
         "hidden_size": 384,
         "patch_size": 12,
@@ -316,19 +189,8 @@ BACKBONE_CONFIGS = {
         "image_size": 504,
     },
     "rf-detr-seg-xlarge": {
-        "attention_probs_dropout_prob": 0.0,
-        "drop_path_rate": 0.0,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.0,
-        "initializer_range": 0.02,
-        "layer_norm_eps": 1e-06,
-        "layerscale_value": 1.0,
-        "mlp_ratio": 4,
+        **BASE_BACKBONE_CONFIG,
         "num_attention_heads": 6,
-        "num_channels": 3,
-        "num_hidden_layers": 12,
-        "qkv_bias": True,
-        "use_swiglu_ffn": False,
         "out_features": ["stage3", "stage6", "stage9", "stage12"],
         "hidden_size": 384,
         "patch_size": 12,
@@ -336,19 +198,8 @@ BACKBONE_CONFIGS = {
         "image_size": 624,
     },
     "rf-detr-seg-xxlarge": {
-        "attention_probs_dropout_prob": 0.0,
-        "drop_path_rate": 0.0,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.0,
-        "initializer_range": 0.02,
-        "layer_norm_eps": 1e-06,
-        "layerscale_value": 1.0,
-        "mlp_ratio": 4,
+        **BASE_BACKBONE_CONFIG,
         "num_attention_heads": 6,
-        "num_channels": 3,
-        "num_hidden_layers": 12,
-        "qkv_bias": True,
-        "use_swiglu_ffn": False,
         "out_features": ["stage3", "stage6", "stage9", "stage12"],
         "hidden_size": 384,
         "patch_size": 12,
@@ -357,46 +208,35 @@ BACKBONE_CONFIGS = {
     },
 }
 
+BASE_MODEL_CONFIG = {
+    "d_model": 256,
+    "num_queries": 300,
+    "decoder_self_attention_heads": 8,
+    "decoder_cross_attention_heads": 16,
+    "decoder_n_points": 2,
+    "projector_scale_factors": [1.0],
+}
+
 MODEL_CONFIGS = {
     "rf-detr-nano": {
-        "d_model": 256,
+        **BASE_MODEL_CONFIG,
         "decoder_layers": 2,
-        "decoder_self_attention_heads": 8,
-        "decoder_cross_attention_heads": 16,
-        "decoder_n_points": 2,
-        "projector_scale_factors": [1.0],
-        "num_queries": 300,
     },
     "rf-detr-small": {
-        "d_model": 256,
+        **BASE_MODEL_CONFIG,
         "decoder_layers": 3,
-        "decoder_self_attention_heads": 8,
-        "decoder_cross_attention_heads": 16,
-        "decoder_n_points": 2,
-        "projector_scale_factors": [1.0],
-        "num_queries": 300,
     },
     "rf-detr-base": {
-        "d_model": 256,
+        **BASE_MODEL_CONFIG,
         "decoder_layers": 3,
-        "decoder_self_attention_heads": 8,
-        "decoder_cross_attention_heads": 16,
-        "decoder_n_points": 2,
-        "projector_scale_factors": [1.0],
-        "num_queries": 300,
     },
     "rf-detr-medium": {
-        "d_model": 256,
+        **BASE_MODEL_CONFIG,
         "decoder_layers": 4,
-        "decoder_self_attention_heads": 8,
-        "decoder_cross_attention_heads": 16,
-        "decoder_n_points": 2,
-        "projector_scale_factors": [1.0],
-        "num_queries": 300,
     },
     "rf-detr-large-deprecated": {
+        **BASE_MODEL_CONFIG,
         "d_model": 384,
-        "num_queries": 300,
         "decoder_layers": 3,
         "decoder_self_attention_heads": 12,
         "decoder_cross_attention_heads": 24,
@@ -404,17 +244,12 @@ MODEL_CONFIGS = {
         "projector_scale_factors": [2.0, 0.5],
     },
     "rf-detr-large": {
-        "d_model": 256,
-        "num_queries": 300,
+        **BASE_MODEL_CONFIG,
         "decoder_layers": 4,
-        "decoder_self_attention_heads": 8,
-        "decoder_cross_attention_heads": 16,
-        "decoder_n_points": 2,
-        "projector_scale_factors": [1.0],
     },
     "rf-detr-xlarge": {
+        **BASE_MODEL_CONFIG,
         "d_model": 512,
-        "num_queries": 300,
         "decoder_layers": 5,
         "decoder_self_attention_heads": 16,
         "decoder_cross_attention_heads": 32,
@@ -422,8 +257,8 @@ MODEL_CONFIGS = {
         "projector_scale_factors": [2.0, 0.5],
     },
     "rf-detr-xxlarge": {
+        **BASE_MODEL_CONFIG,
         "d_model": 512,
-        "num_queries": 300,
         "decoder_layers": 5,
         "decoder_self_attention_heads": 16,
         "decoder_cross_attention_heads": 32,
@@ -431,158 +266,82 @@ MODEL_CONFIGS = {
         "projector_scale_factors": [2.0, 0.5],
     },
     "rf-detr-seg-preview": {
-        "d_model": 256,
+        **BASE_MODEL_CONFIG,
         "decoder_layers": 4,
-        "decoder_self_attention_heads": 8,
-        "decoder_cross_attention_heads": 16,
-        "decoder_n_points": 2,
-        "projector_scale_factors": [1.0],
         "num_queries": 200,
         "class_loss_coefficient": 5.0,
     },
     "rf-detr-seg-nano": {
-        "d_model": 256,
+        **BASE_MODEL_CONFIG,
         "decoder_layers": 4,
-        "decoder_self_attention_heads": 8,
-        "decoder_cross_attention_heads": 16,
-        "decoder_n_points": 2,
-        "projector_scale_factors": [1.0],
         "num_queries": 100,
         "class_loss_coefficient": 5.0,
     },
     "rf-detr-seg-small": {
-        "d_model": 256,
+        **BASE_MODEL_CONFIG,
         "decoder_layers": 4,
-        "decoder_self_attention_heads": 8,
-        "decoder_cross_attention_heads": 16,
-        "decoder_n_points": 2,
-        "projector_scale_factors": [1.0],
         "num_queries": 100,
         "class_loss_coefficient": 5.0,
     },
     "rf-detr-seg-medium": {
-        "d_model": 256,
+        **BASE_MODEL_CONFIG,
         "decoder_layers": 5,
-        "decoder_self_attention_heads": 8,
-        "decoder_cross_attention_heads": 16,
-        "decoder_n_points": 2,
-        "projector_scale_factors": [1.0],
         "num_queries": 200,
         "class_loss_coefficient": 5.0,
     },
     "rf-detr-seg-large": {
-        "d_model": 256,
+        **BASE_MODEL_CONFIG,
         "decoder_layers": 5,
-        "decoder_self_attention_heads": 8,
-        "decoder_cross_attention_heads": 16,
-        "decoder_n_points": 2,
-        "projector_scale_factors": [1.0],
-        "num_queries": 300,
         "class_loss_coefficient": 5.0,
     },
     "rf-detr-seg-xlarge": {
-        "d_model": 256,
+        **BASE_MODEL_CONFIG,
         "decoder_layers": 6,
-        "decoder_self_attention_heads": 8,
-        "decoder_cross_attention_heads": 16,
-        "decoder_n_points": 2,
-        "projector_scale_factors": [1.0],
-        "num_queries": 300,
         "class_loss_coefficient": 5.0,
     },
     "rf-detr-seg-xxlarge": {
-        "d_model": 256,
+        **BASE_MODEL_CONFIG,
         "decoder_layers": 6,
-        "decoder_self_attention_heads": 8,
-        "decoder_cross_attention_heads": 16,
-        "decoder_n_points": 2,
-        "projector_scale_factors": [1.0],
-        "num_queries": 300,
         "class_loss_coefficient": 5.0,
     },
 }
 
 IMAGE_PROCESSORS = {
-    "rf-detr-nano": {
-        "do_resize": True,
-        "size": (384, 384),
-    },
-    "rf-detr-small": {
-        "do_resize": True,
-        "size": (512, 512),
-    },
-    "rf-detr-base": {
-        "do_resize": True,
-        "size": (560, 560),
-    },
-    "rf-detr-medium": {
-        "do_resize": True,
-        "size": (576, 576),
-    },
-    "rf-detr-large-deprecated": {
-        "do_resize": True,
-        "size": (560, 560),
-    },
-    "rf-detr-large": {
-        "do_resize": True,
-        "size": (704, 704),
-    },
-    "rf-detr-xlarge": {
-        "do_resize": True,
-        "size": (560, 560),
-    },
-    "rf-detr-xxlarge": {
-        "do_resize": True,
-        "size": (560, 560),
-    },
-    "rf-detr-seg-preview": {
-        "do_resize": True,
-        "size": (432, 432),
-    },
-    "rf-detr-seg-nano": {
-        "do_resize": True,
-        "size": (312, 312),
-    },
-    "rf-detr-seg-small": {
-        "do_resize": True,
-        "size": (384, 384),
-    },
-    "rf-detr-seg-medium": {
-        "do_resize": True,
-        "size": (432, 432),
-    },
-    "rf-detr-seg-large": {
-        "do_resize": True,
-        "size": (504, 504),
-    },
-    "rf-detr-seg-xlarge": {
-        "do_resize": True,
-        "size": (624, 624),
-    },
-    "rf-detr-seg-xxlarge": {
-        "do_resize": True,
-        "size": (768, 768),
-    },
+    "rf-detr-nano": (384, 384),
+    "rf-detr-small": (512, 512),
+    "rf-detr-base": (560, 560),
+    "rf-detr-medium": (576, 576),
+    "rf-detr-large-deprecated": (560, 560),
+    "rf-detr-large": (704, 704),
+    "rf-detr-xlarge": (560, 560),
+    "rf-detr-xxlarge": (560, 560),
+    "rf-detr-seg-preview": (432, 432),
+    "rf-detr-seg-nano": (312, 312),
+    "rf-detr-seg-small": (384, 384),
+    "rf-detr-seg-medium": (432, 432),
+    "rf-detr-seg-large": (504, 504),
+    "rf-detr-seg-xlarge": (624, 624),
+    "rf-detr-seg-xxlarge": (768, 768),
 }
 
 
 def get_model_config(model_name: str):
     """Get the appropriate configuration for a given model size."""
     config = None
-    image_processor_config = None
     sizes = MODEL_CONFIGS.keys()
     for size in sizes:
         if size == model_name:
+            print(f"Found config for {model_name}")
             config = MODEL_CONFIGS[size]
             config["backbone_config"] = BACKBONE_CONFIGS[size]
-            image_processor_config = IMAGE_PROCESSORS[size]
             break
 
     # Default to base configuration
     if config is None:
-        config = MODEL_CONFIGS["base"]
-        config["backbone_config"] = BACKBONE_CONFIGS["base"]
-        image_processor_config = IMAGE_PROCESSORS["base"]
+        print(f"No config found for {model_name}, using base config")
+        config = MODEL_CONFIGS["rf-detr-base"]
+        config["backbone_config"] = BACKBONE_CONFIGS["rf-detr-base"]
+
     config["backbone_config"]["model_type"] = "rf_detr_dinov2"
 
     if "objects365" in model_name:
@@ -592,7 +351,7 @@ def get_model_config(model_name: str):
     else:
         config["num_labels"] = 91
 
-    return config, image_processor_config
+    return config
 
 
 def get_weight_mapping(
@@ -892,13 +651,15 @@ def convert_rf_detr_checkpoint(
     print(f"Converting {model_name} checkpoint...")
 
     # Get model configuration
-    config, image_processor_config = get_model_config(model_name)
+    config = get_model_config(model_name)
     rf_detr_config = RfDetrConfig(**config)
 
     # Load checkpoint
     checkpoint_url = checkpoint_url if checkpoint_url is not None else HOSTED_MODELS[model_name]
     print(f"Loading checkpoint from {checkpoint_url}...")
-    checkpoint = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", weights_only=False)
+    checkpoint = torch.hub.load_state_dict_from_url(
+        checkpoint_url, map_location="cpu", weights_only=False, file_name=f"{model_name}.pth"
+    )
     # Create model and load weights
     print("Creating model and loading weights...")
     is_segmentation = "seg" in model_name
@@ -917,8 +678,9 @@ def convert_rf_detr_checkpoint(
     else:
         state_dict = checkpoint
 
+    load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
     missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-        model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
+        model, state_dict, load_config, tp_plan=None
     )
     print("Checkpoint loaded...")
     if len(mismatch) > 0 or len(unexpected) > 0 or len(mismatch) > 0:
@@ -929,7 +691,7 @@ def convert_rf_detr_checkpoint(
         print("MISMATCH:", len(mismatch))
         print(mismatch)
 
-    image_processor = DetrImageProcessor(**image_processor_config, use_fast=True)
+    image_processor = DetrImageProcessor(size=IMAGE_PROCESSORS[model_name], do_resize=True, use_fast=True)
     test_models_outputs(model, image_processor, model_name)
 
     repo_id = f"{organization}/{model_name}"
