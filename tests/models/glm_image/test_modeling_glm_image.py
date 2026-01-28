@@ -61,9 +61,9 @@ class GlmImageVisionText2TextModelTester:
         num_channels=3,
         ignore_index=-100,
         image_size=128,
-        image_start_token_id=85,
-        image_end_token_id=86,
-        image_token_id=87,
+        image_start_token_id=50,
+        image_end_token_id=51,
+        image_token_id=52,
         is_training=True,
         text_config={
             "vocab_size": 99,
@@ -318,12 +318,6 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         reason="GlmImage has a VQ module that uses `weight.data` directly in forward which prevent offloading on that module"
     )
     def test_model_parallelism(self):
-        pass
-
-    def test_resize_embeddings_untied(self):
-        pass
-
-    def test_resize_tokens_embeddings(self):
         pass
 
     @unittest.skip("Error with compilation")

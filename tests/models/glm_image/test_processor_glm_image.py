@@ -24,7 +24,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import GlmImageProcessor
+    from transformers import AutoImageProcessor, AutoTokenizer, GlmImageProcessor
 
 if is_torch_available():
     import torch
@@ -45,11 +45,25 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return super()._setup_from_pretrained(
             model_id,
             subfolder="processor",
-            do_sample_frames=False,
-            patch_size=4,
-            size={"shortest_edge": 12 * 12, "longest_edge": 18 * 18},
             **kwargs,
         )
+
+    @classmethod
+    def _setup_image_processor(cls):
+        # Provide a tiny image-processor config so placeholder expansion stays small
+        return AutoImageProcessor.from_pretrained(
+            cls.model_id,
+            subfolder="processor",
+            do_resize=True,
+            patch_size=4,
+            min_pixels=12 * 12,
+            max_pixels=18 * 18,
+        )
+
+    @classmethod
+    def _setup_tokenizer(cls):
+        # Ensure tokenizer is loaded from the correct subfolder when using custom components
+        return AutoTokenizer.from_pretrained(cls.model_id, subfolder="processor")
 
     def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
         """Override to create images with valid aspect ratio (< 4) for GLM-Image."""
@@ -169,48 +183,13 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         text = self.prepare_text_inputs(modalities=["image"])
         image_input = self.prepare_image_inputs()
         inputs_dict = {"text": text, "images": image_input}
-        inputs = processor(**inputs_dict, return_tensors="pt", do_sample_frames=False)
+        inputs = processor(**inputs_dict, return_tensors="pt")
 
         self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
 
     @unittest.skip(
-        reason="GLM-Image processor adds image placeholder tokens which makes sequence length depend on image size"
-    )
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        pass
-
-    @unittest.skip(
-        reason="GLM-Image processor adds image placeholder tokens which makes sequence length depend on image size"
-    )
-    def test_structured_kwargs_nested(self):
-        pass
-
-    @unittest.skip(
-        reason="GLM-Image processor adds image placeholder tokens which makes sequence length depend on image size"
-    )
-    def test_structured_kwargs_nested_from_dict(self):
-        pass
-
-    @unittest.skip(
-        reason="GLM-Image processor adds image placeholder tokens which makes sequence length depend on image size"
-    )
-    def test_unstructured_kwargs(self):
-        pass
-
-    @unittest.skip(
-        reason="GLM-Image processor adds image placeholder tokens which makes sequence length depend on image size"
-    )
-    def test_unstructured_kwargs_batched(self):
-        pass
-
-    @unittest.skip(
-        reason="GLM-Image processor adds image placeholder tokens which makes sequence length depend on image size"
+        "GlmImageProcessor injects additional special/control tokens around plain text inputs, so "
+        "`processor(text=X)` is not equivalent to `tokenizer(X)` for this model."
     )
     def test_tokenizer_defaults(self):
-        pass
-
-    @unittest.skip(
-        reason="GLM-Image processor adds image placeholder tokens which makes sequence length depend on image size"
-    )
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
         pass

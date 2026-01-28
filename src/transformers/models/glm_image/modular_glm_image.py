@@ -1446,6 +1446,8 @@ class GlmImageProcessor(ProcessorMixin):
             in a chat into a tokenizable string.
     """
 
+    model_input_names = ["input_ids", "attention_mask", "pixel_values", "image_grid_thw", "images_per_sample"]
+
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
         self.grid_bos_token = tokenizer.grid_bos_token
