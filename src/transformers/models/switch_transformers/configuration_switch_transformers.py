@@ -48,10 +48,14 @@ class SwitchTransformersConfig(PreTrainedConfig):
             Number of dense hidden layers in the Transformer encoder layer.
         num_sparse_encoder_layers (`int`, *optional*, defaults to 3):
             Number of sparse (MoE) dense hidden layers in the Transformer encoder layer.
+            Note: When set to 0 with `num_layers=1`, the current implementation may still create a sparse layer
+            due to the sparse step calculation. This edge case is not encountered in existing checkpoints.
         num_decoder_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
         num_sparse_decoder_layers (`int`, *optional*, defaults to 3):
             Number of sparse (MoE) dense hidden layers in the Transformer decoder layer.
+            Note: When set to 0 with `num_decoder_layers=1`, the current implementation may still create a sparse
+            layer due to the sparse step calculation. This edge case is not encountered in existing checkpoints.
         num_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_experts (`int`, *optional*, defaults to 8):
@@ -150,7 +154,7 @@ class SwitchTransformersConfig(PreTrainedConfig):
         else:
             self.encoder_sparse_step = self.num_layers  # HACK: this will create 0 sparse layers
 
-        # This tells us, each how many encoder layer we'll have to set a sparse layer.
+        # This tells us, each how many decoder layer we'll have to set a sparse layer.
         if self.num_sparse_decoder_layers > 0:
             self.decoder_sparse_step = self.num_decoder_layers // self.num_sparse_decoder_layers
         else:
