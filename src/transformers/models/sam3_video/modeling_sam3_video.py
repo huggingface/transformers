@@ -16,7 +16,7 @@
 from collections import OrderedDict, defaultdict
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterator
 
 import torch
 import torch.nn.functional as F
@@ -1781,25 +1781,31 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         return processing_order, end_frame_idx
 
     @torch.inference_mode()
+    @auto_docstring(
+        custom_intro="""
+        Propagate the prompts to get grounding results for the entire video. Used when initializing an inference session with a whole video.
+        Yields Sam3VideoSegmentationOutput for each frame.
+        """
+    )
     def propagate_in_video_iterator(
         self,
         inference_session: Sam3VideoInferenceSession,
-        start_frame_idx=0,
-        max_frame_num_to_track=None,
-        reverse=False,
+        start_frame_idx: int = 0,
+        max_frame_num_to_track: int | None = None,
+        reverse: bool = False,
         show_progress_bar: bool = False,
-    ):
-        """
-        Propagate the prompts to get grounding results for the entire video. This method
-        is a generator and yields inference outputs for all frames in the range specified
-        by `start_frame_idx`, `max_frame_num_to_track`, and `reverse`.
-
-        Args:
-            show_progress_bar (`bool`, *optional*, defaults to `False`):
-                Whether to show a progress bar during propagation.
-
-        Yields:
-            `Sam3VideoSegmentationOutput`: The segmentation output for each frame.
+    ) -> Iterator[Sam3VideoSegmentationOutput]:
+        r"""
+        inference_session (`Sam3VideoInferenceSession`):
+            The video inference session object.
+        start_frame_idx (`int`, *optional*, defaults to `0`):
+            The starting frame index for propagation.
+        max_frame_num_to_track (`int`, *optional*):
+            The maximum number of frames to track. If not provided, all frames in the video will be tracked.
+        reverse (`bool`, *optional*, defaults to `False`):
+            Whether to propagate in reverse.
+        show_progress_bar (`bool`, *optional*, defaults to `False`):
+            Whether to show a progress bar during propagation.
         """
         processing_order, end_frame_idx = self._get_processing_order(
             inference_session,
