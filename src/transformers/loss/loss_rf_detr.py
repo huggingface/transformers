@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -13,15 +14,8 @@ from .loss_for_object_detection import (
 from .loss_lw_detr import LwDetrImageLoss
 
 
-if is_vision_available():
-    pass
-
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
-
-if is_accelerate_available():
-    from accelerate import PartialState
-    from accelerate.utils import reduce
 
 
 def sigmoid_cross_entropy_loss(
@@ -380,10 +374,9 @@ class RfDetrImageLoss(LwDetrImageLoss):
         num_boxes = num_boxes * group_detr
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         world_size = 1
-        if is_accelerate_available():
-            if PartialState._shared_state != {}:
-                num_boxes = reduce(num_boxes)
-                world_size = PartialState().num_processes
+        if dist.is_available() and dist.is_initialized():
+            dist.all_reduce(num_boxes, op=dist.ReduceOp.SUM)
+            world_size = dist.get_world_size()
         num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses
