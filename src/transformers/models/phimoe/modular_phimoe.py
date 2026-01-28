@@ -63,9 +63,9 @@ class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
         seq_len = torch.max(position_ids) + 1
         if self.config.rope_parameters["rope_type"] != "default" and seq_len:
             mscale = (
-                self.long_mscale
+                self.config.rope_parameters["long_mscale"]
                 if seq_len > self.config.rope_parameters["original_max_position_embeddings"]
-                else self.short_mscale
+                else self.config.rope_parameters["short_mscale"]
             )
         inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)
         mscale = attention_scaling if mscale is None else mscale
@@ -279,6 +279,7 @@ class PhimoeTopKRouter(nn.Linear):
         super().__init__(config.hidden_size, config.num_local_experts, bias=False)
         self.router_jitter_noise = config.router_jitter_noise
         self.input_jitter_noise = config.input_jitter_noise
+        self.top_k = config.num_experts_per_tok
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if self.training and self.input_jitter_noise > 0:
@@ -287,11 +288,8 @@ class PhimoeTopKRouter(nn.Linear):
             )
         router_logits = super().forward(hidden_states)
         routing_weights, selected_experts = sparsemixer(
-            router_logits,
-            jitter_eps=self.router_jitter_noise,
-            training=self.training,
+            router_logits, jitter_eps=self.router_jitter_noise, training=self.training, top_k=self.top_k
         )
-        routing_weights = torch.zeros_like(router_logits).scatter_(1, selected_experts, routing_weights)
         return routing_weights, selected_experts
 
 
@@ -332,7 +330,14 @@ class PhimoeSparseMoeBlock(nn.Module):
 
 
 class PhimoeDecoderLayer(MixtralDecoderLayer):
-    pass
+    def __init__(self, config: PhimoeConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        # Phimoe uses nn.LayerNorm
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)
+        self.post_attention_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True
+        )
 
 
 class PhimoePreTrainedModel(MixtralPreTrainedModel):

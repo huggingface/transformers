@@ -143,16 +143,17 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "phimoe": [
+            WeightRenaming(".block_sparse_moe.gate", ".mlp.router"),
             WeightConverter(
                 source_patterns=[
-                    "mlp.experts.*.w1.weight",
-                    "mlp.experts.*.w3.weight",
+                    "block_sparse_moe.experts.*.w1.weight",
+                    "block_sparse_moe.experts.*.w3.weight",
                 ],
                 target_patterns="mlp.experts.gate_up_proj",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                source_patterns="mlp.experts.*.w2.weight",
+                source_patterns="block_sparse_moe.experts.*.w2.weight",
                 target_patterns="mlp.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),

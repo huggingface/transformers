@@ -16,7 +16,7 @@
 import inspect
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
@@ -57,7 +57,7 @@ class Qwen2VLVisionConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
-class Qwen2VLTextConfig(PreTrainedConfig):
+class Qwen2VLTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2VLTextModel`]. It is used to instantiate a
     Qwen2-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
