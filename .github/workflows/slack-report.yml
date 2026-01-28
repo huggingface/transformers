@@ -100,7 +100,7 @@ jobs:
             python utils/notification_service.py "$folder_slices"
           fi
 
-      # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
+      # Upload the directory containing CI reports prepared in `notification_service.py`
       - name: Failure table artifacts
         uses: actions/upload-artifact@v4
         with:
