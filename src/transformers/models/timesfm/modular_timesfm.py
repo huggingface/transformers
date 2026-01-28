@@ -17,6 +17,7 @@ import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -30,6 +31,7 @@ from ...utils import auto_docstring, can_return_tuple, logging
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..phi4_multimodal.modeling_phi4_multimodal import simple_eager_attention_forward
 from .configuration_timesfm import TimesFmConfig
+from .xreg_utils import BatchedInContextXRegLinear, _normalize
 
 
 logger = logging.get_logger(__name__)
@@ -64,6 +66,20 @@ class TimesFmOutputForPrediction(BaseModelOutput):
     mean_predictions: torch.Tensor | None = None
     full_predictions: torch.Tensor | None = None
     loss: torch.Tensor | float | None = None
+
+
+@dataclass
+@auto_docstring
+class TimesFmOutputForPredictionWithCovariates(TimesFmOutputForPrediction):
+    r"""
+    xreg_predictions (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        The predictions from the external regression (XReg) model using covariates.
+    combined_predictions (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        The combined predictions from TimesFM and XReg models.
+    """
+
+    xreg_predictions: Optional[torch.Tensor] = None
+    combined_predictions: Optional[torch.Tensor] = None
 
 
 class TimesFmMLP(nn.Module):
@@ -787,6 +803,405 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             full_predictions=full_outputs,
             loss=loss,
         )
+
+    @can_return_tuple
+    @auto_docstring
+    def forecast_with_covariates(
+        self,
+        past_values: Sequence[torch.Tensor],
+        dynamic_numerical_covariates: Optional[dict[str, Sequence[Sequence[float]]]] = None,
+        dynamic_categorical_covariates: Optional[dict[str, Sequence[Sequence[Union[int, str]]]]] = None,
+        static_numerical_covariates: Optional[dict[str, Sequence[float]]] = None,
+        static_categorical_covariates: Optional[dict[str, Sequence[Union[int, str]]]] = None,
+        freq: Optional[Sequence[Union[torch.Tensor, int]]] = None,
+        window_size: Optional[int] = None,
+        forecast_context_len: Optional[int] = None,
+        xreg_mode: str = "xreg + timesfm",
+        normalize_xreg_target_per_input: bool = True,
+        ridge: float = 0.0,
+        truncate_negative: bool = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        future_values: Optional[torch.Tensor] = None,
+    ) -> TimesFmOutputForPredictionWithCovariates:
+        r"""
+        Forecasts time series with external covariates using batched in-context regression.
+
+        This method combines TimesFM's forecasting capabilities with external regression (XReg)
+        on covariates to improve prediction accuracy. It supports both static and dynamic
+        covariates, with numerical and categorical types.
+
+        Args:
+            past_values (`Sequence[torch.Tensor]`):
+                Past values of the time series that serves as input to the model.
+            dynamic_numerical_covariates (`Dict[str, Sequence[Sequence[float]]]`, *optional*):
+                Dictionary mapping covariate names to sequences of numerical values for each
+                time series, covering both context and horizon periods.
+            dynamic_categorical_covariates (`Dict[str, Sequence[Sequence[Union[int, str]]]]`, *optional*):
+                Dictionary mapping covariate names to sequences of categorical values for each
+                time series, covering both context and horizon periods.
+            static_numerical_covariates (`Dict[str, Sequence[float]]`, *optional*):
+                Dictionary mapping covariate names to numerical values for each time series.
+            static_categorical_covariates (`Dict[str, Sequence[Union[int, str]]]`, *optional*):
+                Dictionary mapping covariate names to categorical values for each time series.
+            freq (`Sequence[Union[torch.Tensor, int]]`, *optional*):
+                Frequency indices for the time series data.
+            window_size (`int`, *optional*):
+                Window size of trend + residual decomposition. If None then we do not do decomposition.
+            forecast_context_len (`int`, *optional*):
+                Optional max context length.
+            xreg_mode (`str`, *optional*, defaults to `"xreg + timesfm"`):
+                Mode for combining TimesFM and XReg predictions. Options:
+                - "xreg + timesfm": Fit linear model on targets first, then forecast residuals with TimesFM
+                - "timesfm + xreg": Forecast with TimesFM first, then fit linear model on residuals
+            normalize_xreg_target_per_input (`bool`, *optional*, defaults to `True`):
+                Whether to normalize the XReg targets per input series.
+            ridge (`float`, *optional*, defaults to 0.0):
+                Ridge regularization parameter for the linear regression.
+            truncate_negative (`bool`, *optional*, defaults to `False`):
+                Truncate to only non-negative values if any of the contexts have non-negative values.
+            output_attentions (`bool`, *optional*):
+                Whether to output the attentions.
+            output_hidden_states (`bool`, *optional*):
+                Whether to output the hidden states.
+            return_dict (`bool`, *optional*):
+                Whether to return a dictionary or a tuple.
+            future_values (`torch.Tensor`, *optional*):
+                Optional future time series values to compute a training loss. Shape should be `(batch_size, horizon)`
+                matching the produced horizon from covariates (or model horizon if not provided).
+
+        Returns:
+            [`TimesFmOutputForPredictionWithCovariates`]: The output containing both TimesFM
+            predictions and covariate-based predictions.
+
+        Example:
+            ```python
+            >>> from transformers import TimesFmModelForPrediction
+            >>> import torch
+
+            >>> model = TimesFmModelForPrediction.from_pretrained("google/timesfm-2.0-500m-pytorch")
+
+            >>> # Prepare time series data
+            >>> past_values = [torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0])]
+
+            >>> # Add covariates
+            >>> dynamic_numerical = {"temperature": [[20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0]]}
+            >>> static_categorical = {"store_type": ["supermarket"]}
+
+            >>> # Generate forecast with covariates
+            >>> outputs = model.forecast_with_covariates(
+            ...     past_values=past_values,
+            ...     dynamic_numerical_covariates=dynamic_numerical,
+            ...     static_categorical_covariates=static_categorical,
+            ...     ridge=0.1,
+            ... )
+            >>> combined_forecast = outputs.combined_predictions
+            ```
+        """
+        if not (
+            dynamic_numerical_covariates
+            or dynamic_categorical_covariates
+            or static_numerical_covariates
+            or static_categorical_covariates
+        ):
+            raise ValueError(
+                "At least one of dynamic_numerical_covariates, dynamic_categorical_covariates, "
+                "static_numerical_covariates, static_categorical_covariates must be provided."
+            )
+
+        if xreg_mode not in ["xreg + timesfm", "timesfm + xreg"]:
+            raise ValueError(f"xreg_mode must be 'xreg + timesfm' or 'timesfm + xreg', got '{xreg_mode}'")
+
+        # Get device from the first input tensor
+        device = past_values[0].device
+
+        # Set default values
+        if output_attentions is None:
+            output_attentions = self.config.output_attentions
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
+        if return_dict is None:
+            return_dict = self.config.use_return_dict
+
+        if forecast_context_len is None:
+            fcontext_len = self.context_len
+        else:
+            fcontext_len = forecast_context_len
+
+        if freq is None:
+            logger.info("No frequency provided via `freq`. Default to high (0).")
+            freq = [0] * len(past_values)
+
+        # Convert past_values to lists for easier processing
+        inputs = [ts[-fcontext_len:].cpu().float().numpy().tolist() for ts in past_values]
+
+        # Track the lengths for XReg processing
+        input_lens = [len(inp) for inp in inputs]
+        train_lens = []
+        test_lens = []
+
+        for i, input_len in enumerate(input_lens):
+            if xreg_mode == "timesfm + xreg":
+                # For fitting residuals, no TimesFM forecast on the first patch
+                train_lens.append(max(0, input_len - self.config.patch_length))
+            elif xreg_mode == "xreg + timesfm":
+                train_lens.append(input_len)
+
+            # Determine horizon length from dynamic covariates
+            if dynamic_numerical_covariates:
+                test_len = len(list(dynamic_numerical_covariates.values())[0][i]) - input_len
+            elif dynamic_categorical_covariates:
+                test_len = len(list(dynamic_categorical_covariates.values())[0][i]) - input_len
+            else:
+                test_len = self.horizon_len
+
+            if test_len > self.horizon_len:
+                raise ValueError(f"Forecast horizon ({test_len}) exceeds model horizon ({self.horizon_len})")
+            test_lens.append(test_len)
+
+        # Prepare covariates for XReg
+        train_dynamic_numerical_covariates = {}
+        test_dynamic_numerical_covariates = {}
+        train_dynamic_categorical_covariates = {}
+        test_dynamic_categorical_covariates = {}
+
+        # Split dynamic covariates
+        if dynamic_numerical_covariates:
+            for cov_name, cov_values in dynamic_numerical_covariates.items():
+                train_dynamic_numerical_covariates[cov_name] = []
+                test_dynamic_numerical_covariates[cov_name] = []
+                for input_len, train_len, cov_value in zip(input_lens, train_lens, cov_values):
+                    train_dynamic_numerical_covariates[cov_name].append(cov_value[(input_len - train_len) : input_len])
+                    test_dynamic_numerical_covariates[cov_name].append(cov_value[input_len:])
+
+        if dynamic_categorical_covariates:
+            for cov_name, cov_values in dynamic_categorical_covariates.items():
+                train_dynamic_categorical_covariates[cov_name] = []
+                test_dynamic_categorical_covariates[cov_name] = []
+                for input_len, train_len, cov_value in zip(input_lens, train_lens, cov_values):
+                    train_dynamic_categorical_covariates[cov_name].append(
+                        cov_value[(input_len - train_len) : input_len]
+                    )
+                    test_dynamic_categorical_covariates[cov_name].append(cov_value[input_len:])
+
+        # Execute XReg mode
+        if xreg_mode == "timesfm + xreg":
+            # First get TimesFM forecast, then fit XReg on residuals
+            timesfm_output = self.forward(
+                past_values=past_values,
+                freq=freq,
+                window_size=window_size,
+                forecast_context_len=forecast_context_len,
+                return_forecast_on_context=True,
+                truncate_negative=truncate_negative,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+
+            # Calculate residuals:
+            mean_outputs = timesfm_output.mean_predictions  # keep as torch for grad flow
+            targets = []
+            # Slicing: use fixed horizon_start based on forecast_context_len
+            horizon_start = max(0, fcontext_len - self.config.patch_length)
+
+            for i, (input_ts, mean_output, train_len) in enumerate(zip(inputs, mean_outputs, train_lens)):
+                if train_len > 0:
+                    # compute on CPU/NumPy only for target arrays; does not affect autograd
+                    input_segment = np.array(input_ts)[-train_len:]
+                    context_prediction = (
+                        mean_output[(horizon_start - train_len) : horizon_start].detach().cpu().numpy()
+                    )
+                    target_residuals = input_segment - context_prediction
+                    targets.append(target_residuals.tolist())
+                else:
+                    targets.append([])
+
+            # Normalize if requested
+            per_instance_stats = None
+            if normalize_xreg_target_per_input:
+                targets, per_instance_stats = _normalize(targets)
+
+        else:  # "xreg + timesfm"
+            # First fit XReg on targets, then forecast residuals with TimesFM
+            targets = [np.array(inp)[-train_len:].tolist() for inp, train_len in zip(inputs, train_lens)]
+
+            # Normalize if requested
+            per_instance_stats = None
+            if normalize_xreg_target_per_input:
+                targets, per_instance_stats = _normalize(targets)
+
+        # Fit XReg model
+        xreg_model = BatchedInContextXRegLinear(
+            targets=targets,
+            train_lens=train_lens,
+            test_lens=test_lens,
+            train_dynamic_numerical_covariates=train_dynamic_numerical_covariates,
+            test_dynamic_numerical_covariates=test_dynamic_numerical_covariates,
+            train_dynamic_categorical_covariates=train_dynamic_categorical_covariates,
+            test_dynamic_categorical_covariates=test_dynamic_categorical_covariates,
+            static_numerical_covariates=static_numerical_covariates,
+            static_categorical_covariates=static_categorical_covariates,
+        )
+
+        if xreg_mode == "xreg + timesfm":
+            # Get both predictions and predictions on context
+            xreg_result = xreg_model.fit(
+                ridge=ridge,
+                one_hot_encoder_drop="first" if ridge == 0 else None,
+                debug_info=True,
+                device=device,
+                assert_covariates=True,
+            )
+            xreg_predictions, xreg_on_context, _, _, _ = xreg_result
+
+            # Calculate residuals and forecast with TimesFM
+            residual_inputs = []
+            for i, (target, xreg_context) in enumerate(zip(targets, xreg_on_context)):
+                if len(target) > 0 and len(xreg_context) > 0:
+                    residual = np.array(target) - np.array(xreg_context)
+                    residual_inputs.append(torch.tensor(residual, dtype=next(self.parameters()).dtype, device=device))
+                else:
+                    residual_inputs.append(past_values[i])
+
+            # Forecast residuals with TimesFM
+            timesfm_output = self.forward(
+                past_values=residual_inputs,
+                freq=freq,
+                window_size=window_size,
+                forecast_context_len=forecast_context_len,
+                return_forecast_on_context=True,
+                truncate_negative=False,  # Don't truncate residuals
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+        else:  # "timesfm + xreg"
+            # Just get XReg predictions
+            xreg_predictions = xreg_model.fit(
+                ridge=ridge,
+                one_hot_encoder_drop="first" if ridge == 0 else None,
+                device=device,
+                assert_covariates=True,
+            )
+
+        # Convert to tensors with proper padding
+        max_horizon = max(test_lens)
+        batch_size = len(past_values)
+
+        model_dtype = next(self.parameters()).dtype
+        xreg_tensor = torch.zeros(batch_size, max_horizon, dtype=model_dtype, device=device)
+        mean_predictions_tensor = torch.zeros(batch_size, max_horizon, dtype=model_dtype, device=device)
+        combined_tensor = torch.zeros(batch_size, max_horizon, dtype=model_dtype, device=device)
+
+        # Fill tensors from XReg outputs and sliced TimesFM predictions (torch ops to keep grad)
+        for i, (xreg_out, test_len) in enumerate(zip(xreg_predictions, test_lens)):
+            xreg_tensor[i, :test_len] = torch.tensor(xreg_out, dtype=model_dtype, device=device)
+            # Take the forecast portion from TimesFM predictions
+            horizon_start = max(0, fcontext_len - self.config.patch_length)
+            horizon_end = min(timesfm_output.mean_predictions.shape[1], horizon_start + test_len)
+            timesfm_forecast = timesfm_output.mean_predictions[i, horizon_start:horizon_end]
+            # Ensure same length by padding if needed
+            if len(timesfm_forecast) < test_len:
+                last_val = (
+                    timesfm_forecast[-1]
+                    if len(timesfm_forecast) > 0
+                    else torch.tensor(0.0, device=device, dtype=timesfm_forecast.dtype)
+                )
+                pad_len = test_len - len(timesfm_forecast)
+                padding = last_val.repeat(pad_len)
+                timesfm_forecast = torch.cat([timesfm_forecast, padding])
+            mean_predictions_tensor[i, :test_len] = timesfm_forecast
+        # Keep a copy of normalized XReg predictions for later use
+        xreg_tensor_norm = xreg_tensor.clone()
+
+        # Combine predictions with correct scaling depending on mode
+        if xreg_mode == "timesfm + xreg":
+            if normalize_xreg_target_per_input and per_instance_stats:
+                for i, test_len in enumerate(test_lens):
+                    mean_i, std_i = per_instance_stats[i]
+                    if std_i is None or test_len == 0:
+                        continue
+                    xreg_tensor[i, :test_len] = xreg_tensor[i, :test_len] * float(std_i) + float(mean_i)
+            for i, tl in enumerate(test_lens):
+                if tl > 0:
+                    combined_tensor[i, :tl] = mean_predictions_tensor[i, :tl] + xreg_tensor[i, :tl]
+        else:
+            for i, tl in enumerate(test_lens):
+                if tl == 0:
+                    continue
+                if normalize_xreg_target_per_input and per_instance_stats:
+                    mean_i, std_i = per_instance_stats[i]
+                    if std_i is not None:
+                        combined_tensor[i, :tl] = (mean_predictions_tensor[i, :tl] + xreg_tensor_norm[i, :tl]) * float(
+                            std_i
+                        ) + float(mean_i)
+                        xreg_tensor[i, :tl] = xreg_tensor_norm[i, :tl] * float(std_i) + float(mean_i)
+                        # TimesFM contribution in original units as residual*std
+                        mean_predictions_tensor[i, :tl] = combined_tensor[i, :tl] - xreg_tensor[i, :tl]
+                else:
+                    combined_tensor[i, :tl] = mean_predictions_tensor[i, :tl] + xreg_tensor[i, :tl]
+
+        # Apply truncation if requested
+        if truncate_negative:
+            inp_min = min(torch.min(ts) for ts in past_values)
+            if inp_min >= 0:
+                combined_tensor = torch.maximum(combined_tensor, torch.tensor(0.0, device=device))
+                xreg_tensor = torch.maximum(xreg_tensor, torch.tensor(0.0, device=device))
+
+        # Compute training loss if labels provided (always on combined)
+        loss = None
+        if future_values is not None:
+            # Build mask using per-series horizon lengths
+            mask = torch.zeros_like(combined_tensor, dtype=combined_tensor.dtype, device=device)
+            for i, tl in enumerate(test_lens):
+                if tl > 0:
+                    mask[i, :tl] = 1.0
+            denom = torch.clamp(mask.sum(), min=1.0)
+
+            if future_values.shape[1] < combined_tensor.shape[1]:
+                raise ValueError(
+                    f"future_values width {future_values.shape[1]} < expected horizon {combined_tensor.shape[1]}"
+                )
+
+            # MSE on combined prediction
+            mse_loss = (((combined_tensor - future_values[:, : mask.shape[1]]) ** 2) * mask).sum() / denom
+
+            # Quantile loss: combine TimesFM quantiles with XReg per-step predictions
+            q_losses = []
+            for i, tl in enumerate(test_lens):
+                if tl == 0:
+                    continue
+                h_start = max(0, fcontext_len - self.config.patch_length)
+                h_end = min(timesfm_output.full_predictions.shape[1], h_start + tl)
+                timesfm_quants = timesfm_output.full_predictions[i, h_start:h_end, 1:]
+                if xreg_mode == "xreg + timesfm" and normalize_xreg_target_per_input and per_instance_stats:
+                    mean_i, std_i = per_instance_stats[i]
+                    if std_i is not None:
+                        xreg_norm_slice = xreg_tensor_norm[i, :tl]
+                        shifted_quants = (timesfm_quants + xreg_norm_slice.unsqueeze(-1)) * float(std_i) + float(
+                            mean_i
+                        )
+                    else:
+                        shifted_quants = timesfm_quants + xreg_tensor[i, :tl].unsqueeze(-1)
+                else:
+                    shifted_quants = timesfm_quants + xreg_tensor[i, :tl].unsqueeze(-1)
+                q_losses.append(self._quantile_loss(shifted_quants, future_values[i, :tl]))
+            quantile_loss = torch.stack(q_losses).mean() if q_losses else torch.tensor(0.0, device=device)
+            loss = mse_loss + quantile_loss
+
+        # Create output
+        output = TimesFmOutputForPredictionWithCovariates(
+            last_hidden_state=timesfm_output.last_hidden_state,
+            attentions=timesfm_output.attentions if output_attentions else None,
+            hidden_states=timesfm_output.hidden_states if output_hidden_states else None,
+            mean_predictions=mean_predictions_tensor,
+            full_predictions=timesfm_output.full_predictions,
+            loss=loss,
+            xreg_predictions=xreg_tensor,
+            combined_predictions=combined_tensor,
+        )
+
+        return output if return_dict else tuple(output.values())
 
     @staticmethod
     def _timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:

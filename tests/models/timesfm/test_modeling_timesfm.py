@@ -187,3 +187,508 @@ class TimesFmModelIntegrationTests(unittest.TestCase):
             device=torch_device)
         # fmt: on
         self.assertTrue(torch.allclose(mean_predictions[0, :64], expected_slice, atol=TOLERANCE))
+
+
+@require_torch
+class TimesFmCovariatesTest(unittest.TestCase):
+    """Test TimesFM covariates functionality."""
+
+    def setUp(self):
+        self.model_tester = TimesFmModelTester(
+            self,
+            patch_length=32,
+            context_length=128,
+            horizon_length=32,
+            num_hidden_layers=1,
+            hidden_size=16,
+            intermediate_size=32,
+            batch_size=2,
+        )
+        self.config = self.model_tester.get_config()
+        self.model = TimesFmModelForPrediction(self.config).to(torch_device)
+        self.model.eval()
+
+        # Create test data with consistent lengths
+        self.context_len = 60  # Use a fixed context length
+        self.horizon_len = 16
+        self.past_values = [
+            torch.tensor(np.sin(np.linspace(0, 10, self.context_len)), dtype=torch.float32, device=torch_device),
+            torch.tensor(np.cos(np.linspace(0, 10, self.context_len)), dtype=torch.float32, device=torch_device),
+        ]
+        self.total_len = self.context_len + self.horizon_len
+
+    def _create_test_covariates(self):
+        """Create comprehensive test covariates."""
+        # Dynamic numerical covariates
+        dynamic_numerical = {
+            "temperature": [
+                (20 + 5 * np.sin(2 * np.pi * np.arange(self.total_len) / 10)).tolist(),
+                (25 + 3 * np.cos(2 * np.pi * np.arange(self.total_len) / 8)).tolist(),
+            ],
+            "humidity": [
+                (60 + np.random.RandomState(42).randn(self.total_len) * 2).tolist(),
+                (55 + np.random.RandomState(43).randn(self.total_len) * 3).tolist(),
+            ],
+        }
+
+        # Dynamic categorical covariates
+        dynamic_categorical = {
+            "weekday": [
+                [i % 7 for i in range(self.total_len)],
+                [(i + 1) % 7 for i in range(self.total_len)],
+            ],
+            "season": [
+                [["spring", "summer", "fall", "winter"][i % 4] for i in range(self.total_len)],
+                [["spring", "summer", "fall", "winter"][i % 4] for i in range(self.total_len)],
+            ],
+        }
+
+        # Static covariates
+        static_numerical = {
+            "store_size": [100.0, 150.0],
+            "avg_income": [50000.0, 60000.0],
+        }
+
+        static_categorical = {
+            "store_type": ["supermarket", "convenience"],
+            "region": ["north", "south"],
+        }
+
+        return {
+            "dynamic_numerical_covariates": dynamic_numerical,
+            "dynamic_categorical_covariates": dynamic_categorical,
+            "static_numerical_covariates": static_numerical,
+            "static_categorical_covariates": static_categorical,
+        }
+
+    def test_forecast_with_covariates_basic_functionality(self):
+        """Test basic covariates functionality."""
+        covariates = self._create_test_covariates()
+
+        with torch.no_grad():
+            output = self.model.forecast_with_covariates(
+                past_values=self.past_values,
+                ridge=0.5,  # Use higher ridge for test stability
+                **covariates,
+            )
+
+        # Check output structure
+        self.assertTrue(hasattr(output, "combined_predictions"))
+        self.assertTrue(hasattr(output, "xreg_predictions"))
+        self.assertTrue(hasattr(output, "mean_predictions"))
+
+        # Check tensor shapes
+        batch_size = len(self.past_values)
+        expected_shape = torch.Size([batch_size, self.horizon_len])
+
+        self.assertEqual(output.combined_predictions.shape, expected_shape)
+        self.assertEqual(output.xreg_predictions.shape, expected_shape)
+        self.assertTrue(output.mean_predictions.shape[0] == batch_size)
+
+        # Check that predictions are finite
+        self.assertTrue(torch.isfinite(output.combined_predictions).all())
+        self.assertTrue(torch.isfinite(output.xreg_predictions).all())
+        self.assertTrue(torch.isfinite(output.mean_predictions).all())
+
+    def test_forecast_with_covariates_both_modes(self):
+        """Test both XReg modes."""
+        covariates = self._create_test_covariates()
+
+        for mode in ["xreg + timesfm", "timesfm + xreg"]:
+            with self.subTest(mode=mode):
+                with torch.no_grad():
+                    output = self.model.forecast_with_covariates(
+                        past_values=self.past_values, xreg_mode=mode, ridge=0.5, **covariates
+                    )
+
+                # Both modes should produce valid outputs
+                self.assertTrue(torch.isfinite(output.combined_predictions).all())
+                self.assertTrue(torch.isfinite(output.xreg_predictions).all())
+
+                # Check shapes are consistent
+                batch_size = len(self.past_values)
+                expected_shape = torch.Size([batch_size, self.horizon_len])
+                self.assertEqual(output.combined_predictions.shape, expected_shape)
+
+    def test_forecast_with_covariates_individual_types(self):
+        """Test individual covariate types."""
+        test_cases = [
+            {
+                "name": "dynamic_numerical_only",
+                "covariates": {
+                    "dynamic_numerical_covariates": self._create_test_covariates()["dynamic_numerical_covariates"]
+                },
+            },
+            {
+                "name": "dynamic_categorical_only",
+                "covariates": {
+                    "dynamic_categorical_covariates": self._create_test_covariates()["dynamic_categorical_covariates"]
+                },
+            },
+            {
+                "name": "static_numerical_only",
+                "covariates": {
+                    "static_numerical_covariates": self._create_test_covariates()["static_numerical_covariates"]
+                },
+            },
+            {
+                "name": "static_categorical_only",
+                "covariates": {
+                    "static_categorical_covariates": self._create_test_covariates()["static_categorical_covariates"]
+                },
+            },
+        ]
+
+        for test_case in test_cases:
+            with self.subTest(covariate_type=test_case["name"]):
+                with torch.no_grad():
+                    output = self.model.forecast_with_covariates(
+                        past_values=self.past_values,
+                        ridge=1.0,  # Higher ridge for stability with fewer covariates
+                        **test_case["covariates"],
+                    )
+
+                # All individual types should work
+                self.assertTrue(torch.isfinite(output.combined_predictions).all())
+                self.assertTrue(torch.isfinite(output.xreg_predictions).all())
+
+    def test_forecast_with_covariates_error_handling(self):
+        """Test error handling for invalid inputs."""
+
+        # Test no covariates provided
+        with self.assertRaises(ValueError) as context:
+            self.model.forecast_with_covariates(past_values=self.past_values)
+        self.assertIn("At least one of", str(context.exception))
+
+        # Test invalid xreg_mode
+        with self.assertRaises(ValueError) as context:
+            self.model.forecast_with_covariates(
+                past_values=self.past_values,
+                static_numerical_covariates={"test": [1.0, 2.0]},
+                xreg_mode="invalid_mode",
+            )
+        self.assertIn("xreg_mode must be", str(context.exception))
+
+        # Test horizon too long
+        long_covariates = {
+            "dynamic_numerical_covariates": {
+                "test": [
+                    list(range(len(self.past_values[0]) + 1000)),  # Much longer than model horizon
+                    list(range(len(self.past_values[1]) + 1000)),
+                ]
+            }
+        }
+        with self.assertRaises(ValueError) as context:
+            self.model.forecast_with_covariates(past_values=self.past_values, **long_covariates)
+        self.assertIn("exceeds model horizon", str(context.exception))
+
+    def test_forecast_with_covariates_ridge_regularization(self):
+        """Test different ridge regularization values."""
+        covariates = self._create_test_covariates()
+        ridge_values = [0.0, 0.1, 1.0, 10.0]
+
+        for ridge in ridge_values:
+            with self.subTest(ridge=ridge):
+                with torch.no_grad():
+                    output = self.model.forecast_with_covariates(
+                        past_values=self.past_values, ridge=ridge, **covariates
+                    )
+
+                # All ridge values should produce finite outputs
+                self.assertTrue(torch.isfinite(output.combined_predictions).all())
+                self.assertTrue(torch.isfinite(output.xreg_predictions).all())
+
+    def test_forecast_with_covariates_normalization(self):
+        """Test normalization option."""
+        covariates = self._create_test_covariates()
+
+        for normalize in [True, False]:
+            with self.subTest(normalize=normalize):
+                with torch.no_grad():
+                    output = self.model.forecast_with_covariates(
+                        past_values=self.past_values,
+                        normalize_xreg_target_per_input=normalize,
+                        ridge=0.5,
+                        **covariates,
+                    )
+
+                # Both options should work
+                self.assertTrue(torch.isfinite(output.combined_predictions).all())
+                self.assertTrue(torch.isfinite(output.xreg_predictions).all())
+
+    def test_forecast_with_covariates_truncate_negative(self):
+        """Test negative value truncation."""
+        # Create positive-only past values
+        positive_past_values = [torch.abs(ts) + 1.0 for ts in self.past_values]
+        covariates = self._create_test_covariates()
+
+        with torch.no_grad():
+            output = self.model.forecast_with_covariates(
+                past_values=positive_past_values, truncate_negative=True, ridge=0.5, **covariates
+            )
+
+        # Check that outputs are non-negative when truncate_negative=True
+        self.assertTrue((output.combined_predictions >= 0).all())
+        self.assertTrue((output.xreg_predictions >= 0).all())
+
+    def test_forecast_with_covariates_variable_lengths(self):
+        """Test with variable sequence lengths."""
+        # Create sequences of different lengths
+        var_past_values = [
+            torch.tensor(np.sin(np.linspace(0, 5, 30)), dtype=torch.float32, device=torch_device),
+            torch.tensor(np.cos(np.linspace(0, 8, 45)), dtype=torch.float32, device=torch_device),
+        ]
+
+        # Adjust covariates for variable lengths
+        max_context = max(len(ts) for ts in var_past_values)
+        total_len = max_context + self.horizon_len
+
+        covariates = {
+            "dynamic_numerical_covariates": {
+                "feature1": [
+                    np.random.RandomState(42).randn(total_len).tolist(),
+                    np.random.RandomState(43).randn(total_len).tolist(),
+                ]
+            },
+            "static_categorical_covariates": {"category": ["A", "B"]},
+        }
+
+        with torch.no_grad():
+            output = self.model.forecast_with_covariates(past_values=var_past_values, ridge=1.0, **covariates)
+
+        # Should handle variable lengths correctly
+        self.assertTrue(torch.isfinite(output.combined_predictions).all())
+        self.assertTrue(torch.isfinite(output.xreg_predictions).all())
+
+    def test_forecast_with_covariates_return_dict(self):
+        """Test return_dict parameter."""
+        covariates = self._create_test_covariates()
+
+        # Test return_dict=True (default)
+        with torch.no_grad():
+            output_dict = self.model.forecast_with_covariates(
+                past_values=self.past_values, return_dict=True, ridge=0.5, **covariates
+            )
+
+        self.assertTrue(hasattr(output_dict, "combined_predictions"))
+        self.assertTrue(hasattr(output_dict, "xreg_predictions"))
+
+        # Test return_dict=False
+        with torch.no_grad():
+            output_tuple = self.model.forecast_with_covariates(
+                past_values=self.past_values, return_dict=False, ridge=0.5, **covariates
+            )
+
+        self.assertIsInstance(output_tuple, tuple)
+        self.assertTrue(len(output_tuple) > 0)
+
+    def test_forecast_with_covariates_device_consistency(self):
+        """Test that outputs are on the correct device."""
+        covariates = self._create_test_covariates()
+
+        with torch.no_grad():
+            output = self.model.forecast_with_covariates(past_values=self.past_values, ridge=0.5, **covariates)
+
+        # All outputs should be on the same device as the model
+        expected_device = next(self.model.parameters()).device
+        self.assertEqual(output.combined_predictions.device, expected_device)
+        self.assertEqual(output.xreg_predictions.device, expected_device)
+        self.assertEqual(output.mean_predictions.device, expected_device)
+
+    def test_forecast_with_covariates_realistic_example(self):
+        """Test with realistic ice cream/sunscreen sales data similar to covariates.ipynb."""
+        # Based on the ice cream and sunscreen sales example from covariates.ipynb
+        batch_size = 2
+        context_len = 50
+        horizon_len = 10
+
+        # Create realistic time series (ice cream and sunscreen sales)
+        np.random.seed(42)
+        time_points = np.arange(context_len)
+
+        # Ice cream sales: higher in summer, affected by temperature
+        seasonal_pattern = 50 + 30 * np.sin(2 * np.pi * time_points / 12 - np.pi / 2)
+        ice_cream_sales = seasonal_pattern + np.random.randn(context_len) * 5
+
+        # Sunscreen sales: also seasonal but different pattern
+        seasonal_pattern2 = 40 + 25 * np.sin(2 * np.pi * time_points / 12)
+        sunscreen_sales = seasonal_pattern2 + np.random.randn(context_len) * 4
+
+        past_values = [
+            torch.tensor(ice_cream_sales, dtype=torch.float32, device=torch_device),
+            torch.tensor(sunscreen_sales, dtype=torch.float32, device=torch_device),
+        ]
+
+        # Create realistic covariates
+        total_len = context_len + horizon_len
+
+        # Temperature covariate - main driver
+        temperature = 20 + 15 * np.sin(2 * np.pi * np.arange(total_len) / 12) + np.random.randn(total_len) * 2
+
+        # Day of week effect
+        weekday_pattern = np.tile([0, 1, 2, 3, 4, 5, 6], (total_len // 7) + 1)[:total_len]
+
+        # Promotion effect (binary)
+        promotion = np.random.choice([0, 1], size=total_len, p=[0.8, 0.2])
+
+        dynamic_numerical = {
+            "temperature": [temperature.tolist(), temperature.tolist()],
+            "promotion": [promotion.tolist(), promotion.tolist()],
+        }
+
+        dynamic_categorical = {"weekday": [weekday_pattern.tolist(), weekday_pattern.tolist()]}
+
+        static_numerical = {
+            "store_size": [1000.0, 800.0]  # sq ft
+        }
+
+        static_categorical = {"store_type": ["mall", "street"], "region": ["north", "south"]}
+
+        # Test both modes
+        for xreg_mode in ["xreg + timesfm", "timesfm + xreg"]:
+            with torch.no_grad():
+                output = self.model.forecast_with_covariates(
+                    past_values=past_values,
+                    dynamic_numerical_covariates=dynamic_numerical,
+                    dynamic_categorical_covariates=dynamic_categorical,
+                    static_numerical_covariates=static_numerical,
+                    static_categorical_covariates=static_categorical,
+                    xreg_mode=xreg_mode,
+                    ridge=0.1,
+                )
+
+            # Validate realistic predictions
+            self.assertEqual(output.combined_predictions.shape, (batch_size, horizon_len))
+            self.assertEqual(output.xreg_predictions.shape, (batch_size, horizon_len))
+            self.assertEqual(output.mean_predictions.shape, (batch_size, horizon_len))
+
+            # Ensure finite predictions (main technical requirement)
+            self.assertTrue(torch.isfinite(output.combined_predictions).all())
+            self.assertTrue(torch.isfinite(output.xreg_predictions).all())
+
+            # Predictions should not be extreme values (reasonable sanity check)
+            self.assertTrue(torch.abs(output.combined_predictions).max() < 1e6)  # Avoid extreme values
+
+    def test_forecast_with_covariates_epf_style_data(self):
+        """Test with EPF (Electricity Price Forecasting) style data like in covariates.ipynb."""
+        # Based on EPF example from covariates.ipynb
+        batch_size = 3  # 3 different market regions
+        context_len = 48  # 48 hours of historical data
+        horizon_len = 24  # 24 hour forecast
+
+        # Create realistic electricity price data with daily patterns
+        np.random.seed(123)
+
+        past_values = []
+        for region in range(batch_size):
+            time_points = np.arange(context_len)
+
+            # Daily pattern: higher during day, lower at night
+            daily_pattern = 50 + 20 * np.sin(2 * np.pi * time_points / 24)
+            # Weekly pattern: higher on weekdays
+            weekly_pattern = 5 * np.sin(2 * np.pi * time_points / (24 * 7))
+            # Regional base price
+            regional_base = 40 + region * 10
+            # Random noise
+            noise = np.random.randn(context_len) * 5
+
+            prices = regional_base + daily_pattern + weekly_pattern + noise
+            past_values.append(torch.tensor(prices, dtype=torch.float32, device=torch_device))
+
+        # EPF-style covariates
+        total_len = context_len + horizon_len
+
+        # Load covariates (MW) - main driver for electricity prices
+        base_load = 1000 + 300 * np.sin(2 * np.pi * np.arange(total_len) / 24)
+        load_variation = np.random.randn(total_len) * 50
+
+        dynamic_numerical = {
+            "load_mw": [(base_load + load_variation + i * 100).tolist() for i in range(batch_size)],
+            "temperature": [
+                (
+                    20 + 10 * np.sin(2 * np.pi * np.arange(total_len) / (24 * 30)) + np.random.randn(total_len) * 3
+                ).tolist()
+                for _ in range(batch_size)
+            ],
+            "renewable_share": [
+                np.clip(0.3 + 0.2 * np.random.randn(total_len), 0.1, 0.8).tolist() for _ in range(batch_size)
+            ],
+        }
+
+        dynamic_categorical = {
+            "hour": [[i % 24 for i in range(total_len)] for _ in range(batch_size)],
+            "day_type": [
+                ["weekday" if (i // 24) % 7 < 5 else "weekend" for i in range(total_len)] for _ in range(batch_size)
+            ],
+        }
+
+        static_numerical = {
+            "market_capacity_mw": [5000.0, 4500.0, 6000.0],
+            "transmission_capacity": [800.0, 700.0, 900.0],
+        }
+
+        static_categorical = {
+            "market_type": ["competitive", "regulated", "competitive"],
+            "primary_fuel": ["gas", "coal", "nuclear"],
+        }
+
+        # Test with higher ridge for stability with many covariates
+        with torch.no_grad():
+            output = self.model.forecast_with_covariates(
+                past_values=past_values,
+                dynamic_numerical_covariates=dynamic_numerical,
+                dynamic_categorical_covariates=dynamic_categorical,
+                static_numerical_covariates=static_numerical,
+                static_categorical_covariates=static_categorical,
+                xreg_mode="xreg + timesfm",
+                ridge=0.5,  # Higher ridge for stability
+            )
+
+        # Validate EPF-style predictions
+        self.assertEqual(output.combined_predictions.shape, (batch_size, horizon_len))
+
+        # Electricity prices should be positive
+        self.assertTrue((output.combined_predictions > 0).all())
+        self.assertTrue((output.xreg_predictions > 0).all())
+
+        # Should be in reasonable range for electricity prices (0-500 $/MWh)
+        self.assertTrue((output.combined_predictions < 500).all())
+
+        # Predictions should be finite
+        self.assertTrue(torch.isfinite(output.combined_predictions).all())
+        self.assertTrue(torch.isfinite(output.xreg_predictions).all())
+
+        # Test that covariates model provides useful signal
+        # XReg predictions should capture some of the load-price relationship
+        mean_price = output.combined_predictions.mean()
+        self.assertTrue(20 < mean_price < 200)  # Reasonable electricity price range
+
+    def test_covariates_training_backward(self):
+        """Ensure loss computes and gradients flow for covariate training."""
+        covariates = self._create_test_covariates()
+
+        # Fresh small model for training step
+        model = TimesFmModelForPrediction(self.config).to(torch_device)
+        model.train()
+
+        # Future values matching the covariate-driven horizon per series
+        future_values = torch.zeros(len(self.past_values), self.horizon_len, dtype=torch.float32, device=torch_device)
+
+        # Use residual training path (xreg + timesfm) by default
+        output = model.forecast_with_covariates(
+            past_values=self.past_values,
+            future_values=future_values,
+            ridge=0.1,
+            **covariates,
+        )
+
+        self.assertIsNotNone(output.loss)
+        # Backward pass should produce non-zero gradients on some parameters
+        output.loss.backward()
+
+        total_grad = 0.0
+        for p in model.parameters():
+            if p.grad is not None:
+                total_grad += float(p.grad.detach().abs().sum().item())
+
+        self.assertGreater(total_grad, 0.0)
