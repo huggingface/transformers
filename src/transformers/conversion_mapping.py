@@ -288,7 +288,13 @@ def _build_checkpoint_conversion_mapping():
     mapping["minimax_m2"] += [
         WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),
     ]
-
+    mapping["deepseek_v32"] = mapping["qwen2_moe"].copy()
+    mapping["deepseek_v32"] += [
+        WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias"),
+        WeightRenaming("indexer.wk", "indexer.k_proj"),
+        WeightRenaming("indexer.k_norm", "indexer.k_layernorm"),
+        WeightRenaming("indexer.wq_b", "indexer.q_b_proj"),
+    ]
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
             continue

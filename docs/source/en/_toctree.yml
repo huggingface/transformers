@@ -481,6 +481,8 @@
         title: DeepSeek-V2
       - local: model_doc/deepseek_v3
         title: DeepSeek-V3
+      - local: model_doc/deepseek_v32
+        title: DeepseekV32
       - local: model_doc/dialogpt
         title: DialoGPT
       - local: model_doc/diffllama
