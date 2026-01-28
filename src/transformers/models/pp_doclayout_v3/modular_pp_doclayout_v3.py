@@ -648,20 +648,8 @@ class PPDocLayoutV3MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAtten
 class PPDocLayoutV3PreTrainedModel(RTDetrPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
-        if isinstance(module, PPDocLayoutV3ForObjectDetection):
-            if module.model.decoder.class_embed is not None:
-                layer = module.model.decoder.class_embed
-                prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
-                bias = float(-math.log((1 - prior_prob) / prior_prob))
-                init.xavier_uniform_(layer.weight)
-                init.constant_(layer.bias, bias)
-
-            if module.model.decoder.bbox_embed is not None:
-                layer = module.model.decoder.bbox_embed
-                init.constant_(layer.layers[-1].weight, 0)
-                init.constant_(layer.layers[-1].bias, 0)
-
-        elif isinstance(module, PPDocLayoutV3MultiscaleDeformableAttention):
+        """Initialize the weights"""
+        if isinstance(module, PPDocLayoutV3MultiscaleDeformableAttention):
             init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
@@ -689,6 +677,8 @@ class PPDocLayoutV3PreTrainedModel(RTDetrPreTrainedModel):
             bias = float(-math.log((1 - prior_prob) / prior_prob))
             init.xavier_uniform_(module.enc_score_head.weight)
             init.constant_(module.enc_score_head.bias, bias)
+            init.xavier_uniform_(module.decoder.class_embed.weight)
+            init.constant_(module.decoder.class_embed.bias, bias)
 
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
@@ -1258,8 +1248,10 @@ class PPDocLayoutV3Model(RTDetrModel):
         self.decoder_global_pointer = PPDocLayoutV3GlobalPointer(config)
         self.decoder_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.decoder = PPDocLayoutV3Decoder(config)
-        self.decoder.class_embed = self.enc_score_head
-        self.decoder.bbox_embed = self.enc_bbox_head
+        self.decoder.class_embed = nn.Linear(config.d_model, config.num_labels)
+        self.decoder.bbox_embed = PPDocLayoutV3MLPPredictionHead(
+            config, config.d_model, config.d_model, 4, num_layers=3
+        )
 
         self.mask_enhanced = config.mask_enhanced
         self.mask_query_head = PPDocLayoutV3MLPPredictionHead(

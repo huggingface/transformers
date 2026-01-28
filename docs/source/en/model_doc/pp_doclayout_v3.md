@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-01-28 and added to Hugging Face Transformers on 2026-01-28.*
+*This model was released on 2026-01-29 and added to Hugging Face Transformers on 2026-01-29.*
 
 # PP-DocLayoutV3
 
@@ -23,7 +23,13 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-TBD.
+**PP-DocLayoutV3** is a unified and high-efficiency model designed for comprehensive layout analysis. It addresses the challenges of complex physical distortions—such as skewing, curving, and adverse lighting—by integrating instance segmentation and reading order prediction into a single, end-to-end framework.
+
+## Model Architecture
+
+PP-DocLayoutV3 evolves from a traditional detection-based approach to a robust instance segmentation architecture built upon the RT-DETR framework. Instead of simple bounding boxes, it utilizes a mask-based detection head to predict pixel-accurate segments for layout elements. 
+
+Unlike its predecessor, PP-DocLayoutV3 eliminates decoupled stages by embedding a Global Pointer Mechanism directly within the Transformer decoder layers. This allows the model to concurrently output classification labels, precise masks, and logical reading orders in a single forward pass, significantly reducing latency while enhancing parsing precision on complex document layouts.
 
 ## Usage
 
@@ -65,10 +71,10 @@ inputs = image_processor(images=image, return_tensors="pt")
 outputs = model(**inputs)
 results = image_processor.post_process_object_detection(outputs, target_sizes=[image.size[::-1]])
 for result in results:
-    for idx, (score, label_id, box) in enumerate(zip(result["scores"], result["labels"], result["boxes"])):
+    for idx, (score, label_id, box, polygon_points) in enumerate(zip(result["scores"], result["labels"], result["boxes"], result["polygon_points"])):
         score, label = score.item(), label_id.item()
         box = [round(i, 2) for i in box.tolist()]
-        print(f"Order {idx + 1}: {model.config.id2label[label]}: {score:.2f} {box}")
+        print(f"Order {idx + 1}: {model.config.id2label[label]}, score: {score:.2f}, box: {box}, polygon_points: {polygon_points}")
 ```
 
 </hfoption>
@@ -116,10 +122,10 @@ outputs = model(**inputs)
 results = image_processor.post_process_object_detection(outputs, target_sizes=target_sizes)
 for result in results:
     print("result:")
-    for idx, (score, label_id, box) in enumerate(zip(result["scores"], result["labels"], result["boxes"])):
+    for idx, (score, label_id, box, polygon_points) in enumerate(zip(result["scores"], result["labels"], result["boxes"], result["polygon_points"])):
         score, label = score.item(), label_id.item()
         box = [round(i, 2) for i in box.tolist()]
-        print(f"Order {idx + 1}: {model.config.id2label[label]}: {score:.2f} {box}")
+        print(f"Order {idx + 1}: {model.config.id2label[label]}, score: {score:.2f}, box: {box}, polygon_points: {polygon_points}")
 ```
 
 </hfoption>
