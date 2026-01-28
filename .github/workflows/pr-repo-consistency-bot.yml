@@ -258,6 +258,7 @@ jobs:
     if: always()
     permissions:
       pull-requests: write
+      contents: write
     steps:
       - name: Download modified files
         if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
