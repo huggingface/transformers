@@ -84,6 +84,14 @@ class YoutuModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(layer.keys.shape, expected_key_shape)
             self.assertEqual(layer.values.shape, expected_value_shape)
 
+    @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(reason="Since Youtu-LLM requires a non-zero hidden layer size, the configuration test is skipped.")
+    def test_config(self):
+        pass
+
 
 @slow
 class YoutuIntegrationTest(unittest.TestCase):
