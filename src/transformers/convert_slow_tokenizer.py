@@ -1943,6 +1943,7 @@ class MistralConverter:
             vocab[token.content] = idx
         bpe_ranks = [base64.b64decode(k["token_bytes"]) for k in bpe_ranks]
         rank_set = set(bpe_ranks)
+        token_to_rank = {token: rank for rank, token in enumerate(bpe_ranks)}
         for rank, token in enumerate(tqdm(bpe_ranks, desc="Converting tekken.json to tokenizer.json")):
             vocab[token_bytes_to_string(token)] = rank
             if len(token) == 1:
@@ -1952,7 +1953,7 @@ class MistralConverter:
                 piece_l, piece_r = token[:index], token[index:]
                 if piece_l in rank_set and piece_r in rank_set and (piece_l + piece_r) in rank_set:
                     local.append((piece_l, piece_r, rank))
-            local = sorted(local, key=lambda x: (bpe_ranks.index(x[0]), bpe_ranks.index(x[1])), reverse=False)
+            local = sorted(local, key=lambda x: (token_to_rank[x[0]], token_to_rank[x[1]]), reverse=False)
             merges.extend(local)
         merges = sorted(merges, key=lambda val: val[2], reverse=False)
         merges = [(token_bytes_to_string(val[0]), token_bytes_to_string(val[1])) for val in merges]
