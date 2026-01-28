@@ -175,7 +175,7 @@ class CpmAntModelIntegrationTest(unittest.TestCase):
     @tooslow
     def test_inference_masked_lm(self):
         texts = "今天天气真好！"
-        model_path = "openbmb/cpm-ant-10b"
+        model_path = "Rocketknight1/cpm-ant-10b-testing"
         model = CpmAntModel.from_pretrained(model_path)
         tokenizer = CpmAntTokenizer.from_pretrained(model_path)
         inputs = tokenizer(texts, return_tensors="pt")
@@ -192,7 +192,7 @@ class CpmAntForCausalLMlIntegrationTest(unittest.TestCase):
     @tooslow
     def test_inference_causal(self):
         texts = "今天天气真好！"
-        model_path = "openbmb/cpm-ant-10b"
+        model_path = "Rocketknight1/cpm-ant-10b-testing"
         model = CpmAntForCausalLM.from_pretrained(model_path)
         tokenizer = CpmAntTokenizer.from_pretrained(model_path)
         inputs = tokenizer(texts, return_tensors="pt")
@@ -205,7 +205,7 @@ class CpmAntForCausalLMlIntegrationTest(unittest.TestCase):
 
     @tooslow
     def test_simple_generation(self):
-        model_path = "openbmb/cpm-ant-10b"
+        model_path = "Rocketknight1/cpm-ant-10b-testing"
         model = CpmAntForCausalLM.from_pretrained(model_path)
         tokenizer = CpmAntTokenizer.from_pretrained(model_path)
         texts = "今天天气不错，"
@@ -217,7 +217,7 @@ class CpmAntForCausalLMlIntegrationTest(unittest.TestCase):
 
     @tooslow
     def test_batch_generation(self):
-        model_path = "openbmb/cpm-ant-10b"
+        model_path = "Rocketknight1/cpm-ant-10b-testing"
         model = CpmAntForCausalLM.from_pretrained(model_path)
         tokenizer = CpmAntTokenizer.from_pretrained(model_path)
         texts = ["今天天气不错，", "新年快乐，万事如意！"]

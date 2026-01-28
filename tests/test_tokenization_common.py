@@ -367,14 +367,11 @@ Hey how are you doing"""  # noqa: W293
 
         # save the first pretrained tokenizer to tmpdirname for tests to use
         if cls.from_pretrained_id and cls.tokenizer_class is not None:
-            try:
-                tokenizer = AutoTokenizer.from_pretrained(
-                    cls.from_pretrained_id[0],
-                    **(cls.from_pretrained_kwargs if cls.from_pretrained_kwargs is not None else {}),
-                )
-                tokenizer.save_pretrained(cls.tmpdirname)
-            except Exception:
-                pass
+            tokenizer = AutoTokenizer.from_pretrained(
+                cls.from_pretrained_id[0],
+                **(cls.from_pretrained_kwargs if cls.from_pretrained_kwargs is not None else {}),
+            )
+            tokenizer.save_pretrained(cls.tmpdirname)
 
     @classmethod
     def tearDownClass(cls):
