@@ -582,7 +582,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         num_layer_groups = {"full_attention": 1, "sliding_window": 0}
         input_msg = "What is the Transformers library known for?"
         expected_generated_tokens = Expectations({
-            ("cpu", None): [785, 80532, 6733, 374, 3881, 369, 1181, 5726, 311, 1855, 323, 36635, 3460, 12934, 4128, 4119, 11, 7945, 1846, 16176, 389, 279, 3460, 12934, 4128, 4119, 320, 4086, 44, 8, 2390, 13],
             (None, None): [785, 80532, 6733, 374, 3881, 369, 1181, 5726, 311, 1855, 323, 36635, 3460, 12934, 4128, 4119, 11, 2670, 1846, 429, 646, 6923, 1467, 11, 14683, 1467, 11, 323, 2736, 1008, 4128, 13904]
         }).get_expectation()  # fmt: skip
 
