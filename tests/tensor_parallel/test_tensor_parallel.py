@@ -55,6 +55,9 @@ def global_wrapper(rank, func, tp, port, func_args, func_kwargs):
     if torch.cuda.is_available():
         torch.cuda.set_device(rank)
         dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
+        torch.xpu.set_device(rank)
+        dist.init_process_group(backend="xccl", rank=rank, world_size=world_size)
     else:
         dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
 
