@@ -45,9 +45,9 @@ if is_torch_available():
     from torch.types import _dtype
 
     from ..model_debugging_utils import model_addition_debugger_context
+    from ..pytorch_utils import is_torch_greater_or_equal_than_2_4
 
     _is_torch_available = True
-
 
 # required for @can_return_tuple decorator to work with torchdynamo
 _is_mlx_available = False
@@ -191,7 +191,14 @@ def maybe_autocast(
     Which makes graph splitting in `torch.compile` more flexible as it removes the
     requirement that partition IDs be monotonically increasing.
     """
-    if torch.is_autocast_enabled(device_type) or enabled:
+    # torch.is_autocast_enabled(device_type) was added in torch 2.4.0
+    # For older versions, fall back to calling without device_type argument
+    if is_torch_greater_or_equal_than_2_4:
+        is_autocast_active = torch.is_autocast_enabled(device_type)
+    else:
+        is_autocast_active = torch.is_autocast_enabled()
+
+    if is_autocast_active or enabled:
         return torch.autocast(device_type, dtype=dtype, enabled=enabled, cache_enabled=cache_enabled)
     else:
         return nullcontext()
