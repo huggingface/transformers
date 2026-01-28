@@ -98,7 +98,7 @@ class Sam3TrackerMaskDecoderTester:
         num_multimask_outputs=3,
         iou_head_depth=3,
         iou_head_hidden_dim=32,
-        is_training=True
+        is_training=True,
     ):
         self.hidden_size = hidden_size
         self.hidden_act = hidden_act
