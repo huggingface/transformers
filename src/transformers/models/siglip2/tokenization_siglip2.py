@@ -91,8 +91,5 @@ class Siglip2Tokenizer(TokenizersBackend):
         if backend is not None and backend.normalizer is not None:
             backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), backend.normalizer])
 
-    def _unk_id(self) -> int:
-        raise ValueError("_unk_id is not needed for SigLIP2.")
-
 
 __all__ = ["Siglip2Tokenizer"]

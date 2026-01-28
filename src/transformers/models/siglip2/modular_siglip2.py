@@ -77,7 +77,7 @@ class Siglip2Tokenizer(GemmaTokenizer):
             backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), backend.normalizer])
 
     def _unk_id(self) -> int:
-        raise ValueError("_unk_id is not needed for SigLIP2.")
+        raise AttributeError("_unk_id is not needed for SigLIP2.")
 
 
 class Siglip2TextConfig(SiglipTextConfig):
