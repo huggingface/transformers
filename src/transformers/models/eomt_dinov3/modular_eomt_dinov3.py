@@ -252,11 +252,8 @@ class EomtDinov3ForUniversalSegmentationOutput(EomtForUniversalSegmentationOutpu
 
 class EomtDinov3PreTrainedModel(EomtPreTrainedModel):
     config_class = EomtDinov3Config
-    base_model_prefix = "eomt"
-    main_input_name = "pixel_values"
-    supports_gradient_checkpointing = False
+    base_model_prefix = "eomt_dinov3"
     _no_split_modules = ["EomtDinov3Layer"]
-    _supports_sdpa = True
     _can_record_outputs = {
         "hidden_states": EomtDinov3Layer,
         "attentions": EomtDinov3Attention,
