@@ -14,14 +14,14 @@
 """Falcon configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class FalconConfig(PreTrainedConfig):
+class FalconConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`FalconModel`]. It is used to instantiate a Falcon
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
