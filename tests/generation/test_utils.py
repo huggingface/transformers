@@ -1493,10 +1493,19 @@ class GenerationTesterMixin:
 
             # 2. Prepares two sets of inputs
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=4)
+            print(f"{config = }")
+            print(f"{model_class = }")
             set_config_for_less_flaky_test(config)
             model = model_class(config).to(torch_device)
             set_model_for_less_flaky_test(model)
             model.eval()  # otherwise `self.training` is `True` -- this flag is used at attn mask creation time
+
+            from transformers.integrations.accelerate import compute_module_sizes
+            model_size = compute_module_sizes(model)
+            print(f"{model_size} bytes")
+
+            for param in model.parameters():
+                print(param.device, param.shape)
 
             # On CPU, we don't switch to batched_mm during decoding, so the grouped_mm is what gets compiled.
             # But since grouped_mm only supports bf16 when compiled, we need to switch to bf16 here.
