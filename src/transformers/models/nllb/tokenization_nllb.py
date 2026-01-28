@@ -100,11 +100,16 @@ class NllbTokenizer(TokenizersBackend):
         src_lang=None,
         tgt_lang=None,
         additional_special_tokens=None,
+        extra_special_tokens=None,
         legacy_behaviour=False,
         **kwargs,
     ):
-        if additional_special_tokens is None:
-            additional_special_tokens = kwargs.get("extra_special_tokens", FAIRSEQ_LANGUAGE_CODES)
+        # V5: extra_special_tokens takes precedence over additional_special_tokens (deprecated)
+        # Handle case where both are passed (ie. from config and user override)
+        if extra_special_tokens is not None:
+            additional_special_tokens = extra_special_tokens
+        elif additional_special_tokens is None:
+            additional_special_tokens = FAIRSEQ_LANGUAGE_CODES
 
         mask_token = (
             AddedToken(mask_token, normalized=True, lstrip=True, special=True)
@@ -144,9 +149,6 @@ class NllbTokenizer(TokenizersBackend):
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
-
-        # Remove extra_special_tokens from kwargs if present to avoid conflict
-        kwargs.pop("extra_special_tokens", None)
 
         super().__init__(
             bos_token=bos_token,

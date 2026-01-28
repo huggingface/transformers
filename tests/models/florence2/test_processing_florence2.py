@@ -42,7 +42,6 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = tokenizer_class.from_pretrained("florence-community/Florence-2-base")
         tokenizer.image_token = "<image>"
         tokenizer.image_token_id = tokenizer.encode(tokenizer.image_token, add_special_tokens=False)[0]
-        tokenizer.extra_special_tokens = {"image_token": "<image>"}
         return tokenizer
 
     @unittest.skip("Florence2Processor adds prefix and suffix tokens to the text")
