@@ -965,17 +965,14 @@ class GlmImageModel(Glm4vModel):
                     non_pad_mask = non_pad_mask[:, -input_ids.shape[1] :]
                 else:
                     non_pad_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids)
-                source_grids_list = [
-                    grids[:num_source]
-                    for grids, num_source in (
-                        (
-                            grids_per_sample[i],
-                            ((input_ids[i] == self.config.image_end_token_id) & (non_pad_mask[i] == 1)).sum().item(),
-                        )
-                        for i in range(batch_size)
-                    )
-                    if num_source > 0
-                ]
+
+                source_grids_list = []
+                for sample_idx in range(batch_size):
+                    is_image_end = input_ids[sample_idx] == self.config.image_end_token_id
+                    is_non_pad = non_pad_mask[sample_idx] == 1
+                    num_source = (is_image_end & is_non_pad).sum().item()
+                    if num_source > 0:
+                        source_grids_list.append(grids_per_sample[sample_idx][:num_source])
                 if len(source_grids_list) == 0:
                     raise ValueError(
                         "pixel_values provided but no source images found in input_ids. "
@@ -986,9 +983,8 @@ class GlmImageModel(Glm4vModel):
                 # Fallback for batch_size=1: all but last grid are source images
                 source_grids = image_grid_thw[:-1]
 
-            image_features = self.get_image_features(pixel_values, source_grids)
-            image_embeds = image_features.pooler_output if hasattr(image_features, "pooler_output") else image_features
-            image_embeds = torch.cat(image_embeds, dim=0)
+            image_features = self.get_image_features(pixel_values, source_grids, return_dict=True)
+            image_embeds = torch.cat(image_features.pooler_output, dim=0)
             image_ids = self.get_image_tokens(image_embeds, source_grids)
             image_ids = image_ids.view(-1).to(input_ids.device)
             special_image_mask = self.get_placeholder_mask(input_ids, image_ids)
@@ -1083,17 +1079,15 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             Whether to return a BaseModelOutputWithPooling or a tuple. If None, uses model config.
 
         Returns:
-            BaseModelOutputWithPooling or tuple: If return_dict=True, returns BaseModelOutputWithPooling.
-            If return_dict=False, returns tuple of tensors (pooler_output), one per image.
-
-        Note:
-            External callers (e.g., diffusers) should use `return_dict=False` to get a tuple of tensors.
+            If `return_dict=True`: `BaseModelOutputWithPooling` with `pooler_output` containing list of image embeddings.
+            If `return_dict=False`: tuple of image embedding tensors (for diffusers compatibility).
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         # Always get dict from inner call to access pooler_output
         image_features = self.model.get_image_features(pixel_values, image_grid_thw, return_dict=True, **kwargs)
         if return_dict:
             return image_features
+        # Return pooler_output directly for diffusers compatibility
         return image_features.pooler_output
 
     def get_image_tokens(self, hidden_states: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
@@ -1535,6 +1529,14 @@ class GlmImageProcessor(ProcessorMixin):
         # Format: [sample0_source_grids..., sample0_target_grids, sample1_source_grids..., sample1_target_grids, ...]
         # Note: In i2i mode, batches are homogeneous (same number of source images per sample)
         num_source_images = images_per_sample[0] if images_per_sample else 0
+        
+        # Validate homogeneity for i2i mode
+        if not is_text_to_image and images_per_sample and len(set(images_per_sample)) != 1:
+            raise ValueError(
+                f"In image-to-image mode, all samples must have the same number of source images. "
+                f"Got different counts: {images_per_sample}"
+            )
+        
         all_grids = []
         for i in range(batch_size):
             text[i], token_h, token_w, prev_h, prev_w = self._build_prompt_with_target_shape(
