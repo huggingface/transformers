@@ -118,7 +118,6 @@ class OPTTokenizationTest(unittest.TestCase):
         # Same as above
         self.assertEqual(tokens_ids, [2, 250, 1345, 9, 10, 4758])
 
-    @unittest.skip(reason="This test is failing because of a bug in the fast tokenizer")
     def test_users_can_modify_bos(self):
         tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
 
