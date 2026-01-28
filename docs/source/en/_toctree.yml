@@ -545,6 +545,8 @@
         title: GLM-4.7-Flash
       - local: model_doc/glm_image
         title: GLM-Image
+      - local: model_doc/glm_moe_dsa
+        title: GlmMoeDsa
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
