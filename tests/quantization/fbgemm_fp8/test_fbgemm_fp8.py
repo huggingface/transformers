@@ -226,7 +226,6 @@ class FbgemmFp8Test(unittest.TestCase):
             self.assertTrue(self.tokenizer.decode(output[0], skip_special_tokens=True) in self.EXPECTED_OUTPUT)
 
     @require_torch_multi_accelerator
-    @require_deterministic_for_xpu
     def test_quantized_model_multi_gpu(self):
         """
         Simple test that checks if the quantized model is working properly with multiple GPUs
