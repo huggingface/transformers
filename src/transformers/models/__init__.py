@@ -274,6 +274,7 @@ if TYPE_CHECKING:
     from .olmo import *
     from .olmo2 import *
     from .olmo3 import *
+    from .olmo3_5_hybrid import *
     from .olmoe import *
     from .omdet_turbo import *
     from .oneformer import *
