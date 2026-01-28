@@ -18,7 +18,6 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ... import initialization as init
-from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -34,6 +33,7 @@ from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTLayerScale,
     DINOv3ViTRopePositionEmbedding,
 )
+from ..eomt.configuration_eomt import EomtConfig
 from ..eomt.modeling_eomt import (
     EomtForUniversalSegmentation,
     EomtForUniversalSegmentationOutput,
@@ -42,7 +42,7 @@ from ..eomt.modeling_eomt import (
 )
 
 
-class EomtDinov3Config(PretrainedConfig, RotaryEmbeddingConfigMixin):
+class EomtDinov3Config(EomtConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`EomtDinov3ForUniversalSegmentation`]. It is used to instantiate an EoMT-DINOv3 model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -128,6 +128,7 @@ class EomtDinov3Config(PretrainedConfig, RotaryEmbeddingConfigMixin):
     """
 
     model_type = "eomt_dinov3"
+    default_theta = 100.0
 
     def __init__(
         self,
@@ -168,6 +169,28 @@ class EomtDinov3Config(PretrainedConfig, RotaryEmbeddingConfigMixin):
         pos_embed_rescale: float | None = 2.0,
         **kwargs,
     ):
+        super().__init__(
+            hidden_size=hidden_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            hidden_dropout_prob=hidden_dropout_prob,
+            hidden_act=hidden_act,
+            initializer_range=initializer_range,
+            layer_norm_eps=layer_norm_eps,
+            image_size=image_size,
+            patch_size=patch_size,
+            num_channels=num_channels,
+            **kwargs,
+        )
+
+        del self.qkv_bias
+        del self.pooler_act
+        del self.pooler_output_size
+        del self.encoder_stride
+        del self.attention_probs_dropout_prob
+        del self.mlp_ratio
+        del self.use_swiglu_ffn
+
         self.intermediate_size = intermediate_size
         self.attention_dropout = attention_dropout
         self.layerscale_value = layerscale_value
@@ -193,18 +216,6 @@ class EomtDinov3Config(PretrainedConfig, RotaryEmbeddingConfigMixin):
         self.pos_embed_shift = pos_embed_shift
         self.pos_embed_jitter = pos_embed_jitter
         self.pos_embed_rescale = pos_embed_rescale
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-
-        super().__init__(**kwargs)
 
 
 class EomtDinov3Attention(DINOv3ViTAttention):

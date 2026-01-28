@@ -17,11 +17,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class EomtDinov3Config(PretrainedConfig, RotaryEmbeddingConfigMixin):
+class EomtDinov3Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`EomtDinov3ForUniversalSegmentation`]. It is used to instantiate an EoMT-DINOv3 model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -107,6 +107,7 @@ class EomtDinov3Config(PretrainedConfig, RotaryEmbeddingConfigMixin):
     """
 
     model_type = "eomt_dinov3"
+    default_theta = 100.0
 
     def __init__(
         self,
@@ -147,7 +148,18 @@ class EomtDinov3Config(PretrainedConfig, RotaryEmbeddingConfigMixin):
         pos_embed_rescale: float | None = 2.0,
         **kwargs,
     ):
-        self.intermediate_size = intermediate_size
+        super().__init__(**kwargs)
+
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
         self.attention_dropout = attention_dropout
         self.layerscale_value = layerscale_value
         self.drop_path_rate = drop_path_rate
@@ -162,6 +174,8 @@ class EomtDinov3Config(PretrainedConfig, RotaryEmbeddingConfigMixin):
         self.importance_sample_ratio = importance_sample_ratio
         self.num_queries = num_queries
         self.num_register_tokens = num_register_tokens
+
+        self.intermediate_size = intermediate_size
         self.rope_parameters = rope_parameters
         self.query_bias = query_bias
         self.key_bias = key_bias
@@ -172,18 +186,6 @@ class EomtDinov3Config(PretrainedConfig, RotaryEmbeddingConfigMixin):
         self.pos_embed_shift = pos_embed_shift
         self.pos_embed_jitter = pos_embed_jitter
         self.pos_embed_rescale = pos_embed_rescale
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-
-        super().__init__(**kwargs)
 
 
 __all__ = ["EomtDinov3Config"]
