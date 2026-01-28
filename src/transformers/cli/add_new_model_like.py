@@ -257,7 +257,7 @@ def create_doc_file(new_paper_name: str, public_classes: list[str]):
             A list of all the public classes that the model will have in the library.
     """
     added_note = (
-        "\n\n⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that "
+        "\n\n⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that "
         "may not be rendered properly in your Markdown viewer.\n\n-->\n\n"
     )
     copyright_for_markdown = re.sub(r"# ?", "", COPYRIGHT).replace("coding=utf-8\n", "<!--") + added_note
@@ -312,7 +312,7 @@ def insert_model_in_doc_toc(
         old_lowercase_name (`str`):
             The old lowercase model name.
         new_lowercase_name (`str`):
-            The old lowercase model name.
+            The new lowercase model name.
         new_model_paper_name (`str`):
             The fully cased name (as in the official paper name) of the new model.
     """
