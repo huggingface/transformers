@@ -57,7 +57,6 @@ if is_torchao_available():
         ModuleFqnToConfig,
         PerAxis,
     )
-    from torchao.quantization.autoquant import AQMixin
 
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0"):
         from torchao.dtypes import Int4CPULayout
@@ -80,11 +79,6 @@ def check_torchao_int4_wo_quantized(test_module, qlayer):
     elif weight.device.type == "cuda":
         layout = TensorCoreTiledLayout
     test_module.assertTrue(isinstance(weight.tensor_impl._layout, layout))
-
-
-def check_autoquantized(test_module, qlayer):
-    weight = qlayer.weight
-    test_module.assertTrue(isinstance(weight, AQMixin))
 
 
 def check_forward(test_module, model, batch_size=1, context_size=1024):
@@ -698,34 +692,6 @@ class TorchAoAcceleratorTest(TorchAoTest):
 
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
         self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
-
-    def test_autoquant(self):
-        """
-        Simple LLM model testing autoquant
-        """
-        quant_config = TorchAoConfig("autoquant")
-
-        quantized_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            torch_dtype="auto",
-            device_map=self.device,
-            quantization_config=quant_config,
-        )
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
-        output = quantized_model.generate(
-            **input_ids, max_new_tokens=self.max_new_tokens, cache_implementation="static"
-        )
-        quantized_model.finalize_autoquant()
-
-        check_autoquantized(self, quantized_model.model.layers[0].self_attn.v_proj)
-
-        EXPECTED_OUTPUTS = ["What are we having for dinner?\n\nJessica: (smiling)", "What are we having for dinner?"]
-
-        output = quantized_model.generate(
-            **input_ids, max_new_tokens=self.max_new_tokens, cache_implementation="static"
-        )
-        self.assertIn(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUTS)
 
 
 @require_torchao_version_greater_or_equal("0.15.0")
