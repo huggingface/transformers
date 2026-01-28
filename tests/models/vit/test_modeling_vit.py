@@ -184,15 +184,10 @@ class ViTModelTester:
 a = 1
 
 
+b = 3
 
 
-
-b=3
-
-
-c=4
-
-
+c = 4
 
 
 @require_torch
