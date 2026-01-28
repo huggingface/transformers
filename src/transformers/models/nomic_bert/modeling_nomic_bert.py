@@ -157,7 +157,14 @@ class NomicBertRotaryEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        base = config.rope_parameters["rope_theta"]
+        base = config.rope_parameters.get("rope_theta")
+
+        if base is None:
+            base = config.rotary_emb_base
+
+        if base is None:
+            base = 10000
+
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -355,82 +362,6 @@ class NomicBertSelfAttention(nn.Module):
 
         attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_len, -1)
         return attn_output, attn_weights
-
-    # def forward(
-    #     self,
-    #     hidden_states,
-    #     attention_mask=None,
-    #     past_key_values=None,
-    #     position_ids=None,
-    #     position_embeddings=None,
-    #     cache_position=None,
-    #     **kwargs,
-    # ):
-    #     batch_size, seq_len, _ = hidden_states.size()
-
-    #     # get all proj
-    #     query_layer = (
-    #         self.q_proj(hidden_states).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-    #     )
-    #     query_layer = query_layer * self.scaling
-
-    #     key_layer = (
-    #         self.k_proj(hidden_states).view(batch_size, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
-    #     )
-    #     value_layer = (
-    #         self.v_proj(hidden_states).view(batch_size, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
-    #     )
-
-    #     # Apply Rotary Position Embeddings
-    #     if position_embeddings is not None:
-    #         cos, sin = position_embeddings
-    #         query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
-
-    #     # Fallback
-    #     elif position_ids is not None and isinstance(position_ids, tuple):
-    #         cos, sin = position_ids
-    #         query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
-
-    #     # Handle KV Cache
-    #     if past_key_values is not None:
-    #         cache_kwargs = {}
-    #         if isinstance(past_key_values, Cache):
-    #             if position_embeddings is not None:
-    #                 cos, sin = position_embeddings
-    #                 cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-    #         key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx, cache_kwargs)
-
-    #     attention_interface: Callable = eager_attention_forward
-    #     if self.config._attn_implementation != "eager":
-    #         attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-    #     if self.config._attn_implementation == "sdpa" and attention_mask is None:
-    #         prepared_attention_mask = None
-    #     elif attention_mask is None:
-    #         # Eager mode needs the 4D mask to function correctly in your current setup
-    #         attention_mask_2d = torch.ones(batch_size, seq_len, device=hidden_states.device, dtype=hidden_states.dtype)
-    #         prepared_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-    #             attention_mask_2d, dtype=query_layer.dtype, tgt_len=seq_len
-    #         )
-    #     else:
-    #         prepared_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-    #             attention_mask, dtype=query_layer.dtype, tgt_len=seq_len
-    #         )
-
-    #     attn_output, attn_weights = attention_interface(
-    #         self,
-    #         query_layer,
-    #         key_layer,
-    #         value_layer,
-    #         prepared_attention_mask,
-    #         dropout=0.0 if not self.training else self.dropout.p,
-    #         scaling=1.0,
-    #         **kwargs,
-    #     )
-
-    #     attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_len, -1)
-
-    #     return attn_output, attn_weights
 
 
 class NomicBertSelfOutput(nn.Module):
@@ -1099,7 +1030,7 @@ class NomicBertForPreTraining(NomicBertPreTrainedModel):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
     config_class = NomicBertConfig
-    base_model_prefix = "nomic_bert"
+    base_model_prefix = "model"
 
     def __init__(self, config):
         super().__init__(config)
@@ -1285,7 +1216,7 @@ class NomicBertForMaskedLM(NomicBertPreTrainedModel):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
     config_class = NomicBertConfig
-    base_model_prefix = "nomic_bert"
+    base_model_prefix = "model"
 
     def __init__(self, config):
         super().__init__(config)
@@ -1356,30 +1287,6 @@ class NomicBertForMaskedLM(NomicBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
-        input_shape = input_ids.shape
-        effective_batch_size = input_shape[0]
-
-        #  add a dummy token
-        if self.config.pad_token_id is None:
-            raise ValueError("The PAD token should be defined for generation")
-
-        attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
-        dummy_token = torch.full(
-            (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
-        )
-        input_ids = torch.cat([input_ids, dummy_token], dim=1)
-
-        return {"input_ids": input_ids, "attention_mask": attention_mask}
-
-    @classmethod
-    def can_generate(cls) -> bool:
-        """
-        Legacy correction: NomicBertForMaskedLM can't call `generate()` from `GenerationMixin`, even though it has a
-        `prepare_inputs_for_generation` method.
-        """
-        return False
-
 
 @auto_docstring(
     custom_intro="""
@@ -1388,7 +1295,7 @@ class NomicBertForMaskedLM(NomicBertPreTrainedModel):
 )
 class NomicBertForNextSentencePrediction(NomicBertPreTrainedModel):
     config_class = NomicBertConfig
-    base_model_prefix = "nomic_bert"
+    base_model_prefix = "model"
 
     def __init__(self, config):
         super().__init__(config)
@@ -1473,7 +1380,7 @@ class NomicBertForNextSentencePrediction(NomicBertPreTrainedModel):
 )
 class NomicBertForSequenceClassification(NomicBertPreTrainedModel):
     config_class = NomicBertConfig
-    base_model_prefix = "nomic_bert"
+    base_model_prefix = "model"
 
     def __init__(self, config):
         super().__init__(config)
@@ -1557,7 +1464,7 @@ class NomicBertForSequenceClassification(NomicBertPreTrainedModel):
 @auto_docstring
 class NomicBertForMultipleChoice(NomicBertPreTrainedModel):
     config_class = NomicBertConfig
-    base_model_prefix = "nomic_bert"
+    base_model_prefix = "model"
 
     def __init__(self, config):
         super().__init__(config)
@@ -1658,7 +1565,7 @@ class NomicBertForMultipleChoice(NomicBertPreTrainedModel):
 @auto_docstring
 class NomicBertForTokenClassification(NomicBertPreTrainedModel):
     config_class = NomicBertConfig
-    base_model_prefix = "nomic_bert"
+    base_model_prefix = "model"
 
     def __init__(self, config):
         super().__init__(config)
@@ -1721,7 +1628,7 @@ class NomicBertForTokenClassification(NomicBertPreTrainedModel):
 @auto_docstring
 class NomicBertForQuestionAnswering(NomicBertPreTrainedModel):
     config_class = NomicBertConfig
-    base_model_prefix = "nomic_bert"
+    base_model_prefix = "model"
 
     def __init__(self, config):
         super().__init__(config)

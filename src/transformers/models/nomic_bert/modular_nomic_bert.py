@@ -95,24 +95,16 @@ class NomicBertConfig(BertConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
+        use_cache (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
-        rotary_emb_fraction (`float`, *optional*, defaults to 0.0):
-            Fraction of the hidden size used for rotary embeddings.
         rotary_emb_base (`int`, *optional*, defaults to 10000):
             Base for the rotary embeddings.
-        rotary_emb_scale_base (`float`, *optional*):
-            Scale base for the rotary embeddings.
-        rotary_emb_interleaved (`bool`, *optional*, defaults to `False`):
-            Whether to use interleaved rotary embeddings.
         type_vocab_size (`int`, *optional*, defaults to 2):
             The size of the token type (segment) vocabulary. Used to distinguish different portions of the input,
             such as sentence A and sentence B in pairwise classification tasks.
-        pad_vocab_size_multiple (`int`, *optional*, defaults to 1):
-            pads the vocabulary size to a multiple (e.g. 8, 64, 128)
         add_cross_attention (`bool`, *optional*, defaults to `False`):
             Whether to add cross-attention layers.
         bos_token_id (`int`, *optional*):
@@ -168,12 +160,8 @@ class NomicBertConfig(BertConfig):
         layer_norm_eps=1e-12,
         use_cache=False,
         classifier_dropout=None,
-        rotary_emb_fraction=0.0,
         rotary_emb_base=10_000,
-        rotary_emb_scale_base=None,
-        rotary_emb_interleaved=False,
         type_vocab_size=2,
-        pad_vocab_size_multiple=1,
         add_cross_attention=False,
         bos_token_id=None,
         eos_token_id=None,
@@ -209,15 +197,10 @@ class NomicBertConfig(BertConfig):
             **kwargs,
         )
 
-        self.rotary_emb_fraction = rotary_emb_fraction
-        self.rotary_emb_base = rotary_emb_base
-
-        self.rotary_emb_scale_base = rotary_emb_scale_base
-        self.rotary_emb_interleaved = rotary_emb_interleaved
-        self.pad_vocab_size_multiple = pad_vocab_size_multiple
         self.rope_parameters = rope_parameters
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.attention_bias = attention_bias
+        self.rotary_emb_base = rotary_emb_base
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
 
@@ -274,7 +257,14 @@ class NomicBertRotaryEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        base = config.rope_parameters["rope_theta"]
+        base = config.rope_parameters.get("rope_theta")
+
+        if base is None:
+            base = config.rotary_emb_base
+
+        if base is None:
+            base = 10000
+
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -472,6 +462,7 @@ class NomicBertSelfAttention(nn.Module):
 
         attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_len, -1)
         return attn_output, attn_weights
+
 
 class NomicBertSelfOutput(BertSelfOutput):
     pass
@@ -846,7 +837,7 @@ class NomicBertModel(BertModel):
 
 class NomicBertForPreTraining(BertForPreTraining):
     config_class = NomicBertConfig
-    base_model_prefix = "nomic_bert"
+    base_model_prefix = "model"
 
 
 class NomicBertLMHeadModel(BertLMHeadModel):
@@ -855,32 +846,32 @@ class NomicBertLMHeadModel(BertLMHeadModel):
 
 class NomicBertForMaskedLM(BertForMaskedLM):
     config_class = NomicBertConfig
-    base_model_prefix = "nomic_bert"
+    base_model_prefix = "model"
 
 
 class NomicBertForNextSentencePrediction(BertForNextSentencePrediction):
     config_class = NomicBertConfig
-    base_model_prefix = "nomic_bert"
+    base_model_prefix = "model"
 
 
 class NomicBertForSequenceClassification(BertForSequenceClassification):
     config_class = NomicBertConfig
-    base_model_prefix = "nomic_bert"
+    base_model_prefix = "model"
 
 
 class NomicBertForMultipleChoice(BertForMultipleChoice):
     config_class = NomicBertConfig
-    base_model_prefix = "nomic_bert"
+    base_model_prefix = "model"
 
 
 class NomicBertForTokenClassification(BertForTokenClassification):
     config_class = NomicBertConfig
-    base_model_prefix = "nomic_bert"
+    base_model_prefix = "model"
 
 
 class NomicBertForQuestionAnswering(BertForQuestionAnswering):
     config_class = NomicBertConfig
-    base_model_prefix = "nomic_bert"
+    base_model_prefix = "model"
 
 
 __all__ = [

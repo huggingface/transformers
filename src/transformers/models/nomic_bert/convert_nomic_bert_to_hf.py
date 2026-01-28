@@ -14,8 +14,6 @@
 
 import argparse
 
-import torch
-
 from transformers import (
     AutoConfig,
     NomicBertConfig,
@@ -27,11 +25,12 @@ EPILOG_TXT = """Example:
     python transformers/src/transformers/models/nomic_bert/convert_nomic_bert_to_hf.py --original_model_id nomic-ai/nomic-embed-text-v1.5 --output_hub_path org/nomic_bert
 """
 
+
 def get_config(checkpoint):
     base_config = AutoConfig.from_pretrained(checkpoint, trust_remote_code=True)
     if checkpoint == "nomic-ai/nomic-embed-text-v1.5":
         return NomicBertConfig(
-            vocab_size=30528, 
+            vocab_size=30528,
             rotary_emb_fraction=base_config.rotary_emb_fraction,
             rotary_emb_base=base_config.rotary_emb_base,
             rotary_emb_scale_base=base_config.rotary_emb_scale_base,
@@ -49,10 +48,7 @@ def convert_nomic_hub_to_hf(original_model_id, output_hub_path, push_to_hub):
     config.model_type = "nomic_bert"
 
     model = NomicBertModel.from_pretrained(
-        original_model_id, 
-        config=config, 
-        trust_remote_code=True,
-        ignore_mismatched_sizes=True 
+        original_model_id, config=config, trust_remote_code=True, ignore_mismatched_sizes=True
     )
 
     model.save_pretrained(output_hub_path)
