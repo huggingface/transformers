@@ -24,6 +24,7 @@ from transformers import (
     GlmImageForConditionalGeneration,
     GlmImageModel,
     is_torch_available,
+    set_seed,
 )
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
@@ -521,8 +522,9 @@ class GlmImageIntegrationTest(unittest.TestCase):
             self.t2i_message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
 
-        # Generate image tokens
-        output = model.generate(**inputs, max_new_tokens=50)
+        # Generate image tokens with fixed seed for reproducibility
+        set_seed(42)
+        output = model.generate(**inputs, max_new_tokens=50, do_sample=False)
 
         # Output should be longer than input (generated tokens)
         self.assertGreater(output.shape[1], inputs["input_ids"].shape[1])
@@ -534,36 +536,36 @@ class GlmImageIntegrationTest(unittest.TestCase):
         # Check actual token values (first 30 tokens) to catch implementation errors
         expected_tokens = torch.tensor(
             [
-                10863,
-                4815,
-                15424,
-                2523,
-                3940,
-                12820,
-                9931,
-                7140,
-                7987,
-                13703,
-                13163,
-                8939,
-                14729,
-                8237,
-                4328,
-                6810,
-                13539,
-                12226,
-                5655,
-                16151,
-                16044,
-                8466,
-                2960,
-                1050,
-                1869,
-                9370,
-                11576,
-                8513,
-                14092,
-                10314,
+                9675,
+                13944,
+                5238,
+                7086,
+                14581,
+                7240,
+                7240,
+                7240,
+                7240,
+                7240,
+                7240,
+                7240,
+                7240,
+                7240,
+                7240,
+                7240,
+                12909,
+                14581,
+                14581,
+                14581,
+                7240,
+                7240,
+                7240,
+                7240,
+                7240,
+                7240,
+                14581,
+                7240,
+                7240,
+                7240,
             ],
             device=torch_device,
         )
@@ -579,8 +581,9 @@ class GlmImageIntegrationTest(unittest.TestCase):
             self.i2i_message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
 
-        # Generate image tokens
-        output = model.generate(**inputs, max_new_tokens=50)
+        # Generate image tokens with fixed seed for reproducibility
+        set_seed(42)
+        output = model.generate(**inputs, max_new_tokens=50, do_sample=False)
 
         # Output should be longer than input (generated tokens)
         self.assertGreater(output.shape[1], inputs["input_ids"].shape[1])
@@ -591,36 +594,36 @@ class GlmImageIntegrationTest(unittest.TestCase):
         # Check actual token values (first 30 tokens) to catch implementation errors
         expected_tokens = torch.tensor(
             [
-                15926,
-                12131,
-                8275,
-                9299,
-                6688,
-                14548,
-                1869,
-                11887,
-                2960,
-                11576,
-                16228,
-                11146,
-                10622,
-                11576,
-                10863,
-                11146,
-                6810,
-                5655,
-                6688,
-                16044,
-                4328,
-                13539,
-                5655,
-                4815,
-                2960,
-                12131,
-                3940,
-                14092,
-                11887,
-                8275,
+                13757,
+                1143,
+                1143,
+                1143,
+                1143,
+                1143,
+                1143,
+                1143,
+                1143,
+                1143,
+                1143,
+                14581,
+                1143,
+                1143,
+                1143,
+                1143,
+                1143,
+                1143,
+                14581,
+                14581,
+                1143,
+                1143,
+                1143,
+                1143,
+                1143,
+                1143,
+                1143,
+                1143,
+                14581,
+                1143,
             ],
             device=torch_device,
         )
