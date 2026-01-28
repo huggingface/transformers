@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
-    is_accelerate_available,
     is_fbgemm_gpu_available,
     is_torch_available,
     is_torch_xpu_available,
@@ -37,9 +36,6 @@ from transformers.utils import (
 
 if is_torch_available():
     import torch
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 
 @require_torch_accelerator
