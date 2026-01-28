@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -86,10 +86,6 @@ class YoutuModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims")
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Since Youtu-LLM requires a non-zero hidden layer size, the configuration test is skipped.")
-    def test_config(self):
         pass
 
 
