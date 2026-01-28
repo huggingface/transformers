@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,12 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_siglip2 import *
-    from .image_processing_siglip2 import *
-    from .image_processing_siglip2_fast import *
-    from .modeling_siglip2 import *
-    from .processing_siglip2 import *
-    from .tokenization_siglip2 import *
+    from .configuration_youtu import *
+    from .modeling_youtu import *
 else:
     import sys
 
