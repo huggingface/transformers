@@ -3440,6 +3440,63 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         self.assertEqual(trainer._train_batch_size, 14)
 
+    def test_multi_dataset_training(self):
+        train_dataset_a = RegressionDataset(a=2, b=3, length=32)
+        train_dataset_b = RegressionDataset(a=5, b=1, length=32)
+        train_datasets = {"domain_a": train_dataset_a, "domain_b": train_dataset_b}
+
+        def loss_fn_a(outputs, labels):
+            return nn.functional.mse_loss(outputs[0], labels) * 2
+
+        def loss_fn_b(outputs, labels):
+            return nn.functional.mse_loss(outputs[0], labels)
+
+        loss_fns = {"domain_a": loss_fn_a, "domain_b": loss_fn_b}
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            initial_params = {n: p.clone() for n, p in model.named_parameters()}
+            args = TrainingArguments(
+                output_dir=tmp_dir, report_to="none", num_train_epochs=1, per_device_train_batch_size=4
+            )
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=train_datasets,
+                compute_loss_fns=loss_fns,
+            )
+            trainer.train()
+            for name, param in model.named_parameters():
+                self.assertFalse(torch.allclose(param, initial_params[name], rtol=1e-10, atol=1e-10))
+
+    def test_multi_dataset_aggregation(self):
+        train_dataset_a = RegressionDataset(a=2, b=3, length=32)
+        train_dataset_b = RegressionDataset(a=5, b=1, length=32)
+        train_datasets = {"domain_a": train_dataset_a, "domain_b": train_dataset_b}
+
+        # Make loss for domain A much larger.
+        def loss_fn_a(outputs, labels):
+            return nn.functional.mse_loss(outputs[0], labels) * 10
+
+        def loss_fn_b(outputs, labels):
+            return nn.functional.mse_loss(outputs[0], labels)
+
+        loss_fns = {"domain_a": loss_fn_a, "domain_b": loss_fn_b}
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            initial_params = {n: p.clone() for n, p in model.named_parameters()}
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                report_to="none",
+                num_train_epochs=1,
+                per_device_train_batch_size=4,
+                multi_dataset_strategy="aggregate",
+                loss_aggregation_strategy="mean",
+            )
+            trainer = Trainer(model=model, args=args, train_dataset=train_datasets, compute_loss_fns=loss_fns)
+            trainer.train()
+            for name, param in model.named_parameters():
+                self.assertFalse(torch.allclose(param, initial_params[name], rtol=1e-10, atol=1e-10))
+
     def test_auto_batch_size_with_resume_from_checkpoint(self):
         train_dataset = RegressionDataset(length=128)
 
@@ -3860,10 +3917,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     def wrap_get_batch_samples(fn):
                         def wrapped_fn(epoch_iterator, num_batches, device):
                             self.assertGreater(num_batches, 0)
-                            batch_samples, num_items_in_batch = fn(epoch_iterator, num_batches, device)
+                            batch_samples, domains, num_items_in_batch = fn(epoch_iterator, num_batches, device)
                             self.assertEqual(len(batch_samples), num_batches)
                             total_batch_samples.append(num_batches)
-                            return batch_samples, num_items_in_batch
+                            return batch_samples, domains, num_items_in_batch
 
                         return wrapped_fn
 

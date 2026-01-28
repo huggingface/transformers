@@ -19,6 +19,8 @@ import os
 import sys
 from unittest.mock import patch
 
+import datasets
+
 from transformers import ViTMAEForPreTraining, Wav2Vec2ForPreTraining
 from transformers.testing_utils import (
     CaptureLogger,
@@ -124,6 +126,45 @@ class ExamplesTests(TestCasePlus):
             run_glue.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
+
+    def test_run_glue_multi_dataset(self):
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_glue.py
+            --model_name_or_path distilbert/distilbert-base-uncased
+            --output_dir {tmp_dir}
+            --do_train
+            --do_eval
+            --per_device_train_batch_size=2
+            --learning_rate=1e-4
+            --max_steps=10
+            --warmup_steps=2
+            --seed=42
+            --max_seq_length=128
+            --task_name mrpc
+            """.split()
+
+        if is_torch_fp16_available_on_device(torch_device):
+            testargs.append("--fp16")
+
+        load_datasets = datasets.load_dataset
+
+        def mock_load_dataset(*args, **kwargs):
+            if args[1] == "mrpc":
+                mrpc_dataset = load_datasets("nyu-mll/glue", "mrpc", split="train[:1%]")
+                rte_dataset = load_datasets("nyu-mll/glue", "rte", split="train[:1%]")
+                dataset_dict = load_datasets("nyu-mll/glue", "mrpc")
+                dataset_dict["train"] = {"mrpc": mrpc_dataset, "rte": rte_dataset}
+                return dataset_dict
+            return load_datasets(*args, **kwargs)
+
+        with patch("run_glue.load_dataset", new=mock_load_dataset):
+            with patch.object(sys, "argv", testargs):
+                run_glue.main()
+                result = get_results(tmp_dir)
+                self.assertIn("eval_accuracy", result)
+                # Let's check if the approach can produce a reasonable accuracy, in conservative terms.
+                self.assertGreaterEqual(result["eval_accuracy"], 0.5)
 
     def test_run_clm(self):
         tmp_dir = self.get_auto_remove_tmp_dir()

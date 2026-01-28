@@ -340,13 +340,23 @@ def main():
     if data_args.task_name is not None:
         is_regression = data_args.task_name == "stsb"
         if not is_regression:
-            label_list = raw_datasets["train"].features["label"].names
+            # Multi dataset scenario.
+            if isinstance(raw_datasets["train"], dict):
+                first_train_dataset = next(iter(raw_datasets["train"].values()))
+                label_list = first_train_dataset.features["label"].names
+            # Lean on fallback if not multi dataset.
+            else:
+                label_list = raw_datasets["train"].features["label"].names
             num_labels = len(label_list)
         else:
             num_labels = 1
     else:
-        # Trying to have good defaults here, don't hesitate to tweak to your needs.
-        is_regression = raw_datasets["train"].features["label"].dtype in ["float32", "float64"]
+        # Tweaked for the multi-dataset scenario, with a fallback.
+        if isinstance(raw_datasets["train"], dict):
+            first_train_dataset = next(iter(raw_datasets["train"].values()))
+            is_regression = first_train_dataset.features["label"].dtype in ["float32", "float64"]
+        else:
+            is_regression = raw_datasets["train"].features["label"].dtype in ["float32", "float64"]
         if is_regression:
             num_labels = 1
         else:
@@ -456,12 +466,30 @@ def main():
         return result
 
     with training_args.main_process_first(desc="dataset map pre-processing"):
-        raw_datasets = raw_datasets.map(
-            preprocess_function,
-            batched=True,
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on dataset",
-        )
+        if isinstance(raw_datasets["train"], dict):
+            # Handle dict of datasets for training set.
+            for task, train_dataset in raw_datasets["train"].items():
+                raw_datasets["train"][task] = train_dataset.map(
+                    preprocess_function,
+                    batched=True,
+                    load_from_cache_file=not data_args.overwrite_cache,
+                    desc=f"Running tokenizer on {task} dataset",
+                )
+            for split in raw_datasets:
+                if split != "train":
+                    raw_datasets[split] = raw_datasets[split].map(
+                        preprocess_function,
+                        batched=True,
+                        load_from_cache_file=not data_args.overwrite_cache,
+                        desc=f"Running tokenizer on {split} dataset",
+                    )
+        else:
+            raw_datasets = raw_datasets.map(
+                preprocess_function,
+                batched=True,
+                load_from_cache_file=not data_args.overwrite_cache,
+                desc="Running tokenizer on dataset",
+            )
 
     def print_class_distribution(dataset, split_name):
         label_counts = Counter(dataset["label"])
@@ -477,7 +505,11 @@ def main():
         if data_args.max_train_samples is not None:
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
-        print_class_distribution(train_dataset, "train")
+        if isinstance(train_dataset, dict):
+            for task_name, ds in train_dataset.items():
+                print_class_distribution(ds, f"train_{task_name}")
+        else:
+            print_class_distribution(train_dataset, "train")
 
     if training_args.do_eval:
         if "validation" not in raw_datasets and "validation_matched" not in raw_datasets:
@@ -499,8 +531,15 @@ def main():
 
     # Log a few random samples from the training set:
     if training_args.do_train:
-        for index in random.sample(range(len(train_dataset)), 3):
-            logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
+        if isinstance(train_dataset, dict):
+            # For multi-dataset, log samples from the first dataset.
+            first_dataset_name = next(iter(train_dataset))
+            first_dataset = train_dataset[first_dataset_name]
+            for index in random.sample(range(len(first_dataset)), 3):
+                logger.info(f"Sample {index} of the training set '{first_dataset_name}': {first_dataset[index]}.")
+        else:
+            for index in random.sample(range(len(train_dataset)), 3):
+                logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
     # Get the metric function
     if data_args.task_name is not None:
