@@ -427,6 +427,7 @@ if TYPE_CHECKING:
     from .xmod import *
     from .yolos import *
     from .yoso import *
+    from .youtu import *
     from .zamba import *
     from .zamba2 import *
     from .zoedepth import *

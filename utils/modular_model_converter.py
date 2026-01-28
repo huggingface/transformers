@@ -1011,7 +1011,9 @@ def replace_class_node(
             modular_node = modular_methods[name]
 
             # If we match the pattern, we should avoid inheriting the method
-            if re.match(r"\ndef .*\(.*\):\n    raise.*Error\(.*", mapper.python_module.code_for_node(modular_node)):
+            if re.match(
+                r"\ndef .*\(.*\).*:.*\n    raise.*Error\(.*", mapper.python_module.code_for_node(modular_node)
+            ):
                 continue
 
             # Compute new method docstring
