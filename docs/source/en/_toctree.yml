@@ -1003,6 +1003,8 @@
         title: Whisper
       - local: model_doc/xcodec
         title: X-Codec
+      - local: model_doc/xcodec2
+        title: X-Codec2
       - local: model_doc/xls_r
         title: XLS-R
       - local: model_doc/xlsr_wav2vec2

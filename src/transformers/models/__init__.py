@@ -418,6 +418,7 @@ if TYPE_CHECKING:
     from .whisper import *
     from .x_clip import *
     from .xcodec import *
+    from .xcodec2 import *
     from .xglm import *
     from .xlm import *
     from .xlm_roberta import *
