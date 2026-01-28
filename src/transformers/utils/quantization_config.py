@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 # Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
@@ -69,6 +68,7 @@ class AwqFormat(str, Enum):
     GEMM = "gemm"
     GEMV = "gemv"
     GEMV_FAST = "gemv_fast"
+    LLM_AWQ = "llm-awq"
 
 
 class AwqBackend(str, Enum):
@@ -153,8 +153,7 @@ class QuantizationConfigMixin:
 
     def __iter__(self):
         """allows `dict(obj)` for situations where obj may be a dict or QuantizationConfigMixin"""
-        for attr, value in copy.deepcopy(self.__dict__).items():
-            yield attr, value
+        yield from copy.deepcopy(self.__dict__).items()
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
@@ -687,14 +686,14 @@ class GPTQConfig(QuantizationConfigMixin):
         sym: bool = True,
         true_sequential: bool = True,
         format: str = "gptq",
-        meta: Optional[dict[str, Any]] = None,
-        backend: Optional[str] = None,
-        model_seqlen: Optional[int] = None,
-        block_name_to_quantize: Optional[str] = None,
-        module_name_preceding_first_block: Optional[list[str]] = None,
+        meta: dict[str, Any] | None = None,
+        backend: str | None = None,
+        model_seqlen: int | None = None,
+        block_name_to_quantize: str | None = None,
+        module_name_preceding_first_block: list[str] | None = None,
         batch_size: int = 1,
-        pad_token_id: Optional[int] = None,
-        max_input_length: Optional[int] = None,
+        pad_token_id: int | None = None,
+        max_input_length: int | None = None,
         cache_block_outputs: bool = True,
         modules_in_block_to_quantize: list[list[str]] | None = None,
         **kwargs,
@@ -838,14 +837,13 @@ class AwqConfig(GPTQConfig):
         r"""
         Safety checker that arguments are correct
         """
-        if self.format not in [
-            AwqFormat.GEMM,
-            AwqFormat.GEMV,
-            AwqFormat.GEMV_FAST,
-        ]:
-            raise ValueError(
-                f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.GEMV_FAST] - not recognized version {self.format}"
-            )
+
+        if self.backend == "llm-awq":
+            self.format = AwqFormat.LLM_AWQ
+            self.backend = AwqBackend.AUTO
+
+        if self.format not in AwqFormat.__members__.values():
+            raise ValueError(f"Invalid format '{self.format}'. Must be one of: {[b.value for b in AwqFormat]}")
 
         if self.backend not in AwqBackend.__members__.values():
             raise ValueError(f"Invalid backend '{self.backend}'. Must be one of: {[b.value for b in AwqBackend]}")

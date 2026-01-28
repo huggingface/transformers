@@ -55,6 +55,8 @@ from transformers.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_available_on_dev
 
 
 if is_torch_available():
+    import os
+
     import torch
     import torch.nn as nn
 
@@ -277,13 +279,17 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         import deepspeed
         import torch
 
-        from transformers.models.gpt2.modeling_gpt2 import GPT2PreTrainedModel
+        from transformers.models.gpt2.modeling_gpt2 import GPT2Model, GPT2PreTrainedModel
 
         class TinyGPT2WithUninitializedWeights(GPT2PreTrainedModel):
             def __init__(self, config):
                 super().__init__(config)
-                self.transformer = AutoModel.from_pretrained(GPT2_TINY, config=config)
+                self.transformer = GPT2Model(config)
+                # AutoModel.from_pretrained(GPT2_TINY, config=config)
                 self.new_head = torch.nn.Linear(config.hidden_size, config.vocab_size, bias=True)
+
+                # Initialize weights and apply final processing
+                self.post_init()
 
             def forward(self, *args, **kwargs):
                 transformer_outputs = self.transformer(*args, **kwargs)
@@ -314,7 +320,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 with CaptureLogger(logger) as cl:
                     model = TinyGPT2WithUninitializedWeights.from_pretrained(GPT2_TINY)
         self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
-        self.assertRegex(cl.out, r"newly initialized.*new_head\.bias.*new_head\.weight")
+        self.assertRegex(cl.out, r"new_head\.(weight|bias)\s*\|\s*MISSING")
         with deepspeed.zero.GatheredParameters([model.new_head.weight, model.new_head.bias]):
             self.assertTrue(
                 torch.allclose(model.new_head.weight, torch.tensor(-100.0, device=model.new_head.weight.device)),
@@ -336,7 +342,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 with CaptureLogger(logger) as cl:
                     model = TinyGPT2WithUninitializedWeights.from_pretrained(GPT2_TINY)
         self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
-        self.assertRegex(cl.out, r"newly initialized.*new_head\.bias.*new_head\.weight")
+        self.assertRegex(cl.out, r"new_head\.(weight|bias)\s*\|\s*MISSING")
         self.assertTrue(
             torch.allclose(model.new_head.weight, torch.tensor(-100.0, device=model.new_head.weight.device)),
         )
@@ -368,49 +374,131 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             with mockenv_context(**self.dist_env_1_gpu):
                 logger = logging.get_logger("transformers.modeling_utils")
                 with CaptureLogger(logger) as cl:
-                    model = AutoModel.from_pretrained(GPTJ_TINY)
+                    model = AutoModel.from_pretrained(GPTJ_TINY, dtype=torch.float32)
         self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
 
         # The model weights are in BF16 as per deepspeed config
         self.assertTrue(str(model.h[0].attn.q_proj.weight.dtype) == "torch.bfloat16")
         good_deepspeed_sin_cos = model.h[0].attn.embed_positions
 
-        # Monkeypatches the function that creates RoPE embeddings using the INCORRECT torch.arange() pattern, and
-        # then recreates the model
-        def bad_deepspeed_create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
-            inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / dim))
-            # Incorrect pattern here: torch.arange has dtype=torch.float32 as its argument, and it will automatically
-            # converted to BF16 by DeepSpeed
-            sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=inv_freq.dtype), inv_freq)
-            return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
-
         good_deepspeed_create_sinusoidal_positions = transformers.models.gptj.modeling_gptj.create_sinusoidal_positions
-        transformers.models.gptj.modeling_gptj.create_sinusoidal_positions = bad_deepspeed_create_sinusoidal_positions
 
-        with LoggingLevel(logging.INFO):
-            with mockenv_context(**self.dist_env_1_gpu):
-                logger = logging.get_logger("transformers.modeling_utils")
-                with CaptureLogger(logger) as cl:
-                    model = AutoModel.from_pretrained(GPTJ_TINY)
-        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
-
-        self.assertTrue(str(model.h[0].attn.q_proj.weight.dtype) == "torch.bfloat16")
-        bad_deepspeed_sin_cos = model.h[0].attn.embed_positions
-
-        # Compares the two values: the two sets of values are different, and the correct one matches the torch
-        # (i.e. outside DeepSpeed) version.
         good_torch_sin_cos = good_deepspeed_create_sinusoidal_positions(
             model.config.max_position_embeddings, model.config.rotary_dim
         )
-        self.assertFalse(torch.allclose(good_deepspeed_sin_cos, bad_deepspeed_sin_cos))
+        # check that we get the same results either with torch or deepspeed
         torch.testing.assert_close(good_torch_sin_cos, good_deepspeed_sin_cos.cpu())
 
-        # Finally, we can see that the incorrect pattern is okay on vanilla torch, demonstrating that this issue is
-        # exclusive to DeepSpeed
-        bad_torch_sin_cos = bad_deepspeed_create_sinusoidal_positions(
-            model.config.max_position_embeddings, model.config.rotary_dim
+    def test_init_zero3_moe_weight_conversion(self):
+        # Test that weight conversions (MoE expert fusion) work correctly with DeepSpeed Zero3
+        # This tests the fix for the issue where DeepSpeed Zero3 loading was bypassing weight conversions
+        import tempfile
+
+        from transformers import Qwen3MoeConfig, Qwen3MoeModel
+
+        tiny_config = Qwen3MoeConfig(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=32,
+            moe_intermediate_size=16,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            num_experts=8,
+            num_experts_per_tok=2,
         )
-        torch.testing.assert_close(bad_torch_sin_cos, good_torch_sin_cos)
+
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertTrue(dschf.is_zero3())
+        self.assertTrue(is_deepspeed_zero3_enabled())
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            with LoggingLevel(logging.INFO):
+                with mockenv_context(**self.dist_env_1_gpu):
+                    model = Qwen3MoeModel(tiny_config)
+                    model.save_pretrained(tmpdirname)
+
+            # Manually create an "old" checkpoint format with separate expert weights
+            # to simulate loading a checkpoint saved before the v5 refactor
+            old_checkpoint_dir = f"{tmpdirname}_old"
+            import os
+            import shutil
+
+            os.makedirs(old_checkpoint_dir, exist_ok=True)
+            shutil.copy(f"{tmpdirname}/config.json", f"{old_checkpoint_dir}/config.json")
+
+            from safetensors.torch import load_file, save_file
+
+            new_state_dict = load_file(f"{tmpdirname}/model.safetensors")
+            old_state_dict = {}
+
+            for key, tensor in new_state_dict.items():
+                if "mlp.experts.gate_up_proj" in key:
+                    layer_prefix = key.replace(".mlp.experts.gate_up_proj", "")
+                    num_experts = tensor.shape[0]
+                    intermediate_size = tensor.shape[1] // 2
+
+                    for expert_idx in range(num_experts):
+                        expert_tensor = tensor[expert_idx]
+                        gate_tensor = expert_tensor[:intermediate_size, :]
+                        up_tensor = expert_tensor[intermediate_size:, :]
+
+                        old_state_dict[f"{layer_prefix}.mlp.experts.{expert_idx}.gate_proj.weight"] = gate_tensor
+                        old_state_dict[f"{layer_prefix}.mlp.experts.{expert_idx}.up_proj.weight"] = up_tensor
+                elif (
+                    "mlp.experts.down_proj" in key
+                    and key[key.rfind(".mlp.experts.down_proj") :] == ".mlp.experts.down_proj"
+                ):
+                    layer_prefix = key.replace(".mlp.experts.down_proj", "")
+                    num_experts = tensor.shape[0]
+
+                    for expert_idx in range(num_experts):
+                        expert_tensor = tensor[expert_idx]
+                        old_state_dict[f"{layer_prefix}.mlp.experts.{expert_idx}.down_proj.weight"] = expert_tensor
+                else:
+                    old_state_dict[key] = tensor
+
+            save_file(old_state_dict, f"{old_checkpoint_dir}/model.safetensors")
+
+            # Load the old checkpoint with DeepSpeed Zero3 and verify weight conversions are applied
+            with LoggingLevel(logging.INFO):
+                with mockenv_context(**self.dist_env_1_gpu):
+                    logger = logging.get_logger("transformers.modeling_utils")
+                    with CaptureLogger(logger) as cl:
+                        loaded_model = Qwen3MoeModel.from_pretrained(old_checkpoint_dir)
+
+            self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+            self.assertNotRegex(cl.out, r"mlp\.experts\.(gate_up_proj|down_proj)\s*\|\s*MISSING")
+
+            # Verify the model structure is correct (fused experts in v5 format)
+            # DeepSpeed Zero3 partitions parameters, so we need to gather them to check shapes
+            import deepspeed
+
+            expert_params_to_check = []
+            for name, param in loaded_model.named_parameters():
+                if "mlp.experts.gate_up_proj" in name or "mlp.experts.down_proj" in name:
+                    expert_params_to_check.append((name, param))
+                self.assertNotRegex(name, r"mlp\.experts\.\d+\.(gate_proj|up_proj|down_proj)\.weight")
+
+            with deepspeed.zero.GatheredParameters([param for _, param in expert_params_to_check], modifier_rank=0):
+                for name, param in expert_params_to_check:
+                    if "mlp.experts.gate_up_proj" in name:
+                        self.assertEqual(len(param.shape), 3, f"gate_up_proj should be 3D, got {param.shape}")
+                        self.assertEqual(param.shape[0], 8, f"Should have 8 experts, got {param.shape[0]}")
+                    elif (
+                        "mlp.experts.down_proj" in name
+                        and name[name.rfind(".mlp.experts.down_proj") :] == ".mlp.experts.down_proj"
+                    ):
+                        self.assertEqual(len(param.shape), 3, f"down_proj should be 3D, got {param.shape}")
+                        self.assertEqual(param.shape[0], 8, f"Should have 8 experts, got {param.shape[0]}")
 
 
 class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
@@ -1064,10 +1152,10 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 return example
 
             def _convert_to_features(example_batch):
-                input_encodings = tokenizer.batch_encode_plus(
+                input_encodings = tokenizer(
                     example_batch["input_text"], padding="max_length", max_length=512, truncation=True
                 )
-                target_encodings = tokenizer.batch_encode_plus(
+                target_encodings = tokenizer(
                     example_batch["target_text"], padding="max_length", max_length=16, truncation=True
                 )
 

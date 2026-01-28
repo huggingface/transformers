@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Meta AI Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +13,19 @@
 # limitations under the License.
 """PyTorch SAM 2 model."""
 
-from typing import Optional, Union
-
 import torch
-import torch.utils.checkpoint
 
-from transformers.models.sam2.configuration_sam2 import Sam2Config, Sam2MaskDecoderConfig, Sam2PromptEncoderConfig
-from transformers.models.sam2.modeling_sam2 import (
+from ... import initialization as init
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import (
+    auto_docstring,
+)
+from ...utils.generic import TransformersKwargs, check_model_inputs
+from ..auto import CONFIG_MAPPING, AutoConfig
+from ..sam2.configuration_sam2 import Sam2Config, Sam2MaskDecoderConfig, Sam2PromptEncoderConfig
+from ..sam2.modeling_sam2 import (
     Sam2Attention,
     Sam2FeedForward,
     Sam2LayerNorm,
@@ -30,21 +35,6 @@ from transformers.models.sam2.modeling_sam2 import (
     Sam2VisionEncoderOutput,
     Sam2VisionModel,
 )
-from transformers.utils.generic import TransformersKwargs, check_model_inputs
-
-from ... import initialization as init
-from ...configuration_utils import PreTrainedConfig
-from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import (
-    auto_docstring,
-)
-from ..auto import CONFIG_MAPPING, AutoConfig
-
-
-# fix this in modular
-if True:
-    from transformers.models.timm_wrapper.modeling_timm_wrapper import TimmWrapperModel
 
 
 class EdgeTamVisionConfig(PreTrainedConfig):
@@ -58,7 +48,7 @@ class EdgeTamVisionConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `timm/repvit_m1.dist_in1k`):
             Configuration for the vision backbone. This is used to instantiate the backbone using
             `AutoModel.from_config`.
         backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
@@ -181,6 +171,8 @@ class EdgeTamPreTrainedModel(Sam2PreTrainedModel):
         if isinstance(module, EdgeTamModel):
             if module.no_memory_embedding is not None:
                 init.zeros_(module.no_memory_embedding)
+        elif hasattr(module, "positional_embedding"):
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 @auto_docstring(
@@ -191,7 +183,9 @@ class EdgeTamPreTrainedModel(Sam2PreTrainedModel):
 class EdgeTamVisionModel(Sam2VisionModel):
     config_class = EdgeTamVisionConfig
     main_input_name = "pixel_values"
-    _can_record_outputs = {"hidden_states": TimmWrapperModel, "attentions": TimmWrapperModel}
+    # TODO: TimmWrapper models aren't compatible with _can_record_outputs yet. We specifically set this to
+    # an empty dict to avoid the _can_record_outputs from Sam2VisionModel being inherited here.
+    _can_record_outputs = {}
 
     def get_input_embeddings(self):
         raise NotImplementedError("Can't get input embeddings from timm wrapper model")
@@ -199,14 +193,14 @@ class EdgeTamVisionModel(Sam2VisionModel):
     @check_model_inputs
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, EdgeTamVisionEncoderOutput]:
+    ) -> tuple | EdgeTamVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         # Forward through backbone
-        backbone_output = self.backbone(pixel_values)
+        backbone_output = self.backbone(pixel_values, **kwargs)
         intermediate_hidden_states = backbone_output.last_hidden_state
         intermediate_hidden_states = [hidden_state.permute(0, 2, 3, 1) for hidden_state in intermediate_hidden_states]
 
@@ -219,6 +213,7 @@ class EdgeTamVisionModel(Sam2VisionModel):
             last_hidden_state=intermediate_hidden_states[-1],
             fpn_hidden_states=fpn_hidden_states,
             fpn_position_encoding=fpn_position_encoding,
+            hidden_states=backbone_output.hidden_states,
         )
 
 

@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 import torch
 
@@ -73,7 +72,7 @@ def compute_predicted_aligned_error(
 
 def compute_tm(
     logits: torch.Tensor,
-    residue_weights: Optional[torch.Tensor] = None,
+    residue_weights: torch.Tensor | None = None,
     max_bin: int = 31,
     no_bins: int = 64,
     eps: float = 1e-8,

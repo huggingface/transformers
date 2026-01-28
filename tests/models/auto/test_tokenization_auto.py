@@ -32,6 +32,7 @@ from transformers import (
     BertTokenizerFast,
     CTRLTokenizer,
     GPT2Tokenizer,
+    HerbertTokenizer,
     PreTrainedTokenizerFast,
     Qwen2Tokenizer,
     Qwen2TokenizerFast,
@@ -44,6 +45,7 @@ from transformers import (
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.auto.tokenization_auto import (
     TOKENIZER_MAPPING,
+    TOKENIZER_MAPPING_NAMES,
     get_tokenizer_config,
     tokenizer_class_from_name,
 )
@@ -175,6 +177,22 @@ class AutoTokenizerTest(unittest.TestCase):
         for tokenizer_name in tokenizer_names:
             # must find the right class
             tokenizer_class_from_name(tokenizer_name)
+
+    def test_tokenizer_mapping_names_use_single_entries(self):
+        # this is just to ensure tokenizer mapping names are correct and map to strings!
+        invalid_entries = [
+            model_name
+            for model_name, tokenizer_entry in TOKENIZER_MAPPING_NAMES.items()
+            if isinstance(tokenizer_entry, (tuple, list))
+        ]
+        self.assertListEqual(
+            invalid_entries,
+            [],
+            msg=(
+                "TOKENIZER_MAPPING_NAMES should map model types to single tokenizer class names. "
+                f"Found invalid mappings for: {invalid_entries}"
+            ),
+        )
 
     @require_tokenizers
     def test_from_pretrained_use_fast_toggle(self):
@@ -574,5 +592,94 @@ class NopConfig(PreTrainedConfig):
                     self.fail("AutoTokenizer.from_pretrained with trust_remote_code=False should raise ValueException")
                 except ValueError:
                     pass
+            finally:
+                os.chdir(prev_dir)
+
+    def test_tokenization_class_priority(self):
+        from transformers import AutoProcessor
+
+        tok = AutoTokenizer.from_pretrained("mlx-community/MiniMax-M2.1-4bit")
+        self.assertTrue(tok.__class__ == TokenizersBackend)
+
+        tok = AutoTokenizer.from_pretrained("allegro/herbert-base-cased")
+        self.assertTrue(tok.__class__ == HerbertTokenizer)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tok.save_pretrained(tmp_dir)
+            tok2 = AutoTokenizer.from_pretrained(tmp_dir)
+            self.assertTrue(tok2.__class__ == HerbertTokenizer)
+
+        tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
+        self.assertTrue(tok.__class__ == TokenizersBackend)
+
+        tok = AutoProcessor.from_pretrained("mistralai/Ministral-3-8B-Instruct-2512-BF16").tokenizer
+        self.assertTrue(tok.__class__ == TokenizersBackend)
+
+        tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
+        self.assertTrue(tok.__class__ == TokenizersBackend)
+
+    def test_custom_tokenizer_with_mismatched_tokenizer_class(self):
+        nop_tokenizer_code = """
+import transformers
+
+class NopTokenizer(transformers.PreTrainedTokenizer):
+    special_attribute_present = True
+
+    def get_vocab(self):
+        return {}
+"""
+
+        nop_config_code = """
+from transformers import PreTrainedConfig
+
+class NopConfig(PreTrainedConfig):
+    model_type = "test_unregistered_dynamic"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+"""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fake_model_id = "hf-internal-testing/test_unregistered_dynamic"
+            fake_repo = os.path.join(tmp_dir, fake_model_id)
+            os.makedirs(fake_repo)
+
+            tokenizer_src_file = os.path.join(fake_repo, "tokenizer.py")
+            with open(tokenizer_src_file, "w") as wfp:
+                wfp.write(nop_tokenizer_code)
+
+            model_config_src_file = os.path.join(fake_repo, "config.py")
+            with open(model_config_src_file, "w") as wfp:
+                wfp.write(nop_config_code)
+
+            config = {
+                "model_type": "test_unregistered_dynamic",
+                "auto_map": {"AutoConfig": f"{fake_model_id}--config.NopConfig"},
+            }
+
+            config_file = os.path.join(fake_repo, "config.json")
+            with open(config_file, "w") as wfp:
+                json.dump(config, wfp, indent=2)
+
+            tokenizer_config = {
+                "tokenizer_class": "NopTokenizer",
+                "auto_map": {
+                    "AutoTokenizer": [
+                        f"{fake_model_id}--tokenizer.NopTokenizer",
+                        None,
+                    ]
+                },
+            }
+
+            tokenizer_config_file = os.path.join(fake_repo, "tokenizer_config.json")
+            with open(tokenizer_config_file, "w") as wfp:
+                json.dump(tokenizer_config, wfp, indent=2)
+
+            prev_dir = os.getcwd()
+            try:
+                os.chdir(tmp_dir)
+
+                tokenizer = AutoTokenizer.from_pretrained(fake_model_id, local_files_only=True, trust_remote_code=True)
+                self.assertEqual(tokenizer.__class__.__name__, "NopTokenizer")
+                self.assertTrue(tokenizer.special_attribute_present)
             finally:
                 os.chdir(prev_dir)

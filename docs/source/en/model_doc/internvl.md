@@ -339,15 +339,18 @@ This example showcases how to handle a batch of chat conversations with interlea
 
 [[autodoc]] InternVLModel
     - forward
+    - get_image_features
 
 ## InternVLForConditionalGeneration
 
 [[autodoc]] InternVLForConditionalGeneration
     - forward
+    - get_image_features
 
 ## InternVLProcessor
 
 [[autodoc]] InternVLProcessor
+    - __call__
 
 ## InternVLVideoProcessor
 

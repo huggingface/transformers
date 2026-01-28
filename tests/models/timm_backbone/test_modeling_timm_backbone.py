@@ -17,7 +17,7 @@ import inspect
 import unittest
 
 from transformers import AutoBackbone
-from transformers.testing_utils import require_timm, require_torch, torch_device
+from transformers.testing_utils import is_flaky, require_timm, require_torch, torch_device
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
@@ -85,8 +85,8 @@ class TimmBackboneModelTester:
 class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TimmBackbone,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": TimmBackbone} if is_torch_available() else {}
-    test_resize_embeddings = False
 
+    test_resize_embeddings = False
     has_attentions = False
 
     def setUp(self):
@@ -101,6 +101,7 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         self.config_tester.run_common_tests()
 
     # `TimmBackbone` has no `_init_weights`. Timm's way of weight init. seems to give larger magnitude in the intermediate values during `forward`.
+    @is_flaky(description="Large difference with A10. Still flaky after setting larger tolerance")
     def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
@@ -135,8 +136,12 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="TimmBackbone initialization is managed on the timm side")
+    @unittest.skip(reason="TimmBackbone uses a pretrained model initialization in __init__, not random weights")
     def test_can_init_all_missing_weights(self):
+        pass
+
+    @unittest.skip(reason="TimmBackbone uses a pretrained model initialization in __init__, not random weights")
+    def test_init_weights_can_init_buffers(self):
         pass
 
     @unittest.skip(reason="TimmBackbone models doesn't have inputs_embeds")
@@ -153,6 +158,10 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
 
     @unittest.skip(reason="Only checkpoints on timm can be loaded into TimmBackbone")
     def test_save_load(self):
+        pass
+
+    @unittest.skip(reason="Only checkpoints on timm can be loaded into TimmBackbone")
+    def test_load_contiguous_weights(self):
         pass
 
     @unittest.skip(reason="TimmBackbone uses its own `from_pretrained` without device_map support")

@@ -17,7 +17,6 @@
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Optional
 
 import torch
 
@@ -106,7 +105,7 @@ class TrainingTesterMixin(ABC):
         self,
         batch_size: int,
         audio_length: int,
-        feature_size: Optional[int] = None,
+        feature_size: int | None = None,
     ) -> dict[str, torch.Tensor]:
         """Create fixed batch for audio models using a deterministic waveform."""
         pass
@@ -347,6 +346,11 @@ class TrainingTesterMixin(ABC):
 
             logger.info(f"Prompt: {self._decode_text_tokens([expected_tokens[0]])}")
 
+            model_type = getattr(config, "model_type", "")
+            use_cache = model_type == "recurrent_gemma"
+            if use_cache:
+                logger.info("Only RecurrentGemmaModel is using use_cache=True. Other models run with use_cache=False")
+
             with torch.no_grad():
                 generated_ids = model.generate(
                     prompt_ids,
@@ -354,6 +358,7 @@ class TrainingTesterMixin(ABC):
                     do_sample=False,
                     pad_token_id=config.pad_token_id if hasattr(config, "pad_token_id") else 0,
                     eos_token_id=0,
+                    use_cache=use_cache,
                 )
 
             generated_tokens = generated_ids[0].tolist()

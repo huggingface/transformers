@@ -245,8 +245,6 @@ docs/source/en/notebooks.md
 docs/source/en/pad_truncation.md
 docs/source/en/peft.md
 docs/source/en/perf_hardware.md
-docs/source/en/perf_infer_cpu.md
-docs/source/en/perf_infer_gpu_one.md
 docs/source/en/perf_torch_compile.md
 docs/source/en/perf_train_cpu.md
 docs/source/en/perf_train_cpu_many.md
@@ -701,7 +699,6 @@ src/transformers/pipelines/feature_extraction.py
 src/transformers/pipelines/fill_mask.py
 src/transformers/pipelines/image_classification.py
 src/transformers/pipelines/image_segmentation.py
-src/transformers/pipelines/image_to_text.py
 src/transformers/pipelines/mask_generation.py
 src/transformers/pipelines/object_detection.py
 src/transformers/pipelines/pt_utils.py

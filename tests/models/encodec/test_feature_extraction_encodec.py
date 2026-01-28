@@ -221,7 +221,7 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         # force no pad
         with self.assertRaisesRegex(
             ValueError,
-            "^Unable to create tensor, you should probably activate padding with 'padding=True' to have batched tensors with the same length.$",
+            r"Unable to convert output[\s\S]*padding=True",
         ):
             truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
 
@@ -232,7 +232,7 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         feature_extractor.chunk_length_s = None
         with self.assertRaisesRegex(
             ValueError,
-            "^Unable to create tensor, you should probably activate padding with 'padding=True' to have batched tensors with the same length.$",
+            r"Unable to convert output[\s\S]*padding=True",
         ):
             truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
 
@@ -244,7 +244,7 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         feature_extractor.overlap = None
         with self.assertRaisesRegex(
             ValueError,
-            "^Unable to create tensor, you should probably activate padding with 'padding=True' to have batched tensors with the same length.$",
+            r"Unable to convert output[\s\S]*padding=True",
         ):
             truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
 

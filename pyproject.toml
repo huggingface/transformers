@@ -18,29 +18,38 @@ target-version = "py310"
 line-length = 119
 
 [tool.ruff.lint]
-# Never enforce `E501` (line length violations).
-# SIM300: Yoda condition detected
-# SIM212: Checks for if expressions that check against a negated condition.
-# SIM905: Consider using a list literal instead of `str.split`
-# UP009: UTF-8 encoding declaration is unnecessary
-# UP015: Unnecessary mode argument
-# UP031: Use format specifiers instead of percent format
-# UP004: Class `XXX` inherits from `object`
-# UP028: Checks for for loops that can be replaced with yield from expressions
-# UP045: Use `X | None` for type annotations
-# UP007: Use `X | Y` for type annotations
-ignore = ["C901", "E501", "E741", "F402", "F823", "SIM1", "SIM300", "SIM212", "SIM905", "UP009", "UP015", "UP031", "UP028", "UP004", "UP045", "UP007"]
-# RUF013: Checks for the use of implicit Optional
-#  in type annotations when the default parameter value is None.
-select = ["C", "E", "F", "I", "W", "RUF013", "PERF102", "PLC1802", "PLC0208", "SIM", "UP", "PIE794", "FURB"]
-extend-safe-fixes = ["UP006"]
+select = [
+    "E",  # pycodestyle errors
+    "F",  # Pyflakes
+    "I",  # isort
+    "W",  # pycodestyle warnings
+    "UP",  # pyupgrade
+    "FURB",  # refurb
+    "SIM",  # flake8-simplify
+    "C4",  # flake8-comprehensions
+    "RUF013",  # Checks for the use of implicit Optional in type annotations when the default parameter value is None.
+    "PERF102",  # Checks for uses of dict.items() that discard either the key or the value when iterating over the dictionary.
+    "PLC1802",  # Checks for len calls on sequences in a boolean test context.
+    "PLC0208",  # Checks for iteration over a set literal where each element in the set is itself a literal value.
+    "PIE794",  # Checks for duplicate field definitions in classes.
+]
+ignore = [
+    "E501",  # Checks for lines that exceed the specified maximum character length.
+    "E741",  # Checks for the use of the characters 'l', 'O', or 'I' as variable names.
+    "SIM1",  # All SIM1XX rules
+    "SIM905",  # Checks for static str.split calls that can be replaced with list literals.
+    "UP015",  # Checks for redundant open mode arguments.
+    "UP031",  # Checks for printf-style string formatting, and offers to replace it with str.format calls.
+]
+extend-safe-fixes = [
+    "UP006",  # Checks for the use of generics that can be replaced with standard library variants based on PEP 585.
+]
 
 # Ignore import violations in all `__init__.py` files.
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["E402", "F401", "F403", "F811"]
 "src/transformers/file_utils.py" = ["F401"]
 "src/transformers/utils/dummy_*.py" = ["F401"]
-"examples/legacy/**/*.py" = ["UP"]
 
 [tool.ruff.lint.isort]
 lines-after-imports = 2
@@ -49,13 +58,10 @@ known-first-party = ["transformers"]
 [tool.ruff.format]
 # Like Black, use double quotes for strings.
 quote-style = "double"
-
 # Like Black, indent with spaces, rather than tabs.
 indent-style = "space"
-
 # Like Black, respect magic trailing commas.
 skip-magic-trailing-comma = false
-
 # Like Black, automatically detect the appropriate line ending.
 line-ending = "auto"
 
@@ -72,3 +78,11 @@ markers = [
 log_cli = 1
 log_cli_level = "WARNING"
 asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    # The above pytest-asyncio rule emits unnessecary warnings when it's not installed, so skip it here
+    "ignore:Unknown config option.*asyncio_default_fixture_loop_scope",
+    # Latest sentencepiece (v0.2.1) triggers those warnings when installed due to its build with afflicted version of swig - skip them
+    "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
+]

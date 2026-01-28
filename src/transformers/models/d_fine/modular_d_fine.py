@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Baidu Inc and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -23,7 +22,7 @@ from ... import initialization as init
 from ...activations import ACT2CLS
 from ...configuration_utils import PreTrainedConfig
 from ...image_transforms import corners_to_center_format
-from ...utils import is_torchdynamo_compiling, logging
+from ...utils import logging, torch_compilable_check
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..rt_detr.modeling_rt_detr import (
@@ -33,6 +32,7 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoderOutput,
     RTDetrEncoder,
     RTDetrForObjectDetection,
+    RTDetrFrozenBatchNorm2d,
     RTDetrHybridEncoder,
     RTDetrMLPPredictionHead,
     RTDetrModel,
@@ -66,7 +66,7 @@ class DFineConfig(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        backbone_config (`Dict`, *optional*, defaults to `RTDetrResNetConfig()`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `HGNetV2Config()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -210,6 +210,8 @@ class DFineConfig(PreTrainedConfig):
             The method to use for the decoder: `"default"` or `"discrete"`.
         up (`float`, *optional*, defaults to 0.5):
             Controls the upper bounds of the Weighting Function.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     """
 
     model_type = "d_fine"
@@ -294,6 +296,7 @@ class DFineConfig(PreTrainedConfig):
         decoder_offset_scale=0.5,
         decoder_method="default",
         up=0.5,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.initializer_range = initializer_range
@@ -307,8 +310,7 @@ class DFineConfig(PreTrainedConfig):
             )
             backbone_model_type = "hgnet_v2"
             config_class = CONFIG_MAPPING[backbone_model_type]
-            # this will map it to RTDetrResNetConfig
-            # note: we can instead create HGNetV2Config
+            # this will map it to HGNetV2Config
             # and we would need to create HGNetV2Backbone
             backbone_config = config_class(
                 num_channels=3,
@@ -402,6 +404,7 @@ class DFineConfig(PreTrainedConfig):
         self.lqe_hidden_dim = lqe_hidden_dim
         self.lqe_layers = lqe_layers
         self.up = up
+        self.tie_word_embeddings = tie_word_embeddings
 
         if isinstance(self.decoder_n_points, list):
             if len(self.decoder_n_points) != self.num_feature_levels:
@@ -414,8 +417,8 @@ class DFineConfig(PreTrainedConfig):
             raise ValueError(
                 f"Embedded dimension {self.d_model} must be divisible by decoder_attention_heads {self.decoder_attention_heads}"
             )
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-        self.tie_encoder_decoder = True
 
 
 class DFineMultiscaleDeformableAttention(nn.Module):
@@ -450,7 +453,7 @@ class DFineMultiscaleDeformableAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         reference_points=None,
         encoder_hidden_states=None,
         spatial_shapes=None,
@@ -459,10 +462,10 @@ class DFineMultiscaleDeformableAttention(nn.Module):
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
 
-        if not is_torchdynamo_compiling() and (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
+        torch_compilable_check(
+            (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
         # Reshape for multi-head attention
         value = encoder_hidden_states.reshape(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
@@ -537,13 +540,13 @@ class DFineDecoderLayer(RTDetrDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor, Any, Any]:
         # Self Attention
         hidden_states_2, self_attn_weights = self.self_attn(
@@ -628,6 +631,9 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
             init.constant_(module.attention_weights.weight, 0.0)
             init.constant_(module.attention_weights.bias, 0.0)
 
+            num_points_scale = [1 / n for n in module.num_points_list for _ in range(n)]
+            init.copy_(module.num_points_scale, torch.tensor(num_points_scale, dtype=torch.float32))
+
         if isinstance(module, DFineModel):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
@@ -638,6 +644,10 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
 
         if isinstance(module, DFineGate):
             bias = float(-math.log((1 - 0.5) / 0.5))
@@ -851,6 +861,10 @@ class DFineDecoder(RTDetrDecoder):
         )
 
 
+class DFineFrozenBatchNorm2d(RTDetrFrozenBatchNorm2d):
+    pass
+
+
 class DFineModel(RTDetrModel):
     def __init__(self, config: DFineConfig):
         super().__init__(config)
@@ -1057,8 +1071,8 @@ class DFineConvNormLayer(RTDetrConvNormLayer):
         kernel_size: int,
         stride: int,
         groups: int = 1,
-        padding: Optional[int] = None,
-        activation: Optional[str] = None,
+        padding: int | None = None,
+        activation: str | None = None,
     ):
         super().__init__(config, in_channels, out_channels, kernel_size, stride, padding=None, activation=activation)
         self.conv = nn.Conv2d(

@@ -12,12 +12,16 @@ import gpustat
 import psutil
 import torch
 
+from transformers.utils import is_torch_accelerator_available
+
 
 # Data class to hold the hardware information
 def get_device_name_and_memory_total() -> tuple[str, float]:
     """Returns the name and memory total of GPU 0."""
-    device_name = torch.cuda.get_device_properties(0).name
-    device_memory_total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+    device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
+    torch_accelerator_module = getattr(torch, device_type, torch.cuda)
+    device_name = torch_accelerator_module.get_device_properties(0).name
+    device_memory_total = torch_accelerator_module.get_device_properties(0).total_memory / 1024**3
     return device_name, device_memory_total
 
 
@@ -62,6 +66,36 @@ def get_amd_gpu_stats() -> tuple[int, float]:
     return int(gpu_stats[0][1]), float(gpu_stats[0][2]) / 1024**3
 
 
+def get_intel_xpu_stats() -> tuple[int, float]:
+    """Returns the utilization and memory used of an Intel XPU"""
+    # xpu-smi outputs CSV format: Timestamp, DeviceId, GPU Memory Utilization (%), GPU Memory Used (MiB)
+    xpu_smi_output = subprocess.check_output(["xpu-smi", "dump", "-m", "5,18", "-n", "1"])
+    lines = xpu_smi_output.decode("utf-8").strip().split("\n")
+
+    # Parse all data lines (skip header) and collect stats from all cards
+    xpu_stats = []
+    for line in lines[1:]:
+        data_line = line.split(",")
+        if len(data_line) < 4:
+            continue
+        device_id = data_line[1].strip()
+        utilization_str = data_line[2].strip()
+        memory_used_str = data_line[3].strip()
+        if utilization_str != "N/A" and memory_used_str != "N/A":
+            utilization = int(float(utilization_str))
+            memory_used_mib = float(memory_used_str)
+            xpu_stats.append((device_id, utilization, memory_used_mib))
+
+    if not xpu_stats:
+        return 0, 0.0
+
+    # Sort by utilization (descending) and pick the highest
+    xpu_stats.sort(key=lambda x: x[1], reverse=True)
+    device_id, utilization, memory_used_mib = xpu_stats[0]
+    memory_used_gb = memory_used_mib / 1024
+    return utilization, memory_used_gb
+
+
 def get_nvidia_gpu_stats() -> tuple[int, float]:
     """Returns the utilization and memory used of an NVIDIA GPU, both in percent"""
     gpu_stats = gpustat.GPUStatCollection.new_query()
@@ -75,11 +109,14 @@ class GPUStatsCollector:
 
     def __init__(self) -> None:
         self.device_name, self.device_memory_total = get_device_name_and_memory_total()
+        device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
         # Monkey patch the get_utilization_and_memory_used method based on the GPU type
         if "amd" in self.device_name.lower():
             self.get_utilization_and_memory_used = get_amd_gpu_stats
         elif "nvidia" in self.device_name.lower():
             self.get_utilization_and_memory_used = get_nvidia_gpu_stats
+        elif "intel" in self.device_name.lower() or device_type == "xpu":
+            self.get_utilization_and_memory_used = get_intel_xpu_stats
         else:
             raise RuntimeError(f"Unsupported GPU: {self.device_name}")
 
@@ -117,6 +154,17 @@ class GPURawMetrics:
             "monitoring_status": self.monitoring_status.value,
         }
 
+    @classmethod
+    def from_dict(cls, data: dict[str, None | int | float | str]) -> "GPURawMetrics":
+        """Create a GPURawMetrics instance from a dictionary."""
+        return cls(
+            utilization=data["utilization"],
+            memory_used=data["memory_used"],
+            timestamps=data["timestamps"],
+            timestamp_0=data["timestamp_0"],
+            monitoring_status=GPUMonitoringStatus(data["monitoring_status"]),
+        )
+
 
 # Main class, used to monitor the GPU utilization during benchmark execution
 class GPUMonitor:
@@ -126,9 +174,11 @@ class GPUMonitor:
         self.sample_interval_sec = sample_interval_sec
         self.logger = logger if logger is not None else logging.getLogger(__name__)
 
-        self.num_available_gpus = torch.cuda.device_count()
+        device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
+        torch_accelerator_module = getattr(torch, device_type, torch.cuda)
+        self.num_available_gpus = torch_accelerator_module.device_count()
         if self.num_available_gpus == 0:
-            raise RuntimeError("No GPUs detected by torch.cuda.device_count().")
+            raise RuntimeError(f"No GPUs detected by torch.{device_type}.device_count().")
         self.gpu_stats_getter = GPUStatsCollector()
 
     def start(self):

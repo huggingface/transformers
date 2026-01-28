@@ -15,7 +15,7 @@
 import copy
 import json
 import os
-from typing import Any, Optional, TypeVar, Union
+from typing import Any, TypeVar
 
 import numpy as np
 from huggingface_hub import create_repo, is_offline_mode
@@ -71,8 +71,8 @@ class ImageProcessingMixin(PushToHubMixin):
         # This key was saved while we still used `XXXFeatureExtractor` for image processing. Now we use
         # `XXXImageProcessor`, this attribute and its value are misleading.
         kwargs.pop("feature_extractor_type", None)
-        # Pop "processor_class" as it should be saved as private attribute
-        self._processor_class = kwargs.pop("processor_class", None)
+        # Pop "processor_class", should not be saved with image processing config anymore
+        kwargs.pop("processor_class", None)
         # Additional attributes without default values
         for key, value in kwargs.items():
             try:
@@ -81,18 +81,14 @@ class ImageProcessingMixin(PushToHubMixin):
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
 
-    def _set_processor_class(self, processor_class: str):
-        """Sets processor class as an attribute."""
-        self._processor_class = processor_class
-
     @classmethod
     def from_pretrained(
         cls: type[ImageProcessorType],
-        pretrained_model_name_or_path: Union[str, os.PathLike],
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        pretrained_model_name_or_path: str | os.PathLike,
+        cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
+        token: str | bool | None = None,
         revision: str = "main",
         **kwargs,
     ) -> ImageProcessorType:
@@ -184,7 +180,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
         return cls.from_dict(image_processor_dict, **kwargs)
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
+    def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """
         Save an image processor object to the directory `save_directory`, so that it can be re-loaded using the
         [`~image_processing_utils.ImageProcessingMixin.from_pretrained`] class method.
@@ -234,7 +230,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
     @classmethod
     def get_image_processor_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
@@ -397,7 +393,7 @@ class ImageProcessingMixin(PushToHubMixin):
         return output
 
     @classmethod
-    def from_json_file(cls, json_file: Union[str, os.PathLike]):
+    def from_json_file(cls, json_file: str | os.PathLike):
         """
         Instantiates a image processor of type [`~image_processing_utils.ImageProcessingMixin`] from the path to a JSON
         file of parameters.
@@ -428,15 +424,9 @@ class ImageProcessingMixin(PushToHubMixin):
             if isinstance(value, np.ndarray):
                 dictionary[key] = value.tolist()
 
-        # make sure private name "_processor_class" is correctly
-        # saved as "processor_class"
-        _processor_class = dictionary.pop("_processor_class", None)
-        if _processor_class is not None:
-            dictionary["processor_class"] = _processor_class
-
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+    def to_json_file(self, json_file_path: str | os.PathLike):
         """
         Save this instance to a JSON file.
 
@@ -472,7 +462,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
         cls._auto_class = auto_class
 
-    def fetch_images(self, image_url_or_urls: Union[str, list[str], list[list[str]]]):
+    def fetch_images(self, image_url_or_urls: str | list[str] | list[list[str]]):
         """
         Convert a single or a list of urls into the corresponding `PIL.Image` objects.
 

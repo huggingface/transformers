@@ -16,13 +16,6 @@ limitations under the License.
 
 # Version 5 Migration guide
 
-> [!NOTE] 
-> 👀 Welcome to the migration guide for the first release candidate! Nothing is final and things are still actively in 
-> movement. We have a section dedicated to what is planned for future release candidates, yet is known not to work in 
-> the RC0. Look for "Disclaimers for the RC0".
-> 
-> We'll be eagerly awaiting your feedback in our GitHub issues!
-
 ## Library-wide changes with widespread impact
 
 ### Removal of TensorFlow and Jax
@@ -104,10 +97,7 @@ class Llama5Tokenizer(TokenizersBackend):
         else:
             self._vocab = vocab
 
-        if merges is not None:
-            self._merges = merges or []
-        else:
-            self._merges = generate_merges(filtered_vocab)
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True)
@@ -165,6 +155,9 @@ If you want something even higher up the stack, then `PreTrainedTokenizerBase` i
 - `save_pretrained`
 - among a few others
 
+**Note for implementing new tokenizers:** When creating a tokenizer class that loads from SentencePiece files, you can override the `convert_from_spm` class method in your converter to customize vocabulary structure, normalizers, regexes and anything that you would want to be passed to the tokenizers your are converting. 
+This is useful if the model requires specific token ordering or special split regex patterns. See existing converter classes in `convert_slow_tokenizer.py` for examples.
+
 ### API Changes
 
 #### 1. Direct tokenizer initialization with vocab and merges
@@ -192,7 +185,9 @@ tokenizer = LlamaTokenizer(vocab=vocab, merges=merges)
 
 This tokenizer will behave as a Llama-like tokenizer, with an updated vocabulary. This allows comparing different tokenizer classes with the same vocab; therefore enabling the comparison of different pre-tokenizers, normalizers, etc.
 
-⚠️ The `vocab_file` (as in, a path towards a file containing the vocabulary) cannot be used to initialize the `LlamaTokenizer` as loading from files is reserved to the `from_pretrained` method.
+**Simplified file loading:** Support is added for passing`vocab` and `merges` as file paths directly to tokenizer initialization. The tokenizer will automatically detect the format (SentencePiece `.model`, Tekken `tekken.json`, or plain vocab/merges files) for loading. For BPE tokenizers, if a vocab is provided but no merges, merges will be automatically generated (excluding special tokens).
+
+Note: Loading from file paths with `vocab="<path_to_a_file>"`'s primary goal is to allow you to do some quick testing, but for `BPE` models for example we don't check whether you properly passed the merges or not. 
 
 #### 2. Simplified decoding API
 
@@ -243,6 +238,9 @@ We simplify the serialization of tokenization attributes:
 - `special_tokens_map.json` - special tokens are now stored in `tokenizer_config.json`.
 - `added_tokens.json` - added tokens are now stored in `tokenizer.json`.
 - `added_tokens_decoder` is only stored when there is no `tokenizer.json`.
+- `add_bos_token` and `add_eos_token` - these are no longer saved in `tokenizer_config.json`. When a `tokenizer.json` file exists, these settings are defined in the tokenizer class or `tokenizer.json` itself.
+
+**Backend synchronization removed:** The automatic synchronization logic that updated backend tokenizer settings (like `add_prefix_space`, `do_lower_case`, `strip_accents`, `tokenize_chinese_chars`) after initialization has been removed. Tokenizer behavior is now fully determined by the `tokenizer.json` file or class definition at initialization time. 
 
 When loading older tokenizers, these files are still read for backward compatibility, but new saves use the consolidated format. We're gradually moving towards consolidating attributes to fewer files so that other libraries and implementations may depend on them more reliably.
 
@@ -256,7 +254,6 @@ Several models that had identical tokenizers now import from their base implemen
 - **LXMert** → uses BertTokenizer
 - **MT5** → uses T5Tokenizer
 - **MVP** → uses BartTokenizer
-
 These modules will eventually be removed altogether.
 
 **Removed T5-specific workarounds**
@@ -306,7 +303,6 @@ model_inputs["labels"] = model_inputs.pop("input_ids_target")
 
 **Removed Methods:**
 - `create_token_type_ids_from_sequences()`: Removed from base class. Subclasses that need custom token type ID creation should implement this method directly.
-- `clean_up_tokenization()`: Removed from base class. Now defined at model class level for models that need it (e.g., PLBart, CLVP, Wav2Vec2).
 - `prepare_for_model()`, `build_inputs_with_special_tokens()`, `truncate_sequences()`: Moved from `tokenization_utils_base.py` to `tokenization_python.py` for `PythonBackend` tokenizers. `TokenizersBackend` provides model-ready input via `tokenize()` and `encode()`, so these methods are no longer needed in the base class.
 - `_switch_to_input_mode()`, `_switch_to_target_mode()`, `as_target_tokenizer()`: Removed from base class. Use `__call__()` with `text_target` parameter instead.
 
@@ -410,6 +406,20 @@ There is a tracker for that here: https://github.com/huggingface/transformers/is
 
 ## Library-wide changes with lesser impact
 
+### Drop support for `safe_serialization=False`
+
+Safetensors is a simple format for storing tensors safely (as opposed to pickle) and that is still fast (zero-copy). It is the preferred file format to store transformers's weights. Prior to transformers `v5`, it was still possible to pass `safe_serialization=False` to fall back to torch's default (and unsafe) file format. This is no longer possible in `v5`. The `safe_serialization` parameter has been removed from all `save_pretrained` and `push_to_hub` methods.
+
+If you really want to export weights to another file format, you must save the `model.state_dict()` by yourself.
+
+Linked PR: https://github.com/huggingface/transformers/issues/42556
+
+### 50GB default shard size
+
+The default shard size went up from `5GB` to `50GB`. Main benefit will be to avoid having tens or hundreds of weight files for large models. This change was made possible thanks to the Xet backend allowing us to efficiently serve very large files. Increasing default shard size was a decision that was only taken after *very careful considerations* around optimizations and load speed. Check out the linked PR for benchmark details.
+
+Linked PR: https://github.com/huggingface/transformers/issues/42556
+
 ### `use_auth_token`
 
 The `use_auth_token` argument/parameter is deprecated in favor of `token` everywhere.
@@ -431,6 +441,37 @@ We dropped support for two torch APIs:
 - `torch.fx` in https://github.com/huggingface/transformers/pull/41683
 
 Those APIs were deprecated by the PyTorch team, and we're instead focusing on the supported APIs `dynamo` and `export`.
+
+### Feature extraction helpers: `get_*_features`
+
+Many multi-modal models expose convenience methods such as `get_text_features`, `get_image_features`, `get_audio_features`, and `get_video_features` to run inference on a single modality without calling `model(**inputs)` directly.
+
+Starting with v5, these 4 helper methods now return a `BaseModelOutputWithPooling` (or a subclass) instead of only a pooled embedding tensor:
+
+- `last_hidden_state`: unpooled token/patch/frame embeddings for the requested modality.
+- `pooler_output`: pooled representation (what most models previously returned from `get_*_features`).
+- `hidden_states`: full hidden states for all layers when `output_hidden_states=True` is passed.
+- `attentions`: attention maps when `output_attentions=True` is passed.
+
+> [!IMPORTANT]
+> There is **no single universal shape** for `last_hidden_state` or `pooler_output`. It's recommended to inspect a small forward pass before making assumptions about shapes or semantics.
+
+If your code previously did something like this:
+
+```python
+text_embeddings = model.get_text_features(**inputs)
+```
+
+and you used `text_embeddings` as a tensor, you should now explicitly use `return_dict=True` take the `pooler_output` field from the returned `BaseModelOutputWithPooling`:
+
+```python
+outputs = model.get_text_features(**inputs, return_dict=True)
+text_embeddings = outputs.pooler_output
+```
+
+This will match the previous behavior in the large majority of cases. If your model-specific implementation returned a tuple of results before, those values should now be accessible as fields on the corresponding `BaseModelOutputWithPooling` subclass.
+
+Linked PR: https://github.com/huggingface/transformers/pull/42564
 
 ## Quantization changes
 
@@ -455,6 +496,12 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
     quantization_config=quantization_config
 )
 ```
+
+
+### Auto-classes
+
+- `AutoModelWithLMHead` is removed in favor of `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and `AutoModelForSeq2SeqLM` for encoder-decoder models
+- `AutoModelForVision2Seq` is removed in favor of `AutoModelForImageTextToText`
 
 
 ## Configuration
@@ -503,7 +550,7 @@ Linked PRs:
 - Old, deprecated output type aliases were removed (e.g. `GreedySearchEncoderDecoderOutput`). We now only have 4 output classes built from the following matrix: decoder-only vs encoder-decoder, uses beams vs doesn't use beams (https://github.com/huggingface/transformers/pull/40998)
 - Removed deprecated classes regarding decoding methods that were moved to the Hub due to low usage (constraints and beam scores) (https://github.com/huggingface/transformers/pull/41223)
 - If `generate` doesn't receive any KV Cache argument, the default cache class used is now defined by the model (as opposed to always being `DynamicCache`) (https://github.com/huggingface/transformers/pull/41505)
-- Generation parameters are no longer accessible via model's config. If generation paramaters are serialized in `config.json` for any old model, it will be loaded back into model's generation config. Users are expected to access or modify generation parameters only with `model.generation_config.do_sample = True`. 
+- Generation parameters are no longer accessible via model's config. If generation parameters are serialized in `config.json` for any old model, it will be loaded back into model's generation config. Users are expected to access or modify generation parameters only with `model.generation_config.do_sample = True`. 
 
 ## Trainer
 
@@ -531,7 +578,7 @@ Linked PRs:
 - `use_mps_device` -> mps will be used by default if detected
 - `fp16_backend` and `half_precision_backend` -> we will only rely on torch.amp as everything has been upstream to torch
 - `no_cuda` -> `use_cpu`
-- ` include_tokens_per_second` -> `include_num_input_tokens_seen`
+- `include_tokens_per_second` -> `include_num_input_tokens_seen`
 - `use_legacy_prediction_loop` -> we only use `evaluation_loop` function from now on
 
 ### Removing deprecated arguments in `Trainer`
@@ -547,9 +594,55 @@ Linked PRs:
 
 ###  New defaults for `Trainer`
 
-- `use_cache` in the model config will be set to `False`. You can still change the cache value through `TrainingArguments` `usel_cache` argument if needed. 
+- `use_cache` in the model config will be set to `False`. You can still change the cache value through `TrainingArguments` `use_cache` argument if needed. 
 
-## Pipeline
+## Pipelines
+
+`Text2TextGenerationPipeline`, as well as the related `SummarizationPipeline` and `TranslationPipeline`, were deprecated and will now be removed.
+`pipeline` classes are intended as a high-level beginner-friendly API, but for almost all text-to-text tasks a modern chat model 
+and `TextGenerationPipeline` will provide much higher quality output. As a result, we felt it was misleading for beginners to offer the older pipelines.
+
+If you were using these pipelines before, try using `TextGenerationPipeline` with a chat model instead. For example, for summarization:
+
+```python
+import torch
+from transformers import pipeline
+
+# Any other chat model will also work - if you're low on memory you can use a smaller one
+summarizer = pipeline("text-generation", model="Qwen/Qwen3-4B-Instruct-2507")  
+message_history = [
+    {
+        "role": "user",
+        "content": "Summarize the following text:\n\n[TEXT_TO_SUMMARIZE]"
+    }
+]
+print(summarizer(message_history)[0]["generated_text"][-1]["content"])
+```
+
+Similarly, the `image-to-text` pipeline has been removed. This pipeline was used for early image captioning models, but these
+no longer offer competitive performance. Instead, for image captioning tasks we recommend using a modern vision-language chat model
+via the `image-text-to-text` pipeline. For example:
+
+```python
+import torch
+from transformers import pipeline
+
+# Any other VLM will also work - if you're low on memory you can use a smaller one
+captioner = pipeline("image-text-to-text", model="Qwen/Qwen3-VL-4B-Instruct")
+message_history = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "image": "[IMAGE_URL_HERE]",
+            },
+            {"type": "text", "text": "Describe this image."},
+        ],
+    }
+]
+print(captioner(message_history)[0]["generated_text"][-1]["content"])
+```
 
 - Image text to text pipelines will no longer accept images as a separate argument along with conversation chats. Image data has to be embedded in the chat's "content" field. See [#42359](https://github.com/huggingface/transformers/pull/42359)
 

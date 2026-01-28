@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,10 +16,10 @@
 import math
 from collections import defaultdict
 from functools import lru_cache
-from typing import Optional, Union
+from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -153,7 +152,7 @@ def find_supported_resolutions(max_num_chunks: int, patch_size: SizeDict) -> tor
 def pad_to_best_fit(
     images: "torch.Tensor",
     target_size: tuple[int, int],
-    background_color: Union[int, tuple[int, int, int]] = 0,
+    background_color: int | tuple[int, int, int] = 0,
 ) -> "torch.Tensor":
     """
     Pads an image to fit the target size.
@@ -181,7 +180,7 @@ def pad_to_best_fit(
     target_height, target_width = target_size
     paste_x_right = target_width - width
     paste_y_right = target_height - height
-    padded_images = F.pad(images, padding=[0, 0, paste_x_right, paste_y_right], fill=background_color)
+    padded_images = tvF.pad(images, padding=[0, 0, paste_x_right, paste_y_right], fill=background_color)
 
     return padded_images
 
@@ -326,8 +325,8 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Union[float, list[float]],
-        image_std: Union[float, list[float]],
+        image_mean: float | list[float],
+        image_std: float | list[float],
     ) -> "torch.Tensor":
         """
         Rescale and normalize images.
@@ -353,14 +352,14 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
         size: SizeDict,
         max_patches: int,
         resize_to_max_canvas: bool,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         possible_resolutions = find_supported_resolutions(max_num_chunks=max_patches, patch_size=size)
@@ -419,10 +418,9 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
                 )
                 grouped_processed_images[shape] = torch.cat([processed_images, global_tiles.unsqueeze(1)], dim=1)
         processed_images = reorder_images(grouped_processed_images, grouped_images_index)
-        aspect_ratios_list = reorder_images(grouped_aspect_ratios, grouped_images_index)
+        aspect_ratios = reorder_images(grouped_aspect_ratios, grouped_images_index)
 
         processed_images = torch.cat(processed_images, dim=0) if return_tensors else processed_images
-        aspect_ratios = torch.stack(aspect_ratios_list, dim=0) if return_tensors else aspect_ratios_list
         return BatchFeature(
             data={"pixel_values": processed_images, "aspect_ratios": aspect_ratios}, tensor_type=return_tensors
         )

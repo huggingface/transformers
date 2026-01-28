@@ -277,8 +277,13 @@ class ProcessorTesterMixin:
         # Get the appropriate Auto mapping for this component type
         if mapping_name == "tokenizer":
             from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING
+            from transformers.utils import is_tokenizers_available
 
             component_class = TOKENIZER_MAPPING.get(config_class, None)
+            if component_class is None and is_tokenizers_available():
+                from transformers.tokenization_utils_tokenizers import TokenizersBackend
+
+                component_class = TokenizersBackend
         elif mapping_name == "image_processor":
             from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING
 
@@ -428,6 +433,14 @@ class ProcessorTesterMixin:
 
                     # tokenizer repr contains model-path from where we loaded
                     if "tokenizer" not in attribute:
+                        # We don't store/load `_processor_class` for subprocessors.
+                        # The `_processor_class` is saved once per config, at general level
+                        self.assertFalse(hasattr(attribute_second, "_processor_class"))
+                        self.assertFalse(hasattr(attribute_first, "_processor_class"))
+
+                        self.assertFalse(hasattr(attribute_second, "processor_class"))
+                        self.assertFalse(hasattr(attribute_first, "processor_class"))
+
                         self.assertEqual(repr(attribute_first), repr(attribute_second))
 
     def test_processor_from_and_save_pretrained_as_nested_dict(self):
@@ -1746,7 +1759,7 @@ class ProcessorTesterMixin:
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            return_tensors="np",
+            return_tensors="pt",
             load_audio_from_video=True,
         )
         self.assertTrue(self.audio_input_name in out_dict)

@@ -1432,15 +1432,15 @@ class TrainingArguments:
             )
 
         # Parse in args that could be `dict` sent in from the CLI as a string
-        for field in self._VALID_DICT_FIELDS:
-            passed_value = getattr(self, field)
+        for valid_field in self._VALID_DICT_FIELDS:
+            passed_value = getattr(self, valid_field)
             # We only want to do this if the str starts with a bracket to indicate a `dict`
             # else its likely a filename if supported
             if isinstance(passed_value, str) and passed_value.startswith("{"):
                 loaded_dict = json.loads(passed_value)
                 # Convert str values to types if applicable
                 loaded_dict = _convert_str_dict(loaded_dict)
-                setattr(self, field, loaded_dict)
+                setattr(self, valid_field, loaded_dict)
 
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
@@ -1530,16 +1530,14 @@ class TrainingArguments:
             self.greater_is_better = not self.metric_for_best_model.endswith("loss")
         if is_torch_available():
             if self.bf16 or self.bf16_full_eval:
-                if self.use_cpu and not is_torch_xla_available():
-                    # cpu
-                    raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
-                elif not self.use_cpu:
-                    if not is_torch_bf16_gpu_available() and not is_torch_xla_available():  # added for tpu support
-                        error_message = "Your setup doesn't support bf16/gpu."
-                        if is_torch_cuda_available():
-                            error_message += " You need Ampere+ GPU with cuda>=11.0"
-                        # gpu
-                        raise ValueError(error_message)
+                if (
+                    not self.use_cpu and not is_torch_bf16_gpu_available() and not is_torch_xla_available()
+                ):  # added for tpu support
+                    error_message = "Your setup doesn't support bf16/gpu. You need to assign use_cpu if you want to train the model on CPU"
+                    if is_torch_cuda_available():
+                        error_message += " You need Ampere+ GPU with cuda>=11.0"
+                    # gpu
+                    raise ValueError(error_message)
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
