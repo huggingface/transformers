@@ -154,6 +154,8 @@ class GlmOcrTextConfig(Glm4vTextConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
 
     ```python
     >>> from transformers import GlmOcrTextModel, GlmOcrConfig
