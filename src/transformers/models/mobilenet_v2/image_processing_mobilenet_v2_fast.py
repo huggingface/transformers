@@ -68,7 +68,7 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
             label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype), label)
             labels[idx] = label
 
-        return label
+        return labels
 
     @auto_docstring
     def preprocess(

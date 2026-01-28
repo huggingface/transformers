@@ -22,6 +22,7 @@ from torch import nn
 
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput
+from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -98,7 +99,7 @@ class LasrProcessor(ParakeetProcessor):
     pass
 
 
-class LasrEncoderConfig(ParakeetEncoderConfig):
+class LasrEncoderConfig(ParakeetEncoderConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`LasrEncoder`]. It is used to instantiate a
     `LasrEncoder` model according to the specified arguments, defining the model architecture.

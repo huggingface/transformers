@@ -769,6 +769,8 @@
         title: xLSTM
       - local: model_doc/yoso
         title: YOSO
+      - local: model_doc/youtu
+        title: Youtu-LLM
       - local: model_doc/zamba
         title: Zamba
       - local: model_doc/zamba2
