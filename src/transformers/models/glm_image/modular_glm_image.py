@@ -236,13 +236,11 @@ class GlmImageTextConfig(Glm4vTextConfig):
         vocab_size: int | None = 168064,
         vision_vocab_size: int | None = 16512,
         attention_bias: bool | None = True,
-        pad_token_id: int | None = None,
         **super_kwargs,
     ):
         self.vocab_size = vocab_size
         self.vision_vocab_size = vision_vocab_size
         self.attention_bias = attention_bias
-        self.pad_token_id = pad_token_id
         super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **super_kwargs)
 
 
