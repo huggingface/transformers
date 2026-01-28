@@ -1787,11 +1787,16 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         start_frame_idx=0,
         max_frame_num_to_track=None,
         reverse=False,
+        show_progress_bar: bool = False,
     ):
         """
         Propagate the prompts to get grounding results for the entire video. This method
         is a generator and yields inference outputs for all frames in the range specified
         by `start_frame_idx`, `max_frame_num_to_track`, and `reverse`.
+
+        Args:
+            show_progress_bar (`bool`, *optional*, defaults to `False`):
+                Whether to show a progress bar during propagation.
 
         Yields:
             `Sam3VideoSegmentationOutput`: The segmentation output for each frame.
@@ -1804,7 +1809,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         )
 
         hotstart_buffer = []
-        for frame_idx in tqdm(processing_order):
+        for frame_idx in tqdm(processing_order, desc="propagate in video", disable=not show_progress_bar):
             out = self(inference_session=inference_session, frame_idx=frame_idx, reverse=reverse)
 
             if self.hotstart_delay > 0:
