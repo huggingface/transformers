@@ -318,6 +318,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if return_language is not None:
             if self.type != "seq2seq_whisper":
                 raise ValueError("Only Whisper can return language for now.")
+            forward_params["return_language"] = return_language
             postprocess_params["return_language"] = return_language
 
         # Parameter used in more than one place
@@ -500,7 +501,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(self, model_inputs, return_timestamps=False, **generate_kwargs):
+    def _forward(self, model_inputs, return_timestamps=False, return_language=False, **generate_kwargs):
         attention_mask = model_inputs.pop("attention_mask", None)
         stride = model_inputs.pop("stride", None)
         num_frames = model_inputs.pop("num_frames", None)
@@ -524,6 +525,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
             # custom processing for Whisper timestamps and word-level timestamps
             return_timestamps = return_timestamps or getattr(self.generation_config, "return_timestamps", False)
+            if return_language and self.type == "seq2seq_whisper":
+                generate_kwargs["return_segments"] = True
             if return_timestamps and self.type == "seq2seq_whisper":
                 generate_kwargs["return_timestamps"] = bool(return_timestamps)
                 if return_timestamps == "word":
@@ -543,15 +546,20 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             tokens = self.model.generate(**generate_kwargs)
 
             # whisper longform generation stores timestamps in "segments"
-            if return_timestamps == "word" and self.type == "seq2seq_whisper":
-                if "segments" not in tokens:
-                    out = {"tokens": tokens["sequences"], "token_timestamps": tokens["token_timestamps"]}
-                else:
+            # This happens when return_timestamps='word' OR when return_language=True
+            if self.type == "seq2seq_whisper" and isinstance(tokens, dict) and "segments" in tokens:
+                if return_timestamps == "word":
                     token_timestamps = [
                         torch.cat([segment["token_timestamps"] for segment in segment_list])
                         for segment_list in tokens["segments"]
                     ]
                     out = {"tokens": tokens["sequences"], "token_timestamps": token_timestamps}
+                    if return_language:
+                        out["language"] = tokens["segments"][0][0]["result"]["sequences"][1]
+                else:
+                    out = {"tokens": tokens["sequences"]}
+                    if return_language:
+                        out["language"] = tokens["segments"][0][0]["result"][1]
             else:
                 out = {"tokens": tokens}
             if self.type == "seq2seq_whisper":
@@ -588,7 +596,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     ):
         # Optional return types
         optional = {}
-
         final_items = []
         key = "logits" if self.type == "ctc_with_lm" else "tokens"
         stride = None
@@ -675,6 +682,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             output.pop("is_last", None)
             output.pop("stride", None)
             output.pop("token_timestamps", None)
+            output.pop("language", None)
             for k, v in output.items():
                 extra[k].append(v)
         return {"text": text, **optional, **extra}
