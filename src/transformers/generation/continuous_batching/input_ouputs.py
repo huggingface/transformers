@@ -116,6 +116,25 @@ def build_attention_mask(
 
 @dataclass
 class PagedAttentionArgs:
+    """Dataclass containing the keyword arguments for a forward pass using paged attention.
+
+    Attributes:
+        input_ids: Input token IDs tensor of shape `(1, total_query_tokens)`.
+        attention_mask: Attention mask tensor or dictionary mapping layer types to masks. Can be `None` if the
+            attention implementation doesn't require explicit masks.
+        position_ids: Position IDs tensor of shape `(1, total_query_tokens)`.
+        cu_seq_lens_q: Cumulative sequence lengths for queries, used for variable-length batching.
+        cu_seq_lens_k: Cumulative sequence lengths for keys/values. Can be a tensor or dictionary mapping layer
+            types (e.g., "full_attention", "sliding_attention") to tensors for hybrid models.
+        max_seqlen_q: Maximum query sequence length in the batch.
+        max_seqlen_k: Maximum key/value sequence length. Can be an int or dictionary for hybrid models.
+        write_index: List of tensors indicating where to write new KV states in the cache, one per attention group.
+        read_index: List of tensors indicating which cache positions to read from, one per attention group.
+        logits_indices: Tensor indicating which positions in the output should be used for next-token prediction.
+        cache: The [`PagedAttentionCache`] instance managing the KV cache.
+        use_cache: Whether to use caching (always `False` in continuous batching as the cache is managed externally).
+    """
+
     input_ids: torch.Tensor
     attention_mask: torch.Tensor | dict[str, torch.Tensor] | None
     position_ids: torch.Tensor
@@ -147,15 +166,36 @@ class PagedAttentionArgs:
 
 
 class ContinuousBatchingIOs:
+    """Manages input/output tensors for continuous batching generation. This class handles the allocation and management
+    of static tensors used during generation steps in continuous batching mode. Allocation is done once at init time.
+
+    The class is responsible for:
+    - Setting up static tensor storage for all generation inputs/outputs
+    - Preparing batch tensors from a list of request states before each forward pass
+    - Building model keyword arguments with optional padding for CUDA graphs/torch.compile
+    - Resetting tensors between batches while minimizing memory operations
+
+    It keeps track of the requests in the current batch as well as the actual number of tokens (Q and KV), sequences in
+    the batch and sizes of indices. This is useful when using padded inputs, for CUDA graphs and/or torch.compile.
+    """
+
     def __init__(
         self, cache: PagedAttentionCache, config: PretrainedConfig, device: torch.device, model_dtype: torch.dtype
     ) -> None:
+        """Initialize the continuous batching I/O manager.
+
+        Args:
+            cache: The [`PagedAttentionCache`] instance managing the KV cache.
+            config: The model's pretrained configuration.
+            device: The device to allocate tensors on.
+            model_dtype: The data type for model computations.
+        """
         # Memoize attributes
         self.cache = cache
         self.device = device
         self.config = config
         self.model_dtype = model_dtype
-        self.sliding_window = getattr(config, "sliding_window", 1)
+        self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
         # Setup accumulators
         self.requests_in_batch: list[RequestState] = []
         self.actual_query_length = 0
@@ -168,8 +208,16 @@ class ContinuousBatchingIOs:
 
     @traced(standalone=True)
     def setup_static_tensors(self) -> None:
-        """Setup the static tensors that are used for storage during the generation step. No other tensor will be
-        allowed for the inputs or the outputs of the generation step."""
+        """Allocates static tensors for generation inputs and outputs. This is called only once at init time, to avoid
+        repeated allocations and enable CUDA graphs. All tensors are allocated with maximum possible sizes.
+        The allocated tensors are:
+
+        - `input_ids` and `position_ids`: Query token information
+        - `cumulative_seqlens_q` and `cumulative_seqlens_k`: Sequence length tracking for FlashAttention-style batching
+        - `attention_mask`: Optional attention masks (only for eager/SDPA implementations)
+        - `write_index` and `read_index` storage: Cache indexing tensors for each attention group
+        - `output_ids`: Storage for generated token IDs
+        """
         num_pages = self.cache.num_blocks * self.cache.block_size
 
         # Some tensors always have the same shape regardless of the model
@@ -219,8 +267,10 @@ class ContinuousBatchingIOs:
     @traced
     @torch.no_grad()
     def reset_static_tensors(self, full_reset: bool = False) -> None:
-        """Reset static tensors for the next batch. In between batches, reset only the parts that were used in the last
-        batch, but for initialisation, we can reset everything using the (full_reset) flag."""
+        """Reset static tensors for the next batch. For efficiency, this only resets the portions of tensors that were
+        actually used in the previous batch, using the attributes actual_query_length, actual_key_length, and
+        actual_batch_size. If a (full_reset) is requested, the entire tensor storage is reset.
+        """
         # Compute the slice to reset
         q_len = self.write_index_storage[0].size(-1) if full_reset else self.actual_query_length
         k_len = self.read_index_storage[0].size(-1) if full_reset else self.actual_key_length
@@ -248,8 +298,18 @@ class ContinuousBatchingIOs:
 
     @traced
     def prepare_batch_tensors(self, requests_in_batch: list[RequestState]) -> None:
-        """Prepare tensors and metadata for the next model forward pass."""
-        # Keep track of this requests in the batch, which will be usefull to update the batch later
+        """Prepare tensors and metadata for the next model forward pass, using the given requests as data. This method:
+
+        1. Resets the static tensors from the previous batch
+        2. Iterates through requests to accumulate input_ids, position_ids, and sequence lengths
+        3. Extends read/write indices for cache management
+        4. Builds attention masks if needed (for eager/SDPA implementations)
+        5. Converts accumulated lists to tensors and copies them to static storage
+
+        This method also modifies the `position_offset` attribute of each request to track progress and adds a
+        temporary token at the end of the requests for which there will a new token.
+        """
+        # Keep track of this requests in the batch, which will be useful to update the batch later
         self.requests_in_batch = requests_in_batch
         if not self.requests_in_batch:
             raise ValueError("No requests in batch")

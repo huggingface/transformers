@@ -31,7 +31,7 @@ from ...generation.logits_process import LogitsProcessorList
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
-from .input_ouputs import ContinuousBatchingIOs
+from .input_ouputs import ContinuousBatchingIOs, attn_mask_is_needed
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 
@@ -66,11 +66,6 @@ def pad_by_intervals(size: int, max_value: int, nb_intervals: int) -> int:
         return max_value
     padded = ceil(size / interval_size) * interval_size if size > 0 else interval_size
     return min(padded, max_value)
-
-
-def attn_mask_is_needed(config: PretrainedConfig) -> bool:
-    """Checks if attention mask is needed for the given (config)."""
-    return config._attn_implementation in ["paged|eager", "paged|sdpa"]
 
 
 # We cannot use `PreTrainedModel` for circular import reasons, so this helps keep track of the basic types
