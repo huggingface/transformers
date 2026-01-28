@@ -93,10 +93,10 @@ class Mxfp4HfQuantizer(HfQuantizer):
             compute_capability = torch.cuda.get_device_capability()
             is_device_supported_mxfp4 = compute_capability >= (7, 5)
             kernels_available = is_triton_available("3.4.0") and is_kernels_available()
-        else:
+        elif device.type == "cpu":
             # CPU support mxfp4 in kernels
             is_device_supported_mxfp4 = True
-            kernels_available = is_triton_available("3.4.0") and is_kernels_available()
+            kernels_available = is_triton_available("3.5.0") and is_kernels_available()
 
         if self.pre_quantized:
             # On unsupported GPUs or without kernels, we will dequantize the model to bf16
@@ -129,12 +129,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             self._lazy_import_kernels()
 
         device_map = kwargs.get("device_map")
-        if device_map is None:
-            logger.warning_once(
-                "You have loaded an FP4 model on CPU and have a CUDA/XPU device available, make sure to set "
-                "your model on a GPU/XPU device in order to run your model. To remove this warning, pass device_map = 'cuda' or device_map = 'xpu'. "
-            )
-        elif isinstance(device_map, dict):
+        if device_map is not None and isinstance(device_map, dict):
             if not self.pre_quantized and "disk" in device_map.values():
                 raise ValueError(
                     "You are attempting to load an FP4 model with a device_map that contains a disk device."
