@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_nomic_bert.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 the HuggingFace Team. All rights reserved.
+# Copyright 2026 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,11 +18,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs
 
 
-class NomicBertConfig(PreTrainedConfig):
+class NomicBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`NomicBertModel`]. It is used to instantiate an NomicBERT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -34,7 +36,7 @@ class NomicBertConfig(PreTrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the NomicBERT model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`BertModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
@@ -46,8 +48,6 @@ class NomicBertConfig(PreTrainedConfig):
             Number of key-value attention heads for each attention layer in the Transformer encoder.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
@@ -59,18 +59,11 @@ class NomicBertConfig(PreTrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        use_cache (`bool`, *optional*, defaults to `False`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
-        rotary_emb_base (`int`, *optional*, defaults to 10000):
-            Base for the rotary embeddings.
         type_vocab_size (`int`, *optional*, defaults to 2):
             The size of the token type (segment) vocabulary. Used to distinguish different portions of the input,
             such as sentence A and sentence B in pairwise classification tasks.
-        add_cross_attention (`bool`, *optional*, defaults to `False`):
-            Whether to add cross-attention layers.
         bos_token_id (`int`, *optional*):
             The token ID used for the beginning-of-sequence token.
         eos_token_id (`int`, *optional*):
@@ -106,7 +99,7 @@ class NomicBertConfig(PreTrainedConfig):
     ```
     """
 
-    model_type = "nomic_bert"
+    model_type = "model"
 
     def __init__(
         self,
@@ -116,17 +109,13 @@ class NomicBertConfig(PreTrainedConfig):
         num_attention_heads=12,
         num_key_value_heads=None,
         intermediate_size=3072,
-        is_decoder=False,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        use_cache=False,
         classifier_dropout=None,
-        rotary_emb_base=10_000,
         type_vocab_size=2,
-        add_cross_attention=False,
         bos_token_id=None,
         eos_token_id=None,
         tie_word_embeddings=True,
@@ -135,47 +124,44 @@ class NomicBertConfig(PreTrainedConfig):
         pad_token_id=0,
         head_dim=None,
         attention_bias=False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
-        self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
+        if rope_parameters is None:
+            rope_parameters = {
+                "rope_type": "default",
+                "rope_theta": 10000.0,
+            }
 
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.classifier_dropout = classifier_dropout
+        super().__init__(
+            rope_parameters=rope_parameters,
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            intermediate_size=intermediate_size,
+            hidden_act=hidden_act,
+            hidden_dropout_prob=hidden_dropout_prob,
+            attention_probs_dropout_prob=attention_probs_dropout_prob,
+            initializer_range=initializer_range,
+            layer_norm_eps=layer_norm_eps,
+            use_cache=False,
+            classifier_dropout=classifier_dropout,
+            is_decoder=False,
+            type_vocab_size=type_vocab_size,
+            max_position_embeddings=max_position_embeddings,
+            pad_token_id=pad_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            add_cross_attention=False,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
 
-        self.rope_parameters = rope_parameters
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.attention_bias = attention_bias
-        self.rotary_emb_base = rotary_emb_base
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
         self.num_key_value_heads = num_key_value_heads
 
-        if rope_parameters is None:
-            self.rope_parameters = {
-                "rope_type": "default",
-                "rope_theta": rotary_emb_base,
-            }
-        else:
-            self.rope_parameters = rope_parameters
+        self.rope_parameters = rope_parameters
 
 
 __all__ = ["NomicBertConfig"]

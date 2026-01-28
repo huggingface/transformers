@@ -1,4 +1,4 @@
-# Copyright 2025 the HuggingFace Team. All rights reserved.
+# Copyright 2026 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,25 +13,22 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...configuration_utils import PreTrainedConfig
+from ...integrations import use_kernelized_func
 from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    BaseModelOutputWithPoolingAndCrossAttentions,
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import TransformersKwargs
-from ...utils.generic import maybe_autocast
-from ..bert.configuration_bert import BertConfig
+from ...utils import TransformersKwargs, auto_docstring
 from ..bert.modeling_bert import (
     BertEmbeddings,
     BertEncoder,
@@ -54,11 +51,13 @@ from ..bert.modeling_bert import (
     BertPredictionHeadTransform,
     BertPreTrainedModel,
     BertPreTrainingHeads,
+    BertSelfAttention,
     BertSelfOutput,
 )
+from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
 
 
-class NomicBertConfig(BertConfig):
+class NomicBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`NomicBertModel`]. It is used to instantiate an NomicBERT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -70,7 +69,7 @@ class NomicBertConfig(BertConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the NomicBERT model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`BertModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
@@ -82,8 +81,6 @@ class NomicBertConfig(BertConfig):
             Number of key-value attention heads for each attention layer in the Transformer encoder.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
@@ -95,18 +92,11 @@ class NomicBertConfig(BertConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        use_cache (`bool`, *optional*, defaults to `False`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
-        rotary_emb_base (`int`, *optional*, defaults to 10000):
-            Base for the rotary embeddings.
         type_vocab_size (`int`, *optional*, defaults to 2):
             The size of the token type (segment) vocabulary. Used to distinguish different portions of the input,
             such as sentence A and sentence B in pairwise classification tasks.
-        add_cross_attention (`bool`, *optional*, defaults to `False`):
-            Whether to add cross-attention layers.
         bos_token_id (`int`, *optional*):
             The token ID used for the beginning-of-sequence token.
         eos_token_id (`int`, *optional*):
@@ -142,7 +132,7 @@ class NomicBertConfig(BertConfig):
     ```
     """
 
-    model_type = "nomic_bert"
+    model_type = "model"
 
     def __init__(
         self,
@@ -152,17 +142,13 @@ class NomicBertConfig(BertConfig):
         num_attention_heads=12,
         num_key_value_heads=None,
         intermediate_size=3072,
-        is_decoder=False,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        use_cache=False,
         classifier_dropout=None,
-        rotary_emb_base=10_000,
         type_vocab_size=2,
-        add_cross_attention=False,
         bos_token_id=None,
         eos_token_id=None,
         tie_word_embeddings=True,
@@ -171,9 +157,16 @@ class NomicBertConfig(BertConfig):
         pad_token_id=0,
         head_dim=None,
         attention_bias=False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
+        if rope_parameters is None:
+            rope_parameters = {
+                "rope_type": "default",
+                "rope_theta": 10000.0,
+            }
+
         super().__init__(
+            rope_parameters=rope_parameters,
             vocab_size=vocab_size,
             hidden_size=hidden_size,
             num_hidden_layers=num_hidden_layers,
@@ -184,111 +177,32 @@ class NomicBertConfig(BertConfig):
             attention_probs_dropout_prob=attention_probs_dropout_prob,
             initializer_range=initializer_range,
             layer_norm_eps=layer_norm_eps,
-            use_cache=use_cache,
+            use_cache=False,
             classifier_dropout=classifier_dropout,
-            is_decoder=is_decoder,
+            is_decoder=False,
             type_vocab_size=type_vocab_size,
             max_position_embeddings=max_position_embeddings,
             pad_token_id=pad_token_id,
             tie_word_embeddings=tie_word_embeddings,
-            add_cross_attention=add_cross_attention,
+            add_cross_attention=False,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             **kwargs,
         )
 
-        self.rope_parameters = rope_parameters
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.attention_bias = attention_bias
-        self.rotary_emb_base = rotary_emb_base
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
         self.num_key_value_heads = num_key_value_heads
 
-        if rope_parameters is None:
-            self.rope_parameters = {
-                "rope_type": "default",
-                "rope_theta": rotary_emb_base,
-            }
-        else:
-            self.rope_parameters = rope_parameters
+        self.rope_parameters = rope_parameters
 
 
 class NomicBertEmbeddings(BertEmbeddings):
     pass
 
 
-class NomicBertRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
-
-    def __init__(self, config: NomicBertConfig, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: NomicBertConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters.get("rope_theta")
-
-        if base is None:
-            base = config.rotary_emb_base
-
-        if base is None:
-            base = 10000
-
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (
-                self.inv_freq[None, :, None].to(device=x.device, dtype=x.dtype)
-                @ position_ids[:, None, :].to(dtype=x.dtype)
-            ).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+class NomicBertRotaryEmbedding(LlamaRotaryEmbedding):
+    pass
 
 
 def rotate_half(x):
@@ -298,75 +212,8 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    dropout: float = 0.0,
-    scaling: float | None = None,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    if scaling is not None:
-        query = query * scaling
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3))
-
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 @use_kernelized_func(apply_rotary_pos_emb)
-class NomicBertSelfAttention(nn.Module):
+class NomicBertSelfAttention(BertSelfAttention):
     """
     Custom Self-Attention mechanism for NomicBERT.
     Key Difference: Replaces standard BERT absolute position embeddings with
@@ -374,93 +221,55 @@ class NomicBertSelfAttention(nn.Module):
     """
 
     def __init__(self, config, layer_idx=None):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.num_heads = config.num_attention_heads
+        super().__init__(config, layer_idx=layer_idx)
         self.num_kv_heads = (
             config.num_key_value_heads if config.num_key_value_heads is not None else config.num_attention_heads
         )
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // self.num_heads)
-        self.num_key_value_groups = self.num_heads // self.num_kv_heads
-        self.scaling = self.head_dim**-0.5
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=config.attention_bias)
+        self.num_key_value_groups = self.num_attention_heads // self.num_kv_heads
+        self.q_proj = nn.Linear(config.hidden_size, self.num_attention_heads * self.attention_head_size, bias=config.attention_bias)
+        self.k_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.attention_head_size, bias=config.attention_bias)
+        self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.attention_head_size, bias=config.attention_bias)
+
+        self.is_causal = False
 
     def forward(
         self,
         hidden_states,
         attention_mask=None,
-        past_key_values=None,
-        position_ids=None,
         position_embeddings=None,
-        cache_position=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size, seq_len, _ = hidden_states.size()
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
 
         # get all proj
-        query_layer = (
-            self.q_proj(hidden_states).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        )
-
-        key_layer = (
-            self.k_proj(hidden_states).view(batch_size, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
-        )
-        value_layer = (
-            self.v_proj(hidden_states).view(batch_size, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
-        )
+        query_layer = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_layer = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_layer = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # Apply Rotary Position Embeddings
-        if position_embeddings is not None:
-            cos, sin = position_embeddings
-            query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
-
-        # Fallback
-        elif position_ids is not None and isinstance(position_ids, tuple):
-            cos, sin = position_ids
-            query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
+        cos, sin = position_embeddings
+        query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
 
         query_layer = query_layer * self.scaling
 
-        # Handle KV Cache
-        if past_key_values is not None:
-            cache_kwargs = {}
-            if isinstance(past_key_values, Cache):
-                if position_embeddings is not None:
-                    cos, sin = position_embeddings
-                    cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx, cache_kwargs)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # Handle SDPA vs Eager differences
-        if self.config._attn_implementation == "sdpa":
-            # SDPA does not return weights
-            attn_output, attn_weights = ALL_ATTENTION_FUNCTIONS["sdpa"](
-                self,
-                query_layer,
-                key_layer,
-                value_layer,
-                attention_mask,
-                dropout=0.0 if not self.training else self.dropout.p,
-                scaling=self.scaling,
-                **kwargs,
-            )
-            attn_weights = None
-        else:
-            attn_output, attn_weights = eager_attention_forward(
-                self,
-                query_layer,
-                key_layer,
-                value_layer,
-                attention_mask,
-                dropout=0.0 if not self.training else self.dropout.p,
-                scaling=1.0,
-                **kwargs,
-            )
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_len, -1)
+        attn_output = attn_output.transpose(1, 2).contiguous().view(*input_shape, -1)
         return attn_output, attn_weights
 
 
@@ -479,58 +288,19 @@ class NomicBertAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        past_key_values=None,
         position_embeddings=None,
-        position_ids=None,
-        cache_position=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        """
-        Forward pass for the NomicBERT Attention layer.
-
-        Args:
-            hidden_states (`torch.Tensor`):
-                Input hidden states of shape `(batch_size, seq_len, hidden_size)`.
-            attention_mask (`torch.FloatTensor`, *optional*):
-                Mask to avoid performing attention on padding token indices.
-                Mask values selected in `[0, 1]`: 1 for tokens that are **not masked**, 0 for masked tokens.
-            head_mask (`torch.FloatTensor`, *optional*):
-                Mask to nullify selected heads of the self-attention modules.
-                Mask values selected in `[0, 1]`: 1 indicates the head is **not masked**, 0 indicates the head is **masked**.
-            encoder_hidden_states (`torch.FloatTensor`, *optional*):
-                Hidden states of the encoder (for cross-attention).
-            encoder_attention_mask (`torch.FloatTensor`, *optional*):
-                Mask to avoid performing attention on the encoder outputs (for cross-attention).
-            past_key_values (`Cache`, *optional*):
-                Cached key and value states from previous steps for fast decoding.
-            output_attentions (`bool`, *optional*):
-                Whether to return the attention probabilities.
-            position_ids (`torch.LongTensor`, *optional*):
-                Indices of positions of each input sequence token in the position embeddings.
-                Required for accurate Rotary Embedding calculations during generation.
-
-        Returns:
-            `Tuple[torch.Tensor]`:
-                A tuple containing:
-                - **attention_output** (`torch.Tensor`): The output of the attention layer.
-                - **attention_probs** (`torch.Tensor`, *optional*): Returned if `output_attentions=True`.
-                - **past_key_values** (`Cache`, *optional*): Returned if `is_decoder=True` or `past_key_values` were passed.
-        """
         self_outputs = self.self(
             hidden_states,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
             position_embeddings=position_embeddings,
-            cache_position=cache_position,
             **kwargs,
         )
         # Process context layer (always index 0)
         attention_output = self.output(self_outputs[0], hidden_states)
 
-        outputs = (attention_output,) + self_outputs[1:]
-
-        return outputs
+        return (attention_output,)
 
 
 class NomicBertIntermediate(nn.Module):
@@ -555,10 +325,7 @@ class NomicBertIntermediate(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        gate_output = self.act_fn(self.gate_proj(hidden_states))
-        up_output = self.up_proj(hidden_states)
-
-        return gate_output * up_output
+        return self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states)
 
 
 class NomicBertOutput(BertOutput):
@@ -576,23 +343,16 @@ class NomicBertLayer(BertLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
-        past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
         position_embeddings: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
-            past_key_values=past_key_values,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
-            position_ids=position_ids,
             **kwargs,
         )
         attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]
 
         hidden_states = self.attention.output(attention_output, hidden_states)
 
@@ -600,16 +360,10 @@ class NomicBertLayer(BertLayer):
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, hidden_states
         )
 
-        return (layer_output,) + outputs
+        return (layer_output,)
 
 
 class NomicBertEncoder(BertEncoder):
-    """
-    NomicBERT Encoder.
-    Inherits from BertEncoder but allows for custom layer classes (like NomicBertLayer)
-    to be passed during initialization via kwargs.
-    """
-
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
 
@@ -622,29 +376,21 @@ class NomicBertEncoder(BertEncoder):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         position_embeddings: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         for i, layer_module in enumerate(self.layer):
             layer_outputs = layer_module(
                 hidden_states,
                 attention_mask,
-                past_key_values=past_key_values,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
-                position_ids=position_ids,
                 **kwargs,
             )
 
             hidden_states = layer_outputs[0]
 
-        return BaseModelOutputWithPast(
+        return BaseModelOutput(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
         )
 
 
@@ -673,19 +419,15 @@ class NomicBertPreTrainingHeads(BertPreTrainingHeads):
 
 
 class NomicBertPreTrainedModel(BertPreTrainedModel):
-    supports_gradient_checkpointing = True
+    pass
 
 
 class NomicBertForPreTrainingOutput(BertForPreTrainingOutput):
     pass
 
 
+@auto_docstring
 class NomicBertModel(BertModel):
-    """
-    NomicBERT Model transformer outputting raw hidden-states without any specific head on top.
-    It overrides the embeddings, encoder, and pooler to use the NomicBERT-specific implementations.
-    """
-
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config, add_pooling_layer=add_pooling_layer)
 
@@ -704,63 +446,8 @@ class NomicBertModel(BertModel):
         inputs_embeds=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        cache_position=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        """
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary.
-            attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`
-            token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`
-            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Indices of positions of each input sequence token in the position embeddings. Selected in the range `[0,
-                config.max_position_embeddings - 1]`.
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-            encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-                the model is configured as a decoder.
-            encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used
-                in the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`
-            past_key_values (`Cache` , *optional*):
-                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-                blocks) that can be used to speed up sequential decoding.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-            cache_position (`torch.Tensor, *optional*):
-                Position for the cache
-
-        Returns:
-            [`~modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions`] or `tuple(torch.FloatTensor)`:
-            A [`~modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions`] (if `return_dict=True` is passed or the `config.use_return_dict=True`) or a tuple of `torch.FloatTensor` comprising various elements depending on the configuration (`NomicBertConfig`) and inputs.
-
-            - **last_hidden_state** (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`) -- Sequence of hidden-states at the output of the last layer of the model.
-            - **pooler_output** (`torch.FloatTensor` of shape `(batch_size, hidden_size)`) -- Last layer hidden-state of the first token of the sequence (classification token) after further processing through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns the classification token after processing through a linear layer and a tanh activation function. The linear layer weights are trained from the next sentence prediction (classification) objective during pretraining.
-            - **hidden_states** (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`) -- Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, + one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-            - **attentions** (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`) -- Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
-            - **cross_attentions** (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`) -- Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
-            - **past_key_values** (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`) -- Tuple of `torch.FloatTensor` of length `config.n_layers`, with each tuple containing the cached key and value states of the self-attention blocks.
-        """
-        if self.config.is_decoder:
-            use_cache = use_cache if use_cache is not None else self.config.use_cache
-        else:
-            use_cache = False
-
-        if use_cache and past_key_values is None:
-            past_key_values = (
-                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-                if encoder_hidden_states is not None or self.config.is_encoder_decoder
-                else DynamicCache(config=self.config)
-            )
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -781,42 +468,27 @@ class NomicBertModel(BertModel):
 
         binary_mask = attention_mask
 
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-
         if position_ids is None:
-            position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
-            )
+            position_ids = torch.arange(seq_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
-
-        if cache_position is None:
-            cache_position = torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
         )
 
         position_embeddings = self.rotary_emb(embedding_output, position_ids)
 
-        extended_attention_mask, encoder_attention_mask = self._create_attention_masks(
-            attention_mask=binary_mask,
-            encoder_attention_mask=encoder_attention_mask,
-            embedding_output=embedding_output,
-            encoder_hidden_states=encoder_hidden_states,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
+        extended_attention_mask = self.get_extended_attention_mask(
+            binary_mask,
+            (batch_size, seq_length)
         )
 
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            cache_position=cache_position,
             position_ids=position_ids,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -825,13 +497,11 @@ class NomicBertModel(BertModel):
 
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        return BaseModelOutputWithPoolingAndCrossAttentions(
+        return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            past_key_values=encoder_outputs.past_key_values,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            cross_attentions=None,
         )
 
 
