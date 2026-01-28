@@ -372,6 +372,18 @@ def get_weight_mapping(
             # RfDetrConvEncoder
             ## RfDetrMultiScaleProjector
             WeightRenaming(r"projector.stages_sampling.(\d+)", r"projector.scale_layers.\1.sampling_layers"),
+            WeightRenaming(
+                r"projector.stages_sampling.(\d+).(\d+).(\d+)",
+                r"projector.scale_layers.\1.sampling_layers.\2.layers.\3",
+            ),
+            WeightRenaming(
+                r"projector.stages_sampling.(\d+).(\d+).(\d+).conv.weight",
+                r"projector.scale_layers.\1.sampling_layers.\2.layers.\3.conv.weight",
+            ),
+            WeightRenaming(
+                r"projector.stages_sampling.(\d+).(\d+).(\d+).bn",
+                r"projector.scale_layers.\1.sampling_layers.\2.layers.\3.norm",
+            ),
             WeightRenaming(r"projector.stages.(\d+).0", r"projector.scale_layers.\1.projector_layer"),
             WeightRenaming(r"projector.stages.(\d+).1", r"projector.scale_layers.\1.layer_norm"),
             ## RfDetrSamplingLayer
@@ -410,29 +422,6 @@ def get_weight_mapping(
             ),
         ]
     )
-
-    # Indices depend on the value of projector_scale_factors
-    for i, scale in enumerate(rf_detr_config.projector_scale_factors):
-        if scale == 2.0:
-            weight_mapping.append(
-                WeightRenaming(
-                    rf"projector.stages_sampling.{i}.(\d+).(\d+)",
-                    rf"projector.scale_layers.{i}.sampling_layers.\1.layers.\2",
-                )
-            )
-        elif scale == 0.5:
-            weight_mapping.append(
-                WeightRenaming(
-                    rf"projector.stages_sampling.{i}.(\d+).(\d+).conv.weight",
-                    rf"projector.scale_layers.{i}.sampling_layers.\1.layers.\2.conv.weight",
-                )
-            )
-            weight_mapping.append(
-                WeightRenaming(
-                    rf"projector.stages_sampling.{i}.(\d+).(\d+).bn",
-                    rf"projector.scale_layers.{i}.sampling_layers.\1.layers.\2.norm",
-                )
-            )
 
     if is_segmentation:
         weight_mapping.extend(
