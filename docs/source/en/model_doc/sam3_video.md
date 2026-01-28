@@ -79,6 +79,7 @@ Process a video with all frames already available using text prompts:
 
 >>> # Process all frames in the video
 >>> outputs_per_frame = {}
+>>> # Pass show_progress_bar=True to display a tqdm progress bar.
 >>> for model_outputs in model.propagate_in_video_iterator(
 ...     inference_session=inference_session, max_frame_num_to_track=50
 ... ):
@@ -114,6 +115,7 @@ You can also track multiple object categories simultaneously by providing multip
 >>>
 >>> # Process video - detects objects from ALL prompts in a single pass
 >>> multi_outputs_per_frame = {}
+>>> # Pass show_progress_bar=True to display a tqdm progress bar.
 >>> for model_outputs in model.propagate_in_video_iterator(
 ...     inference_session=multi_prompt_session, max_frame_num_to_track=50
 ... ):

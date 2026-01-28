@@ -184,7 +184,7 @@ class GlmOcrTextConfig(Glm4vTextConfig):
         super().__init__(**super_kwargs)
 
 
-class GlmOcrConfig(Glm4vConfig, nn.Module):
+class GlmOcrConfig(Glm4vConfig):
     r"""
     This is the configuration class to store the configuration of a [`GlmOcrModel`]. It is used to instantiate a
     GLM-OCR model according to the specified arguments, defining the model architecture. Instantiating a
