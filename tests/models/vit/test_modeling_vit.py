@@ -181,6 +181,16 @@ class ViTModelTester:
         return config, inputs_dict
 
 
+
+a = 3
+
+
+b = 4
+
+
+
+
+
 @require_torch
 class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
