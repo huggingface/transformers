@@ -243,6 +243,9 @@ class GlmMoeDsaAttention(nn.Module):
         self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
 
         self.scaling = self.qk_head_dim ** (-0.5)
+        print(self.config)
+        print("===")
+        print(self.config.rope_parameters)
         if self.config.rope_parameters.get("rope_type", "default") != "default":
             mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
             scaling_factor = self.config.rope_parameters["factor"]

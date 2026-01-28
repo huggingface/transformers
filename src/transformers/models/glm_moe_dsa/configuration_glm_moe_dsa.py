@@ -102,6 +102,9 @@ class GlmMoeDsaConfig(PreTrainedConfig):
             issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
+        first_k_dense_replace (`int`, *optional*, defaults to 3):
+            Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
+                                                            \--k dense layers--/
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
@@ -181,6 +184,7 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         mlp_layer_types=None,
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
+        first_k_dense_replace: int | None = 3,
         index_topk: int | None = 2048,
         **kwargs,
     ):
@@ -196,6 +200,7 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         self.q_lora_rank = q_lora_rank
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
+        self.first_k_dense_replace = first_k_dense_replace
         self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
         self.head_dim = qk_rope_head_dim
