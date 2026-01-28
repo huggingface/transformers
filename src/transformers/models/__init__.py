@@ -58,6 +58,7 @@ if TYPE_CHECKING:
     from .camembert import *
     from .canine import *
     from .chameleon import *
+    from .chatterbox import *
     from .chinese_clip import *
     from .clap import *
     from .clip import *
@@ -335,6 +336,8 @@ if TYPE_CHECKING:
     from .rt_detr import *
     from .rt_detr_v2 import *
     from .rwkv import *
+    from .s3gen import *
+    from .s3tokenizer import *
     from .sam import *
     from .sam2 import *
     from .sam2_video import *
@@ -370,6 +373,7 @@ if TYPE_CHECKING:
     from .swin2sr import *
     from .swinv2 import *
     from .switch_transformers import *
+    from .t3 import *
     from .t5 import *
     from .t5gemma import *
     from .t5gemma2 import *

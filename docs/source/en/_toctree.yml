@@ -969,6 +969,10 @@
         title: PE Audio
       - local: model_doc/pop2piano
         title: Pop2Piano
+      - local: model_doc/s3gen
+        title: S3Gen
+      - local: model_doc/s3tokenizer
+        title: S3Tokenizer
       - local: model_doc/seamless_m4t
         title: Seamless-M4T
       - local: model_doc/seamless_m4t_v2
