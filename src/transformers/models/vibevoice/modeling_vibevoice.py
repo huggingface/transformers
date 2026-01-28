@@ -292,7 +292,7 @@ class VibeVoiceDiffusionHead(nn.Module):
         return hidden_states
 
 
-class VibeVoiceMultiModelProjector(nn.Module):
+class VibeVoiceMultiModalProjector(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
         self.fc1 = nn.Linear(input_dim, output_dim)
@@ -595,10 +595,10 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         self.language_model = AutoModel.from_config(config.text_config)
         self.acoustic_tokenizer = AutoModel.from_config(config.acoustic_tokenizer_config)
         self.semantic_tokenizer = AutoModel.from_config(config.semantic_tokenizer_config)
-        self.acoustic_connector = VibeVoiceMultiModelProjector(
+        self.acoustic_connector = VibeVoiceMultiModalProjector(
             config.acoustic_tokenizer_config.hidden_size, config.text_config.hidden_size
         )
-        self.semantic_connector = VibeVoiceMultiModelProjector(
+        self.semantic_connector = VibeVoiceMultiModalProjector(
             config.semantic_tokenizer_config.hidden_size, config.text_config.hidden_size
         )
         self.diffusion_head = VibeVoiceDiffusionHead(config)
