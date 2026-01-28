@@ -15,176 +15,155 @@
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_processing_utils import (
+    BaseImageProcessor,
+    BatchFeature,
+    PythonBackend,
+    TorchVisionBackend,
+)
 from ...image_transforms import (
-    convert_to_rgb,
-    get_resize_output_image_size,
-    resize,
-    to_channel_dimension_format,
+    group_images_by_shape,
+    reorder_images,
 )
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
-    ChannelDimension,
-    ImageInput,
     PILImageResampling,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_kwargs,
-    validate_preprocess_arguments,
+    SizeDict,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
 
+
+if is_torchvision_available():
+    import torch
+    from torchvision.transforms.v2 import functional as tvF
 
 logger = logging.get_logger(__name__)
 
 
-if is_vision_available():
-    import PIL
-
-
-class LlavaImageProcessor(BaseImageProcessor):
-    r"""
-    Constructs a LLaVa image processor.
-
-    Args:
-        do_pad (`bool`, *optional*, defaults to `False`):
-            Whether to pad the image to a square based on the longest edge.
-            The padding value is determined by the `image_mean` parameter.
-            Can be overridden by `do_pad` in the `preprocess` method.
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
-            `do_resize` in the `preprocess` method.
-        size (`dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
-            Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
-            the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
-            method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
-            Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
-            `preprocess` method.
-        crop_size (`dict[str, int]` *optional*, defaults to 224):
-            Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
-            method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
-            the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
-            method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-            Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-    """
-
-    model_input_names = ["pixel_values"]
-
-    def __init__(
+class LlavaTorchVisionBackend(TorchVisionBackend):
+    def pad_to_square(
         self,
-        do_pad: bool = False,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_center_crop: bool = True,
-        crop_size: dict[str, int] | None = None,
-        do_rescale: bool = True,
-        rescale_factor: int | float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_convert_rgb: bool = True,
+        images: "torch.Tensor",
+        background_color: int | tuple[int, int, int] = 0,
+    ) -> "torch.Tensor":
+        """
+        Pads an image to a square based on the longest edge.
+
+        Args:
+            images (`torch.Tensor`):
+                The images to pad. Shape: (batch_size, num_channels, height, width) or (num_channels, height, width).
+            background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
+                The color to use for the padding. Can be an integer for single channel or a
+                tuple of integers representing for multi-channel images. If passed as integer
+                in multi-channel mode, it will default to `0` in subsequent channels.
+        Returns:
+            `torch.Tensor`: The padded images.
+        """
+        height, width = images.shape[-2:]
+
+        if height == width:
+            return images
+
+        num_channels = images.shape[1]
+        if isinstance(background_color, int):
+            background_color = [background_color] + [0] * (num_channels - 1)
+        elif len(background_color) != num_channels:
+            raise ValueError(
+                f"background_color must have no more than {num_channels} elements to match the number of channels"
+            )
+
+        max_dim = max(height, width)
+        paste_x_left = (max_dim - width) // 2
+        paste_y_left = (max_dim - height) // 2
+        paste_x_right = max_dim - width - paste_x_left
+        paste_y_right = max_dim - height - paste_y_left
+        padded_images = tvF.pad(
+            images, padding=[paste_x_left, paste_y_left, paste_x_right, paste_y_right], fill=background_color
+        )
+
+        return padded_images
+
+    def preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None,
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": 224}
-        size = get_size_dict(size, default_to_square=False)
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
+    ) -> BatchFeature:
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_pad:
+                stacked_images = self.pad_to_square(
+                    images=stacked_images, background_color=tuple(int(x * 255) for x in self.image_mean)
+                )
+            resized_images_grouped[shape] = stacked_images
+        padded_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        self.do_pad = do_pad
-        self.do_resize = do_resize
-        self.size = size
-        self.resample = resample
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
-        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
-        self.do_convert_rgb = do_convert_rgb
-        self._valid_processor_keys = [
-            "images",
-            "do_pad",
-            "do_resize",
-            "size",
-            "resample",
-            "do_center_crop",
-            "crop_size",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_convert_rgb",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
+        # Group images by size for batched resizing
+        # Needed in case do_pad is False, or padding returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(padded_images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(image=stacked_images, size=size, resample=resample)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
+
+class LlavaPythonBackend(PythonBackend):
     def pad_to_square(
         self,
         image: np.ndarray,
         background_color: int | tuple[int, int, int] = 0,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Pads an image to a square based on the longest edge.
 
         Args:
             image (`np.ndarray`):
-                The image to pad.
+                The image to pad. Shape: (num_channels, height, width) - always channels_first in backend.
             background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
-                The color to use for the padding. Can be an integer for single channel or a
-                tuple of integers representing for multi-channel images. If passed as integer
-                in multi-channel mode, it will default to `0` in subsequent channels.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the output image. Can be one of:
-                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                If unset, will use same as the input image.
-            input_data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the input image. Can be one of:
-                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                If unset, will use the inferred format of the input image.
+                The color to use for the padding.
 
         Returns:
             `np.ndarray`: The padded image.
         """
-        height, width = get_image_size(image, input_data_format)
-        num_channels = image.shape[0] if input_data_format == ChannelDimension.FIRST else image.shape[-1]
+        # Backend always uses channels_first format: (num_channels, height, width)
+        num_channels, height, width = image.shape
 
         if height == width:
-            image = (
-                to_channel_dimension_format(image, data_format, input_data_format)
-                if data_format is not None
-                else image
-            )
             return image
 
         max_dim = max(height, width)
@@ -197,233 +176,82 @@ class LlavaImageProcessor(BaseImageProcessor):
                 f"background_color must have no more than {num_channels} elements to match the number of channels"
             )
 
-        if input_data_format == ChannelDimension.FIRST:
-            result = np.zeros((num_channels, max_dim, max_dim), dtype=image.dtype)
-            for i, color in enumerate(background_color):
-                result[i, :, :] = color
-            if width > height:
-                start = (max_dim - height) // 2
-                result[:, start : start + height, :] = image
-            else:
-                start = (max_dim - width) // 2
-                result[:, :, start : start + width] = image
+        result = np.zeros((num_channels, max_dim, max_dim), dtype=image.dtype)
+        for i, color in enumerate(background_color):
+            result[i, :, :] = color
+        if width > height:
+            start = (max_dim - height) // 2
+            result[:, start : start + height, :] = image
         else:
-            result = np.zeros((max_dim, max_dim, num_channels), dtype=image.dtype)
-            for i, color in enumerate(background_color):
-                result[:, :, i] = color
-            if width > height:
-                start = (max_dim - height) // 2
-                result[start : start + height, :, :] = image
-            else:
-                start = (max_dim - width) // 2
-                result[:, start : start + width, :] = image
+            start = (max_dim - width) // 2
+            result[:, :, start : start + width] = image
 
-        image = (
-            to_channel_dimension_format(result, data_format, input_data_format) if data_format is not None else result
-        )
-        return image
-
-    # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.resize
-    def resize(
-        self,
-        image: np.ndarray,
-        size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Resize an image. The shortest edge of the image is resized to size["shortest_edge"], with the longest edge
-        resized to keep the input aspect ratio.
-
-        Args:
-            image (`np.ndarray`):
-                Image to resize.
-            size (`dict[str, int]`):
-                Size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                Resampling filter to use when resiizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
-        """
-        default_to_square = True
-        if "shortest_edge" in size:
-            size = size["shortest_edge"]
-            default_to_square = False
-        elif "height" in size and "width" in size:
-            size = (size["height"], size["width"])
-        else:
-            raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
-
-        output_size = get_resize_output_image_size(
-            image,
-            size=size,
-            default_to_square=default_to_square,
-            input_data_format=input_data_format,
-        )
-        return resize(
-            image,
-            size=output_size,
-            resample=resample,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
-        )
+        return result
 
     def preprocess(
         self,
-        images: ImageInput,
-        do_pad: bool | None = None,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling | None = None,
-        do_center_crop: bool | None = None,
-        crop_size: int | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_convert_rgb: bool | None = None,
-        return_tensors: str | TensorType | None = None,
-        data_format: ChannelDimension | None = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
+        images: list[np.ndarray],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None,
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
-    ) -> PIL.Image.Image:
-        """
-        Preprocess an image or batch of images.
-
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
-                Whether to pad the image to a square based on the longest edge.
-                The padding value is determined by the `image_mean` parameter.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
-                the longest edge resized to keep the input aspect ratio.
-            resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
-                has an effect if `do_resize` is set to `True`.
-            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-                Whether to center crop the image.
-            crop_size (`dict[str, int]`, *optional*, defaults to `self.crop_size`):
-                Size of the center crop. Only has an effect if `do_center_crop` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-                `True`.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                - Unset: Return a list of `np.ndarray`.
-                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        do_pad = do_pad if do_pad is not None else self.do_pad
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
-        size = get_size_dict(size, param_name="size", default_to_square=False)
-        resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
-        crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, param_name="crop_size", default_to_square=True)
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
-        images = self.fetch_images(images)
-        images = make_flat_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-        # we don't pass `do_pad` here since LLaVa uses a custom padding to a square
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
+    ) -> BatchFeature:
         processed_images = []
         for image in images:
+            # Apply pad_to_square first if needed (before resize)
             if do_pad:
-                image = self.pad_to_square(
-                    image=image,
-                    background_color=tuple(int(x * 255) for x in self.image_mean),
-                    input_data_format=input_data_format,
-                )
+                background_color = tuple(int(x * 255) for x in image_mean) if image_mean else 0
+                image = self.pad_to_square(image, background_color=background_color)
 
             if do_resize:
-                image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                image = self.resize(image=image, size=size, resample=resample)
 
             if do_center_crop:
-                image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
+                image = self.center_crop(image, crop_size)
 
             if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                image = self.rescale(image, rescale_factor)
 
             if do_normalize:
-                image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
-                )
+                image = self.normalize(image, image_mean, image_std)
 
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
             processed_images.append(image)
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
+
+@auto_docstring(custom_intro="Constructs a LLaVa image processor.")
+class LlavaImageProcessor(BaseImageProcessor):
+    model_input_names = ["pixel_values"]
+
+    _backend_classes = {
+        "torchvision": LlavaTorchVisionBackend,
+        "python": LlavaPythonBackend,
+    }
+
+    resample = PILImageResampling.BICUBIC
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    size = {"shortest_edge": 224}
+    default_to_square = False
+    crop_size = {"height": 224, "width": 224}
+    do_pad = False
+    do_resize = True
+    do_center_crop = True
+    do_rescale = True
+    do_normalize = True
+    do_convert_rgb = True
 
 
 __all__ = ["LlavaImageProcessor"]
