@@ -14,14 +14,14 @@
 """Dia model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DiaEncoderConfig(PreTrainedConfig):
+class DiaEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`DiaEncoder`]. It is used to instantiate a Dia
     encoder according to the specified arguments, defining the encoder architecture.
@@ -94,7 +94,7 @@ class DiaEncoderConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-class DiaDecoderConfig(PreTrainedConfig):
+class DiaDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`DiaDecoder`]. It is used to instantiate a Dia
     decoder according to the specified arguments, defining the decoder architecture.
