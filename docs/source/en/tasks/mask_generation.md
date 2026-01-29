@@ -230,10 +230,10 @@ plt.show()
 
 ## Fine-tuning for Mask Generation
 
-We will fine-tune SAM2.1 on small part of MicroMat dataset for image matting. We need to install the [monai](https://github.com/Project-MONAI/MONAI) library to use DICE loss, and [trackio](https://huggingface.co/docs/trackio/index) for logging the masks during training.
+We will fine-tune SAM2.1 on small part of MicroMat dataset for image matting. We need to install the [monai](https://github.com/Project-MONAI/MONAI) library to use DICE loss, and [trackio](https://huggingface.co/docs/trackio/index) (>=0.14.0) for logging the masks during training.
 
 ```bash
-pip install -q datasets monai trackio
+pip install -q datasets monai "trackio[gpu]>=0.14.0"
 ``` 
 We can now load our dataset and take a look.
 
