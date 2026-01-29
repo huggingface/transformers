@@ -89,7 +89,7 @@ class StableLmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             The id of the `EOS` token in the vocabulary.
         pad_token_id (int, *optional*):
             The id of the `PAD` token in the vocabulary.
-    
+
     Example:
 
     ```python
