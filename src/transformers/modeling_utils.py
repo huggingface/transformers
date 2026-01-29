@@ -1282,6 +1282,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def __init__(self, config: PreTrainedConfig, *inputs, **kwargs):
         super().__init__()
+        self._skip_post_init = kwargs.pop("skip_post_init", False)
         if not isinstance(config, PreTrainedConfig):
             raise TypeError(
                 f"Parameter config in `{self.__class__.__name__}(config)` should be an instance of class "
@@ -1336,6 +1337,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         A method executed at the end of each Transformer model initialization, to execute code that needs the model's
         modules properly initialized (such as weight initialization).
         """
+        if getattr(self, "_skip_post_init", False):
+            return
         # Attach the different parallel plans and tied weight keys to the top-most model, so that everything is
         # easily available
         self._tp_plan, self._ep_plan, self._pp_plan = {}, {}, {}
@@ -3683,6 +3686,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         revision: str = "main",
         use_safetensors: bool | None = None,
         weights_only: bool = True,
+        skip_post_init: bool = False,
         **kwargs,
     ) -> SpecificPreTrainedModelType:
         r"""
@@ -3855,6 +3859,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 Indicates whether unpickler should be restricted to loading only tensors, primitive types,
                 dictionaries and any types added via torch.serialization.add_safe_globals().
                 When set to False, we can load wrapper tensor subclass weights.
+            skip_post_init (`bool`, *optional*, defaults to `False`):
+                Whether to skip the post-initialization step that reinitializes model weights.
+                Set to `True` when subclassing models with custom parameters that should preserve
+                their initialization. When `False` (default), all weights are reinitialized via
+                `_init_weights()` after loading.
             key_mapping (`dict[str, str], *optional*):
                 A potential mapping of the weight names if using a model on the Hub which is compatible to a Transformers
                 architecture, but was not converted accordingly.
@@ -3920,6 +3929,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         use_kernels = kwargs.pop("use_kernels", False)
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
+        skip_post_init = kwargs.pop("skip_post_init", False)
 
         if distributed_config is not None and tp_plan is None:
             tp_plan = "auto"
@@ -4000,6 +4010,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             config = copy.deepcopy(config)
             model_kwargs = kwargs
+            model_kwargs["skip_post_init"] = skip_post_init
             commit_hash = getattr(config, "_commit_hash", commit_hash)
 
         download_kwargs_with_commit["commit_hash"] = commit_hash
