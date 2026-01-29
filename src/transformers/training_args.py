@@ -226,9 +226,11 @@ class TrainingArguments:
         learning_rate (`float`, *optional*, defaults to 5e-5):
             The initial learning rate for the optimizer. This is typically the peak learning rate when using a scheduler with warmup.
         lr_scheduler_type (`str` or [`SchedulerType`], *optional*, defaults to `"linear"`):
-            The learning rate scheduler type to use. See [`SchedulerType`] for all possible values.
-            Common choices: `"linear"` (linear decay), `"cosine"` (cosine annealing), `"constant"`
-            (no decay), `"constant_with_warmup"`, `"reduce_lr_on_plateau"`.
+            The learning rate scheduler type to use. See [`SchedulerType`] for all possible values. Common choices: 
+                - "linear" = [`get_linear_schedule_with_warmup`]
+                - "cosine" = [`get_cosine_schedule_with_warmup`]
+                - "constant" =  [`get_constant_schedule`]
+                - "constant_with_warmup" = [`get_constant_schedule_with_warmup`]
         lr_scheduler_kwargs (`dict` or `str`, *optional*, defaults to `None`):
             The extra arguments for the lr_scheduler. See the documentation of each scheduler for possible values.
         warmup_steps (`int` or `float`, *optional*, defaults to 0):
