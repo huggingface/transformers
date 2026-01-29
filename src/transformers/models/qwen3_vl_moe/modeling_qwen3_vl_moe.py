@@ -1651,7 +1651,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
         aux_loss = None
-        if kwargs.get("output_router_logits", False):
+        if kwargs.get("output_router_logits", False) and self.training:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.config.text_config.num_experts,
