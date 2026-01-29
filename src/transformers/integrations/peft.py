@@ -229,7 +229,6 @@ def _build_peft_weight_mapping(
         if orig_conversion.target_patterns == ["mlp.experts.gate_up_proj"]:
             # gate_up_proj requires both merging the experts and concatenating for the fusion of w1 and w3
             for lora in ("lora_A", "lora_B"):  # TODO: lora_embedding_A and lora_embedding_B
-                conversion = copy.deepcopy(orig_conversion)
                 # deal with operations
                 peft_weight_operations = []
                 for op in orig_conversion.operations:
@@ -245,14 +244,14 @@ def _build_peft_weight_mapping(
                 # TODO: this assumption may not hold for models != mixtral
                 # For source, we capture the orignal weights + the lora weights
                 new_source_patterns = []
-                for pat in list(conversion.source_patterns):
+                for pat in list(orig_conversion.source_patterns):
                     # we replace the weight pattern to colllect loras
                     pat = pat.rsplit(".", 1)[0]
                     # note: the source state_dict does *not* contain the adapter name
                     new_source_patterns.append(f"{pat}.{lora}.*")
 
                 # the gate_up_proj is the innner PEFT ParamWrapper, so we need to use base_layer
-                pat = conversion.target_patterns[0]
+                pat = orig_conversion.target_patterns[0]
                 pat = pat.replace("gate_up_proj", "base_layer")
                 # we make sure the target key is correct, add '.weight' because the parameter is targeted directly
                 new_target_patterns = [f"{pat}.{lora}.{adapter_name}.weight"]
@@ -284,14 +283,14 @@ def _build_peft_weight_mapping(
                 # TODO: this assumption may not hold for models != mixtral
                 # For source, we capture the orignal weights + the lora weights
                 new_source_patterns = []
-                for pat in list(conversion.source_patterns):
+                for pat in list(orig_conversion.source_patterns):
                     # we replace the weight pattern to colllect loras
                     pat = pat.rsplit(".", 1)[0]
                     # note: the source state_dict does *not* contain the adapter name
                     new_source_patterns.append(f"{pat}.{lora}.*")
 
                 # the down_proj is the outer PEFT ParamWrapper, so we remove the prefix
-                pat = conversion.target_patterns[0]
+                pat = orig_conversion.target_patterns[0]
                 pat = pat.replace(".down_proj", "")
                 # we make sure the target key is correct, add '.weight' because the parameter is targeted directly
                 new_target_patterns = [f"{pat}.{lora}.{adapter_name}.weight"]
