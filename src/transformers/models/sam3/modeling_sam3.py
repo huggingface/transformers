@@ -2005,7 +2005,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
     def forward(
         self,
         decoder_queries: torch.Tensor,
-        backbone_features: list[torch.Tensor],
+        backbone_features: Union[torch.Tensor, list[torch.Tensor]],
         encoder_hidden_states: torch.Tensor,
         prompt_features: torch.Tensor | None = None,
         prompt_mask: torch.Tensor | None = None,
@@ -2014,7 +2014,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
         """
         Args:
             decoder_queries: Decoder output queries [batch_size, num_queries, hidden_size]
-            backbone_features: List of backbone features to process through FPN
+            backbone_features: List of backbone features to process through FPN, or a single tensor for single-scale (see single-scale fallback logic below)
             encoder_hidden_states: Encoder outputs [batch_size, seq_len, hidden_size]
             prompt_features: Prompt features (text + geometry) for cross-attention [batch_size, prompt_len, hidden_size]
             prompt_mask: Padding mask [batch_size, prompt_len] where True=valid, False=padding
@@ -2022,6 +2022,47 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
         Returns:
             Sam3MaskDecoderOutput containing predicted masks and semantic segmentation.
         """
+
+        import warnings
+
+        # --- [Step 1] Input Normalization ---
+        # Ensure inputs are lists to satisfy downstream typing, even if single tensor provided.
+        if isinstance(backbone_features, torch.Tensor):
+            backbone_features = [backbone_features]
+
+        expected_levels = getattr(self.config, "num_multiscale_features", len(backbone_features))
+        actual_levels = len(backbone_features)
+
+        # --- [Step 2] Explicit Contract & Safety Check ---
+        if actual_levels != expected_levels:
+            if actual_levels == 1:
+                warnings.warn(
+                    f"Sam3MaskDecoder detected single-scale input (1 level), but config expects "
+                    f"{expected_levels} levels. Output will be generated using the provided scale only, "
+                    f"bypassing multi-scale fusion.",
+                    UserWarning,
+                )
+            else:
+                raise ValueError(
+                    f"Sam3MaskDecoder expects {expected_levels} feature levels or exactly 1 level "
+                    f"(single-scale mode). Received {actual_levels} levels."
+                )
+
+        # --- [Step 3] Adaptive Processing Logic ---
+        if actual_levels == 1:
+            # Single-scale path
+            x = self.input_projections[0](backbone_features[0]) if hasattr(self, "input_projections") else backbone_features[0]
+            pos = self.image_position_embeddings[0] if hasattr(self, "image_position_embeddings") else 0
+            srcs = [x + pos]
+        else:
+            # Multi-scale path
+            srcs = []
+            for i in range(expected_levels):
+                src = self.input_projections[i](backbone_features[i]) if hasattr(self, "input_projections") else backbone_features[i]
+                pos = self.image_position_embeddings[i] if hasattr(self, "image_position_embeddings") else 0
+                srcs.append(src + pos)
+        pixel_embed = self.pixel_decoder(srcs)
+
         if prompt_features is not None:
             # Cross-attention: encoder features attend to prompt features
             residual = encoder_hidden_states
@@ -2045,12 +2086,6 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
             )
             encoder_hidden_states = residual + self.prompt_cross_attn_dropout(attn_output)
 
-        # Process backbone features through FPN to get pixel embeddings
-        pixel_embed = self._embed_pixels(
-            backbone_features=backbone_features,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-
         # Predict instance masks via dot product between query embeddings and pixel embeddings
         instance_embeds = self.instance_projection(pixel_embed)
         mask_embeddings = self.mask_embedder(decoder_queries)
@@ -2063,39 +2098,6 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
             pred_masks=pred_masks,
             semantic_seg=semantic_seg,
         )
-
-    def _embed_pixels(
-        self,
-        backbone_features: list[torch.Tensor],
-        encoder_hidden_states: torch.Tensor,
-    ) -> torch.Tensor:
-        """
-        Embed pixels by combining backbone FPN features with encoder vision features.
-        The encoder vision features replace the finest-resolution backbone feature.
-
-        Args:
-            backbone_features: List of backbone features [batch_size, C, H_i, W_i]
-            encoder_hidden_states: Encoder outputs [batch_size, seq_len, hidden_size]
-
-        Returns:
-            Pixel embeddings [batch_size, hidden_size, H, W]
-        """
-        backbone_visual_feats = [feat.clone() for feat in backbone_features]
-
-        # Extract vision features from encoder output and reshape to spatial format
-        spatial_dim = backbone_features[-1].shape[-2] * backbone_features[-1].shape[-1]
-        encoder_visual_embed = encoder_hidden_states[:, :spatial_dim, :]
-        batch_size, _, hidden_size = encoder_visual_embed.shape
-        height, width = backbone_features[-1].shape[-2:]
-        encoder_visual_embed = encoder_visual_embed.transpose(1, 2).reshape(batch_size, hidden_size, height, width)
-
-        # Replace finest backbone feature with encoder vision features
-        backbone_visual_feats[-1] = encoder_visual_embed
-
-        # Process through FPN decoder
-        pixel_embed = self.pixel_decoder(backbone_visual_feats)
-
-        return pixel_embed
 
 
 class Sam3Model(Sam3PreTrainedModel):
