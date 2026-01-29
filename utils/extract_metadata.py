@@ -31,6 +31,7 @@ def get_setup_module():
     repo_root = Path(__file__).parent.parent
     sys.path.insert(0, str(repo_root))
     import setup
+
     return setup
 
 
