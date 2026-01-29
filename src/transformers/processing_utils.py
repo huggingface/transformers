@@ -514,12 +514,15 @@ class ChatTemplateLoadKwargs(TypedDict, total=False):
 
     num_frames (`int`, *optional*):
         Number of frames to sample uniformly. If not passed, the whole video is loaded.
+    sampling_rate (`int`, *optional*):
+        The sampling rate at which the audio should be loaded. If not provided, defaults to the
+        processor's feature_extractor.sampling_rate, or 16000 if not available.
     load_audio_from_video (`bool`, *optional*):
             Whether to use the audio track of input video. If `True` the audio track will be loaded and passed to the
             processor. This flag has no effect if the model doesn't support audio modality.
     """
 
-    sampling_rate: int | None = 16_000
+    sampling_rate: int | None = None
     load_audio_from_video: bool | None = False
 
 
@@ -1739,6 +1742,13 @@ class ProcessorMixin(PushToHubMixin):
         tokenize = processed_kwargs["template_kwargs"].pop("tokenize", False)
         return_dict = processed_kwargs["template_kwargs"].pop("return_dict", True)
         mm_load_kwargs = processed_kwargs["mm_load_kwargs"]
+
+        # Use the processor's feature_extractor sampling rate as default if not explicitly provided
+        if mm_load_kwargs.get("sampling_rate") is None:
+            if hasattr(self, "feature_extractor") and hasattr(self.feature_extractor, "sampling_rate"):
+                mm_load_kwargs["sampling_rate"] = self.feature_extractor.sampling_rate
+            else:
+                mm_load_kwargs["sampling_rate"] = 16_000
 
         if tokenize:
             batch_images, batch_videos = [], []
