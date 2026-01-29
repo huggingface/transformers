@@ -197,42 +197,21 @@ jobs:
                 md5sum -c --quiet md5sum.saved || (printf "Error: the version dependency table is outdated.\nPlease run 'make fix-repo' and commit the changes.\n" && exit 1);
                 rm md5sum.saved
 
-    test_extras_installation:
+    test_extras_py310:
         working_directory: ~/transformers
         docker:
             - image: cimg/python:3.10
         resource_class: large
-        parallelism: 5
+        parallelism: 6
         steps:
             - checkout
             - run:
-                name: Setup pyenv for managing multiple Python versions
-                command: |
-                    if [ ! -d "$HOME/.pyenv" ]; then
-                        curl https://pyenv.run | bash
-                    fi
-                    echo 'export PYENV_ROOT="$HOME/.pyenv"' >> $BASH_ENV
-                    echo 'export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"' >> $BASH_ENV
-            - run:
-                name: Install Python versions
-                command: |
-                    source $BASH_ENV
-                    # Install latest patch for each Python minor version (skip if already installed)
-                    pyenv install -s 3.10
-                    pyenv install -s 3.11
-                    pyenv install -s 3.12
-                    pyenv install -s 3.13
-                    pyenv install -s 3.14
-                    pyenv versions
-            - run:
                 name: Test extras installation on Python 3.10
                 command: |
-                    source $BASH_ENV
-                    pyenv global 3.10
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.10
-                    python - \<<'EOF' > extras_310.txt
+                    python - \<<'EOF' > extras_list.txt
                     import sys
                     sys.path.insert(0, '.')
                     import setup
@@ -241,7 +220,7 @@ jobs:
                     EOF
 
                     # Split across parallel nodes
-                    circleci tests split extras_310.txt > my_extras.txt
+                    circleci tests split extras_list.txt > my_extras.txt
                     echo "Testing these extras on Python 3.10:"
                     cat my_extras.txt
 
@@ -255,15 +234,22 @@ jobs:
                     done < my_extras.txt
 
                     python -c "import transformers; print(f'✓ Python 3.10 - Transformers {transformers.__version__}')"
+
+    test_extras_py311:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.11
+        resource_class: large
+        parallelism: 6
+        steps:
+            - checkout
             - run:
                 name: Test extras installation on Python 3.11
                 command: |
-                    source $BASH_ENV
-                    pyenv global 3.11
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.11
-                    python - \<<'EOF' > extras_311.txt
+                    python - \<<'EOF' > extras_list.txt
                     import sys
                     sys.path.insert(0, '.')
                     import setup
@@ -271,24 +257,37 @@ jobs:
                         print(extra)
                     EOF
 
+                    # Split across parallel nodes
+                    circleci tests split extras_list.txt > my_extras.txt
+                    echo "Testing these extras on Python 3.11:"
+                    cat my_extras.txt
+
                     echo "Installing base package..."
                     pip install -e .
 
+                    # Test each extra assigned to this node
                     while IFS= read -r extra; do
                         echo "=== Testing extra: $extra on Python 3.11 ==="
                         pip install -e .[$extra]
-                    done < extras_311.txt
+                    done < my_extras.txt
 
                     python -c "import transformers; print(f'✓ Python 3.11 - Transformers {transformers.__version__}')"
+
+    test_extras_py312:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.12
+        resource_class: large
+        parallelism: 6
+        steps:
+            - checkout
             - run:
                 name: Test extras installation on Python 3.12
                 command: |
-                    source $BASH_ENV
-                    pyenv global 3.12
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.12
-                    python - \<<'EOF' > extras_312.txt
+                    python - \<<'EOF' > extras_list.txt
                     import sys
                     sys.path.insert(0, '.')
                     import setup
@@ -296,24 +295,37 @@ jobs:
                         print(extra)
                     EOF
 
+                    # Split across parallel nodes
+                    circleci tests split extras_list.txt > my_extras.txt
+                    echo "Testing these extras on Python 3.12:"
+                    cat my_extras.txt
+
                     echo "Installing base package..."
                     pip install -e .
 
+                    # Test each extra assigned to this node
                     while IFS= read -r extra; do
                         echo "=== Testing extra: $extra on Python 3.12 ==="
                         pip install -e .[$extra]
-                    done < extras_312.txt
+                    done < my_extras.txt
 
                     python -c "import transformers; print(f'✓ Python 3.12 - Transformers {transformers.__version__}')"
+
+    test_extras_py313:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.13
+        resource_class: large
+        parallelism: 6
+        steps:
+            - checkout
             - run:
                 name: Test extras installation on Python 3.13
                 command: |
-                    source $BASH_ENV
-                    pyenv global 3.13
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.13
-                    python - \<<'EOF' > extras_313.txt
+                    python - \<<'EOF' > extras_list.txt
                     import sys
                     sys.path.insert(0, '.')
                     import setup
@@ -321,24 +333,37 @@ jobs:
                         print(extra)
                     EOF
 
+                    # Split across parallel nodes
+                    circleci tests split extras_list.txt > my_extras.txt
+                    echo "Testing these extras on Python 3.13:"
+                    cat my_extras.txt
+
                     echo "Installing base package..."
                     pip install -e .
 
+                    # Test each extra assigned to this node
                     while IFS= read -r extra; do
                         echo "=== Testing extra: $extra on Python 3.13 ==="
                         pip install -e .[$extra]
-                    done < extras_313.txt
+                    done < my_extras.txt
 
                     python -c "import transformers; print(f'✓ Python 3.13 - Transformers {transformers.__version__}')"
+
+    test_extras_py314:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.14
+        resource_class: large
+        parallelism: 6
+        steps:
+            - checkout
             - run:
                 name: Test extras installation on Python 3.14
                 command: |
-                    source $BASH_ENV
-                    pyenv global 3.14
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.14
-                    python - \<<'EOF' > extras_314.txt
+                    python - \<<'EOF' > extras_list.txt
                     import sys
                     sys.path.insert(0, '.')
                     import setup
@@ -346,21 +371,21 @@ jobs:
                         print(extra)
                     EOF
 
+                    # Split across parallel nodes
+                    circleci tests split extras_list.txt > my_extras.txt
+                    echo "Testing these extras on Python 3.14:"
+                    cat my_extras.txt
+
                     echo "Installing base package..."
                     pip install -e .
 
+                    # Test each extra assigned to this node
                     while IFS= read -r extra; do
                         echo "=== Testing extra: $extra on Python 3.14 ==="
                         pip install -e .[$extra]
-                    done < extras_314.txt
+                    done < my_extras.txt
 
                     python -c "import transformers; print(f'✓ Python 3.14 - Transformers {transformers.__version__}')"
-            - run:
-                name: Summary
-                when: always
-                command: |
-                    echo "Extras smoke test completed"
-                    echo "Python 3.10 extras:" && cat my_extras.txt || true
 
 workflows:
     version: 2
@@ -374,7 +399,11 @@ workflows:
             - check_code_quality
             - check_repository_consistency
             - fetch_tests
-            - test_extras_installation
+            - test_extras_py310
+            - test_extras_py311
+            - test_extras_py312
+            - test_extras_py313
+            - test_extras_py314
 
     setup_and_quality_2:
         when:
@@ -396,4 +425,8 @@ workflows:
             - check_code_quality
             - check_repository_consistency
             - fetch_all_tests
-            - test_extras_installation
+            - test_extras_py310
+            - test_extras_py311
+            - test_extras_py312
+            - test_extras_py313
+            - test_extras_py314
