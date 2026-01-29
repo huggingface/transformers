@@ -413,6 +413,17 @@ For example, to enable 4-bit quantization with bitsandbytes, you need to pass ad
 transformers serve --quantization bnb-4bit
 ```
 
+### Available models
+
+The `/v1/models` endpoint scans your local cache for generative models. It checks for LLMs as well as VLMs.
+The easiest way to download models to your cache is with the `hf download` command:
+
+```shell
+hf download <model_id>
+```
+
+As long as it's a transformers-compatible LLM/VLM, it will now show up under `/v1/models`
+
 ### Performance tips
 
 - Use an efficient attention backend when available:
