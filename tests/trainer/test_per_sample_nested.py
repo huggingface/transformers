@@ -109,12 +109,15 @@ class TestMask2FormerScenario(unittest.TestCase):
         """Simulate full evaluation with multiple batches."""
         # 3 batches: 2+2+1 = 5 images, but dataset has 4 images
         batches = [
-            ([torch.randn(5, 256, 256), torch.randn(3, 256, 256)],
-             [torch.randint(0, 10, (5,)), torch.randint(0, 10, (3,))]),
-            ([torch.randn(7, 256, 256), torch.randn(4, 256, 256)],
-             [torch.randint(0, 10, (7,)), torch.randint(0, 10, (4,))]),
-            ([torch.randn(2, 256, 256)],
-             [torch.randint(0, 10, (2,))]),
+            (
+                [torch.randn(5, 256, 256), torch.randn(3, 256, 256)],
+                [torch.randint(0, 10, (5,)), torch.randint(0, 10, (3,))],
+            ),
+            (
+                [torch.randn(7, 256, 256), torch.randn(4, 256, 256)],
+                [torch.randint(0, 10, (7,)), torch.randint(0, 10, (4,))],
+            ),
+            ([torch.randn(2, 256, 256)], [torch.randint(0, 10, (2,))]),
         ]
 
         # Simulate what Trainer does
@@ -148,12 +151,12 @@ class TestDistributedScenario(unittest.TestCase):
         # GPU0's batch
         gpu0_labels = (
             [torch.randn(5, 256, 256), torch.randn(3, 256, 256)],
-            [torch.randint(0, 10, (5,)), torch.randint(0, 10, (3,))]
+            [torch.randint(0, 10, (5,)), torch.randint(0, 10, (3,))],
         )
         # GPU1's batch
         gpu1_labels = (
             [torch.randn(7, 256, 256), torch.randn(4, 256, 256)],
-            [torch.randint(0, 10, (7,)), torch.randint(0, 10, (4,))]
+            [torch.randint(0, 10, (7,)), torch.randint(0, 10, (4,))],
         )
 
         # gather_object returns list of labels from each process
