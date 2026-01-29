@@ -48,6 +48,9 @@ from pathlib import Path
 from setuptools import Command, find_packages, setup
 
 
+# Supported Python version range (min, max)
+SUPPORTED_PYTHON_VERSIONS = (10, 14)  # 3.10 to 3.14
+
 PYTHON_MINOR_VERSION = sys.version_info.minor
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
@@ -310,6 +313,15 @@ class DepsTableUpdateCommand(Command):
 
 
 if __name__ == "__main__":
+    # Generate python_requires from supported version range
+    min_version, max_version = SUPPORTED_PYTHON_VERSIONS
+    python_requires = f">=3.{min_version}.0"
+
+    # Generate Python version classifiers dynamically
+    python_classifiers = ["Programming Language :: Python :: 3"]
+    for minor in range(min_version, max_version + 1):
+        python_classifiers.append(f"Programming Language :: Python :: 3.{minor}")
+
     setup(
         name="transformers",
         version="5.0.1.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
@@ -328,7 +340,7 @@ if __name__ == "__main__":
         zip_safe=False,
         extras_require=extras,
         entry_points={"console_scripts": ["transformers=transformers.cli.transformers:main"]},
-        python_requires=">=3.10.0",
+        python_requires=python_requires,
         install_requires=list(install_requires),
         classifiers=[
             "Development Status :: 5 - Production/Stable",
@@ -336,11 +348,9 @@ if __name__ == "__main__":
             "Intended Audience :: Education",
             "Intended Audience :: Science/Research",
             "Operating System :: OS Independent",
-            "Programming Language :: Python :: 3",
-            "Programming Language :: Python :: 3.10",
-            "Programming Language :: Python :: 3.11",
-            "Programming Language :: Python :: 3.12",
-            "Programming Language :: Python :: 3.13",
+        ]
+        + python_classifiers
+        + [
             "Topic :: Scientific/Engineering :: Artificial Intelligence",
         ],
         cmdclass={"deps_table_update": DepsTableUpdateCommand},
