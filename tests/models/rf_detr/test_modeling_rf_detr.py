@@ -32,7 +32,6 @@ from transformers.testing_utils import (
     Expectations,
     require_torch,
     require_vision,
-    slow,
     torch_device,
 )
 

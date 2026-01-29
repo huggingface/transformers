@@ -15,10 +15,7 @@
 
 import argparse
 
-import requests
 import torch
-from PIL import Image
-from torchvision import transforms
 
 from transformers import (
     DetrImageProcessor,
