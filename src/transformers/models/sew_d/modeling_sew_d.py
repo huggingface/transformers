@@ -26,7 +26,7 @@ from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, get_torch_context_manager_or_global_device
 from ...pytorch_utils import softmax_backward_data
 from ...utils import auto_docstring, logging
 from .configuration_sew_d import SEWDConfig
@@ -1406,6 +1406,9 @@ class SEWDForCTC(SEWDPreTrainedModel):
 
         This method is **not** supposed to be called by the user and is prone to be changed in the future.
         """
+
+        if get_torch_context_manager_or_global_device() == torch.device("meta"):
+            return
 
         # Note that `tie_weights` is usually used to tie input and output embedding weights. The method is re-purposed to
         # correctly load adapter layers for SEWD so that we do not have to introduce a new API to

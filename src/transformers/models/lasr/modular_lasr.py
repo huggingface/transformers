@@ -20,7 +20,6 @@ from tokenizers import Tokenizer
 from tokenizers.models import Unigram
 from torch import nn
 
-from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
@@ -30,7 +29,7 @@ from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
-from ..parakeet.configuration_parakeet import ParakeetCTCConfig
+from ..parakeet.configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
 from ..parakeet.modeling_parakeet import (
     ParakeetEncoderBlock,
     ParakeetEncoderConvolutionModule,
@@ -100,8 +99,7 @@ class LasrProcessor(ParakeetProcessor):
     pass
 
 
-# Cannot inhert because the mixin will not carry over otherwise
-class LasrEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class LasrEncoderConfig(ParakeetEncoderConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`LasrEncoder`]. It is used to instantiate a
     `LasrEncoder` model according to the specified arguments, defining the model architecture.
@@ -179,9 +177,6 @@ class LasrEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
     """
 
-    model_type = "lasr_encoder"
-    keys_to_ignore_at_inference = ["past_key_values"]
-
     def __init__(
         self,
         hidden_size=512,
@@ -215,32 +210,32 @@ class LasrEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.feed_forward_residual_weights = feed_forward_residual_weights
         self.conv_residual_weights = conv_residual_weights
         self.batch_norm_momentum = batch_norm_momentum
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_attention_heads  # LlamaAttention compatibility
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.attention_bias = attention_bias
-        self.convolution_bias = convolution_bias
-
-        self.conv_kernel_size = conv_kernel_size
-        self.subsampling_conv_kernel_size = subsampling_conv_kernel_size
-        self.subsampling_conv_stride = subsampling_conv_stride
-        self.subsampling_conv_channels = subsampling_conv_channels
-        self.num_mel_bins = num_mel_bins
-
-        self.dropout = dropout
-        self.dropout_positions = dropout_positions
-        self.layerdrop = layerdrop
-        self.activation_dropout = activation_dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
 
         super().__init__(
+            hidden_size=hidden_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            intermediate_size=intermediate_size,
+            hidden_act=hidden_act,
+            attention_bias=attention_bias,
+            convolution_bias=convolution_bias,
+            conv_kernel_size=conv_kernel_size,
+            subsampling_conv_channels=subsampling_conv_channels,
+            num_mel_bins=num_mel_bins,
+            subsampling_conv_kernel_size=subsampling_conv_kernel_size,
+            subsampling_conv_stride=subsampling_conv_stride,
+            dropout=dropout,
+            dropout_positions=dropout_positions,
+            layerdrop=layerdrop,
+            activation_dropout=activation_dropout,
+            attention_dropout=attention_dropout,
+            max_position_embeddings=max_position_embeddings,
+            initializer_range=initializer_range,
             **kwargs,
         )
+
+        del self.subsampling_factor
+        del self.scale_input
 
 
 class LasrCTCConfig(ParakeetCTCConfig):
