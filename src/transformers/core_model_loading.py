@@ -520,6 +520,13 @@ class WeightTransform:
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
 
+    def __setattr__(self, name, value):
+        # We do not allow to set the patterns, as they are linked between each other and changing one
+        # without the other can mess-up with the capturing groups/compiled sources
+        if name in ("source_patterns", "target_patterns") and hasattr(self, name):
+            raise ValueError(f"Cannot assign to field {name}")
+        object.__setattr__(self, name, value)
+
     def __post_init__(self):
         if isinstance(self.source_patterns, str):
             self.source_patterns = [self.source_patterns]
