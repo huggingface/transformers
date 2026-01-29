@@ -47,6 +47,16 @@ class StableLmModelTester(CausalLMModelTester):
 @require_torch
 class StableLmModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = StableLmModelTester
+    def test_config_has_pad_token_id(self):
+        """Test that StableLmConfig includes pad_token_id attribute (fixes #43572)"""
+        from transformers import StableLmConfig
+        
+        config = StableLmConfig()
+        self.assertTrue(hasattr(config, "pad_token_id"))
+        
+        # Verify model can be instantiated from config without AttributeError
+        model = StableLmModel(config)
+        self.assertIsNotNone(model)
 
 
 @require_torch
