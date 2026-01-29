@@ -205,7 +205,7 @@ class Glm46VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=video_fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 8)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 16)
 
         # Load the whole video
         out_dict_with_video = processor.apply_chat_template(
@@ -216,7 +216,7 @@ class Glm46VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             do_sample_frames=False,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 24)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 16)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
