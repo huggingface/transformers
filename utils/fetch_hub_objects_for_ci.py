@@ -265,6 +265,7 @@ if __name__ == "__main__":
 
         # For `tests/test_tokenization_mistral_common.py:TestMistralCommonBackend`, which eventually calls
         # `mistral_common.tokens.tokenizers.utils.download_tokenizer_from_hf_hub` which (probably) doesn't have the cache.
+        # For `revision=None`, see https://github.com/huggingface/transformers/pull/40623
         if is_mistral_common_available():
             from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
             from mistral_common.tokens.tokenizers.utils import list_local_hf_repo_files
