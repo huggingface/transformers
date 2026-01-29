@@ -126,3 +126,4 @@ for label, prob in zip(labels, probs[0]):
 ## AltCLIPProcessor
 
 [[autodoc]] AltCLIPProcessor
+    - __call__

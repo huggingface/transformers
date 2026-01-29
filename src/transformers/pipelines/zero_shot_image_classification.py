@@ -1,4 +1,3 @@
-import warnings
 from collections import UserDict
 from typing import Any, Union, overload
 
@@ -132,12 +131,6 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             preprocess_params["timeout"] = kwargs["timeout"]
         if "hypothesis_template" in kwargs:
             preprocess_params["hypothesis_template"] = kwargs["hypothesis_template"]
-        if tokenizer_kwargs is not None:
-            warnings.warn(
-                "The `tokenizer_kwargs` argument is deprecated and will be removed in version 5 of Transformers",
-                FutureWarning,
-            )
-            preprocess_params["tokenizer_kwargs"] = tokenizer_kwargs
 
         return preprocess_params, {}, {}
 

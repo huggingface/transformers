@@ -1432,15 +1432,15 @@ class TrainingArguments:
             )
 
         # Parse in args that could be `dict` sent in from the CLI as a string
-        for field in self._VALID_DICT_FIELDS:
-            passed_value = getattr(self, field)
+        for valid_field in self._VALID_DICT_FIELDS:
+            passed_value = getattr(self, valid_field)
             # We only want to do this if the str starts with a bracket to indicate a `dict`
             # else its likely a filename if supported
             if isinstance(passed_value, str) and passed_value.startswith("{"):
                 loaded_dict = json.loads(passed_value)
                 # Convert str values to types if applicable
                 loaded_dict = _convert_str_dict(loaded_dict)
-                setattr(self, field, loaded_dict)
+                setattr(self, valid_field, loaded_dict)
 
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home

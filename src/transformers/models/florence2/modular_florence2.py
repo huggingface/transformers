@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Microsoft and the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@ import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch.nn as nn
@@ -28,11 +27,12 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
+from ...utils.generic import check_model_inputs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..bart.modeling_bart import eager_attention_forward, shift_tokens_right
 from ..beit.modeling_beit import BeitDropPath
@@ -237,34 +237,24 @@ class Florence2ProcessorKwargs(LlavaProcessorKwargs):
     pass
 
 
+@auto_docstring
 class Florence2Processor(ProcessorMixin):
-    r"""
-    Constructs a Florence2 processor which wraps a Florence2 image processor and a Florence2 tokenizer into a single processor.
-
-    [`Florence2Processor`] offers all the functionalities of [`AutoImageProcessor`] and [`BartTokenizerFast`]. See the
-    [`~Florence2Processor.__call__`] and [`~Florence2Processor.decode`] for more information.
-
-    Args:
-        image_processor (`AutoImageProcessor`, *optional*):
-            The image processor is a required input.
-        tokenizer (`Union[BartTokenizer, BartTokenizerFast]`, *optional*):
-            The tokenizer is a required input.
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        num_additional_image_tokens: int = 0,
+        post_processor_config: dict | None = None,
+        **kwargs,
+    ):
+        r"""
         num_additional_image_tokens (`int`, *optional*, defaults to 0):
             Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
             extra tokens appended, no need to set this arg.
         post_processor_config (`dict`,  *optional*, defaults to 0):
             Task-specific parsing rules for [`Florence2PostProcessor`], e.g. regex patterns,
             thresholds, or banned tokens.
-    """
-
-    def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-        num_additional_image_tokens: int = 0,
-        post_processor_config: Optional[dict] = None,
-        **kwargs,
-    ):
+        """
         self.tasks_answer_post_processing_type = {
             "<OCR>": "pure_text",
             "<OCR_WITH_REGION>": "ocr",
@@ -313,7 +303,7 @@ class Florence2Processor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, **kwargs)
 
-    def _construct_prompts(self, text: Union[str, list[str]]) -> list[str]:
+    def _construct_prompts(self, text: str | list[str]) -> list[str]:
         """
         Construct prompts by replacing task tokens with corresponding prompt strings.
         """
@@ -338,32 +328,14 @@ class Florence2Processor(ProcessorMixin):
             prompts.append(prompt)
         return prompts
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Florence2ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to BartTokenizerFast's [`~BartTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -683,7 +655,7 @@ class Florence2PostProcessor:
         return text, spans
 
     def parse_ocr_from_text_and_spans(
-        self, text: str, pattern: Optional[str], image_size: tuple[int, int], area_threshold: float = 0.0
+        self, text: str, pattern: str | None, image_size: tuple[int, int], area_threshold: float = 0.0
     ) -> list[dict[str, Any]]:
         """
         Parse OCR results with quadrilateral boxes.
@@ -1373,6 +1345,10 @@ class Florence2VisionPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
 
     _can_compile_fullgraph = True
+    _can_record_outputs = {
+        "hidden_states": Florence2VisionBlock,
+        "attentions": [Florence2VisionChannelAttention, Florence2VisionWindowAttention],
+    }
 
 
 @auto_docstring
@@ -1423,12 +1399,18 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward(self, hidden_states: torch.Tensor, **kwargs):
+    @check_model_inputs
+    def forward(
+        self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
         for conv, block in zip(self.convs, self.blocks):
             hidden_states = conv(hidden_states)
             for layer in block:
                 hidden_states = layer(hidden_states)
-        return hidden_states
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+        )
 
 
 class Florence2MultiModalProjector(nn.Module):
@@ -1470,7 +1452,7 @@ class Florence2Seq2SeqModelOutput(Seq2SeqModelOutput):
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: Optional[torch.FloatTensor] = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -1491,7 +1473,7 @@ class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    image_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -1532,40 +1514,42 @@ class Florence2Model(LlavaModel):
         else:
             return super().get_encoder(modality=modality)
 
-    def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
+    def get_image_features(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
+            The tensors corresponding to the input images.
         """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
+        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
+        image_outputs.pooler_output = self.multi_modal_projector(image_outputs.last_hidden_state)
 
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
-               The tensors corresponding to the input images.
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
-        """
-        image_features = self.vision_tower(pixel_values, **kwargs)
-        image_embeds = self.multi_modal_projector(image_features)
-        return image_embeds
+        return image_outputs
 
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Union[tuple, Florence2Seq2SeqModelOutput]:
+    ) -> tuple | Florence2Seq2SeqModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1580,7 +1564,7 @@ class Florence2Model(LlavaModel):
                 inputs_embeds = self.get_input_embeddings()(input_ids)
 
             if pixel_values is not None:
-                image_features = self.get_image_features(pixel_values)
+                image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
                 image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 special_image_mask = self.get_placeholder_mask(
                     input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -1638,31 +1622,34 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         "lm_head.weight": "model.language_model.shared.weight",
     }
 
-    def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Florence2Seq2SeqLMOutput]:
+    ) -> tuple | Florence2Seq2SeqLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1673,7 +1660,8 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Florence2ForConditionalGeneration
 
         >>> model = Florence2ForConditionalGeneration.from_pretrained("florence-community/Florence-2-large")
@@ -1681,7 +1669,8 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
 
         >>> prompt = "<CAPTION>"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
 
@@ -1720,7 +1709,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
-            # **kwargs, ## TODO: add back when Bart attention is refactored and takes kwargs
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -1758,7 +1747,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         self,
         inputs_tensor: torch.Tensor,
         model_kwargs,
-        model_input_name: Optional[str],
+        model_input_name: str | None,
         generation_config,
     ) -> dict[str, Any]:
         # override to handle merging image and text embeddings before passing to language encoder
@@ -1769,7 +1758,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds = self.get_input_embeddings()(inputs_tensor)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values)
+            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 inputs_tensor, inputs_embeds=inputs_embeds, image_features=image_features

@@ -149,7 +149,7 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Pad the first input to match the second input
         pad_len = len(expected_input_ids_2) - len(expected_input_ids_1)
 
-        expected_attention_mask = [[0] * pad_len + [1] * len(expected_input_ids_1), [1] * (len(expected_input_ids_2))]
+        expected_attention_mask = [ [1] * len(expected_input_ids_1) + [0] * pad_len, [1] * (len(expected_input_ids_2))]
 
         self.assertEqual(
             inputs["attention_mask"],
@@ -265,7 +265,7 @@ And who is that?<|im_end|>
             tokenize=True,
             return_dict=True,
             max_image_size=980,
-            return_tensors="np",
+            return_tensors="pt",
         )
         self.assertListEqual(list(out_dict[self.images_input_name].shape), [1, 3, 980, 980])
 

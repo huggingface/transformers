@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 HuggingFace Inc. team and MosaicML NLP team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Mpt configuration"""
-
-from typing import Optional, Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -139,9 +136,6 @@ class MptConfig(PreTrainedConfig):
             If not None, scale the logits by this value.
         no_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in all linear layers.
-        verbose (`int`, *optional*, defaults to 0):
-            The verbosity level to use for logging. Used in the previous versions of MPT models for logging. This
-            argument is deprecated.
         embedding_fraction (`float`, *optional*, defaults to 1.0):
             The fraction to scale the gradients of the embedding layer by.
         norm_type (`str`, *optional*, defaults to `"low_precision_layernorm"`):
@@ -151,6 +145,8 @@ class MptConfig(PreTrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -190,13 +186,13 @@ class MptConfig(PreTrainedConfig):
         learned_pos_emb: bool = True,
         attn_config: MptAttentionConfig = None,
         init_device: str = "cpu",
-        logit_scale: Optional[Union[float, str]] = None,
+        logit_scale: float | str | None = None,
         no_bias: bool = True,
-        verbose: int = 0,
         embedding_fraction: float = 1.0,
         norm_type: str = "low_precision_layernorm",
         use_cache: bool = False,
         initializer_range=0.02,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if attn_config is None:
@@ -217,12 +213,12 @@ class MptConfig(PreTrainedConfig):
         self.init_device = init_device
         self.logit_scale = logit_scale
         self.no_bias = no_bias
-        self.verbose = verbose
         self.embedding_fraction = embedding_fraction
         self.norm_type = norm_type
         self.layer_norm_epsilon = layer_norm_epsilon
         self.use_cache = use_cache
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

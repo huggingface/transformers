@@ -83,7 +83,13 @@ def get_conversion_pr_reference(api: HfApi, model_id: str, **kwargs):
     return sha
 
 
-def auto_conversion(pretrained_model_name_or_path: str, ignore_errors_during_conversion=False, **cached_file_kwargs):
+def auto_conversion(
+    pretrained_model_name_or_path: str,
+    ignore_errors_during_conversion: bool = False,
+    safe_weights_name: str = "model.safetensors",
+    safe_weights_index_name: str = "model.safetensors.index.json",
+    **cached_file_kwargs,
+):
     try:
         api = HfApi(token=cached_file_kwargs.get("token"), headers={"user-agent": http_user_agent()})
         sha = get_conversion_pr_reference(api, pretrained_model_name_or_path, **cached_file_kwargs)
@@ -97,11 +103,11 @@ def auto_conversion(pretrained_model_name_or_path: str, ignore_errors_during_con
         # description.
         sharded = api.file_exists(
             pretrained_model_name_or_path,
-            "model.safetensors.index.json",
+            safe_weights_index_name,
             revision=sha,
             token=cached_file_kwargs.get("token"),
         )
-        filename = "model.safetensors.index.json" if sharded else "model.safetensors"
+        filename = safe_weights_index_name if sharded else safe_weights_name
 
         resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
         return resolved_archive_file, sha, sharded

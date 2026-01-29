@@ -301,7 +301,7 @@ class DebertaV2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        model = DebertaV2Model.from_pretrained("microsoft/deberta-v2-xlarge")
+        model = DebertaV2Model.from_pretrained("microsoft/deberta-v2-xlarge", dtype=torch.float32)
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])

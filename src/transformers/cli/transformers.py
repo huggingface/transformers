@@ -13,7 +13,7 @@
 # limitations under the License.
 """Transformers CLI."""
 
-from huggingface_hub import typer_factory
+from huggingface_hub import check_cli_update, typer_factory
 
 from transformers.cli.add_fast_image_processor import add_fast_image_processor
 from transformers.cli.add_new_model_like import add_new_model_like
@@ -35,6 +35,7 @@ app.command()(version)
 
 
 def main():
+    check_cli_update("transformers")
     app()
 
 

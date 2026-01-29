@@ -93,6 +93,7 @@ EXTRA_TAGS_MAPPING = {
     "gemma3n": ["gemma3n_audio", "gemma3n_text", "gemma3n_vision"],
     "gpt2": ["cpm", "dialogpt", "gpt-sw3", "megatron_gpt2"],
     "glm4v_moe": ["glm4v_moe_text", "glm4v_moe_vision"],
+    "glm4_image": ["glm4_image_text", "glm4_image_vision"],
     "glm4v": ["glm4v_text", "glm4v_vision"],
     "idefics3": ["idefics3_vision"],
     "internvl": ["internvl_vision"],

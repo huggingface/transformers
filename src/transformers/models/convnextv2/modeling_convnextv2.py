@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch ConvNextV2 model."""
-
-from typing import Optional
 
 import torch
 from torch import nn
@@ -57,7 +54,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class ConvNextV2DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -241,7 +238,7 @@ class ConvNextV2Encoder(nn.Module):
             prev_chs = out_chs
 
     def forward(
-        self, hidden_states: torch.Tensor, output_hidden_states: Optional[bool] = False
+        self, hidden_states: torch.Tensor, output_hidden_states: bool | None = False
     ) -> BaseModelOutputWithNoAttention:
         all_hidden_states = [hidden_states] if output_hidden_states else None
 
@@ -289,7 +286,7 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor] = None, output_hidden_states: Optional[bool] = None, **kwargs
+        self, pixel_values: torch.FloatTensor | None = None, output_hidden_states: bool | None = None, **kwargs
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         if output_hidden_states is None:
             output_hidden_states = self.config.output_hidden_states
@@ -341,7 +338,7 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor] = None, labels: Optional[torch.LongTensor] = None, **kwargs
+        self, pixel_values: torch.FloatTensor | None = None, labels: torch.LongTensor | None = None, **kwargs
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -393,7 +390,7 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: torch.Tensor, output_hidden_states: Optional[bool] = None, **kwargs
+        self, pixel_values: torch.Tensor, output_hidden_states: bool | None = None, **kwargs
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -402,10 +399,12 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("facebook/convnextv2-tiny-1k-224")
         >>> model = AutoBackbone.from_pretrained("facebook/convnextv2-tiny-1k-224")

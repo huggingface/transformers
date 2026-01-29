@@ -54,7 +54,7 @@ else:
     from builtins import object as DeepSpeedConfig
 
 
-class HfDeepSpeedConfig(DeepSpeedConfig):
+class HfDeepSpeedConfig(DeepSpeedConfig):  # noqa UP004
     """
     This object contains a DeepSpeed configuration dictionary and can be quickly queried for things like zero stage.
 
@@ -290,18 +290,159 @@ def deepspeed_config():
         return None
 
 
-def _load_state_dict_into_zero3_model(model_to_load, state_dict):
+def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
+    """
+    Apply weight conversions (renaming and merging/splitting operations) to a state dict.
+    This is a simplified version that handles the conversion without loading into the model.
+    """
+    # Check for Tensor Parallelism - weight conversions are not tested with TP
+    # TP uses ReplaceWithTensorSlicing which may conflict with our weight conversions
+    ds_config = deepspeed_config()
+    if ds_config is not None:
+        # Check training config (tensor_parallel.autotp_size)
+        tp_size = ds_config.get("tensor_parallel", {}).get("autotp_size", 1)
+        # Check inference config (inference.tensor_parallel.tp_size)
+        inference_config = ds_config.get("inference", {})
+        if isinstance(inference_config, dict):
+            tp_size = max(tp_size, inference_config.get("tensor_parallel", {}).get("tp_size", 1))
+        if tp_size > 1:
+            raise NotImplementedError(
+                "Weight conversions (e.g., MoE expert fusion) with DeepSpeed Tensor Parallelism "
+                "are not yet implemented but support is coming soon. Please disable tensor_parallel "
+                "in your DeepSpeed config or convert your checkpoint to the expected format first."
+            )
+
+    from ..core_model_loading import WeightConverter, WeightRenaming, dot_natural_key, rename_source_key
+
+    # Preserve metadata from the original state dict
+    metadata = getattr(state_dict, "_metadata", None)
+
+    prefix = model.base_model_prefix
+
+    # Build a meta state dict for matching - only keys/shapes, no actual tensor data
+    # This minimizes memory since we don't duplicate the model's parameters
+    model_state_dict = {}
+    for key, param in model.state_dict().items():
+        model_state_dict[key] = torch.empty(param.shape, dtype=param.dtype, device="meta")
+
+    renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
+    converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
+
+    # Fast path: if we only have simple renamings and no converters, we can skip the expensive collection logic
+    if len(converters) == 0:
+        new_state_dict = {}
+        for original_key, tensor in state_dict.items():
+            renamed_key, _ = rename_source_key(original_key, renamings, [], prefix, model_state_dict)
+            if renamed_key in model_state_dict:
+                new_state_dict[renamed_key] = tensor
+        # Attach metadata to the new state dict
+        if metadata is not None:
+            new_state_dict._metadata = metadata
+        return new_state_dict
+
+    # Full path: we have WeightConverter operations that require tensor fusion/splitting
+    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
+
+    # Build a mapping of what needs to be converted
+    # Sort keys to ensure consistent ordering (important for MoE conversions)
+    # Iterate over sorted keys and pop from state_dict to free memory immediately
+    conversion_mapping = {}
+    key_rename_cache = {}  # Cache rename results to avoid redundant processing
+    sorted_keys = sorted(state_dict.keys(), key=lambda k: dot_natural_key(k))
+    for original_key in sorted_keys:
+        tensor = state_dict.pop(original_key)  # Pop to free memory immediately
+        # Rename the key according to all renaming pattern and optional weight converter patterns
+        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, prefix, model_state_dict)
+
+        # Cache the rename result for use in the cleanup loop
+        key_rename_cache[original_key] = renamed_key
+
+        # Only process if the renamed key is in the model's state dict
+        if renamed_key in model_state_dict:
+            if source_pattern is not None:
+                new_converter = copy.deepcopy(pattern_to_converter[source_pattern])
+                mapping = conversion_mapping.setdefault(renamed_key, new_converter)
+            else:
+                mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
+                source_pattern = original_key
+
+            # Add the tensor directly (not a Future, since it's already materialized)
+            mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
+
+    # Apply the conversions and build the new state dict
+    new_state_dict = {}
+    # Track which renamed_keys came from WeightConverter (need to skip their originals)
+    converted_renamed_keys = set()
+    for renamed_key, mapping in conversion_mapping.items():
+        try:
+            # Only WeightConverter needs convert(); WeightRenaming is just a simple rename
+            if not isinstance(mapping, WeightConverter):
+                continue
+            realized_value, _ = mapping.convert(
+                renamed_key,
+                model=model,
+                config=model.config,
+            )
+            for target_name, param in realized_value.items():
+                param = param[0] if isinstance(param, list) else param
+                new_state_dict[target_name] = param
+            # Track that this key was converted
+            converted_renamed_keys.add(renamed_key)
+            # Free memory by clearing source tensors
+            if hasattr(mapping, "source_tensors"):
+                mapping.source_tensors = {}
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to apply weight conversion for '{renamed_key}'. "
+                f"This likely means the checkpoint format is incompatible with the current model version. "
+                f"Error: {e}"
+            ) from e
+
+    # Add any keys that didn't need conversion (use cached rename results)
+    # At this point, state_dict only contains unconverted keys (others were popped)
+    for key in list(state_dict.keys()):
+        renamed_key = key_rename_cache.get(key)
+        if renamed_key is None:
+            # Key wasn't in our cache, compute rename
+            renamed_key, _ = rename_source_key(key, renamings, [], prefix, model_state_dict)
+        if renamed_key not in new_state_dict and renamed_key in model_state_dict:
+            new_state_dict[renamed_key] = state_dict.pop(key)
+
+    # Attach metadata to the new state dict
+    if metadata is not None:
+        new_state_dict._metadata = metadata
+
+    return new_state_dict
+
+
+def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=None):
     """
     Loads state dict into a model specifically for Zero3, since DeepSpeed does not support the `transformers`
     tensor parallelism API.
 
     Nearly identical code to PyTorch's `_load_from_state_dict`
+
+    Args:
+        model_to_load: The model to load weights into
+        state_dict: The state dict containing the weights
+        load_config: Optional LoadStateDictConfig containing weight_mapping and other loading options
     """
     # copy state_dict so `_load_state_dict_into_zero3_model` can modify it
     metadata = getattr(state_dict, "_metadata", None)
     state_dict = state_dict.copy()
     if metadata is not None:
         state_dict._metadata = metadata
+
+    # Extract weight_mapping from load_config if provided
+    weight_mapping = None
+    if load_config is not None:
+        weight_mapping = getattr(load_config, "weight_mapping", None)
+
+    # Apply weight conversions if provided
+    if weight_mapping is not None and len(weight_mapping) > 0:
+        state_dict = _apply_weight_conversions_to_state_dict(model_to_load, state_dict, weight_mapping)
+        # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
+        model_to_load._weight_conversions = weight_mapping
 
     error_msgs = []
     meta_model_state_dict = model_to_load.state_dict()

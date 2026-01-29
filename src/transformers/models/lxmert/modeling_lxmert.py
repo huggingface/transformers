@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Hao Tan, Mohit Bansal, and the HuggingFace team
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +14,7 @@
 """PyTorch LXMERT model."""
 
 import math
-import warnings
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -78,14 +75,14 @@ class LxmertModelOutput(ModelOutput):
         the self-attention heads.
     """
 
-    language_output: Optional[torch.FloatTensor] = None
-    vision_output: Optional[torch.FloatTensor] = None
-    pooled_output: Optional[torch.FloatTensor] = None
-    language_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    vision_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    language_attentions: Optional[tuple[torch.FloatTensor]] = None
-    vision_attentions: Optional[tuple[torch.FloatTensor]] = None
-    cross_encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    language_output: torch.FloatTensor | None = None
+    vision_output: torch.FloatTensor | None = None
+    pooled_output: torch.FloatTensor | None = None
+    language_hidden_states: tuple[torch.FloatTensor] | None = None
+    vision_hidden_states: tuple[torch.FloatTensor] | None = None
+    language_attentions: tuple[torch.FloatTensor] | None = None
+    vision_attentions: tuple[torch.FloatTensor] | None = None
+    cross_encoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -121,13 +118,13 @@ class LxmertForQuestionAnsweringOutput(ModelOutput):
         the self-attention heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    question_answering_score: Optional[torch.FloatTensor] = None
-    language_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    vision_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    language_attentions: Optional[tuple[torch.FloatTensor]] = None
-    vision_attentions: Optional[tuple[torch.FloatTensor]] = None
-    cross_encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    question_answering_score: torch.FloatTensor | None = None
+    language_hidden_states: tuple[torch.FloatTensor] | None = None
+    vision_hidden_states: tuple[torch.FloatTensor] | None = None
+    language_attentions: tuple[torch.FloatTensor] | None = None
+    vision_attentions: tuple[torch.FloatTensor] | None = None
+    cross_encoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -168,15 +165,15 @@ class LxmertForPreTrainingOutput(ModelOutput):
         the self-attention heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    prediction_logits: Optional[torch.FloatTensor] = None
-    cross_relationship_score: Optional[torch.FloatTensor] = None
-    question_answering_score: Optional[torch.FloatTensor] = None
-    language_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    vision_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    language_attentions: Optional[tuple[torch.FloatTensor]] = None
-    vision_attentions: Optional[tuple[torch.FloatTensor]] = None
-    cross_encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    prediction_logits: torch.FloatTensor | None = None
+    cross_relationship_score: torch.FloatTensor | None = None
+    question_answering_score: torch.FloatTensor | None = None
+    language_hidden_states: tuple[torch.FloatTensor] | None = None
+    vision_hidden_states: tuple[torch.FloatTensor] | None = None
+    language_attentions: tuple[torch.FloatTensor] | None = None
+    vision_attentions: tuple[torch.FloatTensor] | None = None
+    cross_encoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
 class LxmertEmbeddings(nn.Module):
@@ -701,18 +698,18 @@ class LxmertModel(LxmertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        visual_feats: Optional[torch.FloatTensor] = None,
-        visual_pos: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        visual_attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        visual_feats: torch.FloatTensor | None = None,
+        visual_pos: torch.FloatTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        visual_attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[LxmertModelOutput, tuple[torch.FloatTensor]]:
+    ) -> LxmertModelOutput | tuple[torch.FloatTensor]:
         r"""
         visual_feats (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
             This input represents visual features. They ROI pooled object features from bounding boxes using a
@@ -896,7 +893,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         self.visual_losses = visual_losses
 
     def resize_token_embeddings(
-        self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
+        self, new_num_tokens: int, pad_to_multiple_of: int | None = None, mean_resizing: bool = True
     ) -> nn.Embedding:
         # Adding the following steps to resize bias to match the shape of resized embeddings
         new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
@@ -987,22 +984,22 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        visual_feats: Optional[torch.FloatTensor] = None,
-        visual_pos: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        visual_attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        obj_labels: Optional[dict[str, tuple[torch.FloatTensor, torch.FloatTensor]]] = None,
-        matched_label: Optional[torch.LongTensor] = None,
-        ans: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        visual_feats: torch.FloatTensor | None = None,
+        visual_pos: torch.FloatTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        visual_attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        obj_labels: dict[str, tuple[torch.FloatTensor, torch.FloatTensor]] | None = None,
+        matched_label: torch.LongTensor | None = None,
+        ans: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[LxmertForPreTrainingOutput, tuple[torch.FloatTensor]]:
+    ) -> LxmertForPreTrainingOutput | tuple[torch.FloatTensor]:
         r"""
         visual_feats (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
             This input represents visual features. They ROI pooled object features from bounding boxes using a
@@ -1039,14 +1036,6 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         ans (`Torch.Tensor` of shape `(batch_size)`, *optional*):
             a one hot representation hof the correct answer *optional*
         """
-
-        if "masked_lm_labels" in kwargs:
-            warnings.warn(
-                "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels`"
-                " instead.",
-                FutureWarning,
-            )
-            labels = kwargs.pop("masked_lm_labels")
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1234,19 +1223,19 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        visual_feats: Optional[torch.FloatTensor] = None,
-        visual_pos: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        visual_attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        visual_feats: torch.FloatTensor | None = None,
+        visual_pos: torch.FloatTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        visual_attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[LxmertForQuestionAnsweringOutput, tuple[torch.FloatTensor]]:
+    ) -> LxmertForQuestionAnsweringOutput | tuple[torch.FloatTensor]:
         r"""
         visual_feats (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
             This input represents visual features. They ROI pooled object features from bounding boxes using a

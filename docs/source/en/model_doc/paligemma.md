@@ -175,6 +175,7 @@ visualizer("<img> What is in this image?")
 ## PaliGemmaProcessor
 
 [[autodoc]] PaliGemmaProcessor
+    - __call__
 
 ## PaliGemmaModel
 
@@ -184,3 +185,4 @@ visualizer("<img> What is in this image?")
 
 [[autodoc]] PaliGemmaForConditionalGeneration
     - forward
+    - get_image_features

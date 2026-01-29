@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -250,7 +249,6 @@ class Idefics2Config(PreTrainedConfig):
                 rms_norm_eps=1e-5,
                 # None in the original configuration_mistral, we set it to the unk_token_id
                 pad_token_id=0,
-                tie_word_embeddings=False,
             )
 
         self.text_config = text_config
@@ -262,7 +260,7 @@ class Idefics2Config(PreTrainedConfig):
                 "In your model's config on the hub, add `hidden_size` and `rms_norm_eps` keys under the `perceiver_config` dict. "
             )
 
-        super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
+        super().__init__(**kwargs)
 
 
 __all__ = ["Idefics2Config"]

@@ -224,7 +224,7 @@ pipeline(
     - Reduce compute time and production costs.
     - Dozens of model architectures with 1M+ pretrained checkpoints across all modalities.
 
-1. Choose the right framework for every part of a models lifetime:
+1. Choose the right framework for every part of a model's lifetime:
     - Train state-of-the-art models in 3 lines of code.
     - Move a single model between PyTorch/JAX/TF2.0 frameworks at will.
     - Pick the right framework for training, evaluation, and production.

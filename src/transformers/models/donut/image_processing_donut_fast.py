@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,10 @@
 # limitations under the License.
 """Fast Image processor class for Donut."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -130,11 +129,7 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         pad_right = delta_width - pad_left
 
         padding = (pad_left, pad_top, pad_right, pad_bottom)
-        return F.pad(image, padding)
-
-    def pad(self, *args, **kwargs):
-        logger.info("pad is deprecated and will be removed in version 4.27. Please use pad_image instead.")
-        return self.pad_image(*args, **kwargs)
+        return tvF.pad(image, padding)
 
     def thumbnail(
         self,
@@ -175,7 +170,7 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         return self.resize(
             image,
             size=SizeDict(width=width, height=height),
-            interpolation=F.InterpolationMode.BICUBIC,
+            interpolation=tvF.InterpolationMode.BICUBIC,
         )
 
     def _preprocess(
@@ -186,16 +181,16 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         do_align_long_axis: bool,
         do_pad: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing

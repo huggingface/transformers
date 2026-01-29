@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 import numpy as np
 
@@ -144,7 +142,7 @@ class Glm46VVideoProcessor(Glm4vVideoProcessor):
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        fps: Optional[Union[int, float]] = None,
+        fps: int | float | None = None,
         **kwargs,
     ):
         if metadata is None or getattr(metadata, "fps", None) is None:

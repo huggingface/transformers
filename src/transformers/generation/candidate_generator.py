@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -489,7 +488,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             new_tokens_only: 2D array of shape (batch_size, new_token_length), represents the new tokens that are not in prompt
             discrepancy_only: 2D array of shape (batch_size, discrepancy_length), represents the new tokens that are in prompt but not in prompt_plus_new_tokens
         """
-        compare_mat = prompt_plus_new_tokens.T == prompt
+        compare_mat = prompt == prompt_plus_new_tokens.T
         if not torch.is_tensor(compare_mat):
             compare_mat = torch.tensor(compare_mat)
 

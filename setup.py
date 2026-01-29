@@ -21,12 +21,12 @@ To create the package for pypi.
    current release branch.
 
    If releasing on a special branch, copy the updated README.md on the main branch for the commit you will make
-   for the post-release and run `make fix-copies` on the main branch as well.
+   for the post-release and run `make fix-repo` on the main branch as well.
 
 2. Run `make pre-release` (or `make pre-patch` for a patch release) and commit these changes with the message:
    "Release: <VERSION>" and push.
 
-3. Go back to the main branch and run `make post-release` then `make fix-copies`. Commit these changes with the
+3. Go back to the main branch and run `make post-release` then `make fix-repo`. Commit these changes with the
    message "v<NEXT_VERSION>.dev.0" and push to main.
 
 # If you were just cutting the branch in preparation for a release, you can stop here for now.
@@ -62,7 +62,7 @@ if stale_egg_info.exists():
 
 # IMPORTANT:
 # 1. all dependencies should be listed here with their version requirements if any
-# 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
+# 2. once modified, run: `make fix-repo` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow>=10.0.1,<=15.0",
     "accelerate>=1.1.0",
@@ -70,7 +70,6 @@ _deps = [
     "beautifulsoup4",
     "blobfile",
     "codecarbon>=2.8.1",
-    "cookiecutter==1.7.3",
     "datasets>=2.15.0",  # We need either this pin or pyarrow<21.0.0
     "deepspeed>=0.9.3",
     "diffusers",
@@ -79,12 +78,10 @@ _deps = [
     "faiss-cpu",
     "fastapi",
     "filelock",
-    "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "hf_xet",
-    "huggingface-hub>=1.2.1,<2.0",
+    "huggingface-hub>=1.3.0,<2.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
@@ -111,6 +108,7 @@ _deps = [
     "pydantic>=2",
     "pytest>=7.2.0,<9.0.0",
     "pytest-asyncio>=1.2.0",
+    "pytest-random-order",
     "pytest-rerunfailures<16.0",
     "pytest-timeout",
     "pytest-xdist",
@@ -118,11 +116,10 @@ _deps = [
     "python>=3.10.0",
     "ray[tune]>=2.7.0",
     "regex!=2019.12.17",
-    "requests",
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
-    "ruff==0.13.1",
+    "ruff==0.14.10",
     # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
     # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
     # `Trainer` tests (see references to `run_translation.py`).
@@ -140,7 +137,7 @@ _deps = [
     "tensorboard",
     "timeout-decorator",
     "tiktoken",
-    "timm>=1.0.20",
+    "timm>=1.0.23",
     "tokenizers>=0.22.0,<=0.23.0",
     "torch>=2.2",
     "torchaudio",
@@ -156,37 +153,108 @@ _deps = [
     "libcst",
     "rich",
     "opentelemetry-api",
-    "mistral-common[opencv]>=1.6.3",
+    "opentelemetry-exporter-otlp",
+    "opentelemetry-sdk",
+    "mistral-common[image]>=1.8.8",
 ]
 
-
-# this is a lookup table with items like:
-#
-# tokenizers: "tokenizers==0.9.4"
-# packaging: "packaging"
-#
+# This is a lookup table with items like: {"tokenizers": "tokenizers==0.9.4", "packaging": "packaging"}, i.e.
 # some of the values are versioned whereas others aren't.
 deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] for x in _deps)}
-
-# since we save this data in src/transformers/dependency_versions_table.py it can be easily accessed from
-# anywhere. If you need to quickly access the data from this table in a shell, you can do so easily with:
-#
-# python -c 'import sys; from transformers.dependency_versions_table import deps; \
-# print(" ".join([ deps[x] for x in sys.argv[1:]]))' tokenizers datasets
-#
-# Just pass the desired package names to that script as it's shown with 2 packages above.
-#
-# If transformers is not yet installed and the work is done from the cloned repo remember to add `PYTHONPATH=src` to the script above
-#
-# You can then feed this for example to `pip`:
-#
-# pip install -U $(python -c 'import sys; from transformers.dependency_versions_table import deps; \
-# print(" ".join([deps[x] for x in sys.argv[1:]]))' tokenizers datasets)
-#
 
 
 def deps_list(*pkgs):
     return [deps[pkg] for pkg in pkgs]
+
+
+extras = {}
+
+extras["torch"] = deps_list("torch", "accelerate")
+extras["vision"] = deps_list("torchvision", "Pillow")
+extras["audio"] = deps_list("torchaudio", "librosa", "pyctcdecode", "phonemizer", "kenlm")
+extras["video"] = deps_list("av")
+extras["timm"] = deps_list("timm")
+extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich")
+extras["kernels"] = deps_list("kernels")
+extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
+extras["tiktoken"] = deps_list("tiktoken", "blobfile")
+extras["mistral-common"] = deps_list("mistral-common[image]")
+extras["chat_template"] = deps_list("jinja2", "jmespath")
+extras["sklearn"] = deps_list("scikit-learn")
+extras["accelerate"] = deps_list("accelerate")
+extras["retrieval"] = deps_list("faiss-cpu", "datasets")
+extras["sagemaker"] = deps_list("sagemaker")
+extras["deepspeed"] = deps_list("deepspeed", "accelerate")
+extras["optuna"] = deps_list("optuna")
+extras["ray"] = deps_list("ray[tune]")
+extras["codecarbon"] = deps_list("codecarbon")
+extras["integrations"] = deps_list("kernels", "optuna", "ray[tune]", "codecarbon")
+extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"]
+extras["natten"] = deps_list("natten")
+extras["num2words"] = deps_list("num2words")
+extras["benchmark"] = deps_list("optimum-benchmark")
+extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
+# OpenTelemetry dependencies for metrics collection in continuous batching
+extras["open-telemetry"] = deps_list("opentelemetry-api", "opentelemetry-exporter-otlp", "opentelemetry-sdk")
+
+extras["testing"] = (
+    deps_list(
+        "pytest",
+        "pytest-asyncio",
+        "pytest-random-order",
+        "pytest-rich",
+        "pytest-xdist",
+        "pytest-order",
+        "pytest-rerunfailures",
+        "pytest-timeout",
+        "timeout-decorator",
+        "parameterized",
+        "psutil",
+        "dill",
+        "evaluate",
+        "rouge-score",
+        "nltk",
+        "sacremoses",
+        "rjieba",
+        "beautifulsoup4",
+        "tensorboard",
+        "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
+        "filelock",  # filesystem locks, e.g., to prevent parallel downloads
+    )
+    + extras["quality"]
+    + extras["retrieval"]
+    + extras["sentencepiece"]
+    + extras["mistral-common"]
+    + extras["serving"]
+)
+extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
+extras["all"] = (
+    extras["torch"]
+    + extras["vision"]
+    + extras["audio"]
+    + extras["video"]
+    + extras["kernels"]
+    + extras["timm"]
+    + extras["sentencepiece"]
+    + extras["tiktoken"]
+    + extras["mistral-common"]
+    + extras["chat_template"]
+    + extras["num2words"]
+)
+extras["dev"] = extras["all"] + extras["testing"] + extras["ja"] + extras["sklearn"]
+
+# Those define the hard dependencies of `transformers`
+install_requires = [
+    deps["huggingface-hub"],
+    deps["numpy"],
+    deps["packaging"],  # utilities from PyPA to e.g., compare versions
+    deps["pyyaml"],  # used for the model cards metadata
+    deps["regex"],  # for OpenAI GPT
+    deps["tokenizers"],
+    deps["typer-slim"],  # CLI utilities. In practice, already a dependency of huggingface_hub but we use it as well
+    deps["safetensors"],
+    deps["tqdm"],  # progress bars in model download and training scripts
+]
 
 
 class DepsTableUpdateCommand(Command):
@@ -212,179 +280,20 @@ class DepsTableUpdateCommand(Command):
         content = [
             "# THIS FILE HAS BEEN AUTOGENERATED. To update:",
             "# 1. modify the `_deps` dict in setup.py",
-            "# 2. run `make deps_table_update``",
+            "# 2. run `make fix-repo``",
             "deps = {",
             entries,
             "}",
             "",
         ]
         target = "src/transformers/dependency_versions_table.py"
-        print(f"updating {target}")
         with open(target, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(content))
 
 
-extras = {}
-
-extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
-extras["sklearn"] = deps_list("scikit-learn")
-
-extras["torch"] = deps_list("torch", "accelerate")
-extras["accelerate"] = deps_list("accelerate")
-extras["hf_xet"] = deps_list("hf_xet")
-
-extras["retrieval"] = deps_list("faiss-cpu", "datasets")
-
-extras["tokenizers"] = deps_list("tokenizers")
-extras["ftfy"] = deps_list("ftfy")
-extras["modelcreation"] = deps_list("cookiecutter")
-
-extras["sagemaker"] = deps_list("sagemaker")
-extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
-extras["optuna"] = deps_list("optuna")
-extras["ray"] = deps_list("ray[tune]")
-extras["hub-kernels"] = deps_list("kernels")
-
-extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"]
-
-extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"]
-extras["audio"] = deps_list(
-    "librosa",
-    "pyctcdecode",
-    "phonemizer",
-    "kenlm",
-)
-# `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
-extras["speech"] = deps_list("torchaudio") + extras["audio"]
-extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
-extras["vision"] = deps_list("Pillow")
-extras["timm"] = deps_list("timm")
-extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
-extras["natten"] = deps_list("natten")
-extras["codecarbon"] = deps_list("codecarbon")
-extras["video"] = deps_list("av")
-extras["num2words"] = deps_list("num2words")
-extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
-extras["tiktoken"] = deps_list("tiktoken", "blobfile")
-extras["mistral-common"] = deps_list("mistral-common[opencv]")
-extras["chat_template"] = deps_list("jinja2", "jmespath")
-extras["testing"] = (
-    deps_list(
-        "pytest",
-        "pytest-asyncio",
-        "pytest-rich",
-        "pytest-xdist",
-        "pytest-order",
-        "pytest-rerunfailures",
-        "timeout-decorator",
-        "parameterized",
-        "psutil",
-        "datasets",
-        "dill",
-        "evaluate",
-        "pytest-timeout",
-        "ruff",
-        "rouge-score",
-        "nltk",
-        "GitPython",
-        "sacremoses",
-        "rjieba",
-        "beautifulsoup4",
-        "tensorboard",
-        "pydantic",
-        "sentencepiece",
-        "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
-        "libcst",
-    )
-    + extras["retrieval"]
-    + extras["modelcreation"]
-    + extras["mistral-common"]
-    + extras["serving"]
-)
-
-extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
-extras["ruff"] = deps_list("ruff")
-extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "pandas")
-
-extras["all"] = (
-    extras["torch"]
-    + extras["sentencepiece"]
-    + extras["tokenizers"]
-    + extras["torch-speech"]
-    + extras["vision"]
-    + extras["integrations"]
-    + extras["timm"]
-    + extras["torch-vision"]
-    + extras["codecarbon"]
-    + extras["accelerate"]
-    + extras["video"]
-    + extras["num2words"]
-    + extras["mistral-common"]
-    + extras["chat_template"]
-)
-
-
-extras["dev-torch"] = (
-    extras["testing"]
-    + extras["torch"]
-    + extras["sentencepiece"]
-    + extras["tokenizers"]
-    + extras["torch-speech"]
-    + extras["vision"]
-    + extras["integrations"]
-    + extras["timm"]
-    + extras["torch-vision"]
-    + extras["codecarbon"]
-    + extras["quality"]
-    + extras["ja"]
-    + extras["sklearn"]
-    + extras["modelcreation"]
-    + extras["num2words"]
-)
-
-extras["dev"] = (
-    extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["sklearn"] + extras["modelcreation"]
-)
-
-extras["torchhub"] = deps_list(
-    "filelock",
-    "huggingface-hub",
-    "importlib_metadata",
-    "numpy",
-    "packaging",
-    "protobuf",
-    "regex",
-    "requests",
-    "sentencepiece",
-    "torch",
-    "tokenizers",
-    "tqdm",
-)
-
-extras["benchmark"] = deps_list("optimum-benchmark")
-
-# OpenTelemetry dependencies for metrics collection in continuous batching
-# TODO: refactor this to split API and SDK; SDK and exporter should only be needed to run code that collects metrics whereas API is what people will need to instrument their code and handle exporter themselves
-extras["open-telemetry"] = deps_list("opentelemetry-api") + ["opentelemetry-exporter-otlp", "opentelemetry-sdk"]
-
-# when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
-install_requires = [
-    deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
-    deps["huggingface-hub"],
-    deps["numpy"],
-    deps["packaging"],  # utilities from PyPA to e.g., compare versions
-    deps["pyyaml"],  # used for the model cards metadata
-    deps["regex"],  # for OpenAI GPT
-    deps["requests"],  # for downloading models over HTTPS
-    deps["tokenizers"],
-    deps["typer-slim"],  # CLI utilities. In practice, already a dependency of huggingface_hub
-    deps["safetensors"],
-    deps["tqdm"],  # progress bars in model download and training scripts
-]
-
 setup(
     name="transformers",
-    version="5.0.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="5.0.1.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",
@@ -417,11 +326,3 @@ setup(
     ],
     cmdclass={"deps_table_update": DepsTableUpdateCommand},
 )
-
-extras["tests_torch"] = deps_list()
-extras["tests_hub"] = deps_list()
-extras["tests_pipelines_torch"] = deps_list()
-extras["tests_examples_torch"] = deps_list()
-extras["tests_custom_tokenizers"] = deps_list()
-extras["tests_exotic_models"] = deps_list()
-extras["consistency"] = deps_list()

@@ -15,7 +15,7 @@ import inspect
 import os
 from collections.abc import Callable
 from functools import partial
-from typing import Optional, TypedDict
+from typing import TypedDict
 
 import torch
 import torch.nn.functional as F
@@ -71,7 +71,7 @@ _hf_api_to_flash_mapping = {
 }
 
 
-def _lazy_imports(implementation: Optional[str], attention_wrapper: Optional[Callable] = None):
+def _lazy_imports(implementation: str | None, attention_wrapper: Callable | None = None):
     """
     Lazy loads the respective flash attention implementations.
 
@@ -147,7 +147,7 @@ def _lazy_define_process_function(flash_function):
     return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
 
 
-def lazy_import_flash_attention(implementation: Optional[str], attention_wrapper: Optional[Callable] = None):
+def lazy_import_flash_attention(implementation: str | None, attention_wrapper: Callable | None = None):
     """
     Lazily import flash attention and return the respective functions + flags.
 
@@ -168,7 +168,7 @@ def lazy_import_flash_attention(implementation: Optional[str], attention_wrapper
     return (_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
 
 
-def lazy_import_paged_flash_attention(implementation: Optional[str]):
+def lazy_import_paged_flash_attention(implementation: str | None):
     """
     Same as `lazy_import_flash_attention` but explicitly wrapping it with the paged implementation.
     """
@@ -453,7 +453,7 @@ def fa_peft_integration_check(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
-    target_dtype: Optional[torch.dtype] = None,
+    target_dtype: torch.dtype | None = None,
 ):
     """
     PEFT usually casts the layer norms in float32 for training stability reasons
@@ -482,10 +482,10 @@ class FlashAttentionKwargs(TypedDict, total=False):
             Maximum sequence length for key state.
     """
 
-    cu_seq_lens_q: Optional[torch.LongTensor]
-    cu_seq_lens_k: Optional[torch.LongTensor]
-    max_length_q: Optional[int]
-    max_length_k: Optional[int]
+    cu_seq_lens_q: torch.LongTensor | None
+    cu_seq_lens_k: torch.LongTensor | None
+    max_length_q: int | None
+    max_length_k: int | None
 
 
 def _process_flash_attention_kwargs(
@@ -493,13 +493,13 @@ def _process_flash_attention_kwargs(
     key_length: int,
     is_causal: bool,
     dropout: float = 0.0,
-    softmax_scale: Optional[float] = None,
-    sliding_window: Optional[int] = None,
+    softmax_scale: float | None = None,
+    sliding_window: int | None = None,
     use_top_left_mask: bool = False,
-    softcap: Optional[float] = None,
-    deterministic: Optional[bool] = None,
-    s_aux: Optional[torch.Tensor] = None,
-    supports_mapping: Optional[dict[str, bool]] = None,
+    softcap: float | None = None,
+    deterministic: bool | None = None,
+    s_aux: torch.Tensor | None = None,
+    supports_mapping: dict[str, bool] | None = None,
     **kwargs,
 ):
     """
@@ -568,22 +568,22 @@ def _flash_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
     value_states: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     query_length: int,
     is_causal: bool,
     dropout: float = 0.0,
-    position_ids: Optional[torch.Tensor] = None,
-    softmax_scale: Optional[float] = None,
-    sliding_window: Optional[int] = None,
+    position_ids: torch.Tensor | None = None,
+    softmax_scale: float | None = None,
+    sliding_window: int | None = None,
     use_top_left_mask: bool = False,
-    softcap: Optional[float] = None,
-    deterministic: Optional[bool] = None,
-    cu_seq_lens_q: Optional[torch.LongTensor] = None,
-    cu_seq_lens_k: Optional[torch.LongTensor] = None,
-    max_length_q: Optional[int] = None,
-    max_length_k: Optional[int] = None,
-    target_dtype: Optional[torch.dtype] = None,
-    attn_implementation: Optional[str] = None,
+    softcap: float | None = None,
+    deterministic: bool | None = None,
+    cu_seq_lens_q: torch.LongTensor | None = None,
+    cu_seq_lens_k: torch.LongTensor | None = None,
+    max_length_q: int | None = None,
+    max_length_k: int | None = None,
+    target_dtype: torch.dtype | None = None,
+    attn_implementation: str | None = None,
     **kwargs,
 ):
     """

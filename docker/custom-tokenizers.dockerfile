@@ -17,9 +17,9 @@ RUN make install -j 10
 
 WORKDIR /
 
-RUN uv pip install --no-cache --upgrade 'torch' --index-url https://download.pytorch.org/whl/cpu
+RUN uv pip install --no-cache --upgrade 'torch==2.9.1' --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --no-cache-dir  --no-deps accelerate --extra-index-url https://download.pytorch.org/whl/cpu
-RUN uv pip install  --no-cache-dir "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[ja,testing,sentencepiece,spacy,ftfy,rjieba]" unidic unidic-lite
+RUN uv pip install  --no-cache-dir "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[ja,testing,sentencepiece,spacy,rjieba]" unidic unidic-lite
 # spacy is not used so not tested. Causes to failures. TODO fix later
 RUN uv run python -m unidic download
 

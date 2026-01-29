@@ -335,7 +335,7 @@ class TokenizerUtilsTest(unittest.TestCase):
     def test_special_tokens_overwrite(self):
         text_with_nonspecial_tokens = "there are 2 cats"  # '2' is originally special
 
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/Ernie4_5_Tokenizer")
+        tokenizer = LlamaTokenizer.from_pretrained("hf-internal-testing/Ernie4_5_Tokenizer")
         # Overwrite special tokens 0-9 to non-special
         tokenizer.add_tokens([AddedToken(f"{i}", normalized=False, special=False) for i in range(10)])
         self.assertTrue(

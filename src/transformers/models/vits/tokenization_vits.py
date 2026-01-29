@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Kakao Enterprise Authors, the MMS-TTS Authors and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,7 @@
 import json
 import os
 import re
-from typing import Any, Optional, Union
+from typing import Any
 
 from ...tokenization_python import PreTrainedTokenizer
 from ...utils import is_phonemizer_available, is_uroman_available, logging
@@ -141,7 +140,7 @@ class VitsTokenizer(PreTrainedTokenizer):
         return text
 
     def prepare_for_tokenization(
-        self, text: str, is_split_into_words: bool = False, normalize: Optional[bool] = None, **kwargs
+        self, text: str, is_split_into_words: bool = False, normalize: bool | None = None, **kwargs
     ) -> tuple[str, dict[str, Any]]:
         """
         Performs any necessary transformations before tokenization.
@@ -231,7 +230,7 @@ class VitsTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Union[tuple[str], None]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str] | None:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
