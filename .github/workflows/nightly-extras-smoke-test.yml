@@ -4,10 +4,6 @@ on:
   schedule:
     # Run every night at 2 AM UTC
     - cron: "0 2 * * *"
-  push:
-    paths:
-      - 'setup.py'
-      - '.github/workflows/nightly-extras-smoke-test.yml'
   workflow_dispatch:
 
 jobs:
@@ -29,140 +25,41 @@ jobs:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
 
+      - name: Extract extras for this Python version
+        id: get-extras
+        run: |
+          python - <<'EOF'
+          import sys
+          sys.path.insert(0, '.')
+          import setup
+
+          # Get all extras keys for this Python version
+          extras = sorted(setup.extras.keys())
+
+          print(f"Found {len(extras)} extras for Python {sys.version_info.major}.{sys.version_info.minor}:")
+          for extra in extras:
+              print(f"  - {extra}")
+
+          # Write to file for next step
+          with open('extras_list.txt', 'w') as f:
+              f.write('\n'.join(extras))
+          EOF
+
       - name: Install base package
         run: |
           python -m pip install --upgrade pip
+          echo "Installing base package..."
           pip install -e .
 
-      - name: Test core extras (no GPU required)
+      - name: Test all extras
         run: |
           set -e
-          echo "Testing chat_template extra..."
-          pip install -e .[chat_template]
-
-          echo "Testing sentencepiece extra..."
-          pip install -e .[sentencepiece]
-
-          echo "Testing tiktoken extra..."
-          pip install -e .[tiktoken]
-
-          echo "Testing mistral-common extra..."
-          pip install -e .[mistral-common]
-
-          echo "Testing sklearn extra..."
-          pip install -e .[sklearn]
-
-          echo "Testing retrieval extra..."
-          pip install -e .[retrieval]
-
-          echo "Testing num2words extra..."
-          pip install -e .[num2words]
-
-          echo "Testing benchmark extra..."
-          pip install -e .[benchmark]
-
-          echo "Testing quality extra..."
-          pip install -e .[quality]
-
-          echo "Testing open-telemetry extra..."
-          pip install -e .[open-telemetry]
-
-      - name: Test accelerate and torch extras
-        run: |
-          set -e
-          echo "Testing accelerate extra..."
-          pip install -e .[accelerate]
-
-          echo "Testing torch extra..."
-          pip install -e .[torch]
-
-      - name: Test vision/audio/video extras
-        run: |
-          set -e
-          echo "Testing vision extra..."
-          pip install -e .[vision]
-
-          echo "Testing audio extra..."
-          pip install -e .[audio]
-
-          echo "Testing video extra..."
-          pip install -e .[video]
-
-          echo "Testing timm extra..."
-          pip install -e .[timm]
-
-      - name: Test integration extras
-        run: |
-          set -e
-          echo "Testing optuna extra..."
-          pip install -e .[optuna]
-
-          echo "Testing codecarbon extra..."
-          pip install -e .[codecarbon]
-
-          echo "Testing integrations extra..."
-          pip install -e .[integrations]
-
-          echo "Testing kernels extra..."
-          pip install -e .[kernels]
-
-      - name: Test Japanese tokenizer extras (Python < 3.14)
-        if: matrix.python-version != '3.14'
-        run: |
-          set -e
-          echo "Testing ja extra..."
-          pip install -e .[ja]
-
-      - name: Test deepspeed extras (Python < 3.13)
-        if: matrix.python-version == '3.10' || matrix.python-version == '3.11' || matrix.python-version == '3.12'
-        run: |
-          set -e
-          echo "Testing deepspeed extra..."
-          pip install -e .[deepspeed]
-
-      - name: Test sagemaker extra (CPU only)
-        run: |
-          set -e
-          echo "Testing sagemaker extra..."
-          pip install -e .[sagemaker]
-
-      - name: Test natten extra (if available)
-        continue-on-error: true
-        run: |
-          echo "Testing natten extra (may fail on some platforms)..."
-          pip install -e .[natten]
-
-      - name: Test serving extra
-        run: |
-          set -e
-          echo "Testing serving extra..."
-          pip install -e .[serving]
-
-      - name: Test testing extra
-        run: |
-          set -e
-          echo "Testing testing extra..."
-          pip install -e .[testing]
-
-      - name: Test all extra
-        run: |
-          set -e
-          echo "Testing all extra..."
-          pip install -e .[all]
-
-      - name: Test dev extra
-        run: |
-          set -e
-          echo "Testing dev extra..."
-          pip install -e .[dev]
+          while IFS= read -r extra; do
+              echo "=== Testing extra: $extra on Python ${{ matrix.python-version }} ==="
+              pip install -e .[$extra]
+          done < extras_list.txt
 
       - name: Verify installation
         run: |
           python -c "import transformers; print(f'Transformers version: {transformers.__version__}')"
           python -c "from transformers import pipeline; print('Successfully imported pipeline')"
-
-      - name: Report results
-        if: always()
-        run: |
-          echo "Extras smoke test completed for Python ${{ matrix.python-version }}"
-          echo "Check individual steps for any failures"

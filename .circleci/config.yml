@@ -191,11 +191,174 @@ jobs:
             - run: python utils/check_doctest_list.py
             - run: python utils/update_metadata.py --check-only
             - run: python utils/add_dates.py --check-only
-            - run: > 
+            - run: >
                 md5sum src/transformers/dependency_versions_table.py > md5sum.saved;
                 python setup.py deps_table_update;
                 md5sum -c --quiet md5sum.saved || (printf "Error: the version dependency table is outdated.\nPlease run 'make fix-repo' and commit the changes.\n" && exit 1);
                 rm md5sum.saved
+
+    test_extras_installation:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.10
+        resource_class: large
+        parallelism: 5
+        steps:
+            - checkout
+            - run:
+                name: Install pyenv for managing multiple Python versions
+                command: |
+                    curl https://pyenv.run | bash
+                    echo 'export PYENV_ROOT="$HOME/.pyenv"' >> $BASH_ENV
+                    echo 'export PATH="$PYENV_ROOT/bin:$PATH"' >> $BASH_ENV
+                    echo 'eval "$(pyenv init -)"' >> $BASH_ENV
+            - run:
+                name: Install Python versions
+                command: |
+                    source $BASH_ENV
+                    # Install all supported Python versions
+                    pyenv install 3.10.13 || true
+                    pyenv install 3.11.7 || true
+                    pyenv install 3.12.1 || true
+                    pyenv install 3.13.0 || true
+                    pyenv install 3.14.0a3 || true
+            - run:
+                name: Test extras installation on Python 3.10
+                command: |
+                    source $BASH_ENV
+                    pyenv global 3.10.13
+                    python -m pip install --upgrade pip
+
+                    # Extract extras for Python 3.10
+                    python - <<'EOF' > extras_310.txt
+                    import sys
+                    sys.path.insert(0, '.')
+                    import setup
+                    for extra in sorted(setup.extras.keys()):
+                        print(extra)
+                    EOF
+
+                    # Split across parallel nodes
+                    circleci tests split extras_310.txt > my_extras.txt
+                    echo "Testing these extras on Python 3.10:"
+                    cat my_extras.txt
+
+                    echo "Installing base package..."
+                    pip install -e .
+
+                    # Test each extra assigned to this node
+                    while IFS= read -r extra; do
+                        echo "=== Testing extra: $extra on Python 3.10 ==="
+                        pip install -e .[$extra]
+                    done < my_extras.txt
+
+                    python -c "import transformers; print(f'✓ Python 3.10 - Transformers {transformers.__version__}')"
+            - run:
+                name: Test extras installation on Python 3.11
+                command: |
+                    source $BASH_ENV
+                    pyenv global 3.11.7
+                    python -m pip install --upgrade pip
+
+                    # Extract extras for Python 3.11
+                    python - <<'EOF' > extras_311.txt
+                    import sys
+                    sys.path.insert(0, '.')
+                    import setup
+                    for extra in sorted(setup.extras.keys()):
+                        print(extra)
+                    EOF
+
+                    echo "Installing base package..."
+                    pip install -e .
+
+                    while IFS= read -r extra; do
+                        echo "=== Testing extra: $extra on Python 3.11 ==="
+                        pip install -e .[$extra]
+                    done < extras_311.txt
+
+                    python -c "import transformers; print(f'✓ Python 3.11 - Transformers {transformers.__version__}')"
+            - run:
+                name: Test extras installation on Python 3.12
+                command: |
+                    source $BASH_ENV
+                    pyenv global 3.12.1
+                    python -m pip install --upgrade pip
+
+                    # Extract extras for Python 3.12
+                    python - <<'EOF' > extras_312.txt
+                    import sys
+                    sys.path.insert(0, '.')
+                    import setup
+                    for extra in sorted(setup.extras.keys()):
+                        print(extra)
+                    EOF
+
+                    echo "Installing base package..."
+                    pip install -e .
+
+                    while IFS= read -r extra; do
+                        echo "=== Testing extra: $extra on Python 3.12 ==="
+                        pip install -e .[$extra]
+                    done < extras_312.txt
+
+                    python -c "import transformers; print(f'✓ Python 3.12 - Transformers {transformers.__version__}')"
+            - run:
+                name: Test extras installation on Python 3.13
+                command: |
+                    source $BASH_ENV
+                    pyenv global 3.13.0
+                    python -m pip install --upgrade pip
+
+                    # Extract extras for Python 3.13
+                    python - <<'EOF' > extras_313.txt
+                    import sys
+                    sys.path.insert(0, '.')
+                    import setup
+                    for extra in sorted(setup.extras.keys()):
+                        print(extra)
+                    EOF
+
+                    echo "Installing base package..."
+                    pip install -e .
+
+                    while IFS= read -r extra; do
+                        echo "=== Testing extra: $extra on Python 3.13 ==="
+                        pip install -e .[$extra]
+                    done < extras_313.txt
+
+                    python -c "import transformers; print(f'✓ Python 3.13 - Transformers {transformers.__version__}')"
+            - run:
+                name: Test extras installation on Python 3.14
+                command: |
+                    source $BASH_ENV
+                    pyenv global 3.14.0a3
+                    python -m pip install --upgrade pip
+
+                    # Extract extras for Python 3.14
+                    python - <<'EOF' > extras_314.txt
+                    import sys
+                    sys.path.insert(0, '.')
+                    import setup
+                    for extra in sorted(setup.extras.keys()):
+                        print(extra)
+                    EOF
+
+                    echo "Installing base package..."
+                    pip install -e .
+
+                    while IFS= read -r extra; do
+                        echo "=== Testing extra: $extra on Python 3.14 ==="
+                        pip install -e .[$extra]
+                    done < extras_314.txt
+
+                    python -c "import transformers; print(f'✓ Python 3.14 - Transformers {transformers.__version__}')"
+            - run:
+                name: Summary
+                when: always
+                command: |
+                    echo "Extras smoke test completed"
+                    echo "Python 3.10 extras:" && cat my_extras.txt || true
 
 workflows:
     version: 2
@@ -209,6 +372,7 @@ workflows:
             - check_code_quality
             - check_repository_consistency
             - fetch_tests
+            - test_extras_installation
 
     setup_and_quality_2:
         when:
@@ -230,3 +394,4 @@ workflows:
             - check_code_quality
             - check_repository_consistency
             - fetch_all_tests
+            - test_extras_installation
