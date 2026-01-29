@@ -260,7 +260,9 @@ class ContinuousBatchProcessor:
         # Cuda graphs for the generation step
         self.q_padding_intervals = q_padding_intervals
         self.kv_padding_intervals = kv_padding_intervals
-        self._graphs: dict[tuple[int, int], torch.cuda.CUDAGraph] | None = {} if use_cuda_graph else None
+        self._graphs: dict[tuple[int, int], torch.cuda.CUDAGraph] | None = (
+            {} if use_cuda_graph and torch.cuda.is_available() else None
+        )
         # Compile-related arguments
         self.compile_config: CompileConfig | None = getattr(generation_config, "compile_config", None)
         self._forward_process_and_sample_is_compiled = False
@@ -395,6 +397,7 @@ class ContinuousBatchProcessor:
         # some NaNs in the output logits even for non-padded tokens.
         if use_padding:
             self.max_seqlen_q = max(self.max_seqlen_q, q_len - self.total_seqlen_q)
+            kwargs["max_seqlen_q"] = self.max_seqlen_q  # Update kwargs with the new value
             self.cumulative_seqlens_q[self.actual_batch_size + 1 :] = q_len
             # FIXME: is there another way to avoid this? It has a very slight impact on performance (~5 tok/s)
 

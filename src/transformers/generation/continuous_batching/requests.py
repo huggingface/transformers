@@ -17,10 +17,13 @@ from enum import Enum
 
 import torch
 
-from ...utils import is_torch_xpu_available
+from ...utils import is_psutil_available, is_torch_xpu_available
 from ...utils.logging import logging
 from ...utils.metrics import traced
 
+
+if is_psutil_available():
+    import psutil
 
 # This is a temporary token ID used to represent a token that is not yet generated
 TMP_TOKEN_ID = -1
@@ -53,9 +56,15 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         reserved_memory = 0  # MPS does not track reserved separately
     else:
         device = torch.device("cpu")
-        total_memory = 0
-        reserved_memory = 0
-        allocated_memory = 0
+        if is_psutil_available():
+            total_memory = psutil.virtual_memory().total
+            allocated_memory = psutil.Process().memory_info().rss
+            reserved_memory = allocated_memory
+        else:
+            total_memory = 0
+            reserved_memory = 0
+            allocated_memory = 0
+
     return device, total_memory, reserved_memory, allocated_memory
 
 
