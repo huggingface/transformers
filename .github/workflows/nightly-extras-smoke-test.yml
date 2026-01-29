@@ -7,13 +7,42 @@ on:
   workflow_dispatch:
 
 jobs:
+  get-python-versions:
+    name: Get supported Python versions
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.extract-versions.outputs.versions }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract Python versions from setup.py
+        id: extract-versions
+        run: |
+          python - <<'EOF'
+          import json
+          import sys
+          import os
+          sys.path.insert(0, '.')
+          import setup
+
+          min_ver, max_ver = setup.SUPPORTED_PYTHON_VERSIONS
+          versions = [f"3.{v}" for v in range(min_ver, max_ver + 1)]
+
+          print(f"Supported Python versions: {versions}")
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"versions={json.dumps(versions)}\n")
+          EOF
+
   test-extras:
     name: Test extras on Python ${{ matrix.python-version }}
+    needs: get-python-versions
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ${{ fromJson(needs.get-python-versions.outputs.versions) }}
 
     steps:
       - name: Checkout code

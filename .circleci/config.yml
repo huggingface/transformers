@@ -197,6 +197,9 @@ jobs:
                 md5sum -c --quiet md5sum.saved || (printf "Error: the version dependency table is outdated.\nPlease run 'make fix-repo' and commit the changes.\n" && exit 1);
                 rm md5sum.saved
 
+    # Extras installation testing - one job per Python version
+    # These test that all extras can be installed on each supported Python version
+    # Note: Python versions are defined in setup.py SUPPORTED_PYTHON_VERSIONS
     test_extras_py310:
         working_directory: ~/transformers
         docker:
