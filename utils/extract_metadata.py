@@ -36,10 +36,10 @@ def get_setup_module():
 
 
 def extract_extras():
-    """Extract all extras for the current Python version."""
+    """Extract all extras for the current Python version in definition order."""
     setup = get_setup_module()
-    extras = sorted(setup.extras.keys())
-    for extra in extras:
+    # extras is an OrderedDict, preserve the original order (torch comes first, etc.)
+    for extra in setup.extras.keys():
         print(extra)
 
 
