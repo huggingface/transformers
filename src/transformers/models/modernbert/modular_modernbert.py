@@ -155,7 +155,7 @@ class ModernBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     def __setattr__(self, name, value):
         if name == "reference_compile" and value is not None:
             logger.warning_once(
-                "The `reference_compile` argument is deprecated and will be removed in a future version. "
+                "The `reference_compile` argument is deprecated and will be removed in `transformers v5.2.0`"
                 "Use `torch.compile()` directly on the model instead."
             )
             value = None
@@ -410,7 +410,7 @@ class ModernBertAttention(nn.Module):
             config.hidden_size, 3 * self.head_dim * config.num_attention_heads, bias=config.attention_bias
         )
 
-        if layer_idx % config.global_attn_every_n_layers != 0:
+        if config.layer_types[layer_idx] == "sliding_attention":
             # config.sliding_window = local_attention // 2 (half-window size, e.g. 64 for local_attention=128)
             # +1 is needed because flash attention sets inclusive boundaries (see modeling_flash_attention_utils.py)
             self.sliding_window = config.sliding_window + 1
@@ -716,7 +716,6 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
         last_hidden_state = outputs[0]
@@ -786,7 +785,6 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
         last_hidden_state = outputs[0]
@@ -875,7 +873,6 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
         last_hidden_state = outputs[0]
@@ -925,7 +922,6 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            return_dict=True,
             **kwargs,
         )
         last_hidden_state = outputs[0]
@@ -1001,7 +997,6 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
         last_hidden_state = outputs[0]  # shape (num_choices, seq_len, hidden_size)

@@ -138,7 +138,7 @@ class ModernBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     def __setattr__(self, name, value):
         if name == "reference_compile" and value is not None:
             logger.warning_once(
-                "The `reference_compile` argument is deprecated and will be removed in a `transformers v5.2.0"
+                "The `reference_compile` argument is deprecated and will be removed in `transformers v5.2.0`"
                 "Use `torch.compile()` directly on the model instead."
             )
             value = None
