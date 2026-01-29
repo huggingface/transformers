@@ -116,16 +116,18 @@
       title: Writing a chat template
     title: Chat with models
   - sections:
-    - local: serving
-      title: Serving LLMs, VLMs, and other chat-based models
-    - local: jan
-      title: Jan
-    - local: cursor
+    - local: serve-cli/serving
+      title: Serve CLI
+    - local: serve-cli/serving_optims
+      title: Server optimizations
+    - local: serve-cli/cursor
       title: Cursor
-    - local: tiny_agents
-      title: Tiny-Agents CLI and MCP tools
-    - local: open_webui
+    - local: serve-cli/jan
+      title: Jan
+    - local: serve-cli/openweb_ui
       title: Open WebUI
+    - local: serve-cli/tiny_agents
+      title: tiny-agents
     title: Serving
   title: Inference
 - isExpanded: false
