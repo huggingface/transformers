@@ -1814,6 +1814,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         init_kwargs["name_or_path"] = pretrained_model_name_or_path
         init_kwargs["is_local"] = _is_local
+        init_kwargs["local_files_only"] = local_files_only
 
         #### Handle tokenizer serialization of added and special tokens
         added_tokens_decoder: dict[int, AddedToken] = {}
