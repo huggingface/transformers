@@ -711,6 +711,7 @@ class GPT2Model(GPT2PreTrainedModel):
                 encoder_attention_mask=encoder_attention_mask,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
+                position_ids=position_ids,
                 **kwargs,
             )
 
