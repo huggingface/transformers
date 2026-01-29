@@ -85,6 +85,7 @@ class PeVideoEncoderEmbedder(nn.Module):
 class PeVideoPreTrainedModel(PeAudioVideoPreTrainedModel):
     base_model_prefix = "video_model"
     main_input_name = "pixel_values_videos"
+    _no_split_modules = ["TimmWrapperForImageClassification"]
 
 
 @auto_docstring(
