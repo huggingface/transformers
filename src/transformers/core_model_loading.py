@@ -829,8 +829,7 @@ def spawn_tp_materialize(
     return a Callable that will load the tensor synchronously when called."""
 
     def _job():
-        sharded_tensor, _ = sharding_method.shard_tensor(tensor, dtype=dtype, tensor_idx=tensor_idx)
-        return sharded_tensor
+        return sharding_method.shard_tensor(tensor, tensor_idx=tensor_idx, dtype=dtype)
 
     if thread_pool is not None:
         return thread_pool.submit(_job)

@@ -663,7 +663,9 @@ class TensorParallelLayer:
     @staticmethod
     def _prepare_output_fn(mod, outputs, device_mesh): ...
 
-    def shard_tensor(self, param, param_type=None, dtype=None, tensor_idx=None):
+    def shard_tensor(
+        self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+    ) -> torch.Tensor:
         raise NotImplementedError
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
@@ -695,13 +697,16 @@ class ColwiseParallel(TensorParallelLayer):
             return all_gather(outputs, device_mesh)
         return outputs
 
-    def shard_tensor(self, param, param_type=None, dtype=None, tensor_idx=None):
-        if param_type == "bias":
+    def shard_tensor(
+        self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+    ) -> torch.Tensor:
+        # If only 1 dim, shard this one (usually it's a `bias`)
+        dim = param.dim() if isinstance(param, torch.Tensor) else len(param.get_shape())
+        if dim == 1:
             parameter = get_tensor_shard(param, self.empty_param, self.device_mesh, self.rank, -1, tensor_idx)
         else:
             parameter = get_tensor_shard(param, self.empty_param, self.device_mesh, self.rank, -2, tensor_idx)
-        parameter = parameter.to(dtype)
-        return parameter, None
+        return parameter.to(device=device, dtype=dtype)
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         distribute_module(
@@ -745,13 +750,16 @@ class RowwiseParallel(TensorParallelLayer):
             outputs = outputs + mod._bias
         return outputs
 
-    def shard_tensor(self, param, param_type=None, dtype=None, tensor_idx=None):
-        if param_type == "bias":
+    def shard_tensor(
+        self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+    ) -> torch.Tensor:
+        # If only 1 dim, it should not be sharded (usually it's a `bias`)
+        dim = param.dim() if isinstance(param, torch.Tensor) else len(param.get_shape())
+        if dim == 1:
             parameter = param[...]
         else:
             parameter = get_tensor_shard(param, self.empty_param, self.device_mesh, self.rank, -1, tensor_idx=tensor_idx)
-        parameter = parameter.to(dtype)
-        return parameter, None
+        return parameter.to(device=device, dtype=dtype)
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         module._distribute_module_applied = True
@@ -766,25 +774,31 @@ class RowwiseParallel(TensorParallelLayer):
 class PackedColwiseParallel(ColwiseParallel):
     """Packed column-wise parallel for fused weights like gate_up_proj."""
 
-    def shard_tensor(self, param, param_type=None, dtype=None, tensor_idx=None):
-        if param_type == "bias":
+    def shard_tensor(
+        self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+    ) -> torch.Tensor:
+        # If only 1 dim, shard this one (usually it's a `bias`)
+        dim = param.dim() if isinstance(param, torch.Tensor) else len(param.get_shape())
+        if dim == 1:
             parameter = get_tensor_shard(param, self.empty_param, self.device_mesh, self.rank, -1, tensor_idx)
         else:
             parameter = get_packed_weights(param, self.empty_param, self.device_mesh, self.rank, -2)
-        parameter = parameter.to(dtype)
-        return parameter, None
+        return parameter.to(device=device, dtype=dtype)
 
 
 class PackedRowwiseParallel(RowwiseParallel):
     """Packed row-wise parallel for fused weights like gate_up_proj."""
 
-    def shard_tensor(self, param, param_type=None, dtype=None, tensor_idx=None):
-        if param_type == "bias":
+    def shard_tensor(
+        self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+    ) -> torch.Tensor:
+        # If only 1 dim, it should not be sharded (usually it's a `bias`)
+        dim = param.dim() if isinstance(param, torch.Tensor) else len(param.get_shape())
+        if dim == 1:
             parameter = param[...]
         else:
             parameter = get_packed_weights(param, self.empty_param, self.device_mesh, self.rank, -1)
-        parameter = parameter.to(dtype)
-        return parameter, None
+        return parameter.to(device=device, dtype=dtype)
 
 
 class EmbeddingParallel(TensorParallelLayer):
@@ -831,15 +845,18 @@ class EmbeddingParallel(TensorParallelLayer):
 
         return all_reduce_forward(outputs, device_mesh)
 
-    def shard_tensor(self, param, param_type=None, dtype=None, tensor_idx=None):
-        if param_type == "bias":
+    def shard_tensor(
+        self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+    ) -> torch.Tensor:
+        # If only 1 dim, shard this one (usually it's a `bias`)
+        dim = param.dim() if isinstance(param, torch.Tensor) else len(param.get_shape())
+        if dim == 1:
             parameter = get_tensor_shard(param, self.empty_param, self.device_mesh, self.rank, -1, tensor_idx=tensor_idx)
         else:
             parameter = get_tensor_shard(
                 param, self.empty_param, self.device_mesh, self.rank, self.embedding_dim_sharding, tensor_idx=tensor_idx
             )
-        parameter = parameter.to(dtype)
-        return parameter, None
+        return parameter.to(device=device, dtype=dtype)
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         module._distribute_module_applied = True
@@ -870,9 +887,10 @@ class SequenceParallel(TensorParallelLayer):
     def _prepare_output_fn(self, mod, outputs, device_mesh):
         return reduce_scatter(outputs, device_mesh)
 
-    def shard_tensor(self, param: torch.Tensor, param_type=None, dtype=None, tensor_idx=None):
-        parameter = param[...].to(dtype)
-        return parameter, None
+    def shard_tensor(
+        self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+    ) -> torch.Tensor:
+        return param[...].to(device=device, dtype=dtype)
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         distribute_module(
@@ -891,15 +909,16 @@ class GroupedGemmParallel(TensorParallelLayer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def shard_tensor(self, param: torch.Tensor, param_type=None, dtype=None, tensor_idx: int | None = None):
+    def shard_tensor(
+        self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+    ) -> torch.Tensor:
         global_num_experts = self.empty_param.shape[0]
         if global_num_experts % self.device_mesh.size() != 0:
             raise ValueError(
                 f"Global number of experts must be divisible by number of devices: {global_num_experts} % {self.device_mesh.size()} != 0"
             )
         local_num_experts = global_num_experts // self.device_mesh.size()
-        parameter = param[self.rank * local_num_experts : (self.rank + 1) * local_num_experts].to(dtype)
-        return parameter, None
+        return param[self.rank * local_num_experts : (self.rank + 1) * local_num_experts].to(device=device, dtype=dtype)
 
 
 class RouterParallel(TensorParallelLayer):
@@ -968,9 +987,10 @@ class RouterParallel(TensorParallelLayer):
         router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
         return router_logits, router_scores, router_indices
 
-    def shard_tensor(self, param, param_type=None, dtype=None, tensor_idx=None):
-        parameter = param[...].to(dtype)
-        return parameter, None
+    def shard_tensor(
+        self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+    ) -> torch.Tensor:
+        return param[...].to(device=device, dtype=dtype)
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         distribute_module(
@@ -1014,11 +1034,12 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         # all_reduce_forward to sum partial expert outputs across GPUs
         return all_reduce_forward(outputs, device_mesh)
 
-    def shard_tensor(self, param, param_type=None, dtype=None, tensor_idx=None):
+    def shard_tensor(
+        self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+    ) -> torch.Tensor:
         # This class doesn't shard tensors - sharding is handled by packed_colwise/rowwise
         # on the individual weight tensors (gate_up_proj/down_proj)
-        parameter = param[...].to(dtype)
-        return parameter, None
+        return param[...].to(device=device, dtype=dtype)
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         distribute_module(
@@ -1240,7 +1261,7 @@ def shard_and_distribute_module(
             tp_layer.empty_param = empty_param
             tp_layer.device_mesh = device_mesh
             tp_layer.rank = rank
-            param, _ = tp_layer.shard_tensor(param, param_type=param_type, dtype=param_casting_dtype, tensor_idx=None)
+            param = tp_layer.shard_tensor(param, tensor_idx=None, dtype=param_casting_dtype)
             if is_contiguous:
                 param = param.contiguous()
         except NotImplementedError as e:
