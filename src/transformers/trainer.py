@@ -38,7 +38,9 @@ from typing import TYPE_CHECKING, Any, Union
 
 # Integrations must be imported before ML frameworks:
 # ruff: isort: off
-from .integrations import get_reporting_integration_callbacks, SPEvalCallBack
+from .integrations import (
+    get_reporting_integration_callbacks,
+)
 
 # ruff: isort: on
 
