@@ -336,7 +336,6 @@ def get_model_config(model_name: str):
 
 
 def get_weight_mapping(
-    rf_detr_config: RfDetrConfig,
     is_segmentation: bool,
 ) -> list[WeightConverter | WeightRenaming]:
     if is_segmentation:
@@ -486,7 +485,7 @@ def convert_rf_detr_checkpoint(
     else:
         model = RfDetrForObjectDetection(rf_detr_config)
 
-    weight_mapping = get_weight_mapping(rf_detr_config, is_segmentation)
+    weight_mapping = get_weight_mapping(is_segmentation)
 
     # Handle different checkpoint formats
     if "state_dict" in checkpoint:
