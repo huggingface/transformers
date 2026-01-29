@@ -577,6 +577,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         print(f"{chunk_no_reuse.generated_tokens = } {expected_output_tokens = }")
         self.assertEqual(chunk_no_reuse.generated_tokens, expected_output_tokens)
 
+    @slow
     def test_prefix_sharing(self) -> None:
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         num_layer_groups = {"full_attention": 1, "sliding_window": 0}
@@ -587,6 +588,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         return self._test_block_sharing(model_id, num_layer_groups, input_msg, expected_generated_tokens)
 
+    @slow
     def test_block_sharing_with_hybrid_model(self) -> None:
         model_id = "google/gemma-3-1b-it"
         num_layer_groups = {"full_attention": 2, "sliding_window": 11}
@@ -599,6 +601,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
     @parameterized.expand([True, False])
     @require_flash_attn  # otherwise the test can fail because attention bias has a very slight impact on SDPA and eager
+    @slow
     def test_num_return_sequences(self, allow_block_sharing: bool) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
