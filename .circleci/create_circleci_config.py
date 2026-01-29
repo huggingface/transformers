@@ -13,9 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-a = 1
-
 import argparse
 import copy
 import os
@@ -107,8 +104,8 @@ class CircleCIJob:
         else:
             # BIG HACK WILL REMOVE ONCE FETCHER IS UPDATED
             print(os.environ.get("GIT_COMMIT_MESSAGE"))
-            if "[build-ci-image]" in os.environ.get("GIT_COMMIT_MESSAGE", "") or os.environ.get("GIT_COMMIT_MESSAGE", "") == "dev-ci":
-                self.docker_image[0]["image"] = f"{self.docker_image[0]['image']}:dev"
+            # if "[build-ci-image]" in os.environ.get("GIT_COMMIT_MESSAGE", "") or os.environ.get("GIT_COMMIT_MESSAGE", "") == "dev-ci":
+            self.docker_image[0]["image"] = f"{self.docker_image[0]['image']}:dev"
             print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
             self.install_steps = ["uv pip install ."]
