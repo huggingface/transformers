@@ -30,7 +30,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -248,7 +248,7 @@ class Qwen2_5OmniAudioEncoderConfig(Qwen2AudioEncoderConfig):
         del self.encoder_layerdrop
 
 
-class Qwen2_5OmniTextConfig(PreTrainedConfig):
+class Qwen2_5OmniTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2_5OmniThinkerForConditionalGeneration`]. It is used to instantiate an
     Qwen2.5-Omni-Thinker model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -535,7 +535,7 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
+class Qwen2_5OmniTalkerConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2_5OmniTalkerForConditionalGeneration`]. It is used to instantiate an
     Qwen2.5-Omni-Talker model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -631,6 +631,9 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
             The size used for merging spatial dimensions.
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
+
 
     Example:
 
@@ -700,6 +703,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
         initializer_range=0.02,
         spatial_merge_size=2,
         layer_types=None,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.audio_token_index = audio_token_index
@@ -743,6 +747,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
         self.seconds_per_chunk = seconds_per_chunk  # zf
         self.audio_start_token_id = audio_start_token_id  # zf
         self.audio_end_token_id = audio_end_token_id  # zf
+        self.pad_token_id = pad_token_id
 
         self.initializer_range = initializer_range
         self.spatial_merge_size = spatial_merge_size
@@ -762,7 +767,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
         super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
 
-class Qwen2_5OmniDiTConfig(PreTrainedConfig):
+class Qwen2_5OmniDiTConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of the Qwen2_5OmniToken2WavDiT used in the Qwen2.5-Omni-Token2Wav model.
     It defines the architecture of the DiT model, which is used for generating mel-spectrograms from tokens.

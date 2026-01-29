@@ -291,35 +291,33 @@ class PagedAttentionCache:
         return self._block_manager.num_free_blocks
 
     @traced
-    def extend_read_indices(
-        self, request_id: str, past_length: int, query_length: int, read_index: list[list[int]]
+    def extend_read_and_write_indices(
+        self,
+        request_id: str,
+        past_length: int,
+        query_length: int,
+        read_index: list[list[int]],
+        write_index: list[list[int]],
     ) -> None:
         """Retrieve physical cache indices for reading KV states in the cache across all layer groups. This method
         coordinates with all cache managers to build the complete set of read indices needed for attention computation.
         """
-        for cm, read_indices in zip(self.group_cache_managers, read_index):
+        for cm, read_indices, write_indices in zip(self.group_cache_managers, read_index, write_index):
             indices = cm.get_read_indices(request_id, past_length, query_length)
             read_indices.extend(indices)
-
-    @traced
-    def extend_write_indices(
-        self, request_id: str, past_length: int, query_length: int, write_index: list[list[int]]
-    ) -> None:
-        """Retrieve physical cache indices for writing new KV states to the cache across all layer groups. This method
-        coordinates with all cache managers to build the complete set of write indices needed to store computed KV
-        states."""
-        for cm, write_indices in zip(self.group_cache_managers, write_index):
             indices = cm.get_write_indices(request_id, past_length, query_length)
             write_indices.extend(indices)
 
     @traced
-    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> dict[str, int]:
+    def get_seqlens_k(self, past_length: int, query_length: int) -> dict[str, int]:
         """Retrieve the key sequence length for the given request_id across all layer types. Returns a dictionary of
         layer types to their corresponding key sequence lengths."""
         seqlens_k = {}
-        for cm in self.group_cache_managers:
-            attn_type, seqlen_k = cm.get_seqlens_k(request_id, past_length, query_length)
-            seqlens_k[attn_type] = seqlen_k
+        if self.num_full_attention_groups > 0:
+            seqlens_k["full_attention"] = past_length + query_length
+        if self.num_sliding_attention_groups > 0:
+            seqlens_k["sliding_attention"] = query_length + min(past_length, self.config.sliding_window - 1)
+        # NOTE: when we add more attention types / different sliding windows, we can go back to looping over CMs
         return seqlens_k
 
     @traced
@@ -417,10 +415,10 @@ class PagedAttentionCache:
                     prompt_ids=(state.initial_tokens + state.generated_tokens),
                 )
 
-    def copy_cache(self, source_blocks: list[int], forked_blocks: list[int]) -> None:
+    def copy_cache(self, list_source_blocks: list[int], list_forked_blocks: list[int]) -> None:
         """Copy the cache from the source blocks to the forked blocks."""
-        source_blocks = torch.tensor(source_blocks, device=self.device, dtype=torch.int32)
-        forked_blocks = torch.tensor(forked_blocks, device=self.device, dtype=torch.int32)
+        source_blocks = torch.tensor(list_source_blocks, device=self.device, dtype=torch.int32)
+        forked_blocks = torch.tensor(list_forked_blocks, device=self.device, dtype=torch.int32)
         for key_cache, value_cache in zip(self.key_cache, self.value_cache):
             key_cache = key_cache.view(-1, self.block_size, self.num_key_value_heads, self.head_dim)
             value_cache = value_cache.view(-1, self.block_size, self.num_key_value_heads, self.head_dim)
@@ -534,24 +532,26 @@ class PagedAttentionMemoryHandler:
 
         where we already simplified int32_size = 4.
         """
-        # If neither num_blocks nor max_batch_tokens are provided, we use a second-order polynomial
-        if num_blocks is None and max_batch_tokens is None:
-            num_blocks, max_batch_tokens = self.compute_num_blocks_and_max_batch_tokens(
-                max_memory_percent, cache_dtype
-            )
-        # If only num_blocks is provided, we infer the max_batch_tokens
-        elif num_blocks is not None and max_batch_tokens is None:
+        if num_blocks is None:
+            if max_batch_tokens is None:
+                # If neither num_blocks nor max_batch_tokens are provided, we use a second-order polynomial
+                num_blocks, max_batch_tokens = self.compute_num_blocks_and_max_batch_tokens(
+                    max_memory_percent, cache_dtype
+                )
+            else:
+                # If only max_batch_tokens is provided, we infer the num_blocks
+                num_blocks = self.compute_num_blocks(max_batch_tokens, max_memory_percent, cache_dtype)
+        elif max_batch_tokens is None:
+            # If only num_blocks is provided, we infer the max_batch_tokens
             max_batch_tokens = self.compute_max_batch_tokens(num_blocks, max_memory_percent, cache_dtype)
-        # If only max_batch_tokens is provided, we infer the num_blocks
-        elif max_batch_tokens is not None and num_blocks is None:
-            num_blocks = self.compute_num_blocks(max_batch_tokens, max_memory_percent, cache_dtype)
+        else:
+            # If both num_blocks and max_batch_tokens are provided, we use them (useless, but helps with typing)
+            max_batch_tokens = max_batch_tokens
 
         # We check if the memory footprint is too large in all cases
         available_memory = self.get_available_memory(max_memory_percent)
         memory_footprint = self.compute_memory_footprint(
-            max_batch_tokens=max_batch_tokens,
-            num_blocks=num_blocks,
-            cache_dtype=cache_dtype,
+            max_batch_tokens=max_batch_tokens, num_blocks=num_blocks, cache_dtype=cache_dtype
         )
         if memory_footprint > available_memory:
             raise MemoryError(f"Memory footprint {memory_footprint} is more than available memory {available_memory}")
@@ -670,10 +670,10 @@ class PagedAttentionMemoryHandler:
 
     def compute_memory_footprint(
         self,
-        num_blocks: int | None = None,
-        max_batch_tokens: int | None = None,
-        cache_dtype: torch.dtype = torch.float16,
-    ) -> tuple[int, int, int]:
+        num_blocks: int,
+        max_batch_tokens: int,
+        cache_dtype: torch.dtype,
+    ) -> int:
         """Calculate the memory footprint breakdown for a given number of blocks and maximum batch tokens. The memory
         footprint is given by:
 
