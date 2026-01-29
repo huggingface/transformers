@@ -32,6 +32,7 @@ from transformers.utils.generic import OutputRecorder
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -195,7 +196,7 @@ class EdgeTamAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class EdgeTamTwoWayAttentionBlock(nn.Module):
+class EdgeTamTwoWayAttentionBlock(GradientCheckpointingLayer):
     def __init__(self, config: EdgeTamMaskDecoderConfig, skip_first_layer_pe: bool = False):
         """
         A transformer block with four layers:
