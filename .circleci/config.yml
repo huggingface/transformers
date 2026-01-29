@@ -230,7 +230,7 @@ jobs:
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.10
-                    python - <<'EOF' > extras_310.txt
+                    python - \<<'EOF' > extras_310.txt
                     import sys
                     sys.path.insert(0, '.')
                     import setup
@@ -261,7 +261,7 @@ jobs:
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.11
-                    python - <<'EOF' > extras_311.txt
+                    python - \<<'EOF' > extras_311.txt
                     import sys
                     sys.path.insert(0, '.')
                     import setup
@@ -286,7 +286,7 @@ jobs:
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.12
-                    python - <<'EOF' > extras_312.txt
+                    python - \<<'EOF' > extras_312.txt
                     import sys
                     sys.path.insert(0, '.')
                     import setup
@@ -311,7 +311,7 @@ jobs:
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.13
-                    python - <<'EOF' > extras_313.txt
+                    python - \<<'EOF' > extras_313.txt
                     import sys
                     sys.path.insert(0, '.')
                     import setup
@@ -336,7 +336,7 @@ jobs:
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.14
-                    python - <<'EOF' > extras_314.txt
+                    python - \<<'EOF' > extras_314.txt
                     import sys
                     sys.path.insert(0, '.')
                     import setup
