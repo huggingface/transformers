@@ -34,6 +34,17 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     torch_device,
 )
+from transformers.utils import is_torch_greater_or_equal
+
+
+# Tensor parallel tests require torch >= 2.9 for proper torch.compile support with distributed collectives
+# Newer versions of PyTorch has torch.library.register_autograd in https://github.com/pytorch/pytorch/blob/8bcedd6e6029cce5f3a3731dd59be4941414c731/torch/distributed/_functional_collectives.py#L630
+# that fix the warning "autograd kernel was not registered to the Autograd key(s) but we are trying to backprop through it"
+# NOTE(3outeille): need to double check if it works with older version of torch
+pytestmark = pytest.mark.skipif(
+    not is_torch_greater_or_equal("2.9"),
+    reason="Tensor parallel tests require torch >= 2.9 for torch.compile support with distributed collectives",
+)
 
 
 if is_torch_available():
