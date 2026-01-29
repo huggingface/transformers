@@ -88,7 +88,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     # TODO: Implement proper TP support for compressed tensors quantization
     def update_tp_plan(self, config):
         additional_plan = {
-            "layers.*.feed_forward.experts.*.gate_proj.weight": "lcolwise",
+            "layers.*.feed_forward.experts.*.gate_proj.weight": "colwise",
             "layers.*.feed_forward.experts.*.gate_proj.weight_scale": "colwise",
             "layers.*.feed_forward.experts.*.up_proj.weight": "colwise",
             "layers.*.feed_forward.experts.*.up_proj.weight_scale": "colwise",
