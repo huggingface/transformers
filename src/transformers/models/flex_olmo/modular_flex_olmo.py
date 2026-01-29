@@ -20,7 +20,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import OutputRecorder, check_model_inputs
@@ -34,7 +34,7 @@ from ..olmoe.modeling_olmoe import (
 )
 
 
-class FlexOlmoConfig(PreTrainedConfig):
+class FlexOlmoConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`FlexOlmoModel`]. It is used to instantiate an FlexOlmo
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
