@@ -13,18 +13,18 @@
 # limitations under the License.
 
 # Run all tests: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py
-# Run specific config: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "2Proc"
-# Run spefic test: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py::TestTensorParallelDense2Proc::test_model_dense_forward_train
-# Run tests with a specific prefix: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py::TestTensorParallelDense2Proc -k "forward"
-# Run MoE tests only: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "Moe"
-# Run dense tests only: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "TestTensorParallelDense2Proc"
+# Run dense tests: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "dense"
+# Run MoE tests: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "moe"
+# Collect tests: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py --collect-only
 import os
 import tempfile
 import warnings
 
+import pytest
+
 from safetensors import safe_open
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, is_torch_available
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, is_torch_available, set_seed
 from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
 from transformers.testing_utils import (
     TestCasePlus,
@@ -97,6 +97,12 @@ def init_distributed(tp: int):
         return wrapper
 
     return _init_distributed
+
+
+def skip_if_insufficient_devices(nproc_per_node):
+    """Skip test if there aren't enough devices available."""
+    if backend_device_count(torch_device) < nproc_per_node:
+        pytest.skip(f"Need at least {nproc_per_node} devices, have {backend_device_count(torch_device)}")
 
 
 class TestTensorParallelUtils(TestCasePlus):
@@ -238,8 +244,7 @@ def _test_model_dense_forward_impl(rank, mode, dtype=torch.float32):
     """Implementation for comparing TP and non-TP model outputs."""
     model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 
-    torch.manual_seed(0)
-    torch.cuda.manual_seed_all(0)
+    set_seed(0)
 
     atol, rtol = (1e-5, 1e-5)
 
@@ -289,8 +294,7 @@ def _test_model_dense_backward_pass_impl(rank, dtype=torch.float32):
     """Implementation for comparing TP and non-TP model backward passes."""
     model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 
-    torch.manual_seed(0)
-    torch.cuda.manual_seed_all(0)
+    set_seed(0)
 
     # Set tolerance based on dtype
     atol, rtol = (1e-5, 1e-5)
@@ -305,8 +309,7 @@ def _test_model_dense_backward_pass_impl(rank, dtype=torch.float32):
     model.train()
 
     batch_size, seq_length = 2, 1024
-    torch.manual_seed(0)
-    torch.cuda.manual_seed_all(0)
+    set_seed(0)
     input_ids = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
     labels = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
 
@@ -356,8 +359,7 @@ def _test_model_dense_forward_compile_impl(rank, mode, dtype=torch.float32):
     """Implementation for comparing TP and non-TP model outputs with torch.compile."""
     model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 
-    torch.manual_seed(0)
-    torch.cuda.manual_seed_all(0)
+    set_seed(0)
 
     # Set tolerance based on dtype
     atol, rtol = (1e-5, 1e-5)
@@ -406,8 +408,7 @@ def _test_model_dense_backward_compile_impl(rank, dtype=torch.float32):
     """Implementation for comparing TP and non-TP model backward passes with torch.compile."""
     model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 
-    torch.manual_seed(0)
-    torch.cuda.manual_seed_all(0)
+    set_seed(0)
 
     # Set tolerance based on dtype
     atol, rtol = (1e-5, 1e-5)
@@ -426,8 +427,7 @@ def _test_model_dense_backward_compile_impl(rank, dtype=torch.float32):
     model_tp.forward = torch.compile(model_tp.forward)
 
     batch_size, seq_length = 2, 1024
-    torch.manual_seed(0)
-    torch.cuda.manual_seed_all(0)
+    set_seed(0)
     input_ids = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
     labels = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
 
@@ -486,114 +486,76 @@ def _test_model_dense_save_impl(rank, tmp_dir):
     model.save_pretrained(result_dir)
 
 
-class TestTensorParallelDenseBase(TestCasePlus):
-    """Base class for tensor parallel tests. Subclasses must set nproc_per_node."""
-
-    nproc_per_node = None
-
-    @require_torch_multi_accelerator
-    def test_model_dense_forward_eval(self):
-        """Test that TP and non-TP models produce the same outputs in eval mode."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_impl)("eval", torch.float32)
-
-    @require_torch_multi_accelerator
-    def test_model_dense_forward_train(self):
-        """Test that TP and non-TP models produce the same outputs in train mode."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_impl)("train", torch.float32)
-
-    @require_torch_multi_accelerator
-    def test_model_dense_backward_pass(self):
-        """Test that TP and non-TP models produce the same gradients."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_backward_pass_impl)(torch.float32)
-
-    @require_torch_multi_accelerator
-    def test_model_dense_forward_compile_eval(self):
-        """Test that TP and non-TP models produce the same outputs with torch.compile in eval mode."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_compile_impl)("eval", torch.float32)
-
-    @require_torch_multi_accelerator
-    def test_model_dense_forward_compile_train(self):
-        """Test that TP and non-TP models produce the same outputs with torch.compile in train mode."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_compile_impl)("train", torch.float32)
-
-    @require_torch_multi_accelerator
-    def test_model_dense_backward_compile(self):
-        """Test that TP and non-TP models produce the same gradients with torch.compile."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_backward_compile_impl)(torch.float32)
-
-    @require_huggingface_hub_greater_or_equal("0.31.4")
-    @require_torch_multi_accelerator
-    def test_model_dense_save(self):
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # First run with TP (distributed)
-            init_distributed(tp=self.nproc_per_node)(_test_model_dense_save_impl)(tmp_dir)
-
-            # Then run without TP (non-distributed)
-            _test_model_dense_save_impl(0, tmp_dir)
-
-            non_tp_model_path = os.path.join(tmp_dir, "nontp")
-            tp_model_path = os.path.join(tmp_dir, "tp")
-
-            for filename in os.listdir(non_tp_model_path):
-                if not filename.endswith(".safetensors"):
-                    continue
-
-                non_tp_model = safe_open(os.path.join(non_tp_model_path, filename), device="cpu", framework="pt")
-                tp_model = safe_open(os.path.join(tp_model_path, filename), device="cpu", framework="pt")
-                for non_tp_key in non_tp_model.keys():
-                    non_tp_tensor = non_tp_model.get_tensor(non_tp_key)
-                    tp_tensor = tp_model.get_tensor(non_tp_key)
-                    assert torch.allclose(non_tp_tensor, tp_tensor), f"Tensor with key: {non_tp_key} does not match"
-                    del non_tp_tensor, tp_tensor
+# ====== DENSE MODEL TESTS ======
+@pytest.mark.parametrize("nproc_per_node", [2])
+@pytest.mark.parametrize("mode", ["train", "eval"])
+@require_torch_multi_accelerator
+def test_model_dense_forward(nproc_per_node, mode):
+    """Test that TP and non-TP models produce the same outputs."""
+    skip_if_insufficient_devices(nproc_per_node)
+    init_distributed(tp=nproc_per_node)(_test_model_dense_forward_impl)(mode, torch.float32)
 
 
-class TestTensorParallelDense2Proc(TestTensorParallelDenseBase):
-    """Test tensor parallel dense model with 2 processes."""
+@pytest.mark.parametrize("nproc_per_node", [2])
+@require_torch_multi_accelerator
+def test_model_dense_backward_pass(nproc_per_node):
+    """Test that TP and non-TP models produce the same gradients."""
+    skip_if_insufficient_devices(nproc_per_node)
+    init_distributed(tp=nproc_per_node)(_test_model_dense_backward_pass_impl)(torch.float32)
 
-    nproc_per_node = 2
+
+@pytest.mark.parametrize("nproc_per_node", [2])
+@pytest.mark.parametrize("mode", ["train", "eval"])
+@require_torch_multi_accelerator
+def test_model_dense_forward_compile(nproc_per_node, mode):
+    """Test that TP and non-TP models produce the same outputs with torch.compile."""
+    skip_if_insufficient_devices(nproc_per_node)
+    init_distributed(tp=nproc_per_node)(_test_model_dense_forward_compile_impl)(mode, torch.float32)
+
+
+@pytest.mark.parametrize("nproc_per_node", [2])
+@require_torch_multi_accelerator
+def test_model_dense_backward_compile(nproc_per_node):
+    """Test that TP and non-TP models produce the same gradients with torch.compile."""
+    skip_if_insufficient_devices(nproc_per_node)
+    init_distributed(tp=nproc_per_node)(_test_model_dense_backward_compile_impl)(torch.float32)
+
+
+@pytest.mark.parametrize("nproc_per_node", [2])
+@require_huggingface_hub_greater_or_equal("0.31.4")
+@require_torch_multi_accelerator
+def test_model_dense_save(nproc_per_node):
+    """Test that TP model can be saved and matches non-TP version."""
+    skip_if_insufficient_devices(nproc_per_node)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # First run with TP (distributed)
+        init_distributed(tp=nproc_per_node)(_test_model_dense_save_impl)(tmp_dir)
+
+        # Then run without TP (non-distributed)
+        _test_model_dense_save_impl(0, tmp_dir)
+
+        non_tp_model_path = os.path.join(tmp_dir, "nontp")
+        tp_model_path = os.path.join(tmp_dir, "tp")
+
+        for filename in os.listdir(non_tp_model_path):
+            if not filename.endswith(".safetensors"):
+                continue
+
+            non_tp_model = safe_open(os.path.join(non_tp_model_path, filename), device="cpu", framework="pt")
+            tp_model = safe_open(os.path.join(tp_model_path, filename), device="cpu", framework="pt")
+            for non_tp_key in non_tp_model.keys():
+                non_tp_tensor = non_tp_model.get_tensor(non_tp_key)
+                tp_tensor = tp_model.get_tensor(non_tp_key)
+                assert torch.allclose(non_tp_tensor, tp_tensor), f"Tensor with key: {non_tp_key} does not match"
+                del non_tp_tensor, tp_tensor
 
 
 def _test_model_moe_forward_impl(rank, mode, dtype=torch.float32):
     """Implementation for comparing TP and non-TP MoE model outputs."""
     model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
 
-    torch.manual_seed(0)
-    torch.cuda.manual_seed_all(0)
+    set_seed(0)
 
     # Set tolerance based on dtype
     atol, rtol = (1e-5, 1e-5)
@@ -640,8 +602,7 @@ def _test_model_moe_backward_pass_impl(rank, dtype=torch.float32):
     """Implementation for comparing TP and non-TP MoE model backward passes."""
     model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
 
-    torch.manual_seed(0)
-    torch.cuda.manual_seed_all(0)
+    set_seed(0)
 
     atol, rtol = (1e-5, 1e-5)
 
@@ -657,7 +618,7 @@ def _test_model_moe_backward_pass_impl(rank, dtype=torch.float32):
     model.train()
 
     batch_size, seq_length = 2, 1024
-    torch.manual_seed(42)
+    set_seed(42)
     input_ids = torch.randint(0, model.config.vocab_size, (batch_size, seq_length), device=device)
     labels = torch.randint(0, model.config.vocab_size, (batch_size, seq_length), device=device)
 
@@ -704,8 +665,7 @@ def _test_model_moe_forward_compile_impl(rank, mode, dtype=torch.float32, expert
     """Implementation for comparing TP and non-TP MoE model outputs with torch.compile."""
     model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
 
-    torch.manual_seed(0)
-    torch.cuda.manual_seed_all(0)
+    set_seed(0)
 
     if dtype == torch.bfloat16:
         atol, rtol = (5e-3, 5e-3)
@@ -758,8 +718,7 @@ def _test_model_moe_backward_compile_impl(rank, dtype=torch.float32, experts_imp
     """Implementation for comparing TP and non-TP MoE model backward passes with torch.compile."""
     model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
 
-    torch.manual_seed(0)
-    torch.cuda.manual_seed_all(0)
+    set_seed(0)
 
     # bfloat16 has lower precision
     if dtype == torch.bfloat16:
@@ -786,7 +745,7 @@ def _test_model_moe_backward_compile_impl(rank, dtype=torch.float32, experts_imp
     model_tp.forward = torch.compile(model_tp.forward)
 
     batch_size, seq_length = 2, 1024
-    torch.manual_seed(42)
+    set_seed(42)
     input_ids = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
     labels = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
 
@@ -844,149 +803,76 @@ def _test_model_moe_save_impl(rank, tmp_dir):
     model.save_pretrained(result_dir)
 
 
-class TestTensorParallelMoeBase(TestCasePlus):
-    """Base class for MoE tensor parallel tests. Subclasses must set nproc_per_node."""
-
-    nproc_per_node = None
-
-    @require_torch_multi_accelerator
-    def test_model_moe_forward_eval(self):
-        """Test that TP and non-TP MoE models produce the same outputs in eval mode."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_impl)("eval", torch.float32)
-
-    @require_torch_multi_accelerator
-    def test_model_moe_forward_train(self):
-        """Test that TP and non-TP MoE models produce the same outputs in train mode."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_impl)("train", torch.float32)
-
-    @require_torch_multi_accelerator
-    def test_model_moe_backward_pass(self):
-        """Test that TP and non-TP MoE models produce the same gradients."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_backward_pass_impl)(torch.float32)
-
-    @require_torch_multi_accelerator
-    def test_model_moe_forward_compile_eval_batched_mm(self):
-        """Test that TP and non-TP MoE models produce the same outputs with torch.compile in eval mode (batched_mm)."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_compile_impl)(
-            "eval", torch.float32, experts_implementation="batched_mm"
-        )
-
-    @require_torch_multi_accelerator
-    def test_model_moe_forward_compile_train_batched_mm(self):
-        """Test that TP and non-TP MoE models produce the same outputs with torch.compile in train mode (batched_mm)."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_compile_impl)(
-            "train", torch.float32, experts_implementation="batched_mm"
-        )
-
-    @require_torch_multi_accelerator
-    def test_model_moe_backward_compile_batched_mm(self):
-        """Test that TP and non-TP MoE models produce the same gradients with torch.compile (batched_mm)."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_backward_compile_impl)(
-            torch.float32, experts_implementation="batched_mm"
-        )
-
-    @require_torch_multi_accelerator
-    def test_model_moe_forward_compile_eval_grouped_mm(self):
-        """Test that TP and non-TP MoE models produce the same outputs with torch.compile in eval mode (grouped_mm)."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        # grouped_mm requires bfloat16
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_compile_impl)(
-            "eval", torch.bfloat16, experts_implementation="grouped_mm"
-        )
-
-    @require_torch_multi_accelerator
-    def test_model_moe_forward_compile_train_grouped_mm(self):
-        """Test that TP and non-TP MoE models produce the same outputs with torch.compile in train mode (grouped_mm)."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        # grouped_mm requires bfloat16
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_compile_impl)(
-            "train", torch.bfloat16, experts_implementation="grouped_mm"
-        )
-
-    @require_torch_multi_accelerator
-    def test_model_moe_backward_compile_grouped_mm(self):
-        """Test that TP and non-TP MoE models produce the same gradients with torch.compile (grouped_mm)."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        # grouped_mm requires bfloat16
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_backward_compile_impl)(
-            torch.bfloat16, experts_implementation="grouped_mm"
-        )
-
-    @require_huggingface_hub_greater_or_equal("0.31.4")
-    @require_torch_multi_accelerator
-    def test_model_moe_save(self):
-        """Test that TP MoE model can be saved and matches non-TP version."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # First run with TP (distributed)
-            init_distributed(tp=self.nproc_per_node)(_test_model_moe_save_impl)(tmp_dir)
-
-            # Then run without TP (non-distributed)
-            _test_model_moe_save_impl(0, tmp_dir)
-
-            non_tp_model_path = os.path.join(tmp_dir, "nontp")
-            tp_model_path = os.path.join(tmp_dir, "tp")
-
-            for filename in os.listdir(non_tp_model_path):
-                if not filename.endswith(".safetensors"):
-                    continue
-
-                non_tp_model = safe_open(os.path.join(non_tp_model_path, filename), device="cpu", framework="pt")
-                tp_model = safe_open(os.path.join(tp_model_path, filename), device="cpu", framework="pt")
-                for non_tp_key in non_tp_model.keys():
-                    non_tp_tensor = non_tp_model.get_tensor(non_tp_key)
-                    tp_tensor = tp_model.get_tensor(non_tp_key)
-                    assert torch.allclose(non_tp_tensor, tp_tensor), f"Tensor with key: {non_tp_key} does not match"
-                    del non_tp_tensor, tp_tensor
+# ====== MOE MODEL TESTS ======
+@pytest.mark.parametrize("nproc_per_node", [2])
+@pytest.mark.parametrize("mode", ["train", "eval"])
+@require_torch_multi_accelerator
+def test_model_moe_forward(nproc_per_node, mode):
+    """Test that TP and non-TP MoE models produce the same outputs."""
+    skip_if_insufficient_devices(nproc_per_node)
+    init_distributed(tp=nproc_per_node)(_test_model_moe_forward_impl)(mode, torch.float32)
 
 
-class TestTensorParallelMoe2Proc(TestTensorParallelMoeBase):
-    """Test MoE tensor parallel with 2 processes."""
+@pytest.mark.parametrize("nproc_per_node", [2])
+@require_torch_multi_accelerator
+def test_model_moe_backward_pass(nproc_per_node):
+    """Test that TP and non-TP MoE models produce the same gradients."""
+    skip_if_insufficient_devices(nproc_per_node)
+    init_distributed(tp=nproc_per_node)(_test_model_moe_backward_pass_impl)(torch.float32)
 
-    nproc_per_node = 2
+
+@pytest.mark.parametrize("nproc_per_node", [2])
+@pytest.mark.parametrize("mode", ["train", "eval"])
+@pytest.mark.parametrize("experts_implementation", ["batched_mm", "grouped_mm"])
+@require_torch_multi_accelerator
+def test_model_moe_forward_compile(nproc_per_node, mode, experts_implementation):
+    """Test that TP and non-TP MoE models produce the same outputs with torch.compile."""
+    skip_if_insufficient_devices(nproc_per_node)
+    # grouped_mm requires bfloat16
+    dtype = torch.bfloat16 if experts_implementation == "grouped_mm" else torch.float32
+    init_distributed(tp=nproc_per_node)(_test_model_moe_forward_compile_impl)(
+        mode, dtype, experts_implementation=experts_implementation
+    )
+
+
+@pytest.mark.parametrize("nproc_per_node", [2])
+@pytest.mark.parametrize("experts_implementation", ["batched_mm", "grouped_mm"])
+@require_torch_multi_accelerator
+def test_model_moe_backward_compile(nproc_per_node, experts_implementation):
+    """Test that TP and non-TP MoE models produce the same gradients with torch.compile."""
+    skip_if_insufficient_devices(nproc_per_node)
+    # grouped_mm requires bfloat16
+    dtype = torch.bfloat16 if experts_implementation == "grouped_mm" else torch.float32
+    init_distributed(tp=nproc_per_node)(_test_model_moe_backward_compile_impl)(
+        dtype, experts_implementation=experts_implementation
+    )
+
+
+@pytest.mark.parametrize("nproc_per_node", [2])
+@require_huggingface_hub_greater_or_equal("0.31.4")
+@require_torch_multi_accelerator
+def test_model_moe_save(nproc_per_node):
+    """Test that TP MoE model can be saved and matches non-TP version."""
+    skip_if_insufficient_devices(nproc_per_node)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # First run with TP (distributed)
+        init_distributed(tp=nproc_per_node)(_test_model_moe_save_impl)(tmp_dir)
+
+        # Then run without TP (non-distributed)
+        _test_model_moe_save_impl(0, tmp_dir)
+
+        non_tp_model_path = os.path.join(tmp_dir, "nontp")
+        tp_model_path = os.path.join(tmp_dir, "tp")
+
+        for filename in os.listdir(non_tp_model_path):
+            if not filename.endswith(".safetensors"):
+                continue
+
+            non_tp_model = safe_open(os.path.join(non_tp_model_path, filename), device="cpu", framework="pt")
+            tp_model = safe_open(os.path.join(tp_model_path, filename), device="cpu", framework="pt")
+            for non_tp_key in non_tp_model.keys():
+                non_tp_tensor = non_tp_model.get_tensor(non_tp_key)
+                tp_tensor = tp_model.get_tensor(non_tp_key)
+                assert torch.allclose(non_tp_tensor, tp_tensor), f"Tensor with key: {non_tp_key} does not match"
+                del non_tp_tensor, tp_tensor
