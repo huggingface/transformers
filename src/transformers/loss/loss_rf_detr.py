@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 from .. import requires_backends
 from ..image_transforms import center_to_corners_format
-from ..utils import is_accelerate_available, is_scipy_available, is_vision_available
+from ..utils import is_scipy_available
 from .loss_for_object_detection import (
     dice_loss,
     generalized_box_iou,
