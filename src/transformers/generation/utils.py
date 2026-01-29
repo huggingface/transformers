@@ -41,7 +41,7 @@ from ..dynamic_module_utils import (
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
-from ..masking_utils import create_masks_for_generate
+from ..masking_utils import _attention_mask_all_true, create_masks_for_generate
 from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_python import ExtensionsTrie
 from ..utils import (
@@ -2668,15 +2668,23 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs["use_cache"] = generation_config.use_cache
 
         # 9. Call generation mode
-        result = decoding_method(
-            self,
-            input_ids,
-            logits_processor=prepared_logits_processor,
-            stopping_criteria=prepared_stopping_criteria,
-            generation_config=generation_config,
-            **generation_mode_kwargs,
-            **model_kwargs,
-        )
+        # Check if attention_mask is all-True to avoid per-token GPU-CPU sync in masking utils.
+        # During generation, if the mask starts all-True and we only append ones, it stays all-True.
+        attention_mask = model_kwargs.get("attention_mask")
+        mask_all_true = attention_mask is None or bool(attention_mask.all())
+        mask_token = _attention_mask_all_true.set(mask_all_true)
+        try:
+            result = decoding_method(
+                self,
+                input_ids,
+                logits_processor=prepared_logits_processor,
+                stopping_criteria=prepared_stopping_criteria,
+                generation_config=generation_config,
+                **generation_mode_kwargs,
+                **model_kwargs,
+            )
+        finally:
+            _attention_mask_all_true.reset(mask_token)
 
         return result
 
