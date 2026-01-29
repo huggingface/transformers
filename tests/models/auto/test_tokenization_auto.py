@@ -58,7 +58,6 @@ from transformers.testing_utils import (
     SMALL_MODEL_IDENTIFIER,
     CaptureLogger,
     RequestCounter,
-    is_flaky,
     require_tokenizers,
     slow,
 )
@@ -222,7 +221,9 @@ class AutoTokenizerTest(unittest.TestCase):
         try:
             with (
                 mock.patch("transformers.utils.import_utils.is_mistral_common_available", return_value=False),
-                mock.patch("transformers.models.auto.tokenization_auto.is_mistral_common_available", return_value=False),
+                mock.patch(
+                    "transformers.models.auto.tokenization_auto.is_mistral_common_available", return_value=False
+                ),
             ):
                 tokenization_auto = importlib.reload(tokenization_auto)
                 tokenizer = tokenization_auto.AutoTokenizer.from_pretrained(repo_id)  # should not raise
