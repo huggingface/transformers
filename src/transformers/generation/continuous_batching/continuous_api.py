@@ -260,7 +260,9 @@ class ContinuousBatchProcessor:
         # Cuda graphs for the generation step
         self.q_padding_intervals = q_padding_intervals
         self.kv_padding_intervals = kv_padding_intervals
-        self._graphs: dict[tuple[int, int], torch.cuda.CUDAGraph] | None = {} if use_cuda_graph else None
+        self._graphs: dict[tuple[int, int], torch.cuda.CUDAGraph] | None = (
+            {} if use_cuda_graph and torch.cuda.is_available() else None
+        )
         # Compile-related arguments
         self.compile_config: CompileConfig | None = getattr(generation_config, "compile_config", None)
         self._forward_process_and_sample_is_compiled = False
@@ -766,7 +768,7 @@ class ContinuousBatchProcessor:
         ).asdict()  # TODO: this is imperfect, check if there is no better way to juggle dict / dataclass
 
         # If we are not using cuda graphs, we perform the generation step and return
-        if self._graphs is None or not torch.cuda.is_available():
+        if self._graphs is None:
             self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
             return None
 
