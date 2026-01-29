@@ -68,10 +68,12 @@ def lecun_normal_(tensor):
         variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
     return tensor
 
+
 def default_flax_embed_init(tensor):
     if not getattr(tensor, "_is_hf_initialized", False):
         variance_scaling_(tensor, mode="fan_in", distribution="normal")
     return tensor
+
 
 @dataclass
 @auto_docstring(
