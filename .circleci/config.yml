@@ -212,8 +212,7 @@ jobs:
                         curl https://pyenv.run | bash
                     fi
                     echo 'export PYENV_ROOT="$HOME/.pyenv"' >> $BASH_ENV
-                    echo 'export PATH="$PYENV_ROOT/bin:$PATH"' >> $BASH_ENV
-                    echo 'eval "$(pyenv init -)"' >> $BASH_ENV
+                    echo 'export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"' >> $BASH_ENV
             - run:
                 name: Install Python versions
                 command: |
