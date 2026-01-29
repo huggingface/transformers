@@ -1542,7 +1542,7 @@ class RfDetrModel(RfDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, DeformableDetrModel
+        >>> from transformers import AutoImageProcessor, RfDetrModel
         >>> from PIL import Image
         >>> import requests
 
@@ -2021,27 +2021,35 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
 
         self.post_init()
 
-    def segmentation_head(self, spatial_features, query_features, image_size: torch.Size, skip_blocks: bool = False):
+    def get_mask_logits(self, query_features, spatial_features):
+        batch_size, num_queries, _ = query_features.shape
+        height, width = spatial_features.shape[2], spatial_features.shape[3]
+
+        query_features = self.query_features_block(query_features)
+        query_features = self.query_features_proj(query_features)
+        mask_logits = torch.matmul(query_features, spatial_features.flatten(2))
+        mask_logits = mask_logits.view(batch_size, num_queries, height, width)
+        mask_logits = mask_logits + self.bias
+        return mask_logits
+
+    def segmentation_head(
+        self, spatial_features, list_query_features, image_size: torch.Size, skip_blocks: bool = False
+    ):
         # spatial features: (B, C, H, W)
         # query features: [(B, N, C)] for each decoder layer
         # output: (B, N, H*r, W*r)
         target_size = (image_size[0] // self.downsample_ratio, image_size[1] // self.downsample_ratio)
         spatial_features = F.interpolate(spatial_features, size=target_size, mode="bilinear", align_corners=False)
+
         list_mask_logits = []
         if not skip_blocks:
-            for block, qf in zip(self.blocks, query_features):
+            for block, query_features in zip(self.blocks, list_query_features):
                 spatial_features = block(spatial_features)
                 spatial_features_proj = self.spatial_features_proj(spatial_features)
-                qf = self.query_features_block(qf)
-                qf = self.query_features_proj(qf)
-                mask_logits = torch.einsum("bchw,bnc->bnhw", spatial_features_proj, qf)
-                mask_logits = mask_logits + self.bias
+                mask_logits = self.get_mask_logits(query_features, spatial_features_proj)
                 list_mask_logits.append(mask_logits)
         else:
-            query_features = self.query_features_block(query_features)
-            query_features = self.query_features_proj(query_features)
-            mask_logits = torch.einsum("bchw,bnc->bnhw", spatial_features, query_features)
-            mask_logits = mask_logits + self.bias
+            mask_logits = self.get_mask_logits(list_query_features, spatial_features)
             list_mask_logits.append(mask_logits)
 
         return list_mask_logits
