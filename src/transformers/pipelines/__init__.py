@@ -71,6 +71,7 @@ from .image_to_image import ImageToImagePipeline
 from .keypoint_matching import KeypointMatchingPipeline
 from .mask_generation import MaskGenerationPipeline
 from .object_detection import ObjectDetectionPipeline
+from .promptable_concept_segmentation import PromptableConceptSegmentationPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text_classification import TextClassificationPipeline
@@ -107,6 +108,7 @@ if is_torch_available():
         AutoModelForMaskGeneration,
         AutoModelForMultimodalLM,
         AutoModelForObjectDetection,
+        AutoModelForPromptableConceptSegmentation,
         AutoModelForQuestionAnswering,
         AutoModelForSemanticSegmentation,
         AutoModelForSeq2SeqLM,
@@ -297,6 +299,12 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForKeypointMatching,) if is_torch_available() else (),
         "default": {"model": ("magic-leap-community/superglue_outdoor", "f4041f8")},
         "type": "image",
+    },
+    "promptable-concept-segmentation": {
+        "impl": PromptableConceptSegmentationPipeline,
+        "pt": (AutoModelForPromptableConceptSegmentation,) if is_torch_available() else (),
+        "default": {"model": ("facebook/sam3", "main")},
+        "type": "multimodal",
     },
     "any-to-any": {
         "impl": AnyToAnyPipeline,
