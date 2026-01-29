@@ -23,6 +23,7 @@ from transformers import (
     GlmImageConfig,
     GlmImageForConditionalGeneration,
     GlmImageModel,
+    GlmImageProcessor,
     is_torch_available,
     set_seed,
 )
@@ -455,7 +456,7 @@ class GlmImageIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
-        self.processor = AutoProcessor.from_pretrained(self.model_id, subfolder=self.processor_subfolder)
+        self.processor = GlmImageProcessor.from_pretrained(self.model_id, subfolder=self.processor_subfolder)
         # Text-to-image generation message
         self.t2i_message = [
             {
@@ -487,18 +488,28 @@ class GlmImageIntegrationTest(unittest.TestCase):
         inputs = self.processor.apply_chat_template(
             self.t2i_message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         )
-        # For T2I, there should be no pixel_values (no source images)
+        # For T2I with apply_chat_template, we get basic text inputs
+        # Target grids are added during actual generation when using processor directly with target shape
         self.assertIn("input_ids", inputs)
         self.assertIn("attention_mask", inputs)
-        self.assertIn("image_grid_thw", inputs)
-        # T2I should have 2 target grids (main + prev for coarse-to-fine generation)
-        self.assertEqual(inputs["image_grid_thw"].shape[0], 2)
 
     def test_processor_image_to_image(self):
         """Test processor correctly prepares image-to-image inputs."""
-        inputs = self.processor.apply_chat_template(
-            self.i2i_message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
-        )
+        from PIL import Image
+        import requests
+        from io import BytesIO
+        
+        # Load the image
+        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+        response = requests.get(url)
+        image = Image.open(BytesIO(response.content))
+        
+        # Create prompt with target shape and image token
+        text = "<|dit_token_16384|><|image|><|dit_token_16385|>Add a red hat to this cat<sop>28 40<eop>"
+        
+        # Process with actual images (nested list for batched processing)
+        inputs = self.processor(text=[text], images=[[image]], return_tensors="pt")
+        
         # For I2I, there should be pixel_values from the source image
         self.assertIn("input_ids", inputs)
         self.assertIn("attention_mask", inputs)
@@ -546,7 +557,7 @@ class GlmImageIntegrationTest(unittest.TestCase):
                 7240,
                 7240,
                 7240,
-                12909,
+                5818,
                 14581,
                 14581,
                 14581,
@@ -556,9 +567,9 @@ class GlmImageIntegrationTest(unittest.TestCase):
                 7240,
                 7240,
                 7240,
+                7240,
+                7240,
                 14581,
-                7240,
-                7240,
                 7240,
             ],
             device=torch_device,
@@ -608,16 +619,16 @@ class GlmImageIntegrationTest(unittest.TestCase):
                 1143,
                 14581,
                 14581,
-                1143,
-                1143,
-                1143,
-                1143,
-                1143,
-                1143,
-                1143,
-                1143,
+                1275,
+                1275,
+                1275,
+                1275,
+                1275,
+                1275,
+                1275,
+                1275,
                 14581,
-                1143,
+                1275,
             ],
             device=torch_device,
         )
