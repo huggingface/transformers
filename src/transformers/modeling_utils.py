@@ -1289,6 +1289,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.config = config
+        quant_config = getattr(config, "quantization_config", None)
+        if quant_config is not None:
+            raise NotImplementedError(
+                "Quantization via `from_config()` is not supported. "
+                "Quantized models must be created via `from_pretrained()` with an appropriate backend."
+            )
 
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
