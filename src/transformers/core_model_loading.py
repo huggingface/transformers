@@ -521,7 +521,7 @@ class WeightTransform:
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
 
     def __setattr__(self, name, value):
-        # We do not allow to set the patterns, as they are linked between each other and changing one
+        # We do not allow to re-set the patterns, as they are linked between each other and changing one
         # without the other can mess-up with the capturing groups/compiled sources
         if name in ("source_patterns", "target_patterns") and hasattr(self, name):
             raise ValueError(f"Cannot assign to field {name}")
