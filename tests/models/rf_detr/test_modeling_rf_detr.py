@@ -18,6 +18,7 @@ import unittest
 from functools import cached_property
 
 import numpy as np
+from parameterized import parameterized
 
 from transformers import (
     CONFIG_NAME,
@@ -49,11 +50,24 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-CHECKPOINT = {
-    "base": "stevenbucaille/rf-detr-base",
-    "large": "stevenbucaille/rf-detr-large",
-    "segmentation": "stevenbucaille/rf-detr-segmentation",
-}
+OBJECT_DETECTION_CHECKPOINTS = [
+    "stevenbucaille/rf-detr-nano",
+    "stevenbucaille/rf-detr-small",
+    "stevenbucaille/rf-detr-base",
+    "stevenbucaille/rf-detr-base-2",
+    "stevenbucaille/rf-detr-medium",
+    "stevenbucaille/rf-detr-large",
+]
+
+SEGMENTATION_CHECKPOINTS = [
+    "stevenbucaille/rf-detr-seg-preview",
+    "stevenbucaille/rf-detr-seg-nano",
+    "stevenbucaille/rf-detr-seg-small",
+    "stevenbucaille/rf-detr-seg-medium",
+    "stevenbucaille/rf-detr-seg-large",
+    "stevenbucaille/rf-detr-seg-xlarge",
+    "stevenbucaille/rf-detr-seg-xxlarge",
+]
 
 
 def prepare_img():
@@ -507,226 +521,252 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertEqual(len(outputs.auxiliary_outputs), self.model_tester.decoder_layers - 1)
 
 
+EXPECTED_OBJECT_DETECTION_OUTPUTS = {
+    "stevenbucaille/rf-detr-nano": {
+        "logits": [-6.68004, -5.66107, -11.70373, -8.32324, -5.76176],
+        "boxes": [0.25828, 0.54991, 0.47220, 0.87432, 0.55099],
+        "post_process_labels": [17, 75, 17, 75, 63],
+        "post_process_scores": [0.99419, 0.98870, 0.95431, 0.98553, 0.43040],
+        "post_process_boxes": [14.19509, 54.12025, 316.40289, 473.79239],
+        "loss": 14.893259,
+    },
+    "stevenbucaille/rf-detr-small": {
+        "logits": [-6.83893, -4.55097, -10.53040, -8.20657, -5.55314],
+        "boxes": [0.25782, 0.55037, 0.47922, 0.87102, 0.77074],
+        "post_process_labels": [17, 17, 75, 75, 65],
+        "post_process_scores": [0.99281, 0.98698, 0.99031, 0.98309, 0.51899],
+        "post_process_boxes": [11.65812, 55.13201, 318.35583, 473.22156],
+        "loss": 19.771887,
+    },
+    "stevenbucaille/rf-detr-base": {
+        "logits": [-7.60410, -4.65943, -10.03144, -5.63881, -9.88291],
+        "boxes": [0.25465, 0.54864, 0.48583, 0.86991, 0.16926],
+        "post_process_labels": [17, 75, 17, 75, 63],
+        "post_process_scores": [0.98291, 0.97628, 0.97799, 0.86630, 0.61596],
+        "post_process_boxes": [7.51008, 54.56673, 318.44214, 472.12595],
+        "loss": 21.967346,
+    },
+    "stevenbucaille/rf-detr-base-2": {
+        "logits": [-6.81648, -6.80946, -7.72004, -6.06710, -10.37419],
+        "boxes": [0.16911, 0.19784, 0.21076, 0.09273, 0.25263],
+        "post_process_labels": [75, 17, 17, 75, 63],
+        "post_process_scores": [0.98108, 0.97893, 0.96431, 0.82874, 0.43441],
+        "post_process_boxes": [40.78329, 72.70991, 175.67207, 117.21776],
+        "loss": 21.532478,
+    },
+    "stevenbucaille/rf-detr-medium": {
+        "logits": [-6.58581, -8.07883, -12.52392, -7.78248, -10.47323],
+        "boxes": [0.16824, 0.19932, 0.21110, 0.09385, 0.77087],
+        "post_process_labels": [75, 17, 17, 75, 63],
+        "post_process_scores": [0.98818, 0.98767, 0.98665, 0.98013, 0.42874],
+        "post_process_boxes": [40.12718, 73.15034, 175.22226, 118.19680],
+        "loss": 26.337656,
+    },
+    "stevenbucaille/rf-detr-large": {
+        "logits": [-6.38973, -8.19355, -12.09174, -7.80438, -10.15835],
+        "boxes": [0.16901, 0.19936, 0.21087, 0.09311, 0.77199],
+        "post_process_labels": [75, 17, 17, 75, 63],
+        "post_process_scores": [0.99024, 0.98684, 0.98713, 0.94908, 0.52595],
+        "post_process_boxes": [40.68745, 73.34576, 175.64552, 118.03757],
+        "loss": 27.111633,
+    },
+}
+
+EXPECTED_SEGMENTATION_OUTPUTS = {
+    "stevenbucaille/rf-detr-seg-preview": {
+        "logits": [-7.05877, -4.23362, -6.54288, -8.13384, -6.36838],
+        "boxes": [0.25603, 0.55164, 0.48340, 0.87798, 0.73861],
+        "pred_masks": [-16.72129, -16.17153, -17.06426, -17.29409, -17.78559],
+        "post_process_labels": [17, 75, 75, 17],
+        "post_process_scores": [0.98604, 0.985644, 0.950492, 0.967915],
+        "loss": 76.156754,
+    },
+    "stevenbucaille/rf-detr-seg-nano": {
+        "logits": [-7.38427, -5.59449, -9.97889, -11.03668, -8.62285],
+        "boxes": [0.25230, 0.54825, 0.48196, 0.86925, 0.77119],
+        "pred_masks": [-12.01641, -12.37785, -13.37312, -13.54168, -13.53435],
+        "post_process_labels": [17, 17, 75, 75],
+        "post_process_scores": [0.987039, 0.984917, 0.978123, 0.966226],
+        "loss": 92.973061,
+    },
+    "stevenbucaille/rf-detr-seg-small": {
+        "logits": [-7.35031, -5.09690, -9.58117, -10.80274, -8.35001],
+        "boxes": [0.25607, 0.54820, 0.48018, 0.87013, 0.90797],
+        "pred_masks": [-13.17243, -13.12057, -13.92742, -13.89896, -13.72802],
+        "post_process_labels": [17, 75, 75, 17],
+        "post_process_scores": [0.984295, 0.984524, 0.971301, 0.977482],
+        "loss": 87.512894,
+    },
+    "stevenbucaille/rf-detr-seg-medium": {
+        "logits": [-7.48751, -5.21394, -9.35906, -9.31897, -8.08021],
+        "boxes": [0.76891, 0.41680, 0.46182, 0.72004, 0.16810],
+        "pred_masks": [-15.67913, -17.05902, -16.72426, -17.19833, -17.18960],
+        "post_process_labels": [17, 75, 17, 75],
+        "post_process_scores": [0.982117, 0.982515, 0.986937, 0.94945],
+        "loss": 95.562599,
+    },
+    "stevenbucaille/rf-detr-seg-large": {
+        "logits": [-7.37005, -5.04871, -9.19777, -9.37870, -7.96562],
+        "boxes": [0.76796, 0.41489, 0.46220, 0.72197, 0.25254],
+        "pred_masks": [-15.13846, -16.88754, -16.55486, -17.23686, -17.40160],
+        "post_process_labels": [17, 17, 75, 75],
+        "post_process_scores": [0.973857, 0.980841, 0.982329, 0.940749],
+        "loss": 91.781540,
+    },
+    "stevenbucaille/rf-detr-seg-xlarge": {
+        "logits": [-7.42486, -4.72502, -8.16429, -8.30500, -7.21668],
+        "boxes": [0.76863, 0.41618, 0.46055, 0.72461, 0.16735],
+        "pred_masks": [-15.15330, -17.61085, -16.79776, -17.33611, -17.39120],
+        "post_process_labels": [17, 75, 75, 17],
+        "post_process_scores": [0.978207, 0.979888, 0.943645, 0.982371],
+        "loss": 105.279922,
+    },
+    "stevenbucaille/rf-detr-seg-xxlarge": {
+        "logits": [-7.33242, -5.11294, -6.31125, -7.06520, -7.07922],
+        "boxes": [0.25516, 0.53685, 0.49769, 0.88601, 0.76872],
+        "pred_masks": [-7.94849, -8.57010, -8.60056, -8.92854, -8.99288],
+        "post_process_labels": [17, 75, 75, 17],
+        "post_process_scores": [0.980528, 0.976553, 0.846246, 0.974776],
+        "loss": 99.136574,
+    },
+}
+
+
 @require_torch
 @require_vision
 class RfDetrModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_image_processor(self):
-        if is_vision_available():
-            return {
-                "base": DetrImageProcessor.from_pretrained(CHECKPOINT["base"]),
-                "large": DetrImageProcessor.from_pretrained(CHECKPOINT["large"]),
-                "segmentation": DetrImageProcessor.from_pretrained(CHECKPOINT["segmentation"]),
-            }
+    def annotations(self):
+        return {
+            "image_id": 0,
+            "annotations": [
+                {
+                    "bbox": [250, 250, 350, 350],
+                    "category_id": 0,
+                    "iscrowd": 0,
+                    "area": 122500,
+                    "segments": [[0, 0, 0, 100, 100, 100, 100, 0]],
+                }
+            ],
+        }
 
-    @slow
-    def test_inference_object_detection_head_base(self):
-        size = "base"
-        model = RfDetrForObjectDetection.from_pretrained(CHECKPOINT[size], attn_implementation="eager").to(
-            torch_device
-        )
-
-        image_processor = self.default_image_processor[size]
+    @parameterized.expand([(name, EXPECTED_OBJECT_DETECTION_OUTPUTS[name]) for name in OBJECT_DETECTION_CHECKPOINTS])
+    def test_inference_object_detection(self, model_name, expected_outputs):
+        tol = 5e-3
+        model = RfDetrForObjectDetection.from_pretrained(model_name, attn_implementation="eager").to(torch_device)
+        image_processor = DetrImageProcessor.from_pretrained(model_name)
         image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
-        pixel_values = encoding["pixel_values"].to(torch_device)
-        pixel_mask = encoding["pixel_mask"].to(torch_device)
-        with torch.no_grad():
-            outputs = model(pixel_values, pixel_mask)
+        inputs = image_processor(images=image, annotations=self.annotations, return_tensors="pt").to(torch_device)
 
-        expected_logits_shape = torch.Size((1, model.config.num_queries, model.config.num_labels))
-        self.assertEqual(outputs.logits.shape, expected_logits_shape)
+        print(inputs)
+        outputs = model(**inputs)
 
-        expectations = Expectations(
-            {
-                ("cpu", None): [-7.60410, -4.65943, -10.03144, -5.63881, -9.88291],
-            }
-        )
+        # Check raw outputs from the model
+        expectations = Expectations({("cpu", None): expected_outputs["logits"]})
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
-        torch.testing.assert_close(outputs.logits.flatten()[:5], expected_logits, rtol=2e-4, atol=2e-4)
+        expected_logits_shape = torch.Size((1, model.config.num_queries, model.config.num_labels))
 
-        expected_boxes_shape = torch.Size((1, model.config.num_queries, 4))
-        self.assertEqual(outputs.pred_boxes.shape, expected_boxes_shape)
-
-        expectations = Expectations(
-            {
-                ("cpu", None): [0.25465, 0.54864, 0.48583, 0.86991, 0.16926],
-            }
-        )
+        expectations = Expectations({("cpu", None): expected_outputs["boxes"]})
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
+        expected_boxes_shape = torch.Size((1, model.config.num_queries, 4))
 
-        torch.testing.assert_close(outputs.pred_boxes.flatten()[:5], expected_boxes, rtol=2e-4, atol=2e-4)
+        expectations = Expectations({("cpu", None): expected_outputs["loss"]})
+        expected_loss = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        results = image_processor.post_process_object_detection(
+        predicted_logits = outputs.logits.flatten()[:5]
+        predicted_boxes = outputs.pred_boxes.flatten()[:5]
+        predicted_loss = outputs.loss
+
+        self.assertEqual(outputs.logits.shape, expected_logits_shape)
+        self.assertEqual(outputs.pred_boxes.shape, expected_boxes_shape)
+        torch.testing.assert_close(predicted_logits, expected_logits, rtol=tol, atol=tol)
+        torch.testing.assert_close(predicted_boxes, expected_boxes, rtol=tol, atol=tol)
+        torch.testing.assert_close(predicted_loss, expected_loss, rtol=tol, atol=tol)
+
+        # Check post-processed outputs
+        post_processed_outputs = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
+        expectations = Expectations({("cpu", None): expected_outputs["post_process_labels"]})
+        expected_post_process_labels = torch.tensor(expectations.get_expectation()).to(torch_device)
+        expectations = Expectations({("cpu", None): expected_outputs["post_process_scores"]})
+        expected_post_process_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
+        expectations = Expectations({("cpu", None): expected_outputs["post_process_boxes"]})
+        expected_post_process_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        expectations = Expectations(
-            {
-                ("cpu", None): [0.9829, 0.9763, 0.9780, 0.8663],
-            }
-        )
-        expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
+        post_processed_labels = post_processed_outputs["labels"][:5]
+        post_processed_scores = post_processed_outputs["scores"][:5]
+        post_processed_boxes = post_processed_outputs["boxes"][0]
+        torch.testing.assert_close(post_processed_labels, expected_post_process_labels, rtol=tol, atol=tol)
+        torch.testing.assert_close(post_processed_scores, expected_post_process_scores, rtol=tol, atol=tol)
+        torch.testing.assert_close(post_processed_boxes, expected_post_process_boxes, rtol=1, atol=1)
 
-        expected_labels = [17, 75, 17, 75]
+    @parameterized.expand([(name, EXPECTED_SEGMENTATION_OUTPUTS[name]) for name in SEGMENTATION_CHECKPOINTS])
+    def test_inference_segmentation(self, model_name, expected_outputs):
+        tol = 5e-3
+        model = RfDetrForInstanceSegmentation.from_pretrained(model_name, attn_implementation="eager").to(torch_device)
 
-        expectations = Expectations(
-            {
-                ("cpu", None): [
-                    [7.5101, 54.5667, 318.4421, 472.1259],
-                    [40.7178, 72.6109, 175.9414, 117.5903],
-                    [343.0202, 23.9165, 639.3325, 372.2062],
-                    [333.5370, 76.9845, 370.3848, 187.3158],
-                ],
-            }
-        )
-        expected_slice_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
-
-        torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=2e-4)
-        self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
-        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-3, rtol=2e-4)
-
-    @slow
-    def test_inference_object_detection_head_large(self):
-        size = "large"
-        model = RfDetrForObjectDetection.from_pretrained(CHECKPOINT[size], attn_implementation="eager").to(
-            torch_device
-        )
-
-        image_processor = self.default_image_processor[size]
+        image_processor = DetrImageProcessor.from_pretrained(model_name)
         image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
-        pixel_values = encoding["pixel_values"].to(torch_device)
-        pixel_mask = encoding["pixel_mask"].to(torch_device)
-        with torch.no_grad():
-            outputs = model(pixel_values, pixel_mask)
-
-        expected_logits_shape = torch.Size((1, model.config.num_queries, model.config.num_labels))
-        self.assertEqual(outputs.logits.shape, expected_logits_shape)
-
-        expectations = Expectations(
-            {
-                ("cpu", None): [-7.60888, -4.36906, -4.98865, -8.06598, -5.52970],
-            }
+        inputs = image_processor(images=image, annotations=self.annotations, return_tensors="pt").to(torch_device)
+        inputs["labels"][0]["masks"] = torch.zeros(
+            (1, inputs["pixel_values"].shape[-1], inputs["pixel_values"].shape[-2])
         )
+        outputs = model(**inputs)
+
+        # Check raw outputs from the model
+        expectations = Expectations({("cpu", None): expected_outputs["logits"]})
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
-        torch.testing.assert_close(outputs.logits.flatten()[:5], expected_logits, rtol=2e-3, atol=2e-3)
-
-        expected_boxes_shape = torch.Size((1, model.config.num_queries, 4))
-        self.assertEqual(outputs.pred_boxes.shape, expected_boxes_shape)
-
-        expectations = Expectations(
-            {
-                ("cpu", None): [0.25576, 0.55051, 0.47765, 0.87141, 0.76966],
-            }
-        )
-        expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
-
-        torch.testing.assert_close(outputs.pred_boxes.flatten()[:5], expected_boxes, rtol=2e-3, atol=2e-3)
-
-        results = image_processor.post_process_object_detection(
-            outputs, threshold=0.0, target_sizes=[image.size[::-1]]
-        )[0]
-
-        expectations = Expectations(
-            {
-                ("cpu", None): [0.9820, 0.9874, 0.9918, 0.9696],
-            }
-        )
-        expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
-
-        expected_labels = [17, 17, 75, 75]
-
-        expectations = Expectations(
-            {
-                ("cpu", None): [
-                    [10.8431, 55.1121, 316.5317, 473.3869],
-                    [345.1129, 24.5076, 640.0582, 373.1581],
-                    [40.3736, 73.1451, 175.8807, 117.5796],
-                    [333.9091, 76.8915, 370.1848, 186.7155],
-                ],
-            }
-        )
-        expected_slice_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
-
-        torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=2e-4)
-        self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
-        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-3, rtol=2e-4)
-
-    @slow
-    def test_inference_segmentation(self):
-        size = "segmentation"
-        model = RfDetrForInstanceSegmentation.from_pretrained(CHECKPOINT[size], attn_implementation="eager").to(
-            torch_device
-        )
-
-        image_processor = self.default_image_processor[size]
-        image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
-        pixel_values = encoding["pixel_values"].to(torch_device)
-        pixel_mask = encoding["pixel_mask"].to(torch_device)
-        with torch.no_grad():
-            outputs = model(pixel_values, pixel_mask)
-
         expected_logits_shape = torch.Size((1, model.config.num_queries, model.config.num_labels))
-        self.assertEqual(outputs.logits.shape, expected_logits_shape)
 
-        score_expectations = Expectations(
-            {
-                ("cpu", None): [-7.05877, -4.23362, -6.54288, -8.13384, -6.36838],
-            }
-        )
-        expected_logits = torch.tensor(score_expectations.get_expectation()).to(torch_device)
-        torch.testing.assert_close(outputs.logits.flatten()[:5], expected_logits, rtol=2e-3, atol=2e-3)
-
+        expectations = Expectations({("cpu", None): expected_outputs["boxes"]})
+        expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_boxes_shape = torch.Size((1, model.config.num_queries, 4))
-        self.assertEqual(outputs.pred_boxes.shape, expected_boxes_shape)
 
-        score_expectations = Expectations(
-            {
-                ("cpu", None): [0.25603, 0.55164, 0.48340, 0.87798, 0.73861],
-            }
-        )
-        expected_boxes = torch.tensor(score_expectations.get_expectation()).to(torch_device)
-
-        torch.testing.assert_close(outputs.pred_boxes.flatten()[:5], expected_boxes, rtol=2e-3, atol=2e-3)
-
+        expectations = Expectations({("cpu", None): expected_outputs["pred_masks"]})
+        expected_masks = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_masks_shape = torch.Size(
             (
                 1,
                 model.config.num_queries,
-                pixel_values.shape[-2] // model.config.mask_downsample_ratio,
-                pixel_values.shape[-1] // model.config.mask_downsample_ratio,
+                inputs["pixel_values"].shape[-2] // model.config.mask_downsample_ratio,
+                inputs["pixel_values"].shape[-1] // model.config.mask_downsample_ratio,
             )
         )
+
+        expectations = Expectations({("cpu", None): expected_outputs["loss"]})
+        expected_loss = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        predicted_logits = outputs.logits.flatten()[:5]
+        predicted_boxes = outputs.pred_boxes.flatten()[:5]
+        predicted_masks = outputs.pred_masks.flatten()[:5]
+        predicted_loss = outputs.loss
+
+        self.assertEqual(outputs.logits.shape, expected_logits_shape)
+        self.assertEqual(outputs.pred_boxes.shape, expected_boxes_shape)
         self.assertEqual(outputs.pred_masks.shape, expected_masks_shape)
+        torch.testing.assert_close(predicted_logits, expected_logits, rtol=tol, atol=tol)
+        torch.testing.assert_close(predicted_boxes, expected_boxes, rtol=tol, atol=tol)
+        torch.testing.assert_close(predicted_masks, expected_masks, rtol=tol, atol=tol)
+        torch.testing.assert_close(predicted_loss, expected_loss, rtol=tol, atol=tol)
 
-        score_expectations = Expectations(
-            {
-                ("cpu", None): [-16.72129, -16.17153, -17.06426, -17.29409, -17.78559],
-            }
-        )
-        expected_masks = torch.tensor(score_expectations.get_expectation()).to(torch_device)
-
-        torch.testing.assert_close(outputs.pred_masks.flatten()[:5], expected_masks, rtol=2e-3, atol=2e-3)
-
-        results = image_processor.post_process_instance_segmentation(
+        # Check post-processed outputs
+        post_processed_outputs = image_processor.post_process_instance_segmentation(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
+        expectations = Expectations({("cpu", None): expected_outputs["post_process_labels"]})
+        expected_post_process_labels = torch.tensor(expectations.get_expectation()).to(torch_device)
+        expectations = Expectations({("cpu", None): expected_outputs["post_process_scores"]})
+        expected_post_process_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        expected_labels = [17, 75, 75, 17]
-        score_expectations = Expectations(
-            {
-                ("cpu", None): [0.98604, 0.985644, 0.950492, 0.967915],
-            }
-        )
-        expected_scores = torch.tensor(score_expectations.get_expectation()).to(torch.float32)
-
-        predicted_labels = [segment["label_id"] for segment in results["segments_info"]]
-        predicted_scores = torch.tensor([segment["score"] for segment in results["segments_info"]])
-
-        self.assertSequenceEqual(predicted_labels, expected_labels)
-        torch.testing.assert_close(predicted_scores, expected_scores, atol=1e-3, rtol=2e-4)
+        post_processed_labels = [
+            segments_info["label_id"] for segments_info in post_processed_outputs["segments_info"]
+        ]
+        post_processed_labels = torch.tensor(post_processed_labels).to(torch_device)
+        post_processed_scores = [segments_info["score"] for segments_info in post_processed_outputs["segments_info"]]
+        post_processed_scores = torch.tensor(post_processed_scores).to(torch_device)
+        torch.testing.assert_close(post_processed_labels, expected_post_process_labels, rtol=tol, atol=tol)
+        torch.testing.assert_close(post_processed_scores, expected_post_process_scores, rtol=tol, atol=tol)
 
 
 class RfDetrDinov2ModelTester:
