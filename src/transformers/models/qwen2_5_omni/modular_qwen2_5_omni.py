@@ -2632,12 +2632,13 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
                     video_second_per_grid,
                 )
 
-                inputs_embeds[:, -1, :] += self.get_input_embeddings()(
-                    torch.tensor([self.codec_bos_token], dtype=torch.long, device=inputs_embeds.device)
-                )
-                inputs_embeds[:, -2, :] += self.get_input_embeddings()(
-                    torch.tensor([self.codec_pad_token], dtype=torch.long, device=inputs_embeds.device)
-                )
+                if inputs_embeds is not None:
+                    inputs_embeds[:, -1, :] += self.get_input_embeddings()(
+                        torch.tensor([self.codec_bos_token], dtype=torch.long, device=inputs_embeds.device)
+                    )
+                    inputs_embeds[:, -2, :] += self.get_input_embeddings()(
+                        torch.tensor([self.codec_pad_token], dtype=torch.long, device=inputs_embeds.device)
+                    )
                 self.rope_deltas = rope_deltas
 
             else:
