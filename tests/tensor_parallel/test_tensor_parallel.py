@@ -21,7 +21,6 @@ import tempfile
 import warnings
 
 import pytest
-
 from safetensors import safe_open
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, is_torch_available, set_seed
