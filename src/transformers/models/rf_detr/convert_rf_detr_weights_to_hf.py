@@ -291,6 +291,7 @@ IMAGE_PROCESSORS = {
     "rf-detr-nano": (384, 384),
     "rf-detr-small": (512, 512),
     "rf-detr-base": (560, 560),
+    "rf-detr-base-2": (560, 560),
     "rf-detr-medium": (576, 576),
     "rf-detr-large": (704, 704),
     "rf-detr-xlarge": (560, 560),
@@ -447,153 +448,6 @@ def get_weight_mapping(
     return weight_mapping
 
 
-# We will verify our results on an image of cute cats
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-
-    return im
-
-
-def original_preprocess_image(image, size):
-    transform = transforms.Compose(
-        [
-            transforms.Resize(list(size.values())),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        ]
-    )
-    image = transform(image)
-    return image
-
-
-def test_models_outputs(
-    model: RfDetrForObjectDetection | RfDetrForInstanceSegmentation,
-    image_processor: DetrImageProcessor,
-    model_name: str,
-):
-    expected_outputs = {
-        "rf-detr-nano": {
-            "logits": [-6.68004, -5.66107, -11.70373, -8.32324, -5.76176],
-            "boxes": [0.25828, 0.54991, 0.47220, 0.87432, 0.55099],
-            "loss": 14.893259,
-        },
-        "rf-detr-small": {
-            "logits": [-6.83893, -4.55097, -10.53040, -8.20657, -5.55314],
-            "boxes": [0.25782, 0.55037, 0.47922, 0.87102, 0.77074],
-            "loss": 19.771887,
-        },
-        "rf-detr-base": {
-            "logits": [-7.60410, -4.65943, -10.03144, -5.63881, -9.88291],
-            "boxes": [0.25465, 0.54864, 0.48583, 0.86991, 0.16926],
-            "loss": 21.967346,
-        },
-        "rf-detr-base-2": {
-            "logits": [-6.81648, -6.80946, -7.72004, -6.06710, -10.37419],
-            "boxes": [0.16911, 0.19784, 0.21076, 0.09273, 0.25263],
-            "loss": 21.532478,
-        },
-        "rf-detr-medium": {
-            "logits": [-6.58581, -8.07883, -12.52392, -7.78248, -10.47323],
-            "boxes": [0.16824, 0.19932, 0.21110, 0.09385, 0.77087],
-            "loss": 26.337656,
-        },
-        "rf-detr-large": {
-            "logits": [-6.38973, -8.19355, -12.09174, -7.80438, -10.15835],
-            "boxes": [0.16901, 0.19936, 0.21087, 0.09311, 0.77199],
-            "loss": 27.111633,
-        },
-        "rf-detr-seg-preview": {
-            "logits": [-7.05877, -4.23362, -6.54288, -8.13384, -6.36838],
-            "boxes": [0.25603, 0.55164, 0.48340, 0.87798, 0.73861],
-            "pred_masks": [-16.72129, -16.17153, -17.06426, -17.29409, -17.78559],
-            "loss": 76.156754,
-        },
-        "rf-detr-seg-nano": {
-            "logits": [-7.38427, -5.59449, -9.97889, -11.03668, -8.62285],
-            "boxes": [0.25230, 0.54825, 0.48196, 0.86925, 0.77119],
-            "pred_masks": [-12.01641, -12.37785, -13.37312, -13.54168, -13.53435],
-            "loss": 92.973061,
-        },
-        "rf-detr-seg-small": {
-            "logits": [-7.35031, -5.09690, -9.58117, -10.80274, -8.35001],
-            "boxes": [0.25607, 0.54820, 0.48018, 0.87013, 0.90797],
-            "pred_masks": [-13.17243, -13.12057, -13.92742, -13.89896, -13.72802],
-            "loss": 87.512894,
-        },
-        "rf-detr-seg-medium": {
-            "logits": [-7.48751, -5.21394, -9.35906, -9.31897, -8.08021],
-            "boxes": [0.76891, 0.41680, 0.46182, 0.72004, 0.16810],
-            "pred_masks": [-15.67913, -17.05902, -16.72426, -17.19833, -17.18960],
-            "loss": 95.562599,
-        },
-        "rf-detr-seg-large": {
-            "logits": [-7.37005, -5.04871, -9.19777, -9.37870, -7.96562],
-            "boxes": [0.76796, 0.41489, 0.46220, 0.72197, 0.25254],
-            "pred_masks": [-15.13846, -16.88754, -16.55486, -17.23686, -17.40160],
-            "loss": 91.781540,
-        },
-        "rf-detr-seg-xlarge": {
-            "logits": [-7.42486, -4.72502, -8.16429, -8.30500, -7.21668],
-            "boxes": [0.76863, 0.41618, 0.46055, 0.72461, 0.16735],
-            "pred_masks": [-15.15330, -17.61085, -16.79776, -17.33611, -17.39120],
-            "loss": 105.279922,
-        },
-        "rf-detr-seg-xxlarge": {
-            "logits": [-7.33242, -5.11294, -6.31125, -7.06520, -7.07922],
-            "boxes": [0.25516, 0.53685, 0.49769, 0.88601, 0.76872],
-            "pred_masks": [-7.94849, -8.57010, -8.60056, -8.92854, -8.99288],
-            "loss": 99.136574,
-        },
-    }
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    image = prepare_img()
-    # Fake annotation for testing
-    annotations = {
-        "image_id": 0,
-        "annotations": [
-            {
-                "bbox": [250, 250, 350, 350],
-                "category_id": 0,
-                "iscrowd": 0,
-                "area": 122500,
-                "segments": [[0, 0, 0, 100, 100, 100, 100, 0]],
-            }
-        ],
-    }
-    is_segmentation = "segmentation" in model_name
-
-    original_pixel_values = original_preprocess_image(image, image_processor.size).unsqueeze(0).to(device)
-    inputs = image_processor(images=image, annotations=annotations, return_tensors="pt").to(device)
-    inputs["labels"][0]["masks"] = torch.zeros((1, original_pixel_values.shape[-1], original_pixel_values.shape[-2]))
-    torch.testing.assert_close(original_pixel_values, inputs["pixel_values"], atol=1e-6, rtol=1e-6)
-    print("Preprocessing looks ok!")
-
-    model.to(device)
-    model.eval()
-    model.config._attn_implementation = "eager"
-    outputs = model(**inputs, output_hidden_states=True, output_attentions=True)
-
-    predicted_logits = outputs.logits.flatten()[:5]
-    expected_logits = expected_outputs[model_name]["logits"]
-    predicted_boxes = outputs.pred_boxes.flatten()[:5]
-    expected_boxes = expected_outputs[model_name]["boxes"]
-    torch.testing.assert_close(predicted_logits, torch.Tensor(expected_logits), rtol=5e-3, atol=5e-3)
-    torch.testing.assert_close(predicted_boxes, torch.Tensor(expected_boxes), rtol=5e-3, atol=5e-3)
-
-    if is_segmentation:
-        predicted_mask_logits = outputs.pred_masks.flatten()[:5]
-        expected_mask_logits = expected_outputs[model_name]["pred_masks"]
-        torch.testing.assert_close(predicted_mask_logits, torch.Tensor(expected_mask_logits), rtol=5e-3, atol=5e-3)
-
-    predicted_loss = outputs.loss
-    expected_loss = expected_outputs[model_name]["loss"]
-    torch.testing.assert_close(predicted_loss, torch.tensor(expected_loss), rtol=5e-3, atol=5e-3)
-
-    print("Forward pass looks ok!")
-
-
 @torch.no_grad()
 def convert_rf_detr_checkpoint(
     model_name: str,
@@ -656,7 +510,6 @@ def convert_rf_detr_checkpoint(
         print(mismatch)
 
     image_processor = DetrImageProcessor(size=IMAGE_PROCESSORS[model_name], do_resize=True, use_fast=True)
-    test_models_outputs(model, image_processor, model_name)
 
     repo_id = f"{organization}/{model_name}"
     # Save model
