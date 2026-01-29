@@ -145,7 +145,7 @@ class RequestState:
     _timestamps: list[float] = field(default_factory=list)  # Timestamps of the generated tokens
     _true_initial_tokens: int = 0  # The true number of initial tokens, useful when soft resetting requests
     # TODO: remove the attribute above to _num_initial_tokens once initial_tokens is renamed
-    _new_tokens_limit: int = 2147483647  # An int to check the max number of new tokens w/out always comparing with None
+    _new_tokens_limit: int = 2147483647  # An int to check the max number of new tokens w/out always comparing w/ None
 
     def __post_init__(self):
         # If no max length is set, we set an absurdly high value which will never be reached
