@@ -200,7 +200,7 @@ class TrainingArguments:
     Configuration class for controlling all aspects of model training with the Trainer.
     TrainingArguments centralizes all hyperparameters, optimization settings, logging preferences, and infrastructure choices needed for training.
 
-    Using [`HfArgumentParser`], we can turn this class into
+    [`HfArgumentParser`] can turn this class into
     [argparse](https://docs.python.org/3/library/argparse#module-argparse) arguments that can be specified on the
     command line.
 
@@ -265,8 +265,8 @@ class TrainingArguments:
             zero in the denominator of the update rule.
         optim_target_modules (`Union[str, list[str]]`, *optional*):
             The target modules to optimize, i.e. the module names that you would like to train.
-            Currently used for the GaLore algorithm (https://huggingface.co/papers/2403.03507) and APOLLO algorithm (https://huggingface.co/papers/2412.05270).
-            See GaLore implementation (https://github.com/jiaweizzhao/GaLore) and APOLLO implementation (https://github.com/zhuhanqing/APOLLO) for more details.
+            Currently used for the [GaLore algorithm](https://huggingface.co/papers/2403.03507) and [APOLLO algorithm](https://huggingface.co/papers/2412.05270).
+            See [GaLore implementation](https://github.com/jiaweizzhao/GaLore) and [APOLLO implementation](https://github.com/zhuhanqing/APOLLO) for more details.
             You need to make sure to pass a valid GaLore or APOLLO optimizer, e.g., one of: "apollo_adamw", "galore_adamw", "galore_adamw_8bit", "galore_adafactor" and make sure that the target modules are `nn.Linear` modules only.
 
         > Regularization & Training Stability
@@ -275,11 +275,8 @@ class TrainingArguments:
             Number of update steps to accumulate gradients before performing a backward/update pass.
             Simulates larger batch sizes without additional memory. Effective batch size =
             `per_device_train_batch_size × num_devices × gradient_accumulation_steps`.
-            <Tip warning={true}>
-            When using gradient accumulation, one "step" is counted as one step with a backward pass.
-            Therefore, logging, evaluation, and saving will occur every
-            `gradient_accumulation_steps × xxx_step` training examples.
-            </Tip>
+            > [!TIP]
+            > When using gradient accumulation, one "step" is counted as one step with a backward pass. Therefore, logging, evaluation, and saving will occur every `gradient_accumulation_steps × xxx_step` training examples.
         average_tokens_across_devices (`bool`, *optional*, defaults to `True`):
             Whether or not to average tokens across devices. If enabled, will use all_reduce to synchronize
             num_tokens_in_batch for precise loss calculation. Reference:
@@ -294,7 +291,7 @@ class TrainingArguments:
             targets: 0 becomes `ε/num_labels` and 1 becomes `1 - ε + ε/num_labels`, where
             ε = `label_smoothing_factor`. Zero means no smoothing. Typical range: 0.0 to 0.1.
 
-        > Performance: Mixed Precision Training
+        > Mixed Precision Training
 
         bf16 (`bool`, *optional*, defaults to `False`):
             Enable bfloat16 (BF16) mixed precision training
@@ -314,7 +311,7 @@ class TrainingArguments:
             negligible accuracy loss. Default depends on PyTorch version. See
             [TF32 docs](https://huggingface.co/docs/transformers/perf_train_gpu_one#tf32).
 
-        > Performance: Gradient Checkpointing
+        > Gradient Checkpointing
 
         gradient_checkpointing (`bool`, *optional*, defaults to `False`):
             Enable gradient checkpointing to trade compute for memory. Reduces memory usage by
@@ -323,7 +320,7 @@ class TrainingArguments:
         gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
             Keyword arguments passed to `gradient_checkpointing_enable()`.
 
-        > Performance: Compilation
+        > Compilation
 
         torch_compile (`bool`, *optional*, defaults to `False`):
             Compile the model using PyTorch 2.0's `torch.compile()` for faster training. Can provide
@@ -338,7 +335,7 @@ class TrainingArguments:
             Options: `"default"`, `"reduce-overhead"` (minimize Python overhead), `"max-autotune"`
             (aggressive optimization, slower compile time).
 
-        > Performance: Kernels
+        > Kernels
 
         use_liger_kernel (`bool`, *optional*, defaults to `False`):
             Enable [Liger Kernel](https://github.com/linkedin/Liger-Kernel) optimizations. Increases
@@ -349,7 +346,7 @@ class TrainingArguments:
             Options typically include: `"rope"`, `"swiglu"`, `"cross_entropy"`,
             `"fused_linear_cross_entropy"`, `"rms_norm"`. If `None`, uses default configuration.
 
-        > Performance: Additional Optimizations
+        > Additional Optimizations
 
         use_cache (`bool`, *optional*, defaults to `False`):
             Whether or not to enable cache for the model. For training, this is usually not needed apart from some PEFT methods that uses `past_key_values`.
@@ -413,7 +410,7 @@ class TrainingArguments:
             The name of the project to use for logging. Currently, only used by Trackio.
         trackio_space_id (`str` or `None`, *optional*, defaults to `"trackio"`):
             The Hugging Face Space ID to deploy to when using Trackio. Should be a complete Space name like
-            `'username/reponame'` or `'orgname/reponame' `, or just `'reponame'` in which case the Space will be
+            `'username/reponame'` or `'orgname/reponame'`, or just `'reponame'` in which case the Space will be
             created in the currently-logged-in Hugging Face user's namespace. If `None`, will log to a local directory.
             Note that this Space will be public unless you set `hub_private_repo=True` or your organization's default
             is to create private Spaces."
@@ -630,7 +627,7 @@ class TrainingArguments:
             than computing them on train startup. Ignored unless `group_by_length` is `True` and the dataset is an
             instance of `Dataset`.
 
-        > Distributed Training: DDP (DistributedDataParallel)
+        > DDP (DistributedDataParallel)
 
         ddp_find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
@@ -644,11 +641,10 @@ class TrainingArguments:
             The backend to use for distributed training. Must be one of `"nccl"`, `"mpi"`, `"ccl"`, `"gloo"`, `"hccl"`.
         ddp_timeout (`int`, *optional*, defaults to 1800):
             The timeout for `torch.distributed.init_process_group` calls, used to avoid GPU socket timeouts when
-            performing slow operations in distributed runnings. Please refer the [PyTorch documentation]
-            (https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) for more
+            performing slow operations in distributed runnings. Please refer to the [PyTorch documentation](https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) for more
             information.
 
-        > Distributed Training: FSDP (Fully Sharded Data Parallel)
+        > FSDP (Fully Sharded Data Parallel)
 
         fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `None`):
             Enable PyTorch Fully Sharded Data Parallel (FSDP) for distributed training. Options:
@@ -720,16 +716,15 @@ class TrainingArguments:
                     used when the xla flag is set to true, and an auto wrapping policy is specified through
                     fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
 
-        > Distributed Training: DeepSpeed
+        > DeepSpeed
 
         deepspeed (`str` or `dict`, *optional*):
              Enable [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) integration. Value is either:
                 - Path to DeepSpeed JSON config file: `"ds_config.json"`
                 - Loaded config as dictionary
-          <Tip warning={true}>
-          If using ZeRO initialization, instantiate your model *after* initializing
+          > [!TIP]
+          > If using ZeRO initialization, instantiate your model *after* initializing
           `TrainingArguments`, otherwise ZeRO won't be applied.
-          </Tip>
 
         > Debugging & Profiling (Experimental)
 
