@@ -964,16 +964,22 @@ class GenerationMixin(ContinuousMixin):
             pass
         # user input but doesn't start with decoder_start_token_id -> prepend decoder_start_token_id (and adjust
         # decoder_attention_mask if provided)
-        elif (decoder_input_ids[:, 0] != decoder_start_token_id[:, 0]).all().item():
-            decoder_input_ids = torch.cat([decoder_start_token_id, decoder_input_ids], dim=-1)
-            if "decoder_attention_mask" in model_kwargs:
-                decoder_attention_mask = model_kwargs["decoder_attention_mask"]
-                decoder_attention_mask = torch.cat(
-                    (torch.ones_like(decoder_attention_mask)[:, :1], decoder_attention_mask),
-                    dim=-1,
-                )
-                model_kwargs["decoder_attention_mask"] = decoder_attention_mask
+        else:
+            # compute condition on-device (no sync yet)
+            decoder_start_mismatch = (
+                decoder_input_ids[:, 0] != decoder_start_token_id[:, 0]
+            ).all()  # scalar boolean tensor on device
 
+            # single explicit sync point (can be batched with other checks later)
+            if decoder_start_mismatch.item():
+                decoder_input_ids = torch.cat([decoder_start_token_id, decoder_input_ids], dim=-1)
+                if "decoder_attention_mask" in model_kwargs:
+                    decoder_attention_mask = model_kwargs["decoder_attention_mask"]
+                    decoder_attention_mask = torch.cat(
+                        (torch.ones_like(decoder_attention_mask)[:, :1], decoder_attention_mask),
+                        dim=-1,
+                    )
+                    model_kwargs["decoder_attention_mask"] = decoder_attention_mask
         return decoder_input_ids, model_kwargs
 
     @staticmethod
