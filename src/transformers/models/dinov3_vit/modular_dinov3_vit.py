@@ -313,11 +313,12 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        output_attentions: bool = False,
     ) -> torch.Tensor:
         # Attention with residual connection
         residual = hidden_states
         hidden_states = self.norm1(hidden_states)
-        hidden_states, _ = self.attention(
+        hidden_states, attn_weights = self.attention(
             hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
@@ -332,7 +333,12 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
         hidden_states = self.layer_scale2(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
 
-        return hidden_states
+        outputs = (hidden_states, )
+
+        if output_attentions:
+            outputs = outputs + (attn_weights,)
+
+        return outputs
 
 
 @auto_docstring
@@ -386,6 +392,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: torch.Tensor | None = None,
+        output_attentions: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -393,21 +400,31 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
             pre-training.
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        all_attentions = () if output_attentions else None
 
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         position_embeddings = self.rope_embeddings(pixel_values)
 
         for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(
+            layer_outputs = layer_module(
                 hidden_states,
                 position_embeddings=position_embeddings,
+                output_attentions=output_attentions
             )
+            hidden_states = layer_outputs[0]
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
+
 
         sequence_output = self.norm(hidden_states)
         pooled_output = sequence_output[:, 0, :]
 
-        return BaseModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            attentions=all_attentions)
 
 
 @auto_docstring
