@@ -2686,7 +2686,7 @@ class TrainingArguments:
 
         if self.fsdp_config is not None and isinstance(self.fsdp_config, dict):
             for k in list(self.fsdp_config.keys()):
-                if k.startswith("fsdp_"):
+                if k.startswith("fsdp_") and k != "fsdp_version":
                     v = self.fsdp_config.pop(k)
                     self.fsdp_config[k[5:]] = v
 
@@ -2730,6 +2730,7 @@ class TrainingArguments:
         # accelerate integration for FSDP
         fsdp_plugin_args = None
         if len(self.fsdp) > 0 and not self.fsdp_config["xla"]:
+            from accelerate.utils import FullyShardedDataParallelPlugin
             from accelerate.utils.constants import (
                 FSDP_AUTO_WRAP_POLICY,
                 FSDP_SHARDING_STRATEGY,
@@ -2738,7 +2739,10 @@ class TrainingArguments:
             fsdp_plugin_args = {}
             for fsdp_option in self.fsdp:
                 if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
-                    fsdp_plugin_args["sharding_strategy"] = fsdp_option
+                    # Set deprecated sharding_strategy from CLI (plugin maps to reshard_after_forward)
+                    # Skip if config has explicit reshard_after_forward (prioritize config)
+                    if "reshard_after_forward" not in self.fsdp_config:
+                        fsdp_plugin_args["sharding_strategy"] = fsdp_option
                 elif fsdp_option == FSDPOption.OFFLOAD:
                     fsdp_plugin_args["cpu_offload"] = True
                 elif fsdp_option == FSDPOption.AUTO_WRAP:
@@ -2750,7 +2754,8 @@ class TrainingArguments:
                         fsdp_plugin_args["transformer_cls_names_to_wrap"] = ",".join(
                             self.fsdp_config["transformer_layer_cls_to_wrap"]
                         )
-            fsdp_version = int(self.fsdp_config.get("version", 1))
+
+            fsdp_version = int(self.fsdp_config.get("fsdp_version", 1))
             fsdp_plugin_args["fsdp_version"] = fsdp_version
             prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
             if fsdp_version == 2:
@@ -2781,6 +2786,12 @@ class TrainingArguments:
             os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = cpu_ram_efficient_loading
 
             fsdp_plugin_args["sync_module_states"] = str_to_bool(sync_module_states)
+
+            # Pull allowed parameters from fsdp_config
+            ALLOWED_FSDP_PARAMS = {f.name for f in fields(FullyShardedDataParallelPlugin)}
+            for key in ALLOWED_FSDP_PARAMS:
+                if key in self.fsdp_config and key not in fsdp_plugin_args:
+                    fsdp_plugin_args[key] = self.fsdp_config[key]
 
         return fsdp_plugin_args
 
