@@ -29,17 +29,11 @@ EPILOG_TXT = """Example:
 def get_config(checkpoint):
     base_config = AutoConfig.from_pretrained(checkpoint, trust_remote_code=True)
     if checkpoint == "nomic-ai/nomic-embed-text-v1.5":
-        return NomicBertConfig(
-            vocab_size=30528,
-            rotary_emb_fraction=base_config.rotary_emb_fraction,
-            rotary_emb_base=base_config.rotary_emb_base,
-            rotary_emb_scale_base=base_config.rotary_emb_scale_base,
-            rotary_emb_interleaved=base_config.rotary_emb_interleaved,
-            type_vocab_size=base_config.type_vocab_size,
-            pad_vocab_size_multiple=base_config.pad_vocab_size_multiple,
-            tie_word_embeddings=base_config.tie_word_embeddings,
-            max_position_embeddings=base_config.max_position_embeddings,
-        )
+        config_dict = base_config.to_dict()
+        keys_to_remove = ["add_cross_attention", "is_decoder", "use_cache"]
+        for key in keys_to_remove:
+            config_dict.pop(key, None)
+        return NomicBertConfig(**config_dict)
     return base_config
 
 

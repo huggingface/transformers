@@ -29,6 +29,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import check_model_inputs
 from ..bert.modeling_bert import (
     BertEmbeddings,
     BertEncoder,
@@ -54,7 +55,11 @@ from ..bert.modeling_bert import (
     BertSelfAttention,
     BertSelfOutput,
 )
-from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
+from ..llama.modeling_llama import (
+    LlamaRotaryEmbedding,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+)
 
 
 class NomicBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
@@ -226,9 +231,21 @@ class NomicBertSelfAttention(BertSelfAttention):
             config.num_key_value_heads if config.num_key_value_heads is not None else config.num_attention_heads
         )
         self.num_key_value_groups = self.num_attention_heads // self.num_kv_heads
-        self.q_proj = nn.Linear(config.hidden_size, self.num_attention_heads * self.attention_head_size, bias=config.attention_bias)
-        self.k_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.attention_head_size, bias=config.attention_bias)
-        self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.attention_head_size, bias=config.attention_bias)
+        self.q_proj = nn.Linear(
+            config.hidden_size,
+            self.num_attention_heads * self.attention_head_size,
+            bias=config.attention_bias,
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size,
+            self.num_kv_heads * self.attention_head_size,
+            bias=config.attention_bias,
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size,
+            self.num_kv_heads * self.attention_head_size,
+            bias=config.attention_bias,
+        )
 
         self.is_causal = False
 
@@ -239,7 +256,6 @@ class NomicBertSelfAttention(BertSelfAttention):
         position_embeddings=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        batch_size, seq_len, _ = hidden_states.size()
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.attention_head_size)
 
@@ -300,7 +316,7 @@ class NomicBertAttention(nn.Module):
         # Process context layer (always index 0)
         attention_output = self.output(self_outputs[0], hidden_states)
 
-        return (attention_output,)
+        return attention_output
 
 
 class NomicBertIntermediate(nn.Module):
@@ -346,21 +362,23 @@ class NomicBertLayer(BertLayer):
         position_embeddings: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        self_attention_outputs = self.attention(
+        attention_output = self.attention(
             hidden_states,
             attention_mask,
             position_embeddings=position_embeddings,
             **kwargs,
         )
-        attention_output = self_attention_outputs[0]
 
         hidden_states = self.attention.output(attention_output, hidden_states)
 
         layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, hidden_states
+            self.feed_forward_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            hidden_states,
         )
 
-        return (layer_output,)
+        return layer_output
 
 
 class NomicBertEncoder(BertEncoder):
@@ -380,14 +398,12 @@ class NomicBertEncoder(BertEncoder):
         **kwargs: Unpack[TransformersKwargs],
     ):
         for i, layer_module in enumerate(self.layer):
-            layer_outputs = layer_module(
+            hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
@@ -419,7 +435,10 @@ class NomicBertPreTrainingHeads(BertPreTrainingHeads):
 
 
 class NomicBertPreTrainedModel(BertPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": NomicBertLayer,
+        "attentions": NomicBertSelfAttention,
+    }
 
 
 class NomicBertForPreTrainingOutput(BertForPreTrainingOutput):
@@ -437,6 +456,7 @@ class NomicBertModel(BertModel):
 
         self.post_init()
 
+    @check_model_inputs
     def forward(
         self,
         input_ids=None,
@@ -481,10 +501,7 @@ class NomicBertModel(BertModel):
 
         position_embeddings = self.rotary_emb(embedding_output, position_ids)
 
-        extended_attention_mask = self.get_extended_attention_mask(
-            binary_mask,
-            (batch_size, seq_length)
-        )
+        extended_attention_mask = self.get_extended_attention_mask(binary_mask, (batch_size, seq_length))
 
         encoder_outputs = self.encoder(
             embedding_output,

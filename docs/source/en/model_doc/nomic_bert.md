@@ -30,7 +30,7 @@ The NomicBERT model currently has no academic papers specifically written about 
 - No dropout
 
 > [!TIP]
-> - NomicBERT can handle very long sequences efficiently (up to 2048 tokens by default).
+> - NomicBERT can handle long sequences efficiently (up to 2048 tokens by default).
 > - For masked language modeling, use `NomicBertForMaskedLM`.
 > - Use smaller configs for testing locally to save memory and speed up unit tests.
 > - Supports various heads: classification, QA, token classification, multiple choice, etc.
@@ -99,10 +99,16 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 ## Notes
 
 - For extremely long sequences, consider batching (gradient checkpointing is currently not supported) to save memory.
+- NomicBERT uses Rotary Positional Embeddings (RoPE). For correct positional encoding **right padding** must be used
 
 ## NomicBertConfig
 
 [[autodoc]] NomicBertConfig
+
+## NomicBertModel
+
+[[autodoc]] NomicBertModel
+    - forward
 
 ## NomicBertForMaskedLM
 
@@ -131,11 +137,6 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 ## NomicBertForTokenClassification
 
 [[autodoc]] NomicBertForTokenClassification
-
-## NomicBertModel
-
-[[autodoc]] NomicBertModel
-    - forward
 
 ## NomicBertLMHeadModel
 
