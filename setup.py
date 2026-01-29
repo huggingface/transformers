@@ -200,7 +200,7 @@ extras["deepspeed"] = deps_list("deepspeed", "accelerate")
 extras["optuna"] = deps_list("optuna")
 extras["integrations"] = deps_list("kernels", "optuna", "codecarbon")
 if PYTHON_MINOR_VERSION < 14:
-    extras["ray"] = deps_list("ray[tune]>=2.7.0")
+    extras["ray"] = deps_list("ray[tune]")
     extras["integrations"] += extras["ray"]
 extras["codecarbon"] = deps_list("codecarbon")
 extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"]
