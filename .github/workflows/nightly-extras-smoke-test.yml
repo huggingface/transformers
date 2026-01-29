@@ -19,21 +19,9 @@ jobs:
       - name: Extract Python versions from setup.py
         id: extract-versions
         run: |
-          python - <<'EOF'
-          import json
-          import sys
-          import os
-          sys.path.insert(0, '.')
-          import setup
-
-          min_ver, max_ver = setup.SUPPORTED_PYTHON_VERSIONS
-          versions = [f"3.{v}" for v in range(min_ver, max_ver + 1)]
-
-          print(f"Supported Python versions: {versions}")
-
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f"versions={json.dumps(versions)}\n")
-          EOF
+          VERSIONS=$(python utils/extract_metadata.py python-versions)
+          echo "Supported Python versions: $VERSIONS"
+          echo "versions=$VERSIONS" >> $GITHUB_OUTPUT
 
   test-extras:
     name: Test extras on Python ${{ matrix.python-version }}
@@ -57,22 +45,9 @@ jobs:
       - name: Extract extras for this Python version
         id: get-extras
         run: |
-          python - <<'EOF'
-          import sys
-          sys.path.insert(0, '.')
-          import setup
-
-          # Get all extras keys for this Python version
-          extras = sorted(setup.extras.keys())
-
-          print(f"Found {len(extras)} extras for Python {sys.version_info.major}.{sys.version_info.minor}:")
-          for extra in extras:
-              print(f"  - {extra}")
-
-          # Write to file for next step
-          with open('extras_list.txt', 'w') as f:
-              f.write('\n'.join(extras))
-          EOF
+          python utils/extract_metadata.py extras > extras_list.txt
+          echo "Found $(wc -l < extras_list.txt) extras for Python ${{ matrix.python-version }}"
+          cat extras_list.txt
 
       - name: Install base package
         run: |

@@ -214,13 +214,7 @@ jobs:
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.10
-                    python - \<<'EOF' > extras_list.txt
-                    import sys
-                    sys.path.insert(0, '.')
-                    import setup
-                    for extra in sorted(setup.extras.keys()):
-                        print(extra)
-                    EOF
+                    python utils/extract_metadata.py extras > extras_list.txt
 
                     # Split across parallel nodes
                     circleci tests split extras_list.txt > my_extras.txt
@@ -252,13 +246,7 @@ jobs:
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.11
-                    python - \<<'EOF' > extras_list.txt
-                    import sys
-                    sys.path.insert(0, '.')
-                    import setup
-                    for extra in sorted(setup.extras.keys()):
-                        print(extra)
-                    EOF
+                    python utils/extract_metadata.py extras > extras_list.txt
 
                     # Split across parallel nodes
                     circleci tests split extras_list.txt > my_extras.txt
@@ -290,13 +278,7 @@ jobs:
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.12
-                    python - \<<'EOF' > extras_list.txt
-                    import sys
-                    sys.path.insert(0, '.')
-                    import setup
-                    for extra in sorted(setup.extras.keys()):
-                        print(extra)
-                    EOF
+                    python utils/extract_metadata.py extras > extras_list.txt
 
                     # Split across parallel nodes
                     circleci tests split extras_list.txt > my_extras.txt
@@ -328,13 +310,7 @@ jobs:
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.13
-                    python - \<<'EOF' > extras_list.txt
-                    import sys
-                    sys.path.insert(0, '.')
-                    import setup
-                    for extra in sorted(setup.extras.keys()):
-                        print(extra)
-                    EOF
+                    python utils/extract_metadata.py extras > extras_list.txt
 
                     # Split across parallel nodes
                     circleci tests split extras_list.txt > my_extras.txt
@@ -366,13 +342,7 @@ jobs:
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.14
-                    python - \<<'EOF' > extras_list.txt
-                    import sys
-                    sys.path.insert(0, '.')
-                    import setup
-                    for extra in sorted(setup.extras.keys()):
-                        print(extra)
-                    EOF
+                    python utils/extract_metadata.py extras > extras_list.txt
 
                     # Split across parallel nodes
                     circleci tests split extras_list.txt > my_extras.txt
