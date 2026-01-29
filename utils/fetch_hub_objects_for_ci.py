@@ -267,13 +267,24 @@ if __name__ == "__main__":
         # `mistral_common.tokens.tokenizers.utils.download_tokenizer_from_hf_hub` which (probably) doesn't have the cache.
         if is_mistral_common_available():
             from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
+            from mistral_common.tokens.tokenizers.utils import list_local_hf_repo_files
 
             from transformers import AutoTokenizer
             from transformers.tokenization_mistral_common import MistralCommonBackend
 
             repo_id = "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503"
             AutoTokenizer.from_pretrained(repo_id, tokenizer_type="mistral")
-            MistralCommonBackend.from_pretrained(repo_id)
+
+            # determine if we already have this downloaded
+            local_files_only = len(list_local_hf_repo_files(repo_id, revision=None)) > 0
+            _ = MistralCommonBackend.from_pretrained(
+                repo_id,
+                local_files_only=local_files_only,
+                # This is a hack as `list_local_hf_repo_files` from `mistral_common` has a bug
+                # TODO: Discuss with `mistral-common` maintainers: after a fix being done there, remove this `revision` hack
+                revision=None,
+            )
+
             MistralTokenizer.from_hf_hub(repo_id)
 
             repo_id = "mistralai/Voxtral-Mini-3B-2507"
