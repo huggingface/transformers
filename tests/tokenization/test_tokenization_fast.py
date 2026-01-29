@@ -258,8 +258,10 @@ class TokenizerVersioningTest(unittest.TestCase):
         self.assertIn("huggingface", json_tokenizer["model"]["vocab"])
 
         # Testing an older version by monkey-patching the version in the module it's used.
-        import transformers as old_transformers
         from unittest.mock import patch
+
+        import transformers as old_transformers
+
         # Matt: The old test modified the module level version numbers
         # which was (I think) the cause of strange flaky tests depending on test ordering.
         # Using a context manager ensures the version mutation doesn't leak out of this test
