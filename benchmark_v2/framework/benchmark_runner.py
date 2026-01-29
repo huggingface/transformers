@@ -205,14 +205,15 @@ class BenchmarkRunner:
         # Load model
         self.logger.debug(f"Loading model {model_id} on device {config.device}...")
         dtype = getattr(torch, config.dtype.removeprefix("torch."))
+        use_kernels = config.kernelize and kernelize is not None and Mode is not None
         self.model = AutoModelForCausalLM.from_pretrained(
-            model_id, dtype=dtype, attn_implementation=config.attn_implementation, generation_config=generation_config
+            model_id,
+            dtype=dtype,
+            attn_implementation=config.attn_implementation,
+            generation_config=generation_config,
+            use_kernels=use_kernels,
         )
         self.model = self.model.eval().to(config.device)
-
-        # Kernelize the model if needed
-        if config.kernelize and kernelize is not None and Mode is not None:
-            self.model = kernelize(self.model, mode=Mode.INFERENCE)
 
     def run_benchmark(self, config: BenchmarkConfig, num_tokens_to_profile: int = 0) -> BenchmarkResult | None:
         """Run a single benchmark with the given model ID and config."""
