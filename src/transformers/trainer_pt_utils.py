@@ -24,7 +24,7 @@ import os
 import re
 import sys
 import warnings
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from itertools import chain
@@ -508,7 +508,50 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         drop_last: bool = False,
         lengths: list[int] | None = None,
         model_input_name: str | None = None,
+        length_func: Callable[[Any], int] | None = None,
+        mega_batch_mult: int | None = None,
     ):
+        """
+        **Warning**: This sampler may be slow to initialize if lengths is not provided. It is
+        recommended to cache the resulting lengths object after the first run to speed up subsequent runs.
+
+        Args:
+            batch_size (`int`):
+                The batch size to use for sampling.
+            dataset (`Dataset`, *optional*):
+                The dataset to sample from. Either `dataset` or `lengths` must be provided.
+            num_replicas (`int`, *optional*):
+                Number of processes participating in distributed training. Will default to
+                the dist.get_world_size() if not provided.
+            rank (`int`, *optional*):
+                Rank of the current process within `num_replicas`. Will default to the
+                dist.get_rank() if not provided.
+            seed (`int`, *optional*, defaults to `0`):
+                Random seed used for shuffling.
+            drop_last (`bool`, *optional*, defaults to `False`):
+                If `True`, the sampler will drop the tail of the data to make it evenly
+                divisible across the number of replicas.
+            lengths (`list[int]`, *optional*):
+                Pre-computed lengths of the dataset items. If not provided, lengths will be
+                inferred from the dataset using `length_func` or the default method.
+            model_input_name (`str`, *optional*):
+                The name of the key in the dataset items to use for computing lengths.
+                Defaults to `"input_ids"` if not specified. Ignored if length_func is provided.
+            length_func (`Callable[[Any], int]`, *optional*):
+                A function that takes a dataset item and returns its length. If not provided,
+                the length will be inferred from the `model_input_name` key.
+            mega_batch_mult (`int`, *optional*):
+                The sampler takes mega_batch_mult * batch_size number of samples into memory
+                before sorting them by length. This parameter controls the size of these mega
+                batches. If not provided, it will default to min(len(dataset) // (batch_size * 4), 50).
+
+        Raises:
+            ValueError: If neither `dataset` nor `lengths` is provided.
+            RuntimeError: If distributed package is not available when `num_replicas` or `rank`
+                is not provided.
+            ValueError: If lengths cannot be automatically inferred from the dataset.
+        """
+
         if dataset is None and lengths is None:
             raise ValueError("One of dataset and lengths must be provided.")
         if num_replicas is None:
@@ -525,15 +568,23 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         self.rank = rank
         self.epoch = 0
         self.drop_last = drop_last
+        self.mega_batch_mult = mega_batch_mult
 
         if lengths is None:
-            model_input_name = model_input_name if model_input_name is not None else "input_ids"
-            if not isinstance(dataset[0], (dict, BatchEncoding)) or model_input_name not in dataset[0]:
-                raise ValueError(
-                    "Can only automatically infer lengths for datasets whose items are dictionaries with an "
-                    f"'{model_input_name}' key."
-                )
-            lengths = [len(feature[model_input_name]) for feature in dataset]
+            if length_func is None:
+                model_input_name = model_input_name if model_input_name is not None else "input_ids"
+                if not isinstance(dataset[0], (dict, BatchEncoding)) or model_input_name not in dataset[0]:
+                    raise ValueError(
+                        "Can only automatically infer lengths for datasets whose items are dictionaries with an "
+                        f"'{model_input_name}' key."
+                    )
+
+                def _length_func(x):
+                    return len(x[model_input_name])
+
+                length_func = _length_func
+
+            lengths = [length_func(feature) for feature in dataset]
         elif isinstance(lengths, torch.Tensor):
             logger.info(
                 "If lengths is a torch.Tensor, DistributedLengthGroupedSampler will be slow. Converting lengths to"
@@ -559,7 +610,9 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         # Deterministically shuffle based on epoch and seed
         g = torch.Generator()
         g.manual_seed(self.seed + self.epoch)
-        indices = get_length_grouped_indices(self.lengths, self.batch_size, generator=g)
+        indices = get_length_grouped_indices(
+            self.lengths, self.batch_size, mega_batch_mult=self.mega_batch_mult, generator=g
+        )
 
         if not self.drop_last:
             # add extra samples to make it evenly divisible
