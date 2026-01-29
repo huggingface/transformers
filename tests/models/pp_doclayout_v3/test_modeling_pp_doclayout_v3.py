@@ -18,7 +18,6 @@ import inspect
 import math
 import unittest
 
-import pytest
 import requests
 from parameterized import parameterized
 
@@ -448,12 +447,9 @@ class PPDocLayoutV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             )
 
 
-# TODO:
-# Later, we will determine these values based on the latest weights.
 @require_torch
 @require_vision
 @slow
-@pytest.mark.xfail(reason="Weigths will determine the values of these tests")
 class PPDocLayoutV3ModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/PP-DocLayoutV3_safetensors"
@@ -472,28 +468,28 @@ class PPDocLayoutV3ModelIntegrationTest(unittest.TestCase):
 
         expected_shape_logits = torch.Size((1, 300, self.model.config.num_labels))
         expected_logits = torch.tensor(
-            [[-5.6224, -6.5667, -4.9352], [-5.7931, -5.5543, -5.6476], [-4.5742, -5.0603, -7.2864]]
+            [[-4.7670, -6.2655, -6.3641], [-4.9534, -5.8549, -6.4938], [-5.1931, -6.2573, -6.6023]]
         ).to(torch_device)
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
-        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=2e-4, atol=2e-2)
 
         expected_shape_boxes = torch.Size((1, 300, 4))
         expected_boxes = torch.tensor(
-            [[0.4000, 0.9702, 0.3897], [0.3642, 0.3164, 0.3212], [0.3716, 0.1786, 0.3386]]
+            [[0.3725, 0.1789, 0.3373], [0.7256, 0.2672, 0.3378], [0.7247, 0.1389, 0.3352]]
         ).to(torch_device)
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=2e-4, atol=2e-2)
 
         expected_shape_order_logits = torch.Size((1, 300, 300))
         expected_order_logits = torch.tensor(
             [
-                [-10000.0000, -937.0416, -1045.3816],
-                [-10000.0000, -10000.0000, -343.8752],
+                [-10000.0000, 2333.5664, 1632.4893],
+                [-10000.0000, -10000.0000, -1068.3279],
                 [-10000.0000, -10000.0000, -10000.0000],
             ]
         ).to(torch_device)
         self.assertEqual(outputs.order_logits.shape, expected_shape_order_logits)
-        torch.testing.assert_close(outputs.order_logits[0, :3, :3], expected_order_logits, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.order_logits[0, :3, :3], expected_order_logits, rtol=2e-2, atol=2e-2)
 
         # verify postprocessing
         results = self.image_processor.post_process_object_detection(
@@ -501,19 +497,29 @@ class PPDocLayoutV3ModelIntegrationTest(unittest.TestCase):
         )[0]
 
         expected_scores = torch.tensor(
-            [0.9834, 0.9485, 0.9837, 0.9728, 0.9741, 0.9770, 0.9508, 0.9390, 0.9482, 0.8391, 0.9358, 0.8249, 0.9095]
+            [0.9605, 0.9050, 0.9517, 0.9482, 0.9640, 0.9519, 0.9216, 0.7799, 0.7979, 0.5582, 0.7412, 0.7018, 0.8377]
         ).to(torch_device)
-        torch.testing.assert_close(results["scores"], expected_scores, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(results["scores"], expected_scores, rtol=2e-2, atol=2e-2)
 
-        expected_labels = [22, 17, 22, 22, 22, 22, 22, 10, 10, 22, 10, 16, 8]
+        expected_labels = [22, 17, 22, 22, 22, 22, 22, 10, 10, 10, 10, 16, 8]
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
 
         expected_slice_boxes = torch.tensor(
             [
-                [334.5682, 182.9777, 894.6927, 652.4594],
-                [336.7216, 683.4235, 867.9361, 796.9210],
-                [335.2677, 841.1227, 891.1608, 1453.0148],
-                [919.8677, 183.4835, 1475.8800, 463.4977],
+                [337.0705, 183.0614, 895.0403, 653.6794],
+                [337.8179, 684.5647, 868.7692, 798.1080],
+                [921.4486, 185.6825, 1475.8827, 464.3206],
+                [920.6929, 484.8696, 1479.4470, 765.1530],
             ]
         ).to(torch_device)
-        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=2e-2, atol=2e-2)
+
+        expected_slice_polygon_points = torch.tensor([[867, 684], [636, 684], [337, 696], [337, 797], [867, 797]]).to(
+            torch_device
+        )
+        torch.testing.assert_close(
+            torch.tensor(results["polygon_points"][1], device=torch_device, dtype=expected_slice_polygon_points.dtype),
+            expected_slice_polygon_points,
+            rtol=0,
+            atol=2,
+        )

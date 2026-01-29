@@ -285,8 +285,8 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
             order_seq = order_seq[score >= threshold]
             order_seq, indices = torch.sort(order_seq)
             polygon_points = self._extract_polygon_points_by_masks(
-                box[score >= threshold][indices].detach().numpy(),
-                mask[score >= threshold][indices].detach().numpy(),
+                box[score >= threshold][indices].detach().cpu().numpy(),
+                mask[score >= threshold][indices].detach().cpu().numpy(),
                 [self.size["width"] / target_size[1], self.size["height"] / target_size[0]],
             )
             results.append(
