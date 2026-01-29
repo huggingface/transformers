@@ -19,6 +19,7 @@ from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
 )
+from ...utils import auto_docstring
 from ..sam2.image_processing_sam2_fast import Sam2ImageProcessorFast
 
 
@@ -49,7 +50,7 @@ def _scale_boxes(boxes, target_sizes):
     boxes = boxes * scale_factor
     return boxes
 
-
+@auto_docstring
 class Sam3ImageProcessorFast(Sam2ImageProcessorFast):
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
