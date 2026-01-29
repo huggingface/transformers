@@ -22,7 +22,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
@@ -43,7 +43,7 @@ from ..mixtral.modeling_mixtral import (
 )
 
 
-class MiniMaxM2Config(PreTrainedConfig):
+class MiniMaxM2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`MiniMaxM2Model`]. It is used to instantiate an
     MiniMaxM2 model according to the specified arguments, defining the model architecture. Instantiating a configuration

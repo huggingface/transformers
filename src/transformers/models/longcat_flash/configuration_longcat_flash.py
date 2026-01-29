@@ -15,10 +15,10 @@
 """LongCat Flash model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class LongcatFlashConfig(PreTrainedConfig):
+class LongcatFlashConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`LongcatFlashModel`]. It is used to instantiate
     a LongCat Flash model according to the specified arguments, defining the model architecture. Instantiating a

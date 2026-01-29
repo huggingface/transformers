@@ -15,10 +15,10 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class Glm4Config(PreTrainedConfig):
+class Glm4Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Glm4Model`]. It is used to instantiate an Glm4
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

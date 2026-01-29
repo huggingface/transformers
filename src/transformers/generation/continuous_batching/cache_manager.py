@@ -99,7 +99,8 @@ class BlockManager:
         for _ in range(block_to_uninitialize):
             id_to_uninitialize = self._init_block_ids.popitem()[0]
             block = self._id_to_block[id_to_uninitialize]
-            self._hash_to_id.pop(block.hash)
+            # Since the block is initialized it must have a hash, thus no need to check .hash is not None
+            self._hash_to_id.pop(block.hash)  # ty:ignore[invalid-argument-type]
             self._uninit_block_ids.append(id_to_uninitialize)
         return True
 
@@ -124,7 +125,7 @@ class BlockManager:
 
     def fork_blocks(
         self, parent_blocks: list[int], num_forks: int, shareable: bool, group_id: int
-    ) -> tuple[list[list[int]], list[int], list[int]]:
+    ) -> tuple[list[list[int]] | None, list[int], list[int]]:
         """Fork a given list of (parent_blocks) as many times as (num_forks). If the blocks are (shareable), we use
         reference on the blocks that are complete. Otherwise, we allocate new blocks and keep track of their indices to
         later copy the physical cache. For instance, when forking 4 blocks for 2 children:
@@ -307,10 +308,6 @@ class CacheAllocator(ABC):
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
         """Returns the physical indices of where to write request_id's cache in the cache tensor."""
 
-    @abstractmethod
-    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
-        """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
-
     def fork_blocks(
         self, parent_request_id: str, children_request_ids: list[str], block_manager: BlockManager
     ) -> tuple[list[int], list[int]]:
@@ -405,11 +402,6 @@ class FullAttentionCacheAllocator(CacheAllocator):
             physical_indices.append(physical_index)
         return physical_indices
 
-    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
-        """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
-        seqlens_k = past_length + query_length
-        return "full_attention", seqlens_k
-
 
 class SlidingAttentionCacheAllocator(CacheAllocator):
     """Cache manager for sliding window attention layers."""
@@ -496,8 +488,3 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         if padding_length > 0:
             physical_indices = [-1] * padding_length + physical_indices
         return physical_indices
-
-    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
-        """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
-        seqlens_k = query_length + min(past_length, self.sliding_window - 1)
-        return "sliding_attention", seqlens_k

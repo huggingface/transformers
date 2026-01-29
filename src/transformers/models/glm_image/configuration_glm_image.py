@@ -19,7 +19,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
 class GlmImageVQVAEConfig(PreTrainedConfig):
@@ -138,7 +138,7 @@ class GlmImageVisionConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
 
-class GlmImageTextConfig(PreTrainedConfig):
+class GlmImageTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`GlmImageTextModel`]. It is used to instantiate a
     GLM-Image model according to the specified arguments, defining the model architecture. Instantiating a
@@ -184,6 +184,8 @@ class GlmImageTextConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
         vision_vocab_size (`int`, *optional*, defaults to 16512):
             Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented
             by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
@@ -236,6 +238,7 @@ class GlmImageTextConfig(PreTrainedConfig):
         use_cache: bool | None = True,
         attention_dropout: float | None = 0.0,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        pad_token_id: int | None = None,
         vision_vocab_size: int | None = 16512,
         attention_bias: bool | None = True,
         **kwargs,
@@ -261,6 +264,7 @@ class GlmImageTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
+        self.pad_token_id = pad_token_id
 
         super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 

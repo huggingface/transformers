@@ -32,7 +32,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
@@ -279,7 +279,7 @@ class Phi4MultimodalAudioConfig(PreTrainedConfig):
         self.nemo_final_size = length
 
 
-class Phi4MultimodalConfig(Phi3Config):
+class Phi4MultimodalConfig(Phi3Config, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Phi4MultimodalModel`]. It is used to instantiate a
     Phi4Multimodal model according to the specified arguments, defining the model architecture. Instantiating a configuration

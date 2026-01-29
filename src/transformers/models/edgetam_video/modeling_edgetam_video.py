@@ -537,7 +537,7 @@ class EdgeTamVideoRoPECrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class EdgeTamVideoTwoWayAttentionBlock(nn.Module):
+class EdgeTamVideoTwoWayAttentionBlock(GradientCheckpointingLayer):
     def __init__(self, config: EdgeTamVideoMaskDecoderConfig, skip_first_layer_pe: bool = False):
         """
         A transformer block with four layers:

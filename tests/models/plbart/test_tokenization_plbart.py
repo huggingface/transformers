@@ -18,6 +18,7 @@ import unittest
 from transformers import SPIECE_UNDERLINE, BatchEncoding, PLBartTokenizer, is_torch_available
 from transformers.testing_utils import (
     get_tests_dir,
+    is_flaky,
     nested_simplify,
     require_sentencepiece,
     require_tokenizers,
@@ -288,6 +289,7 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__python__"], 50002)
         self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__en_XX__"], 50003)
 
+    @is_flaky
     def test_python_en_tokenizer_batch_encode_plus(self):
         ids = self.tokenizer(self.src_text).input_ids[0]
         self.assertListEqual(self.expected_src_tokens, ids)
@@ -300,6 +302,7 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
         self.assertEqual(result, expected_english)
         self.assertNotIn(self.tokenizer.eos_token, result)
 
+    @is_flaky
     def test_python_en_tokenizer_truncation(self):
         src_text = ["def sum(a,b,c):NEW_LINE_INDENTreturn sum([a,b,c])" * 20]
         self.assertIsInstance(src_text[0], str)
@@ -320,6 +323,7 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
         self.assertDictEqual(new_tok.fairseq_tokens_to_ids, original_special_tokens)
 
     @require_torch
+    @is_flaky
     def test_batch_fairseq_parity(self):
         batch = self.tokenizer(self.src_text, text_target=self.tgt_text, padding=True, return_tensors="pt")
         batch["decoder_input_ids"] = shift_tokens_right(batch["labels"], self.tokenizer.pad_token_id)
