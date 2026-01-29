@@ -198,8 +198,8 @@ extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcs
 extras["kernels"] = deps_list("kernels")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
-if PYTHON_MINOR_VERSION < 14:
-    extras["mistral-common"] = deps_list("mistral-common[image]")
+if PYTHON_MINOR_VERSION < 15:
+    extras["mistral-common"] = deps_list("mistral-common")
 extras["chat_template"] = deps_list("jinja2", "jmespath")
 extras["sklearn"] = deps_list("scikit-learn")
 extras["accelerate"] = deps_list("accelerate")
@@ -261,9 +261,11 @@ extras["testing"] = (
     + extras["quality"]
     + extras["retrieval"]
     + extras["sentencepiece"]
-    + extras["mistral-common"]
     + extras["serving"]
 )
+if PYTHON_MINOR_VERSION < 14:
+    extras["testing"] += extras["mistral-common"]
+
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 extras["all"] = (
     extras["torch"]
@@ -274,10 +276,12 @@ extras["all"] = (
     + extras["timm"]
     + extras["sentencepiece"]
     + extras["tiktoken"]
-    + extras["mistral-common"]
     + extras["chat_template"]
     + extras["num2words"]
 )
+if PYTHON_MINOR_VERSION < 14:
+    extras["all"] += extras["mistral-common"]
+
 extras["dev"] = extras["all"] + extras["testing"] + extras["ja"] + extras["sklearn"]
 
 # Those define the hard dependencies of `transformers`
