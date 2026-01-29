@@ -253,13 +253,6 @@ class GlmImageTextConfig(Glm4vTextConfig):
         self.attention_bias = attention_bias
         self.eos_token_id = eos_token_id
 
-    @property
-    def mrope_section(self) -> list[int]:
-        """Return mrope_section from rope_parameters for vLLM MROPE detection."""
-        if self.rope_parameters is not None:
-            return self.rope_parameters.get("mrope_section", [8, 12, 12])
-        return [8, 12, 12]
-
 
 class GlmImageConfig(PreTrainedConfig):
     r"""
