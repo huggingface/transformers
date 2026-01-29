@@ -206,9 +206,11 @@ jobs:
         steps:
             - checkout
             - run:
-                name: Install pyenv for managing multiple Python versions
+                name: Setup pyenv for managing multiple Python versions
                 command: |
-                    curl https://pyenv.run | bash
+                    if [ ! -d "$HOME/.pyenv" ]; then
+                        curl https://pyenv.run | bash
+                    fi
                     echo 'export PYENV_ROOT="$HOME/.pyenv"' >> $BASH_ENV
                     echo 'export PATH="$PYENV_ROOT/bin:$PATH"' >> $BASH_ENV
                     echo 'eval "$(pyenv init -)"' >> $BASH_ENV
@@ -216,17 +218,18 @@ jobs:
                 name: Install Python versions
                 command: |
                     source $BASH_ENV
-                    # Install all supported Python versions
-                    pyenv install 3.10.13 || true
-                    pyenv install 3.11.7 || true
-                    pyenv install 3.12.1 || true
-                    pyenv install 3.13.0 || true
-                    pyenv install 3.14.0a3 || true
+                    # Install latest patch for each Python minor version (skip if already installed)
+                    pyenv install -s 3.10
+                    pyenv install -s 3.11
+                    pyenv install -s 3.12
+                    pyenv install -s 3.13
+                    pyenv install -s 3.14
+                    pyenv versions
             - run:
                 name: Test extras installation on Python 3.10
                 command: |
                     source $BASH_ENV
-                    pyenv global 3.10.13
+                    pyenv global 3.10
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.10
@@ -257,7 +260,7 @@ jobs:
                 name: Test extras installation on Python 3.11
                 command: |
                     source $BASH_ENV
-                    pyenv global 3.11.7
+                    pyenv global 3.11
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.11
@@ -282,7 +285,7 @@ jobs:
                 name: Test extras installation on Python 3.12
                 command: |
                     source $BASH_ENV
-                    pyenv global 3.12.1
+                    pyenv global 3.12
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.12
@@ -307,7 +310,7 @@ jobs:
                 name: Test extras installation on Python 3.13
                 command: |
                     source $BASH_ENV
-                    pyenv global 3.13.0
+                    pyenv global 3.13
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.13
@@ -332,7 +335,7 @@ jobs:
                 name: Test extras installation on Python 3.14
                 command: |
                     source $BASH_ENV
-                    pyenv global 3.14.0a3
+                    pyenv global 3.14
                     python -m pip install --upgrade pip
 
                     # Extract extras for Python 3.14
