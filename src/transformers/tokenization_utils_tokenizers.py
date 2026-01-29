@@ -1196,15 +1196,21 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         from transformers.utils.hub import cached_file
 
+        if local_files_only or is_offline_mode():
+            return tokenizer
+        
+        if not is_local and isinstance(pretrained_model_name_or_path, str):
+            _id = pretrained_model_name_or_path.lower()
+            # Only continue for likely Mistral repos/ids; otherwise no-op.
+            if not (_id.startswith("mistralai/") or "mistral" in _id):
+                return tokenizer
+
         def is_base_mistral(model_id: str) -> bool:
             model = model_info(model_id)
             if model.tags is not None:
                 if re.search("base_model:.*mistralai", "".join(model.tags)):
                     return True
             return False
-
-        if is_offline_mode():
-            is_local = True
 
         if pretrained_model_name_or_path is not None and (
             is_local or (not is_local and is_base_mistral(pretrained_model_name_or_path))
