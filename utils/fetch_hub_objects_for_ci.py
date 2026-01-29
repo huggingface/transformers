@@ -296,7 +296,7 @@ if __name__ == "__main__":
             repo_id = "mistralai/Voxtral-Mini-3B-2507"
             local_files_only = len(list_local_hf_repo_files(repo_id, revision=None)) > 0
 
-            AutoTokenizer.from_pretrained(repo_id)
+            AutoTokenizer.from_pretrained(repo_id, local_files_only=local_files_only)
             MistralTokenizer.from_hf_hub(repo_id, local_files_only=local_files_only)
 
     # Download files from URLs to local directory
