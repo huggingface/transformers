@@ -32,7 +32,7 @@ import torch
 
 from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
-from .utils import is_env_variable_true, logging
+from .utils import is_env_variable_true, is_torch_greater_or_equal, logging
 
 
 _torch_distributed_available = torch.distributed.is_available()
@@ -823,13 +823,13 @@ def spawn_materialize(
 
 
 def spawn_tp_materialize(
-    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, dtype=None
+    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, device=None, dtype=None
 ) -> Future | Callable:
     """Materialize and shard a tensor (according to the TP-plan) from file asynchronously if `thread_pool` is provided, or
     return a Callable that will load the tensor synchronously when called."""
 
     def _job():
-        return sharding_method.shard_tensor(tensor, tensor_idx=tensor_idx, dtype=dtype)
+        return sharding_method.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
 
     if thread_pool is not None:
         return thread_pool.submit(_job)
@@ -911,23 +911,20 @@ def set_param_for_module(
         unexpected_keys.add(target_name)
     else:
         if not isinstance(param_value, torch.nn.Parameter):
-            if distributed_operation is not None:
-                device_mesh = distributed_operation.device_mesh
-                target_device = torch.device(f"{device_mesh.device_type}:{device_mesh.get_local_rank()}")
-                param_value = param_value.to(target_device)
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
         # Remove from missing keys (it's either mismatched, or all good)
         missing_keys.discard(target_name)
-        # Skip shape check when tensor parallel sharding is applied (shape is intentionally different)
-        if (
-            ref is not None
-            and ref.shape != param_value.shape
-            and hf_quantizer is None
-            and distributed_operation is None
-        ):
-            mismatch_keys.add((target_name, param_value.shape, ref.shape))
+
+        # Determine expected shape: for TP, use sharded shape; otherwise, use full shape
+        if distributed_operation is not None:
+            expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(tuple(ref.shape), param_name))
+        else:
+            expected_shape = ref.shape
+
+        if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
+            mismatch_keys.add((target_name, param_value.shape, expected_shape))
         else:
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
@@ -1187,6 +1184,7 @@ def convert_and_load_state_dict_in_model(
                         tensor,
                         mapping.distributed_operation,
                         shard_index,
+                        device_map[""],
                         _dtype,
                     )
 

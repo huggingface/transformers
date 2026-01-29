@@ -377,11 +377,13 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int
     # Flatten the mesh to get the total number of devices
     mesh_shape = device_mesh.shape
     world_size = reduce(operator.mul, mesh_shape)
+    # Get param shape: works for both torch.Tensor and safetensors TensorInfo
+    param_shape = list(param.shape) if isinstance(param, torch.Tensor) else param.get_shape()
     if dim < 0:
         dim = param_dim + dim
-    if empty_param.dim() == 3 and dim == 1 and len(param.get_shape()) == 2:
+    if empty_param.dim() == 3 and dim == 1 and len(param_shape) == 2:
         dim = 0
-    elif empty_param.dim() == 3 and dim == 2 and len(param.get_shape()) == 2:
+    elif empty_param.dim() == 3 and dim == 2 and len(param_shape) == 2:
         dim = 0
 
     shard_size = math.ceil(empty_param.size(dim) / world_size)
@@ -403,9 +405,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int
     # actually we still shard dim=0 does not change
     # so only case is if the dim of the empty param is 3 and the shard dim is 0 -> we put the
     # tensor on a certain device (with the input tensor_index)
-    dimensions = param.get_shape()
-
-    if empty_param.dim() == 3 and dim == 0 and len(param.get_shape()) == 2:
+    if empty_param.dim() == 3 and dim == 0 and len(param_shape) == 2:
         # special case we don't "shard" just send this entire tensor to the correct rank.
         if start <= tensor_idx < end:
             # this tensor does need to be materialized on this device:
@@ -413,17 +413,17 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int
         else:
             return torch.empty([], dtype=torch.int64, device=rank)
 
-    slice_indices = [slice(None)] * len(param.get_shape())
+    slice_indices = [slice(None)] * len(param_shape)
 
-    if start < param.get_shape()[dim]:
+    if start < param_shape[dim]:
         slice_indices[dim] = slice(start, end)
         param = param[tuple(slice_indices)]
         if isinstance(param, list):  # TODO handle the modulelist case!
             param = [p[:] for p in param]
         return param
 
-    dimensions[dim] = 0
-    return torch.empty(tuple(dimensions), dtype=torch.int64)  # empty allocates memory....
+    param_shape[dim] = 0
+    return torch.empty(tuple(param_shape), dtype=torch.int64)  # empty allocates memory....
 
 
 def _split_along_last_dim(x, world_size):
@@ -676,6 +676,20 @@ class TensorParallelLayer:
             self._prepare_output_fn,
         )
 
+    def get_expected_sharded_shape(self, full_shape: tuple[int, ...], param_name: str) -> tuple[int, ...]:
+        """
+        Compute the expected shape after TP sharding for a given full shape.
+
+        Args:
+            full_shape: The full (unsharded) parameter shape
+            param_name: The parameter name (to determine if it's weight or bias)
+
+        Returns:
+            The expected sharded shape for this rank
+        """
+        # Default: no sharding, return full shape
+        return full_shape
+
 
 class ColwiseParallel(TensorParallelLayer):
     """
@@ -715,6 +729,18 @@ class ColwiseParallel(TensorParallelLayer):
             self._prepare_input_fn,
             self._prepare_output_fn,
         )
+
+    def get_expected_sharded_shape(self, full_shape: tuple[int, ...], param_name: str) -> tuple[int, ...]:
+        world_size = self.device_mesh.size()
+        shape = list(full_shape)
+        # Colwise shards dim -2, but 1D tensors (bias) shard on dim -1
+        dim = -1 if len(shape) == 1 else -2
+        dim = len(shape) + dim if dim < 0 else dim
+        shard_size = math.ceil(shape[dim] / world_size)
+        start = self.rank * shard_size
+        end = min(start + shard_size, shape[dim])
+        shape[dim] = end - start
+        return tuple(shape)
 
 
 class RowwiseParallel(TensorParallelLayer):
@@ -769,6 +795,20 @@ class RowwiseParallel(TensorParallelLayer):
             self._prepare_input_fn,
             self._prepare_output_fn,
         )
+
+    def get_expected_sharded_shape(self, full_shape: tuple[int, ...], param_name: str) -> tuple[int, ...]:
+        # 1D tensors (bias) are NOT sharded in rowwise
+        if len(full_shape) == 1:
+            return full_shape
+        world_size = self.device_mesh.size()
+        shape = list(full_shape)
+        dim = -1
+        dim = len(shape) + dim if dim < 0 else dim
+        shard_size = math.ceil(shape[dim] / world_size)
+        start = self.rank * shard_size
+        end = min(start + shard_size, shape[dim])
+        shape[dim] = end - start
+        return tuple(shape)
 
 
 class PackedColwiseParallel(ColwiseParallel):
@@ -867,6 +907,19 @@ class EmbeddingParallel(TensorParallelLayer):
             self._prepare_output_fn,
         )
 
+    def get_expected_sharded_shape(self, full_shape: tuple[int, ...], param_name: str) -> tuple[int, ...]:
+        world_size = self.device_mesh.size()
+        shape = list(full_shape)
+        # EmbeddingParallel shards on self.embedding_dim_sharding (default 0)
+        # 1D tensors (bias) shard on dim -1
+        dim = -1 if len(shape) == 1 else self.embedding_dim_sharding
+        dim = len(shape) + dim if dim < 0 else dim
+        shard_size = math.ceil(shape[dim] / world_size)
+        start = self.rank * shard_size
+        end = min(start + shard_size, shape[dim])
+        shape[dim] = end - start
+        return tuple(shape)
+
 
 class SequenceParallel(TensorParallelLayer):
     """
@@ -919,6 +972,14 @@ class GroupedGemmParallel(TensorParallelLayer):
             )
         local_num_experts = global_num_experts // self.device_mesh.size()
         return param[self.rank * local_num_experts : (self.rank + 1) * local_num_experts].to(device=device, dtype=dtype)
+
+    def get_expected_sharded_shape(self, full_shape: tuple[int, ...], param_name: str) -> tuple[int, ...]:
+        # GroupedGemm shards on dim 0 (experts dimension)
+        world_size = self.device_mesh.size()
+        shape = list(full_shape)
+        local_num_experts = shape[0] // world_size
+        shape[0] = local_num_experts
+        return tuple(shape)
 
 
 class RouterParallel(TensorParallelLayer):
