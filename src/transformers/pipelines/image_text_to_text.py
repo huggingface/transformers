@@ -36,7 +36,6 @@ if is_vision_available():
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES
-    from .pt_utils import KeyDataset
 
 logger = logging.get_logger(__name__)
 
@@ -197,41 +196,32 @@ class ImageTextToTextPipeline(Pipeline):
     @overload
     def __call__(
         self,
-        image: Union[str, "Image.Image"] | None = None,
         text: str | None = None,
+        images: Union[str, "Image.Image"] | None = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]: ...
 
     @overload
     def __call__(
         self,
-        image: list[str] | list["Image.Image"] | None = None,
         text: list[str] | None = None,
+        images: list[str] | list["Image.Image"] | None = None,
         **kwargs: Any,
     ) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
         self,
+        text: str | list[str] | list[dict] | None = None,
         images: Union[
             str, list[str], list[list[str]], "Image.Image", list["Image.Image"], list[list["Image.Image"]], list[dict]
         ]
         | None = None,
-        text: str | list[str] | list[dict] | None = None,
         **kwargs,
     ) -> list[dict[str, Any]] | list[list[dict[str, Any]]]:
         """
         Generate a text given text and the image(s) passed as inputs.
 
         Args:
-            images (`str`, `list[str]`, `PIL.Image, `list[PIL.Image]`, `list[dict[str, Union[str, PIL.Image]]]`):
-                The pipeline handles three types of images:
-
-                - A string containing a HTTP(s) link pointing to an image
-                - A string containing a local path to an image
-                - An image loaded in PIL directly
-
-                The pipeline accepts either a single image or a batch of images. Finally, this pipeline also supports
-                the chat format (see `text`) containing images and text in this argument.
             text (str, list[str], `list[dict[str, Union[str, PIL.Image]]]`):
                 The text to be used for generation. If a list of strings is passed, the length of the list should be
                 the same as the number of images. Text can also follow the chat format: a list of dictionaries where
@@ -239,6 +229,15 @@ class ImageTextToTextPipeline(Pipeline):
                 and 'content'. 'role' should be one of 'user', 'system' or 'assistant'. 'content' should be a list of
                 dictionary containing the text of the message and the type of the message. The type of the message
                 can be either 'text' or 'image'. If the type is 'image', no text is needed.
+            images (`str`, `list[str]`, `PIL.Image, `list[PIL.Image]`, `list[dict[str, Union[str, PIL.Image]]]`):
+                Certain models do not support chat format and require images to be passed separately from text. For
+                such models, the pipeline handles three types of images:
+
+                - A string containing a HTTP(s) link pointing to an image
+                - A string containing a local path to an image
+                - An image loaded in PIL directly
+
+                The pipeline accepts either a single image or a batch of images.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Returns the tensors of predictions (as token indices) in the outputs. If set to
                 `True`, the decoded text is not returned.
@@ -266,34 +265,17 @@ class ImageTextToTextPipeline(Pipeline):
         if images is None and text is None:
             raise ValueError("You must at least provide either text or images.")
 
-        def _is_chat(arg):
-            return isinstance(arg, (list, tuple, KeyDataset)) and isinstance(arg[0], (list, tuple, dict))
-
-        if _is_chat(text):
+        # encourage the user to use the chat format if supported
+        if getattr(self.processor, "chat_template", None) is not None:
             if images is not None:
                 raise ValueError(
-                    "Invalid input: you passed `chat` and `images` as separate input arguments. "
-                    "Images must be placed inside the chat message's `content`. For example, "
+                    "The model supports chat templates and you passed an `images` argument. A chat template must be "
+                    "passed with images placed inside the chat message's `content`. For example, "
                     "'content': ["
                     "      {'type': 'image', 'url': 'image_url'}, {'type': 'text', 'text': 'Describe the image.'}}"
                     "]"
                 )
-            # We have one or more prompts in list-of-dicts format, so this is chat mode
-            if isinstance(text[0], dict):
-                return super().__call__(Chat(text), **kwargs)
-            else:
-                chats = [Chat(chat) for chat in text]  # 🐈 🐈 🐈
-                return super().__call__(chats, **kwargs)
-
-        # Same as above, but the `images` argument contains the chat. This can happen e.g. is the user only passes a
-        # chat as a positional argument.
-        elif text is None and _is_chat(images):
-            # We have one or more prompts in list-of-dicts format, so this is chat mode
-            if isinstance(images[0], dict):
-                return super().__call__(Chat(images), **kwargs)
-            else:
-                chats = [Chat(image) for image in images]  # 🐈 🐈 🐈
-                return super().__call__(chats, **kwargs)
+            return super().__call__(text, **kwargs)
 
         elif images is not None and text is None and not valid_images(images):
             """
@@ -304,14 +286,6 @@ class ImageTextToTextPipeline(Pipeline):
             This is a common pattern in other multimodal pipelines, so we support it here as well.
             """
             return super().__call__(images, **kwargs)
-
-        # encourage the user to use the chat format if supported
-        if getattr(self.processor, "chat_template", None) is not None:
-            logger.warning_once(
-                "The input data was not formatted as a chat with dicts containing 'role' and 'content' keys, even "
-                "though this model supports chat. Consider using the chat format for better results. For more "
-                "information, see https://huggingface.co/docs/transformers/en/chat_templating"
-            )
 
         # support text only generation
         if images is None:
