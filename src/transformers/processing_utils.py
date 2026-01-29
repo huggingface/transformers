@@ -514,6 +514,8 @@ class ChatTemplateLoadKwargs(TypedDict, total=False):
 
     num_frames (`int`, *optional*):
         Number of frames to sample uniformly. If not passed, the whole video is loaded.
+    fps (`int` or `float`, *optional*):
+        Target frames to sample per second. If not passed, the whole video is loaded.
     load_audio_from_video (`bool`, *optional*):
             Whether to use the audio track of input video. If `True` the audio track will be loaded and passed to the
             processor. This flag has no effect if the model doesn't support audio modality.
@@ -521,6 +523,8 @@ class ChatTemplateLoadKwargs(TypedDict, total=False):
 
     sampling_rate: int | None = 16_000
     load_audio_from_video: bool | None = False
+    num_frames: int | None = None
+    fps: int | float | None = None
 
 
 class ProcessorChatTemplateKwargs(ChatTemplateLoadKwargs, TokenizerChatTemplateKwargs, total=False):
@@ -1809,6 +1813,12 @@ class ProcessorMixin(PushToHubMixin):
             single_prompt = prompt[0] if is_batched else prompt
             if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
                 kwargs["add_special_tokens"] = False
+
+            # Pass num_frames and fps from mm_load_kwargs to kwargs so they reach the video processor
+            if mm_load_kwargs.get("num_frames") is not None:
+                kwargs["num_frames"] = mm_load_kwargs["num_frames"]
+            if mm_load_kwargs.get("fps") is not None:
+                kwargs["fps"] = mm_load_kwargs["fps"]
 
             # Always sample frames by default unless explicitly set to `False` by users. If users do not pass `num_frames`/`fps`
             # sampling should not done for BC.
