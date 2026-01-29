@@ -1193,6 +1193,8 @@
         title: Pix2Struct
       - local: model_doc/pixtral
         title: Pixtral
+      - local: model_doc/pp_lcnet
+        title: PPLCNet
       - local: model_doc/qwen2_5_omni
         title: Qwen2.5-Omni
       - local: model_doc/qwen2_5_vl

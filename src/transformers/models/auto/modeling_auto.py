@@ -825,6 +825,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
             ),
         ),
         ("poolformer", "PoolFormerForImageClassification"),
+        ("pp_lcnet", "PPLCNetForImageClassification"),
         ("pvt", "PvtForImageClassification"),
         ("pvt_v2", "PvtV2ForImageClassification"),
         ("regnet", "RegNetForImageClassification"),
