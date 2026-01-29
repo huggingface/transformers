@@ -751,7 +751,7 @@ class RfDetrModel(LwDetrModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, DeformableDetrModel
+        >>> from transformers import AutoImageProcessor, RfDetrModel
         >>> from PIL import Image
         >>> import requests
 
