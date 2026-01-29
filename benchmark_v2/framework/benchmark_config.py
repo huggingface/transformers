@@ -40,6 +40,7 @@ def is_fa2_or_kernel_available() -> bool:
     try:
         from kernels import get_kernel
 
+        # TODO: Pass the 'version' kwarg to specify the binary version once kernels >= 0.12.0 is supported.
         get_kernel("kernels-community/flash-attn2")
     except Exception as _:
         logger.warning(
