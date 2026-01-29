@@ -77,8 +77,12 @@ class CacheLayerMixin(ABC):
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         """Reorders this layer's cache for beam search."""
         if self.get_seq_length() > 0:
-            self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
-            self.values = self.values.index_select(0, beam_idx.to(self.values.device))
+            # Get device for each tensor and then move beam_idx to that device
+            keys_device = self.keys.device
+            self.keys = self.keys.index_select(0, beam_idx.to(keys_device))
+
+            values_device = self.values.device
+            self.values = self.values.index_select(0, beam_idx.to(values_device))
 
 
 class DynamicLayer(CacheLayerMixin):
