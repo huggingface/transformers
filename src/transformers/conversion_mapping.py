@@ -62,6 +62,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "hunyuan_v1_moe": "qwen2_moe",
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
+    "nomic_bert": "nomic_bert",
 }
 
 
@@ -133,7 +134,11 @@ def _build_checkpoint_conversion_mapping():
                     "mlp.experts.*.up_proj.weight",
                 ],
                 target_patterns="mlp.experts.gate_up_proj",
-                operations=[MergeModulelist(dim=0), Concatenate(dim=1), Transpose(1, 2)],
+                operations=[
+                    MergeModulelist(dim=0),
+                    Concatenate(dim=1),
+                    Transpose(1, 2),
+                ],
             ),
             WeightConverter(
                 source_patterns="mlp.experts.*.down_proj.weight",
@@ -256,6 +261,46 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="LayerNorm.bias",
             ),
         ],
+        "nomic_bert": [
+            # Embeddings & Pooler
+            WeightRenaming("emb_ln.weight", "embeddings.LayerNorm.weight"),
+            WeightRenaming("emb_ln.bias", "embeddings.LayerNorm.bias"),
+            # Encoder Layers Renaming
+            WeightRenaming(
+                r"encoder\.layers\.(\d+)\.attn\.out_proj\.",
+                r"encoder.layer.\1.attention.output.dense.",
+            ),
+            WeightRenaming(
+                r"encoder\.layers\.(\d+)\.mlp\.fc11\.",
+                r"encoder.layer.\1.intermediate.gate_proj.",
+            ),
+            WeightRenaming(
+                r"encoder\.layers\.(\d+)\.mlp\.fc12\.",
+                r"encoder.layer.\1.intermediate.up_proj.",
+            ),
+            WeightRenaming(r"encoder\.layers\.(\d+)\.mlp\.fc2\.", r"encoder.layer.\1.output.dense."),
+            WeightRenaming(
+                r"encoder\.layers\.(\d+)\.norm1\.",
+                r"encoder.layer.\1.attention.output.LayerNorm.",
+            ),
+            WeightRenaming(
+                r"encoder\.layers\.(\d+)\.norm2\.",
+                r"encoder.layer.\1.output.LayerNorm.",
+            ),
+            # QKV Splits
+            *[
+                WeightConverter(
+                    source_patterns=f"encoder.layers.{i}.attn.Wqkv.weight",
+                    target_patterns=[
+                        f"encoder.layer.{i}.attention.self.q_proj.weight",
+                        f"encoder.layer.{i}.attention.self.k_proj.weight",
+                        f"encoder.layer.{i}.attention.self.v_proj.weight",
+                    ],
+                    operations=[Chunk(dim=0)],
+                )
+                for i in range(12)
+            ],
+        ],
     }
     if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
         mapping["legacy"] += [
@@ -282,7 +327,10 @@ def _build_checkpoint_conversion_mapping():
 
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] += [
-        WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
+        WeightRenaming(
+            "mlp.moe_statics.e_score_correction_bias",
+            "mlp.gate.moe_statics.e_score_correction_bias",
+        )
     ]
     mapping["minimax_m2"] = mapping["mixtral"].copy()
     mapping["minimax_m2"] += [
@@ -308,7 +356,9 @@ def get_checkpoint_conversion_mapping(model_type):
 
 
 def register_checkpoint_conversion_mapping(
-    model_type: str, mapping: list[WeightConverter | WeightRenaming], overwrite: bool = False
+    model_type: str,
+    mapping: list[WeightConverter | WeightRenaming],
+    overwrite: bool = False,
 ) -> None:
     global _checkpoint_conversion_mapping_cache
     if _checkpoint_conversion_mapping_cache is None:

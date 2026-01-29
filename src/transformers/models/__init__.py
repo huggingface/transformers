@@ -269,6 +269,7 @@ if TYPE_CHECKING:
     from .nemotron import *
     from .nllb import *
     from .nllb_moe import *
+    from .nomic_bert import *
     from .nougat import *
     from .nystromformer import *
     from .olmo import *
