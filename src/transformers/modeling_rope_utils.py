@@ -567,13 +567,18 @@ ROPE_INIT_FUNCTIONS = {
 }
 
 
-def _validate_default_rope_parameters(config: "PreTrainedConfig", rope_parameters: dict, ignore_keys: set | None = None):
+def _validate_default_rope_parameters(
+    config: "PreTrainedConfig", rope_parameters: dict, ignore_keys: set | None = None
+):
     required_keys = {"rope_type", "rope_theta"}
     received_keys = set(rope_parameters.keys())
     rope_type = rope_parameters["rope_type"]
     _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
-def _validate_linear_rope_parameters(config: "PreTrainedConfig", rope_parameters: dict, ignore_keys: set | None = None):
+
+def _validate_linear_rope_parameters(
+    config: "PreTrainedConfig", rope_parameters: dict, ignore_keys: set | None = None
+):
     required_keys = {"rope_type", "factor", "rope_theta"}
     received_keys = set(rope_parameters.keys())
     rope_type = rope_parameters["rope_type"]
@@ -583,7 +588,10 @@ def _validate_linear_rope_parameters(config: "PreTrainedConfig", rope_parameters
     if factor is None or not isinstance(factor, float) or factor < 1.0:
         logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
 
-def _validate_dynamic_rope_parameters(config: "PreTrainedConfig", rope_parameters: dict, ignore_keys: set | None = None):
+
+def _validate_dynamic_rope_parameters(
+    config: "PreTrainedConfig", rope_parameters: dict, ignore_keys: set | None = None
+):
     required_keys = {"rope_type", "factor", "rope_theta"}
     received_keys = set(rope_parameters.keys())
     rope_type = rope_parameters["rope_type"]
@@ -592,6 +600,7 @@ def _validate_dynamic_rope_parameters(config: "PreTrainedConfig", rope_parameter
     factor = rope_parameters["factor"]
     if factor is None or not isinstance(factor, float) or factor < 1.0:
         logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+
 
 def _validate_yarn_rope_parameters(config: "PreTrainedConfig", rope_parameters: dict, ignore_keys: set | None = None):
     required_keys = {"rope_type", "factor", "rope_theta", "original_max_position_embeddings"}
@@ -644,7 +653,10 @@ def _validate_yarn_rope_parameters(config: "PreTrainedConfig", rope_parameters: 
             "behaviour in model usage, please correct the 'original_max_position_embeddings' fields in the model config."
         )
 
-def _validate_longrope_rope_parameters(config: "PreTrainedConfig", rope_parameters: dict, ignore_keys: set | None = None):
+
+def _validate_longrope_rope_parameters(
+    config: "PreTrainedConfig", rope_parameters: dict, ignore_keys: set | None = None
+):
     required_keys = {"rope_type", "short_factor", "long_factor", "rope_theta", "original_max_position_embeddings"}
     optional_keys = {"attention_factor", "factor"}
     received_keys = set(rope_parameters.keys())
@@ -659,17 +671,13 @@ def _validate_longrope_rope_parameters(config: "PreTrainedConfig", rope_paramete
     if not isinstance(short_factor, list) and all(isinstance(x, (int, float)) for x in short_factor):
         logger.warning(f"`rope_parameters`'s short_factor field must be a list of numbers, got {short_factor}")
     if len(short_factor) != dim // 2:
-        logger.warning(
-            f"`rope_parameters`'s short_factor field must have length {dim // 2}, got {len(short_factor)}"
-        )
+        logger.warning(f"`rope_parameters`'s short_factor field must have length {dim // 2}, got {len(short_factor)}")
 
     long_factor = rope_parameters.get("long_factor")
     if not isinstance(long_factor, list) and all(isinstance(x, (int, float)) for x in long_factor):
         logger.warning(f"`rope_parameters`'s long_factor field must be a list of numbers, got {long_factor}")
     if len(long_factor) != dim // 2:
-        logger.warning(
-            f"`rope_parameters`'s long_factor field must have length {dim // 2}, got {len(long_factor)}"
-        )
+        logger.warning(f"`rope_parameters`'s long_factor field must have length {dim // 2}, got {len(long_factor)}")
 
     factor = rope_parameters.get("factor")
     original_max_position_embeddings = rope_parameters["original_max_position_embeddings"]
@@ -694,7 +702,10 @@ def _validate_longrope_rope_parameters(config: "PreTrainedConfig", rope_paramete
             f"`rope_parameters`'s attention_factor field must be a float greater than 0, got {attention_factor}"
         )
 
-def _validate_llama3_rope_parameters(config: "PreTrainedConfig", rope_parameters: dict, ignore_keys: set | None = None):
+
+def _validate_llama3_rope_parameters(
+    config: "PreTrainedConfig", rope_parameters: dict, ignore_keys: set | None = None
+):
     required_keys = {
         "rope_type",
         "factor",
