@@ -150,8 +150,8 @@ class GlmImageTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 168064):
-            Vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GlmImageModel`]
+            Vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented by
+            the `inputs_ids` passed when calling [`GlmImageModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 13696):
@@ -169,7 +169,7 @@ class GlmImageTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
+        max_position_embeddings (`int`, *optional*, defaults to 131072):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -184,13 +184,15 @@ class GlmImageTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        pad_token_id (`int`, *optional*):
+        pad_token_id (`int`, *optional*, defaults to 167841):
             The id of the padding token.
         vision_vocab_size (`int`, *optional*, defaults to 16512):
-            Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
+            Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be
+            represented by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
         attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
+        eos_token_id (`int`, *optional*, defaults to 16385):
+            The id of the end of sequence token.
 
     ```python
     >>> from transformers import GlmImageTextModel, GlmImageConfig
@@ -225,27 +227,25 @@ class GlmImageTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
     def __init__(
         self,
-        vocab_size: int | None = 168064,
+        vocab_size: int = 168064,
         hidden_size: int | None = 4096,
         intermediate_size: int | None = 13696,
         num_hidden_layers: int | None = 40,
         num_attention_heads: int | None = 32,
         num_key_value_heads: int | None = 2,
         hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
+        max_position_embeddings: int = 131072,
         initializer_range: float | None = 0.02,
         rms_norm_eps: int | None = 1e-05,
         use_cache: bool | None = True,
         attention_dropout: float | None = 0.0,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        pad_token_id: int | None = None,
-        vision_vocab_size: int | None = 16512,
-        attention_bias: bool | None = True,
+        pad_token_id: int = 167841,
+        vision_vocab_size: int = 16512,
+        attention_bias: bool = True,
+        eos_token_id: int = 16385,
         **kwargs,
     ):
-        self.vocab_size = vocab_size
-        self.vision_vocab_size = vision_vocab_size
-        self.attention_bias = attention_bias
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -267,6 +267,16 @@ class GlmImageTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.pad_token_id = pad_token_id
 
         super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
+        self.vision_vocab_size = vision_vocab_size
+        self.attention_bias = attention_bias
+        self.eos_token_id = eos_token_id
+
+    @property
+    def mrope_section(self) -> list[int]:
+        """Return mrope_section from rope_parameters for vLLM MROPE detection."""
+        if self.rope_parameters is not None:
+            return self.rope_parameters.get("mrope_section", [8, 12, 12])
+        return [8, 12, 12]
 
 
 class GlmImageConfig(PreTrainedConfig):
