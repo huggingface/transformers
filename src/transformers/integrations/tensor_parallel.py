@@ -779,7 +779,9 @@ class RowwiseParallel(TensorParallelLayer):
         if dim == 1:
             parameter = param[...]
         else:
-            parameter = get_tensor_shard(param, self.empty_param, self.device_mesh, self.rank, -1, tensor_idx=tensor_idx)
+            parameter = get_tensor_shard(
+                param, self.empty_param, self.device_mesh, self.rank, -1, tensor_idx=tensor_idx
+            )
         return parameter.to(device=device, dtype=dtype)
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
@@ -886,10 +888,17 @@ class EmbeddingParallel(TensorParallelLayer):
         # If only 1 dim, shard this one (usually it's a `bias`)
         dim = param.dim() if isinstance(param, torch.Tensor) else len(param.get_shape())
         if dim == 1:
-            parameter = get_tensor_shard(param, self.empty_param, self.device_mesh, self.rank, -1, tensor_idx=tensor_idx)
+            parameter = get_tensor_shard(
+                param, self.empty_param, self.device_mesh, self.rank, -1, tensor_idx=tensor_idx
+            )
         else:
             parameter = get_tensor_shard(
-                param, self.empty_param, self.device_mesh, self.rank, self.embedding_dim_sharding, tensor_idx=tensor_idx
+                param,
+                self.empty_param,
+                self.device_mesh,
+                self.rank,
+                self.embedding_dim_sharding,
+                tensor_idx=tensor_idx,
             )
         return parameter.to(device=device, dtype=dtype)
 
@@ -966,7 +975,9 @@ class GroupedGemmParallel(TensorParallelLayer):
                 f"Global number of experts must be divisible by number of devices: {global_num_experts} % {self.device_mesh.size()} != 0"
             )
         local_num_experts = global_num_experts // self.device_mesh.size()
-        return param[self.rank * local_num_experts : (self.rank + 1) * local_num_experts].to(device=device, dtype=dtype)
+        return param[self.rank * local_num_experts : (self.rank + 1) * local_num_experts].to(
+            device=device, dtype=dtype
+        )
 
     def get_expected_sharded_shape(self, full_shape: tuple[int, ...], param_name: str) -> tuple[int, ...]:
         # GroupedGemm shards on dim 0 (experts dimension)
