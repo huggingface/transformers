@@ -266,97 +266,60 @@ jobs:
         with:
           name: modified-files
 
-      - name: Push changes via GitHub API (no checkout)
+      - name: Push changes to fork using git
         if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
-        uses: actions/github-script@v6
         env:
           PR_HEAD_REF: ${{ needs.get-pr-info.outputs.PR_HEAD_REF }}
           PR_HEAD_SHA: ${{ needs.check-timestamps.outputs.VERIFIED_PR_HEAD_SHA }}
-          PR_HEAD_REPO_OWNER: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_OWNER }}
-          PR_HEAD_REPO_NAME: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_NAME }}
-        with:
-          github-token: ${{ secrets.HF_STYLE_BOT_ACTION }}
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-            
-            const owner = process.env.PR_HEAD_REPO_OWNER;
-            const repo = process.env.PR_HEAD_REPO_NAME;
-            const baseSha = process.env.PR_HEAD_SHA;
-            const branch = process.env.PR_HEAD_REF;
-            
-            console.log(`Creating commit on ${owner}/${repo} branch ${branch} from ${baseSha}`);
-            
-            // Read list of modified files
-            const modifiedFiles = fs.readFileSync('modified-files.txt', 'utf8')
-              .trim()
-              .split('\n')
-              .filter(f => f.length > 0);
-            
-            console.log(`Modified files: ${modifiedFiles.join(', ')}`);
-            
-            // Get the base commit to retrieve its tree SHA (metadata only, no checkout)
-            const { data: baseCommit } = await github.rest.git.getCommit({
-              owner,
-              repo,
-              commit_sha: baseSha
-            });
-            
-            console.log(`Base tree SHA: ${baseCommit.tree.sha}`);
-            
-            // Create blobs for each modified file
-            const tree = [];
-            for (const file of modifiedFiles) {
-              const filePath = path.join('pr-repo', file);
-              const content = fs.readFileSync(filePath, 'utf8');
-              
-              console.log(`Creating blob for ${file}`);
-              const { data: blob } = await github.rest.git.createBlob({
-                owner,
-                repo,
-                content: content,
-                encoding: 'utf-8'
-              });
-              
-              tree.push({
-                path: file,
-                mode: '100644',
-                type: 'blob',
-                sha: blob.sha
-              });
-            }
-            
-            // Create new tree based on the base tree
-            console.log(`Creating tree with ${tree.length} modified files`);
-            const { data: newTree } = await github.rest.git.createTree({
-              owner,
-              repo,
-              base_tree: baseCommit.tree.sha,
-              tree: tree
-            });
-            
-            // Create commit
-            console.log(`Creating commit`);
-            const { data: newCommit } = await github.rest.git.createCommit({
-              owner,
-              repo,
-              message: 'Apply repo. consistency fixes',
-              tree: newTree.sha,
-              parents: [baseSha]
-            });
-            
-            console.log(`Created commit: ${newCommit.sha}`);
-            
-            // Update branch ref
-            console.log(`Updating ref heads/${branch} to ${newCommit.sha}`);
-            await github.rest.git.updateRef({
-              owner,
-              repo,
-              ref: `heads/${branch}`,
-              sha: newCommit.sha
-            });
-            
-            console.log(`Successfully pushed commit to ${branch}`);
+          PR_HEAD_REPO_FULL_NAME: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
+          GITHUB_TOKEN: ${{ secrets.HF_STYLE_BOT_ACTION }}
+        run: |
+          # Initialize a fresh git repository for pushing
+          mkdir push-repo
+          cd push-repo
+          git init
+          
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Add fork as remote with token
+          git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${PR_HEAD_REPO_FULL_NAME}.git
+          
+          # Fetch only the specific branch
+          git fetch origin ${PR_HEAD_REF}
+          
+          # Checkout the branch
+          git checkout -b ${PR_HEAD_REF} origin/${PR_HEAD_REF}
+          
+          # Verify we're on the correct SHA
+          current_sha=$(git rev-parse HEAD)
+          if [ "$current_sha" != "$PR_HEAD_SHA" ]; then
+            echo "❌ Error: Branch has been updated since workflow started"
+            echo "Expected SHA: $PR_HEAD_SHA"
+            echo "Current SHA: $current_sha"
+            exit 1
+          fi
+          
+          # Copy modified files from artifact
+          echo "Copying modified files..."
+          while IFS= read -r file; do
+            if [ -n "$file" ]; then
+              echo "  - $file"
+              mkdir -p "$(dirname "$file")"
+              cp "../pr-repo/$file" "$file"
+            fi
+          done < ../modified-files.txt
+          
+          # Check if there are changes
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "Apply repo consistency fixes"
+            git push origin HEAD:${PR_HEAD_REF}
+            echo "✅ Changes pushed successfully"
+          else
+            echo "No changes to commit"
+          fi
 
       - name: Prepare final comment message
         id: prepare_final_comment
