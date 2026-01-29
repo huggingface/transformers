@@ -199,7 +199,7 @@ extras["kernels"] = deps_list("kernels")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 if PYTHON_MINOR_VERSION < 15:
-    extras["mistral-common"] = deps_list("mistral-common")
+    extras["mistral-common"] = deps_list("mistral-common[image]")
 extras["chat_template"] = deps_list("jinja2", "jmespath")
 extras["sklearn"] = deps_list("scikit-learn")
 extras["accelerate"] = deps_list("accelerate")
