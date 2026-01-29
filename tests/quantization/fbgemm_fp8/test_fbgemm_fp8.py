@@ -29,6 +29,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import (
     is_fbgemm_gpu_available,
+    is_kernels_available,
     is_torch_available,
     is_torch_xpu_available,
 )
@@ -63,7 +64,10 @@ class FbgemmFp8ConfigTest(unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-@unittest.skipIf(not is_torch_xpu_available() and not is_fbgemm_gpu_available(), "test requires fbgemm-gpu or xpu")
+@unittest.skipIf(
+    not (is_torch_xpu_available() and is_kernels_available()) and not is_fbgemm_gpu_available(),
+    "test requires fbgemm-gpu or (xpu and kernels)",
+)
 @require_accelerate
 class FbgemmFp8Test(unittest.TestCase):
     model_name = "meta-llama/Meta-Llama-3-8B"
