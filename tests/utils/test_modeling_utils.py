@@ -39,6 +39,7 @@ from transformers import (
     AutoModel,
     AutoModelForImageClassification,
     AutoModelForSequenceClassification,
+    AutoTokenizer,
     BartConfig,
     BartForConditionalGeneration,
     BartModel,
@@ -350,6 +351,16 @@ if is_torch_available():
                 AutoModelForImageClassification.from_pretrained(
                     TINY_IMAGE_CLASSIF, cache_dir=tmpdir, local_files_only=True
                 )
+
+        def test_offline_tokenizer(self):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                # Populate cache
+                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", False):
+                    snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+
+                # Load tokenizer in offline mode - should work
+                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
+                    AutoTokenizer.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
 
 # Need to be serializable, which means they cannot be in a test class method
