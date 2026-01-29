@@ -21,11 +21,11 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_available, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import can_return_tuple, check_model_inputs
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
     AudioFlamingo3MultiModalProjector,
@@ -305,6 +305,10 @@ class GlmAsrEncoder(GlmAsrPreTrainedModel):
     main_input_name = "input_features"
     input_modalities = "audio"
     _no_split_modules = ["GlmAsrEncoderLayer"]
+    _can_record_outputs = {
+        "hidden_states": GlmAsrEncoderLayer,
+        "attentions": GlmAsrAttention,
+    }
 
     def __init__(self, config: GlmAsrEncoderConfig):
         super().__init__(config)
@@ -335,7 +339,7 @@ class GlmAsrEncoder(GlmAsrPreTrainedModel):
             hidden_states = encoder_layer(hidden_states, position_embeddings=position_embeddings, **kwargs)
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
 class GlmAsrMultiModalProjector(AudioFlamingo3MultiModalProjector):
@@ -351,10 +355,17 @@ class GlmAsrMultiModalProjector(AudioFlamingo3MultiModalProjector):
     """
 )
 class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Compute audio embeddings from log-mel input features using the audio encoder and multi-modal projector."
+    )
     def get_audio_features(
-        self, input_features: torch.FloatTensor, input_features_mask: torch.Tensor
-    ) -> torch.FloatTensor:
-        audio_outputs = self.audio_tower(input_features)
+        self,
+        input_features: torch.FloatTensor,
+        input_features_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        audio_outputs = self.audio_tower(input_features, return_dict=True, **kwargs)
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_hidden_states = audio_hidden_states.reshape(
             input_features.shape[0], -1, self.config.audio_config.intermediate_size
@@ -368,8 +379,9 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         post_lengths = (audio_lengths - merge_factor) // merge_factor + 1
 
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
-        audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
-        return audio_embeds
+        audio_outputs.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
+
+        return audio_outputs
 
     def forward(
         self,

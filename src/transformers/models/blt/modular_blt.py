@@ -950,7 +950,7 @@ class BltModel(BltPreTrainedModel):
         use_cache: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

@@ -19,10 +19,10 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class MoonshineConfig(PreTrainedConfig):
+class MoonshineConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`MoonshineModel`]. It is used to instantiate a Moonshine
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

@@ -33,11 +33,16 @@ from transformers.utils.generic import OutputRecorder
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+)
 from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_sam2 import (
@@ -54,16 +59,10 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
-class Sam2VisionEncoderOutput(ModelOutput):
+class Sam2VisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    fpn_hidden_states (`tuple(torch.FloatTensor)`):
-        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
-        `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
-    fpn_position_encoding (`tuple(torch.FloatTensor)`):
-        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
-        `(batch_size, hidden_size, height, width)`. Positional encodings corresponding to the `fpn_hidden_states`.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`. Hidden-states of the
@@ -72,13 +71,16 @@ class Sam2VisionEncoderOutput(ModelOutput):
         Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
         the self-attention heads.
+    fpn_hidden_states (`tuple(torch.FloatTensor)`):
+        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
+        `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
+    fpn_position_encoding (`tuple(torch.FloatTensor)`):
+        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
+        `(batch_size, hidden_size, height, width)`. Positional encodings corresponding to the `fpn_hidden_states`.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
     fpn_hidden_states: torch.FloatTensor | None = None
     fpn_position_encoding: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -912,7 +914,7 @@ class Sam2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Sam2TwoWayAttentionBlock(nn.Module):
+class Sam2TwoWayAttentionBlock(GradientCheckpointingLayer):
     def __init__(self, config: Sam2MaskDecoderConfig, skip_first_layer_pe: bool = False):
         """
         A transformer block with four layers:
@@ -1284,6 +1286,7 @@ class Sam2MaskDecoder(nn.Module):
 class Sam2Model(Sam2PreTrainedModel):
     input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam2TwoWayAttentionBlock, index=2)}
+    _tied_weights_keys = {}
     _keys_to_ignore_on_load_unexpected = [
         r"^memory_.*",
         r"^mask_downsample.*",
@@ -1341,7 +1344,8 @@ class Sam2Model(Sam2PreTrainedModel):
                 Input pixel values
         """
         batch_size = pixel_values.shape[0]
-        feature_maps, _, _, _ = self.get_image_features(pixel_values, **kwargs)
+        image_outputs = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+        feature_maps = image_outputs.fpn_hidden_states
 
         # add no memory embedding to the last feature map
         feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -1460,14 +1464,16 @@ class Sam2Model(Sam2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("danelcsb/sam2.1_hiera_tiny")
         >>> processor = AutoProcessor.from_pretrained("danelcsb/sam2.1_hiera_tiny")
 
-        >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
+        >>> with httpx.stream("GET", url) as response:
+        ...     raw_image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> input_points = [[[400, 650]]]  # 2D location of a window on the car
         >>> inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt")
 
@@ -1497,10 +1503,10 @@ class Sam2Model(Sam2PreTrainedModel):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            feature_maps, _, vision_hidden_states, vision_attentions = self.get_image_features(
-                pixel_values,
-                **kwargs,
-            )
+            image_outputs: Sam2VisionEncoderOutput = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+            feature_maps = image_outputs.fpn_hidden_states
+            vision_hidden_states = image_outputs.hidden_states
+            vision_attentions = image_outputs.attentions
 
             # add no memory embedding to the last feature map
             feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -1560,34 +1566,18 @@ class Sam2Model(Sam2PreTrainedModel):
             vision_attentions=vision_attentions,
         )
 
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[
-        list[torch.Tensor],
-        list[torch.Tensor],
-        tuple[torch.FloatTensor, ...] | None,
-        tuple[torch.FloatTensor, ...] | None,
-    ]:
+    ) -> tuple | Sam2VisionEncoderOutput:
         r"""
-        Extract and preprocess image features using the vision encoder.
-
-        Args:
-            pixel_values (`torch.FloatTensor`):
-                Input pixel values of shape `(batch_size, num_channels, height, width)`.
-
-        Returns:
-            `tuple`: A tuple containing:
-                - feature_maps (`list[torch.Tensor]`): List of feature maps from different levels.
-                - feature_maps_position_embeddings (`list[torch.Tensor]`): List of positional embeddings for each feature level.
-                - vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*): Hidden states from the vision encoder.
-                - vision_attentions (`tuple[torch.FloatTensor]`, *optional*): Attention weights from the vision encoder.
+        pixel_values (`torch.FloatTensor`):
+            Input pixel values of shape `(batch_size, num_channels, height, width)`.
         """
-        vision_outputs: Sam2VisionEncoderOutput = self.vision_encoder(
-            pixel_values,
-            **kwargs,
-        )
+        vision_outputs: Sam2VisionEncoderOutput = self.vision_encoder(pixel_values, return_dict=True, **kwargs)
 
         feature_maps = vision_outputs.fpn_hidden_states
         feature_maps_position_embeddings = vision_outputs.fpn_position_encoding
@@ -1604,8 +1594,10 @@ class Sam2Model(Sam2PreTrainedModel):
             feature_map_position_embedding.flatten(2).permute(2, 0, 1)
             for feature_map_position_embedding in feature_maps_position_embeddings
         ]
+        vision_outputs.fpn_hidden_states = feature_maps
+        vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 
-        return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
+        return vision_outputs
 
 
 __all__ = ["Sam2Model", "Sam2VisionModel", "Sam2PreTrainedModel", "Sam2HieraDetModel"]

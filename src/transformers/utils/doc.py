@@ -684,10 +684,12 @@ DEPTH_ESTIMATION_SAMPLE = r"""
     >>> from transformers import AutoImageProcessor, {model_class}
     >>> import torch
     >>> from PIL import Image
-    >>> import requests
+    >>> import httpx
+        >>> from io import BytesIO
 
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> with httpx.stream("GET", url) as response:
+    ...     image = Image.open(BytesIO(response.read())).convert("RGB")
 
     >>> processor = AutoImageProcessor.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
@@ -854,7 +856,6 @@ IMAGE_TEXT_TO_TEXT_GENERATION_SAMPLE = r"""
 
     ```python
     >>> from PIL import Image
-    >>> import requests
     >>> from transformers import AutoProcessor, {model_class}
 
     >>> model = {model_class}.from_pretrained("{checkpoint}")

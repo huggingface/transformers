@@ -26,12 +26,12 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils import TransformersKwargs, auto_docstring, is_torch_available
+from ...utils.generic import can_return_tuple, check_model_inputs, maybe_autocast
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_glmasr import GlmAsrConfig, GlmAsrEncoderConfig
 
@@ -292,6 +292,10 @@ class GlmAsrEncoder(GlmAsrPreTrainedModel):
     main_input_name = "input_features"
     input_modalities = "audio"
     _no_split_modules = ["GlmAsrEncoderLayer"]
+    _can_record_outputs = {
+        "hidden_states": GlmAsrEncoderLayer,
+        "attentions": GlmAsrAttention,
+    }
 
     def __init__(self, config: GlmAsrEncoderConfig):
         super().__init__(config)
@@ -322,7 +326,7 @@ class GlmAsrEncoder(GlmAsrPreTrainedModel):
             hidden_states = encoder_layer(hidden_states, position_embeddings=position_embeddings, **kwargs)
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
 class GlmAsrMultiModalProjector(nn.Module):
@@ -382,26 +386,27 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Compute audio embeddings from log-mel input features using the audio encoder and multi-modal projector."
+    )
     def get_audio_features(
-        self, input_features: torch.FloatTensor, input_features_mask: torch.Tensor
-    ) -> torch.FloatTensor:
+        self,
+        input_features: torch.FloatTensor,
+        input_features_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        input_features (`torch.FloatTensor`):
+            Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
+            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
+            `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+            `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+            and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask to avoid performing attention on padded feature indices.
         """
-        This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
-        Args:
-            input_features (`torch.FloatTensor`):
-                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
-                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-            input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
-                Mask to avoid performing attention on padded feature indices.
-
-        Returns:
-            `torch.FloatTensor`:
-                The audio embeddings.
-        """
-        audio_outputs = self.audio_tower(input_features)
+        audio_outputs = self.audio_tower(input_features, return_dict=True, **kwargs)
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_hidden_states = audio_hidden_states.reshape(
             input_features.shape[0], -1, self.config.audio_config.intermediate_size
@@ -415,8 +420,9 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
         post_lengths = (audio_lengths - merge_factor) // merge_factor + 1
 
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
-        audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
-        return audio_embeds
+        audio_outputs.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
+
+        return audio_outputs
 
     @can_return_tuple
     @auto_docstring
@@ -468,7 +474,7 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, input_features_mask)
+            audio_embeds = self.get_audio_features(input_features, input_features_mask, return_dict=True).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
             audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)

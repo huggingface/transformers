@@ -200,6 +200,8 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         if is_torch_available()
         else {}
     )
+    # Llava-NeXT merges batch_size and num_patches in the first output dimension
+    skip_test_image_features_output_shape = True
     _is_composite = True
 
     def setUp(self):
@@ -228,7 +230,7 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
             # remove one image but leave the image token in text
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
             curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:, ...]
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
@@ -238,7 +240,7 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
 
             # two images and two image tokens don't raise an error

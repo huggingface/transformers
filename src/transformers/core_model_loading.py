@@ -520,6 +520,46 @@ class WeightTransform:
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
 
+    def __setattr__(self, name: str, value: Any):
+        if name == "source_patterns":
+            if isinstance(value, str):
+                value = [value]
+            normalized = []
+            for pattern in value:
+                if r"\1" in pattern:
+                    pattern = pattern.replace(r"\1", r"(.+)")
+                normalized.append(pattern)
+            object.__setattr__(self, name, normalized)
+            self._rebuild_compiled_sources()
+            return
+        if name == "target_patterns":
+            if isinstance(value, str):
+                value = [value]
+            normalized = []
+            for pattern in value:
+                # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
+                pattern = pattern.removeprefix("^")
+                # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
+                pattern = pattern.removesuffix("$")
+                # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
+                # Qwen2.5, Sam3, Ernie4.5 VL MoE!
+                pattern = re.sub(r"\(\?.+\)", "", pattern)
+                # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
+                if r"(.+)" in pattern:
+                    pattern = pattern.replace(r"(.+)", r"\1")
+                normalized.append(pattern)
+            object.__setattr__(self, name, normalized)
+            return
+        object.__setattr__(self, name, value)
+
+    def _rebuild_compiled_sources(self):
+        branches = []
+        for i, source_pattern in enumerate(self.source_patterns):
+            group_name = f"g{i}"
+            pattern = source_pattern.replace(".*.", r"\..*\.")
+            branches.append(f"(?P<{group_name}>{pattern})")
+        object.__setattr__(self, "compiled_sources", re.compile("|".join(branches)))
+
     def __post_init__(self):
         if isinstance(self.source_patterns, str):
             self.source_patterns = [self.source_patterns]
@@ -561,18 +601,13 @@ class WeightTransform:
             self.source_patterns[i] = pattern
 
         # Construct the regex we will use to rename keys from the sources to the targets
-        branches = []
-        for i, source_pattern in enumerate(self.source_patterns):
-            group_name = f"g{i}"
-            pattern = source_pattern.replace(".*.", r"\..*\.")
-            branches.append(f"(?P<{group_name}>{pattern})")
-        self.compiled_sources = re.compile("|".join(branches))
+        self._rebuild_compiled_sources()
 
     def add_tensor(self, target_key: str, source_key: str, source_pattern: str, future: Future):
         self.collected_tensors[source_pattern].append(future)
         self.layer_targets[target_key].add(source_key)
 
-    def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
+    def rename_source_key(self, source_key: str) -> tuple[str, str | re.Pattern]:
         """
         Return a tuple (renamed_key, source_pattern_producing_the_match).
         Try renaming `source_key` according to the source and target patterns of the current WeightTransform.
@@ -694,7 +729,6 @@ class WeightConverter(WeightTransform):
     operations: list[ConversionOps] = field(default_factory=list, repr=False)
 
     def __post_init__(self):
-        WeightTransform.__post_init__(self)
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             # We allow many-to-many only if we use an internal operation that can handle it
             if not any(isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS) for op in self.operations):
@@ -970,16 +1004,10 @@ def rename_source_key(
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
-    weight_mapping: list[WeightConverter | WeightRenaming] | None,
+    load_config: Any,
     tp_plan: dict[str, str] | None,
-    hf_quantizer: HfQuantizer | None,
-    dtype: torch.dtype | None = None,
-    device_map: dict | None = None,
     dtype_plan: dict | None = None,
-    device_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
     disk_offload_index: dict | None = None,
-    disk_offload_folder: str | None = None,
-    offload_buffers: bool = False,
 ):
     r"""
     We build a mapping from the keys obtained by renaming each of the checkpoint keys according to the weight_mapping rules.
@@ -1069,9 +1097,14 @@ def convert_and_load_state_dict_in_model(
     """
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
-    device_map = device_map or {"": "cpu"}
+    device_map = load_config.device_map or {"": "cpu"}
+    hf_quantizer = load_config.hf_quantizer
+    dtype = load_config.dtype
+    device_mesh = load_config.device_mesh
+    disk_offload_folder = load_config.disk_offload_folder
+    offload_buffers = load_config.offload_buffers
     dtype_plan = dtype_plan or {}
-    weight_mapping = weight_mapping or []
+    weight_mapping = load_config.weight_mapping or []
     meta_model_state_dict = model.state_dict()
     model_buffers = {k for k, _ in model.named_buffers()}
 

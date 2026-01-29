@@ -24,10 +24,10 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class Olmo2Config(PreTrainedConfig):
+class Olmo2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Olmo2Model`]. It is used to instantiate an OLMo2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

@@ -94,7 +94,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
                 with CaptureLogger(logger) as cl:
-                    peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                    peft_model = transformers_class.from_pretrained(model_id, use_safetensors=False).to(torch_device)
                 # ensure that under normal circumstances, there  are no warnings about keys
                 self.assertNotIn("unexpected keys", cl.out)
                 self.assertNotIn("missing keys", cl.out)
@@ -111,7 +111,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                peft_model = transformers_class.from_pretrained(model_id, revision="refs/pr/2").to(torch_device)
 
                 state_dict = peft_model.get_adapter_state_dict()
 
@@ -125,7 +125,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                peft_model = transformers_class.from_pretrained(model_id, revision="refs/pr/2").to(torch_device)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -675,11 +675,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 dummy_state_dict["foobar"] = next(iter(dummy_state_dict.values()))
 
                 with CaptureLogger(logger) as cl:
-                    model.load_adapter(
-                        adapter_state_dict=dummy_state_dict, peft_config=peft_config, low_cpu_mem_usage=False
-                    )
+                    model.load_adapter(adapter_state_dict=dummy_state_dict, peft_config=peft_config)
 
-                msg = "Loading adapter weights from state_dict led to unexpected keys not found in the model: foobar"
+                msg = "foobar | UNEXPECTED"
                 self.assertIn(msg, cl.out)
 
     def test_peft_from_pretrained_missing_keys_warning(self):
@@ -717,9 +715,8 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 key = key.removeprefix(peft_prefix)
                 # 2. Insert adapter name
                 prefix, _, suffix = key.rpartition(".")
-                key = f"{prefix}.other.{suffix}"
-
-                msg = f"Loading adapter weights from state_dict led to missing keys in the model: {key}"
+                key = f".other.{suffix}"
+                msg = f"{key} | MISSING |"
                 self.assertIn(msg, cl.out)
 
     def test_peft_load_adapter_training_inference_mode_true(self):
@@ -735,8 +732,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     peft_model.save_pretrained(tmpdirname)
                     model = transformers_class.from_pretrained(peft_model.config._name_or_path)
                     model.load_adapter(tmpdirname)
-                    assert not any(p.requires_grad for p in model.parameters())
                     assert not any(m.training for m in model.modules())
+                    grads = [n for n, p in model.named_parameters() if p.requires_grad]
+                    assert len(grads) == 0
                     del model
 
     def test_peft_load_adapter_training_inference_mode_false(self):
@@ -746,7 +744,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                peft_model = transformers_class.from_pretrained(model_id, use_safetensors=False).to(torch_device)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)

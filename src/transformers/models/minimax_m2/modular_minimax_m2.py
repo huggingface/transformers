@@ -22,7 +22,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
@@ -43,7 +43,7 @@ from ..mixtral.modeling_mixtral import (
 )
 
 
-class MiniMaxM2Config(PreTrainedConfig):
+class MiniMaxM2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`MiniMaxM2Model`]. It is used to instantiate an
     MiniMaxM2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -203,27 +203,6 @@ class MiniMaxM2Config(PreTrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
-
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or self.rope_parameters
-        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
-
-        # Standardize and validate the correctness of rotary position embeddings parameters
-        # Model uses non-standard naming for rope params, overwrite!
-        self.rope_parameters.setdefault("rope_theta", self.default_theta)
-        self.rope_parameters["partial_rotary_factor"] = (
-            kwargs.pop("rotary_dim", self.head_dim // 2) / self.head_dim
-        )  # Default to `0.5`
-        self.standardize_rope_params()
-
-        if ignore_keys_at_rope_validation is None:
-            ignore_keys_at_rope_validation = {"partial_rotary_factor"}
-        else:
-            ignore_keys_at_rope_validation |= {"partial_rotary_factor"}
-
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
-        return kwargs
 
 
 class MiniMaxM2TopKRouter(MixtralTopKRouter):

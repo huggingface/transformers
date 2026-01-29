@@ -140,14 +140,13 @@ def _get_terminal_width(default=80):
 def log_state_dict_report(
     *,
     model,
-    pretrained_model_name_or_path,
+    load_config,
     logger: logging.Logger | None = None,
     error_msgs: Iterable[str] | None = None,
     unexpected_keys=None,
     missing_keys=None,
     mismatched_keys=None,
     mismatched_shapes=None,
-    ignore_mismatched_sizes=True,
     conversion_errors=None,
     color=True,  # allow disabling for plain logs
 ):
@@ -165,6 +164,8 @@ def log_state_dict_report(
     mismatched_keys = mismatched_keys or []
     mismatched_shapes = mismatched_shapes or []
     conversion_errors = conversion_errors or {}
+    pretrained_model_name_or_path = load_config.pretrained_model_name_or_path
+    ignore_mismatched_sizes = load_config.ignore_mismatched_sizes
 
     # Detect whether the current stdout supports ANSI colors; allow callers to pass `color=False` to force no color
     color_enabled = bool(color and sys.stdout.isatty())

@@ -769,6 +769,8 @@
         title: xLSTM
       - local: model_doc/yoso
         title: YOSO
+      - local: model_doc/youtu
+        title: Youtu-LLM
       - local: model_doc/zamba
         title: Zamba
       - local: model_doc/zamba2
@@ -1097,6 +1099,8 @@
         title: glm4v
       - local: model_doc/glm4v_moe
         title: glm4v_moe
+      - local: model_doc/glm_ocr
+        title: GlmOcr
       - local: model_doc/got_ocr2
         title: GOT-OCR2
       - local: model_doc/granitevision

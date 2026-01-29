@@ -21,7 +21,7 @@
 from typing import Any
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 from ..siglip import SiglipVisionConfig
 
@@ -29,7 +29,7 @@ from ..siglip import SiglipVisionConfig
 logger = logging.get_logger(__name__)
 
 
-class T5Gemma2TextConfig(PreTrainedConfig):
+class T5Gemma2TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`T5Gemma2TextModel`]. It is used to instantiate the encoder's
     text model portion of the T5Gemma2 Model according to the specified arguments, defining the model architecture. Instantiating
@@ -191,9 +191,15 @@ class T5Gemma2TextConfig(PreTrainedConfig):
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
+
+        # Set default values if not present
+        if self.rope_parameters.get("full_attention") is None:
+            self.rope_parameters["full_attention"] = {"rope_type": "default"}
         self.rope_parameters["full_attention"].setdefault(
             "rope_theta", kwargs.pop("rope_theta", self.default_theta["global"])
         )
+        if self.rope_parameters.get("sliding_attention") is None:
+            self.rope_parameters["sliding_attention"] = {"rope_type": "default"}
         self.rope_parameters["sliding_attention"].setdefault(
             "rope_theta", kwargs.pop("rope_local_base_freq", self.default_theta["local"])
         )
@@ -302,7 +308,7 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-class T5Gemma2DecoderConfig(PreTrainedConfig):
+class T5Gemma2DecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`T5Gemma2DecoderModel`]. It is used to instantiate the decoder
     text model portion of the T5Gemma2 Model according to the specified arguments, defining the model architecture. Instantiating
@@ -464,9 +470,15 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
+
+        # Set default values if not present
+        if self.rope_parameters.get("full_attention") is None:
+            self.rope_parameters["full_attention"] = {"rope_type": "default"}
         self.rope_parameters["full_attention"].setdefault(
             "rope_theta", kwargs.pop("rope_theta", self.default_theta["global"])
         )
+        if self.rope_parameters.get("sliding_attention") is None:
+            self.rope_parameters["sliding_attention"] = {"rope_type": "default"}
         self.rope_parameters["sliding_attention"].setdefault(
             "rope_theta", kwargs.pop("rope_local_base_freq", self.default_theta["local"])
         )
@@ -609,6 +621,7 @@ class T5Gemma2Config(PreTrainedConfig):
             "attention_dropout",
             "vocab_size",
             "dtype",
+            "return_dict",
         ]
 
         if key in shared_attr_with_submodules:
