@@ -521,18 +521,17 @@ class WeightTransform:
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
 
     def __setattr__(self, name, value):
-        # We do not allow to re-set the patterns, as they are linked between each other and changing one
-        # without the other can mess-up with the capturing groups/compiled sources
-        if name in ("source_patterns", "target_patterns") and hasattr(self, name):
-            raise ValueError(f"Cannot assign to field {name}")
+        if name in ("source_patterns", "target_patterns"):
+            # We do not allow to re-set the patterns, as they are linked between each other and changing one
+            # without the other can mess-up with the capturing groups/compiled sources
+            if hasattr(self, name):
+                raise ValueError(f"Cannot assign to field {name}, you should create a new instance")
+            # Switch str to list
+            elif isinstance(value, str):
+                value = [value]
         object.__setattr__(self, name, value)
 
     def __post_init__(self):
-        if isinstance(self.source_patterns, str):
-            self.source_patterns = [self.source_patterns]
-        if isinstance(self.target_patterns, str):
-            self.target_patterns = [self.target_patterns]
-
         # Due to how our `_checkpoint_conversion_mapping` mappings are written, we need a few exceptions here
         # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
         # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
