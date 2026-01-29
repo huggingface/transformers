@@ -279,7 +279,9 @@ if __name__ == "__main__":
 
             # This will go the path `transformers/tokenization_mistral_common.py::MistralCommonBackend::from_pretrained --> mistral_common.tokens.tokenizers.utils.download_tokenizer_from_hf_hub`.
             # No idea at all why we need the statement below again (`MistralCommonBackend.from_pretrained`).
-            AutoTokenizer.from_pretrained(repo_id, tokenizer_type="mistral", local_files_only=local_files_only, revision=None)
+            AutoTokenizer.from_pretrained(
+                repo_id, tokenizer_type="mistral", local_files_only=local_files_only, revision=None
+            )
 
             _ = MistralCommonBackend.from_pretrained(
                 repo_id,
