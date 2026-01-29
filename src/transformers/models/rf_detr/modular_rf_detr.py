@@ -741,6 +741,10 @@ class RfDetrModelOutput(LwDetrModelOutput):
 
 
 class RfDetrModel(LwDetrModel):
+    def __init__(self, config: RfDetrConfig):
+        super().__init__(config)
+        self.d_model = config.d_model
+
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -831,47 +835,43 @@ class RfDetrModel(LwDetrModel):
 
         group_detr = self.group_detr if self.training else 1
         topk = self.num_queries
-        topk_coords_logits = []
-        object_query_undetach = []
+        enc_outputs_coord_logits = torch.empty(
+            (batch_size, topk * group_detr, 4), device=self.device, dtype=object_query_embedding.dtype
+        )
+        enc_outputs_class = torch.empty(
+            (batch_size, topk * group_detr, self.config.d_model),
+            device=self.device,
+            dtype=object_query_embedding.dtype,
+        )
 
         # Iterate over each group of object queries to refine the object queries
         for group_id in range(group_detr):
-            group_object_query = self.enc_output[group_id](object_query_embedding)
-            group_object_query = self.enc_output_norm[group_id](group_object_query)
+            object_query = self.enc_output[group_id](object_query_embedding)
+            object_query = self.enc_output_norm[group_id](object_query)
 
-            group_enc_outputs_class = self.enc_out_class_embed[group_id](group_object_query)
-            group_delta_bbox = self.enc_out_bbox_embed[group_id](group_object_query)
-            group_enc_outputs_coord = refine_bboxes(output_proposals, group_delta_bbox)
+            enc_outputs_class_proposals = self.enc_out_class_embed[group_id](object_query)
+            delta_bbox = self.enc_out_bbox_embed[group_id](object_query)
+            enc_outputs_coord = refine_bboxes(output_proposals, delta_bbox)
 
-            group_topk_proposals = torch.topk(group_enc_outputs_class.max(-1)[0], topk, dim=1)[1]
-            group_topk_coords_logits_undetach = torch.gather(
-                group_enc_outputs_coord,
+            topk_proposals = torch.topk(enc_outputs_class_proposals.max(-1)[0], topk, dim=1)[1]
+            topk_coords_logits_undetach = torch.gather(
+                enc_outputs_coord,
                 1,
-                group_topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
+                topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
             )
-            group_topk_coords_logits = group_topk_coords_logits_undetach.detach()
-            group_object_query_undetach = torch.gather(
-                group_object_query, 1, group_topk_proposals.unsqueeze(-1).repeat(1, 1, self.config.d_model)
+            topk_coords_logits = topk_coords_logits_undetach.detach()
+            object_query_undetach = torch.gather(
+                object_query, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, self.config.d_model)
             )
 
-            topk_coords_logits.append(group_topk_coords_logits)
-            object_query_undetach.append(group_object_query_undetach)
-
-        # Concatenate the object queries and reference points from all groups
-        topk_coords_logits = torch.cat(topk_coords_logits, 1)
-        object_query_undetach = torch.cat(object_query_undetach, 1)
-
-        # Get the class and coordinate logits from the object queries
-        # enc_outputs_class (batch_size, num_queries, d_model) : object queries
-        # enc_outputs_coord_logits (batch_size, num_queries, 4) : coordinate logits of the object queries
-        enc_outputs_class = object_query_undetach
-        enc_outputs_coord_logits = topk_coords_logits
+            enc_outputs_coord_logits[:, group_id * topk : (group_id + 1) * topk] = topk_coords_logits
+            enc_outputs_class[:, group_id * topk : (group_id + 1) * topk] = object_query_undetach
 
         # Refine the reference points using the coordinate logits
-        two_stage_len = topk_coords_logits.shape[-2]
+        two_stage_len = enc_outputs_coord_logits.shape[-2]
         reference_points_two_stage_subset = reference_points[..., :two_stage_len, :]
         reference_points_subset = reference_points[..., two_stage_len:, :]
-        reference_points_two_stage_subset = refine_bboxes(topk_coords_logits, reference_points_two_stage_subset)
+        reference_points_two_stage_subset = refine_bboxes(enc_outputs_coord_logits, reference_points_two_stage_subset)
         reference_points = torch.cat([reference_points_two_stage_subset, reference_points_subset], dim=-2)
         init_reference_points = reference_points
 
