@@ -14,6 +14,7 @@
 # limitations under the License.
 import queue
 import threading
+from abc import abstractmethod
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ from functools import partial
 from itertools import count
 from math import ceil
 from time import perf_counter
+from typing import Any
 
 import torch
 from torch import nn
@@ -29,11 +31,11 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import CompileConfig, GenerationConfig
-from ...generation.logits_process import LogitsProcessor
+from ...generation.logits_process import LogitsProcessorList
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
-from .requests import GenerationOutput, RequestState, RequestStatus, logger
+from .requests import TMP_TOKEN_ID, GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 
 
@@ -161,17 +163,48 @@ def build_attention_mask(
 @dataclass
 class PagedAttentionArgs:
     input_ids: torch.Tensor
-    attention_mask: torch.Tensor | None
+    attention_mask: torch.Tensor | dict[str, torch.Tensor] | None
     position_ids: torch.Tensor
-    cumulative_seqlens_q: torch.Tensor
-    cumulative_seqlens_k: torch.Tensor
+    cu_seq_lens_q: torch.Tensor
+    cu_seq_lens_k: torch.Tensor | dict[str, torch.Tensor]
     max_seqlen_q: int
-    max_seqlen_k: int
+    max_seqlen_k: int | dict[str, int]
     write_index: list[torch.Tensor]
     read_index: list[torch.Tensor]
     logits_indices: torch.Tensor
     cache: PagedAttentionCache
     use_cache: bool = False
+
+    def asdict(self) -> dict[str, Any]:
+        return {
+            "input_ids": self.input_ids,
+            "attention_mask": self.attention_mask,
+            "position_ids": self.position_ids,
+            "cu_seq_lens_q": self.cu_seq_lens_q,
+            "cu_seq_lens_k": self.cu_seq_lens_k,
+            "max_seqlen_q": self.max_seqlen_q,
+            "max_seqlen_k": self.max_seqlen_k,
+            "write_index": self.write_index,
+            "read_index": self.read_index,
+            "logits_indices": self.logits_indices,
+            "cache": self.cache,
+            "use_cache": self.use_cache,
+        }
+
+
+# We cannot use `PreTrainedModel` for circular import reasons, so this helps keep track of the basic types
+class ProtoPretrainedModel(nn.Module):
+    config: PretrainedConfig
+    dtype: torch.dtype
+    device: torch.device
+
+    @abstractmethod
+    def set_attn_implementation(self, attn_implementation: str) -> None:
+        pass
+
+    @abstractmethod
+    def _get_logits_processor(self, generation_config: GenerationConfig) -> LogitsProcessorList:
+        pass
 
 
 # Continuous Batch Processor (Internal Logic)
@@ -250,15 +283,16 @@ class ContinuousBatchProcessor:
         """Setup the static tensors that are used for storage during the generation step. No other tensor will be
         allowed for the inputs or the outputs of the generation step."""
         self.num_pages = self.cache.num_blocks * self.cache.block_size
-        self.tensor_metadata = {"dtype": torch.int32, "device": self.model_device}
 
         # Some tensors always have the same shape regardless of the model
-        self.input_ids = torch.empty((1, self.max_batch_tokens), **self.tensor_metadata)
-        self.position_ids = torch.empty((1, self.max_batch_tokens), **self.tensor_metadata)
-        self.cumulative_seqlens_q = torch.empty((self.max_batch_tokens + 1,), **self.tensor_metadata)
+        self.input_ids = torch.empty((1, self.max_batch_tokens), dtype=torch.int32, device=self.model_device)
+        self.position_ids = torch.empty((1, self.max_batch_tokens), dtype=torch.int32, device=self.model_device)
+        self.cumulative_seqlens_q = torch.empty(
+            (self.max_batch_tokens + 1,), dtype=torch.int32, device=self.model_device
+        )
         self.max_seqlen_q = 0
-        self.logits_indices = torch.empty((self.max_batch_tokens,), **self.tensor_metadata)
-        self.output_ids = torch.empty((self.max_batch_tokens,), **self.tensor_metadata)
+        self.logits_indices = torch.empty((self.max_batch_tokens,), dtype=torch.int32, device=self.model_device)
+        self.output_ids = torch.empty((self.max_batch_tokens,), dtype=torch.int32, device=self.model_device)
 
         # For some kwargs, we have a dict of tensors with as many items as there are attention types
         layer_types = getattr(self.config, "layer_types", None)
@@ -267,27 +301,32 @@ class ContinuousBatchProcessor:
             layer_types = ["full_attention"] if sliding_window in [1, None] else ["sliding_attention"]
         layer_types = list(set(layer_types))
 
-        self.cumulative_seqlens_k = {
-            l_type: torch.empty((self.max_batch_tokens + 1), **self.tensor_metadata) for l_type in layer_types
-        }
+        self.cumulative_seqlens_k = {}
+        for l_type in layer_types:
+            self.cumulative_seqlens_k[l_type] = torch.empty(
+                (self.max_batch_tokens + 1), dtype=torch.int32, device=self.model_device
+            )
         self.max_seqlen_k = dict.fromkeys(layer_types, 0)
 
         if attn_mask_is_needed(self.config):
-            attn_mask_kwargs = {
-                "size": (1, 1, self.max_batch_tokens, self.num_pages + self.max_batch_tokens),
-                "dtype": self.model_dtype,
-                "device": self.model_device,
-            }
-            self.attention_mask = {layer_type: torch.empty(**attn_mask_kwargs) for layer_type in layer_types}
+            self.attention_mask = {}
+            for layer_type in layer_types:
+                self.attention_mask[layer_type] = torch.empty(
+                    size=(1, 1, self.max_batch_tokens, self.num_pages + self.max_batch_tokens),
+                    dtype=self.model_dtype,
+                    device=self.model_device,
+                )
         else:
             self.attention_mask = None
 
         # For other kwargs, we need a list of tensors with as many tensors as there are groups
         self.write_index_storage = [
-            torch.empty((self.max_batch_tokens,), **self.tensor_metadata) for _ in range(num_groups)
+            torch.empty((self.max_batch_tokens,), dtype=torch.int32, device=self.model_device)
+            for _ in range(num_groups)
         ]
         self.read_index_storage = [
-            torch.empty((self.num_pages + self.max_batch_tokens), **self.tensor_metadata) for _ in range(num_groups)
+            torch.empty((self.num_pages + self.max_batch_tokens), dtype=torch.int32, device=self.model_device)
+            for _ in range(num_groups)
         ]
         # For read index, the +T is because there are -1 for seqlen_q when model uses a sliding window
 
@@ -336,20 +375,20 @@ class ContinuousBatchProcessor:
         padded_kv_size = padded_q_size + padded_kv_cache_size
 
         # Prepare the kwargs, the attributes that are either tensors or dict of tensors are initialized to empty dicts
-        kwargs = {
-            "input_ids": self.input_ids[:, :q_len],
-            "position_ids": self.position_ids[:, :q_len],
-            "cu_seq_lens_q": self.cumulative_seqlens_q[: b_size + 1],
-            "max_seqlen_q": self.max_seqlen_q,
-            "logits_indices": self.logits_indices[:q_len],
-            "cu_seq_lens_k": {},
-            "max_seqlen_k": {},
-            "attention_mask": {},
-            "read_index": [],
-            "write_index": [],
-            "cache": self.cache,
-            "use_cache": False,
-        }
+        kwargs = PagedAttentionArgs(
+            input_ids=self.input_ids[:, :q_len],
+            position_ids=self.position_ids[:, :q_len],
+            cu_seq_lens_q=self.cumulative_seqlens_q[: b_size + 1],
+            max_seqlen_q=self.max_seqlen_q,
+            logits_indices=self.logits_indices[:q_len],
+            cu_seq_lens_k={},
+            max_seqlen_k={},
+            attention_mask={},
+            read_index=[],
+            write_index=[],
+            cache=self.cache,
+            use_cache=False,
+        )
 
         # If we use constant-sized slicing, there are some "padding" queries tokens which FA has some issues with. In
         # some models like Qwen3-4B-Instruct-2507, if we don't include these tokens in cumulative_seqlens_q, there are
@@ -364,28 +403,31 @@ class ContinuousBatchProcessor:
         for i, (read_index_size, write_index_size) in enumerate(self.actual_index_sizes):
             read_index_size = padded_kv_size if use_padding else read_index_size
             write_index_size = padded_q_size if use_padding else write_index_size
-            kwargs["read_index"].append(self.read_index_storage[i][:read_index_size])
-            kwargs["write_index"].append(self.write_index_storage[i][:write_index_size])
+            kwargs.read_index.append(self.read_index_storage[i][:read_index_size])
+            kwargs.write_index.append(self.write_index_storage[i][:write_index_size])
 
         # For the attributes that are dict of tensors, we replace the dict with a tensor if there is only one entry
         layer_types = list(self.cumulative_seqlens_k.keys())
         if len(layer_types) > 1:
+            kwargs.max_seqlen_k: dict[str, int] = {}
+            kwargs.cu_seq_lens_k: dict[str, torch.Tensor] = {}
+            kwargs.attention_mask: dict[str, torch.Tensor] = {}
             for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
-                kwargs["cu_seq_lens_k"][layer_type] = seqlens_k[: b_size + 1]
-                kwargs["max_seqlen_k"][layer_type] = self.max_seqlen_k[layer_type]
+                kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: b_size + 1]
+                kwargs.max_seqlen_k[layer_type] = self.max_seqlen_k[layer_type]
                 if self.attention_mask is not None:
                     k_len = padded_kv_size if use_padding else seqlens_k[b_size]
-                    kwargs["attention_mask"][layer_type] = self.attention_mask[layer_type][..., :q_len, :k_len]
+                    kwargs.attention_mask[layer_type] = self.attention_mask[layer_type][..., :q_len, :k_len]
         else:
             layer_type = layer_types[0]
-            kwargs["cu_seq_lens_k"] = self.cumulative_seqlens_k[layer_type][: b_size + 1]
-            kwargs["max_seqlen_k"] = self.max_seqlen_k[layer_type]
+            kwargs.cu_seq_lens_k = self.cumulative_seqlens_k[layer_type][: b_size + 1]
+            kwargs.max_seqlen_k = self.max_seqlen_k[layer_type]
             if self.attention_mask is not None:
                 k_len = padded_kv_size if use_padding else self.cumulative_seqlens_k[layer_type][b_size]
-                kwargs["attention_mask"] = self.attention_mask[layer_type][..., :q_len, :k_len]
+                kwargs.attention_mask = self.attention_mask[layer_type][..., :q_len, :k_len]
 
         if self.attention_mask is None:
-            kwargs["attention_mask"] = None
+            kwargs.attention_mask = None
         return kwargs
 
     def __repr__(self) -> str:
@@ -409,7 +451,7 @@ class ContinuousBatchProcessor:
                 break
             except Exception as e:
                 logger.error(f"Error processing new request: {e}", exc_info=True)
-                state: RequestState = locals().get("state")
+                state: RequestState = locals().get("state")  # type:ignore
                 if state is not None:
                     self._handle_request_error(e, state)
 
@@ -468,14 +510,16 @@ class ContinuousBatchProcessor:
         self.metrics.record_queue_metrics(len(self.scheduler.active_requests), len(self.scheduler.waiting_requests))
 
         # Schedule the next batch of requests, stop if there are no requests in the batch
-        self.requests_in_batch = self.scheduler.schedule_batch(self.max_batch_tokens, self.num_pages)
+        requests_in_batch = self.scheduler.schedule_batch(self.max_batch_tokens, self.num_pages)
 
         # If requests_in_batch is None, it means we need to offload some requests if possible
-        if self.requests_in_batch is None:
+        if requests_in_batch is None:
             if len(self.scheduler.active_requests) > 1:
                 self.soft_reset_one_request()
+                return False
             else:
                 raise RuntimeError("No requests can be scheduled and no request can be offloaded.")
+        self.requests_in_batch = requests_in_batch
         # If it's an empty list, it means we have no requests to process
         if not self.requests_in_batch:
             return False
@@ -505,7 +549,7 @@ class ContinuousBatchProcessor:
             # First we retrieve the lengths related to the request
             past_length = state.position_offset
             query_length = len(state.tokens_to_process)
-            seqlens_k = self.cache.get_seqlens_k(state.request_id, past_length, query_length)
+            seqlens_k = self.cache.get_seqlens_k(past_length, query_length)
 
             # Then we update the total lengths that are used for slicing
             self.actual_query_length += query_length
@@ -521,15 +565,20 @@ class ContinuousBatchProcessor:
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
             self.max_seqlen_q = max(self.max_seqlen_q, query_length)
 
-            if not state.remaining_prefill_tokens:
-                logits_indices.append(cumulative_seqlens_q[-1] - 1)
-
+            # Accumulate the key sequence lengths for the current request
             for layer_type, layer_type_seqlen_k in seqlens_k.items():
                 cumulative_seqlens_k[layer_type].append(cumulative_seqlens_k[layer_type][-1] + layer_type_seqlen_k)
                 self.max_seqlen_k[layer_type] = max(self.max_seqlen_k[layer_type], layer_type_seqlen_k)
 
-            self.cache.extend_read_indices(state.request_id, past_length, query_length, read_index)
-            self.cache.extend_write_indices(state.request_id, past_length, query_length, write_index)
+            # We extend the read and write indices for the cache
+            self.cache.extend_read_and_write_indices(
+                state.request_id, past_length, query_length, read_index, write_index
+            )
+
+            # If the request has no remaining prefill tokens, it means the next token prediction is relevant
+            if not state.remaining_prefill_tokens:
+                logits_indices.append(cumulative_seqlens_q[-1] - 1)
+                state.generated_tokens.append(TMP_TOKEN_ID)
 
         # When looping over request is done, we can build the actual tensors
         self._build_tensors(
@@ -564,7 +613,7 @@ class ContinuousBatchProcessor:
         logits_indices: list[int],
     ) -> None:
         """Builds the actual tensors for the current batch, by modifying the already allocated tensors in place."""
-        to_tensor = partial(torch.tensor, **self.tensor_metadata)
+        to_tensor = partial(torch.tensor, dtype=torch.int32, device=self.model_device)
 
         # Those kwargs always have the same type regardless of the model
         self.input_ids[:, : len(input_ids)] = to_tensor(input_ids)
@@ -593,12 +642,6 @@ class ContinuousBatchProcessor:
             self.actual_index_sizes[i] = (len(group_read_indices), len(group_write_indices))
 
     @traced
-    def _get_new_tokens(self, num_new_tokens: int) -> list[int]:
-        indices = self.logits_indices[:num_new_tokens]
-        new_tokens = self.output_ids[indices]
-        return new_tokens.tolist()
-
-    @traced
     def _maybe_send_output(self, state: RequestState) -> None:
         """Send output to the queue based on streaming mode and request state."""
         if state.streaming or state.status == RequestStatus.FINISHED:
@@ -607,13 +650,13 @@ class ContinuousBatchProcessor:
     @traced
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
-        new_tokens = self._get_new_tokens(len(self.requests_in_batch))
+        new_tokens = self.output_ids[: len(self.requests_in_batch)].tolist()
         current_logits_index = 0
         for state in self.requests_in_batch:
             # If the request has no remaining prompt ids, it means prefill has already ended or just finished
             if len(state.remaining_prefill_tokens) == 0:
-                # If there are no generated tokens yet, it means prefill just ended
-                if state.generated_len() == 0:
+                # If there is just one temporary token, it means prefill just ended
+                if state.generated_len() == 1:
                     self.metrics.record_ttft_metric(state.created_time, state.request_id)
                     state.status = RequestStatus.DECODING
 
@@ -641,15 +684,15 @@ class ContinuousBatchProcessor:
         copy_source, copy_destination = [], []
         while self.scheduler._requests_to_fork:
             # Get the number of children and reset it so it's not forked again
-            state = self.scheduler._requests_to_fork.pop()
-            num_children = state.num_children
-            state.num_children = 0
+            state_to_fork = self.scheduler._requests_to_fork.pop()
+            num_children = state_to_fork.num_children
+            state_to_fork.num_children = 0
             # Create the new request and add them to the scheduler
-            new_request_ids = [f"{state.request_id}__child#{i}" for i in range(num_children)]
+            new_request_ids = [f"{state_to_fork.request_id}__child#{i}" for i in range(num_children)]
             for new_request_id in new_request_ids:
-                self.scheduler.active_requests[new_request_id] = state.fork(new_request_id)
+                self.scheduler.active_requests[new_request_id] = state_to_fork.fork(new_request_id)
             # Fork the cache
-            copy_src, copy_dst = self.cache.fork_request(state.request_id, new_request_ids)
+            copy_src, copy_dst = self.cache.fork_request(state_to_fork.request_id, new_request_ids)
             copy_source.extend(copy_src)
             copy_destination.extend(copy_dst)
             # FIXME: if fork cant be done, create a new pending request without forking instead of crashing everything
@@ -693,8 +736,8 @@ class ContinuousBatchProcessor:
         self.scheduler.waiting_requests_order.clear()
 
     @traced
-    @torch.no_grad
-    def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessor, do_sample: bool) -> None:
+    @torch.no_grad()
+    def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessorList, do_sample: bool) -> None:
         """Perform a single generation step."""
 
         # If a compile config is specified, we compile the forward pass once in a wrapper
@@ -718,7 +761,9 @@ class ContinuousBatchProcessor:
         else:
             padded_q, padded_read_index_size = 0, 0
         # Retrieve the model kwargs with or without padding
-        batch_data = self.get_model_kwargs(padded_q, padded_read_index_size)
+        batch_data = self.get_model_kwargs(
+            padded_q, padded_read_index_size
+        ).asdict()  # TODO: this is imperfect, check if there is no better way to juggle dict / dataclass
 
         # If we are not using cuda graphs, we perform the generation step and return
         if self._graphs is None or not torch.cuda.is_available():
@@ -747,7 +792,7 @@ class ContinuousBatchProcessor:
 
     @traced
     def _forward_process_and_sample(
-        self, model: nn.Module, batch_data: dict, logit_processor: LogitsProcessor, do_sample: bool
+        self, model: nn.Module, batch_data: dict, logit_processor: LogitsProcessorList, do_sample: bool
     ) -> None:
         """This function performs the forward pass, logits processing, and sampling; which are broken down into smaller
         function to be easier to trace with OpenTelemetry."""
@@ -761,7 +806,9 @@ class ContinuousBatchProcessor:
         return model(**batch_data).logits
 
     @traced(span_name="logit_processing")
-    def _process_logit(self, batch_data: dict, logits: torch.Tensor, logit_processor: LogitsProcessor) -> torch.Tensor:
+    def _process_logit(
+        self, batch_data: dict, logits: torch.Tensor, logit_processor: LogitsProcessorList
+    ) -> torch.Tensor:
         # Pass continuous batching context to logits processor if it supports it.
         if hasattr(logit_processor, "set_continuous_batching_context"):
             logit_processor.set_continuous_batching_context(batch_data["logits_indices"], batch_data["cu_seq_lens_q"])
@@ -771,8 +818,8 @@ class ContinuousBatchProcessor:
         # NOTE: to be an exact match with generate, we should also convert logits2d to float32 here, but it's not needed in practice
         logits_2d = logits.view(batch_size * seq_len, vocab_size)
         input_ids_2d = batch_data["input_ids"].view(batch_size * seq_len)
-        # Process with 2D tensors
-        processed_logits_2d = logit_processor(input_ids_2d, logits_2d)
+        # Process with 2D tensors#
+        processed_logits_2d = logit_processor(input_ids_2d, logits_2d)  # type: ignore[arg-type]
         # Reshape back to 3D
         return processed_logits_2d.view(batch_size, seq_len, vocab_size)
 
@@ -786,6 +833,9 @@ class ContinuousBatchProcessor:
             next_tokens = torch.argmax(probs, dim=-1)  # shape is [1, seq_len]
             next_tokens = next_tokens.squeeze(0)  # shape is [seq_len]
         tokens = next_tokens.size(0)  # Get seq_len dimension
+        #
+        indices = self.logits_indices[:tokens]
+        next_tokens = next_tokens[indices]
         self.output_ids[:tokens].copy_(next_tokens)
 
 
@@ -800,7 +850,7 @@ class ContinuousBatchingManager:
 
     def __init__(
         self,
-        model: nn.Module,
+        model: ProtoPretrainedModel,
         generation_config: GenerationConfig,
         manual_eviction: bool = False,
         max_queue_size: int = 0,
@@ -841,7 +891,7 @@ class ContinuousBatchingManager:
         self.generation_config = generation_config
         self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
         self.do_sample = getattr(generation_config, "do_sample", True)
-        self.logit_processor = self.model._get_logits_processor(generation_config)
+        self.logit_processor: LogitsProcessorList = self.model._get_logits_processor(generation_config)
         num_return_sequences = getattr(generation_config, "num_return_sequences", None)
         self.num_return_sequences = num_return_sequences if num_return_sequences is not None else 1
 
@@ -903,7 +953,7 @@ class ContinuousBatchingManager:
         logger.warning(
             f"No behavior specified for use_cuda_graph, defaulting to {use_cuda_graph = } because "
             f"{self.model.config._attn_implementation = }. If you want to save memory, turn off cuda graphs, but "
-            "they can improve performances."
+            "they tend to improve performances by a lot."
         )
         return use_cuda_graph
 
@@ -1074,7 +1124,9 @@ class ContinuousBatchingManager:
 
     @traced
     def _generation_step(self) -> None:
-        """Perform a single generation step. This is cuda graphed"""
+        """Perform a single generation step. This is mostly cuda graphed"""
+        if self.batch_processor is None:
+            raise RuntimeError("Tried to perform a generation step before the batch processor was initialized.")
         self.batch_processor._generation_step(self.model, self.logit_processor, self.do_sample)
 
     def _run_generation_loop(self) -> None:
@@ -1140,14 +1192,6 @@ class ContinuousBatchingManager:
         # Loop body ends if there is no requests in the batch
         if not batch_processor.prepare_next_batch():
             return
-        # Debug logging of the current memory usage -- commented out because it's often not used even in debug
-        # if logger.level < logging.DEBUG:
-        #     device, total, reserved, allocated = get_device_and_memory_breakdown()
-        #     available_memory = total - max(allocated, reserved)
-        #     logger.debug(
-        # f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}, Available: {available_memory}"
-        #     )
-
         self._generation_step()
         batch_processor.update_batch()
 
@@ -1181,6 +1225,8 @@ class ContinuousBatchingManager:
 
 class ContinuousMixin:
     """Mixin class for models to add continuous batching capabilities."""
+
+    generation_config: GenerationConfig
 
     @contextmanager
     def continuous_batching_context_manager(
@@ -1247,7 +1293,7 @@ class ContinuousMixin:
 
         # Create and return the manager
         return ContinuousBatchingManager(
-            model=self,
+            model=self,  # type: ignore
             generation_config=gen_config,
             manual_eviction=manual_eviction,
             max_queue_size=max_queue_size,
@@ -1329,6 +1375,8 @@ class ContinuousMixin:
                     else:
                         if not manager.is_running():
                             logger.error("Generation thread terminated unexpectedly.")
+                            # This helps get some information in stdout
+                            print("Returning results of generate_batch despite unexpected termination.")
                             break
 
             except Exception as e:
