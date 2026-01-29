@@ -22,7 +22,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Llama4VisionConfig(PreTrainedConfig):
+class Llama4VisionConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Llama4VisionModel`]. It is used to instantiate a
     Llama4 vision model according to the specified arguments, defining the model architecture. Instantiating a configuration
