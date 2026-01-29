@@ -1039,6 +1039,8 @@ class ContinuousBatchingManager:
                 self._request_counter += 1
 
         max_new_tokens = self.generation_config.max_new_tokens if max_new_tokens is None else max_new_tokens
+        # In case there is no max length, we set an absurdly high value to avoid early stopping
+        max_new_tokens = 2147483647 if max_new_tokens is None else max_new_tokens
 
         # NOTE: do we want to handle a case when the user wants token ids returned instead of decoded text?
         state = RequestState(
