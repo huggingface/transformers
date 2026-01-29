@@ -38,6 +38,7 @@ from torch import nn
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
+from .feature_extraction_utils import BatchFeature
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .tokenization_utils_base import BatchEncoding
 from .utils import (
@@ -468,7 +469,7 @@ class LengthGroupedSampler(Sampler):
         self.batch_size = batch_size
         if lengths is None:
             model_input_name = model_input_name if model_input_name is not None else "input_ids"
-            if not isinstance(dataset[0], (dict, BatchEncoding)) or model_input_name not in dataset[0]:
+            if not isinstance(dataset[0], (dict, BatchEncoding, BatchFeature)) or model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{model_input_name}' key."
@@ -528,7 +529,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
 
         if lengths is None:
             model_input_name = model_input_name if model_input_name is not None else "input_ids"
-            if not isinstance(dataset[0], (dict, BatchEncoding)) or model_input_name not in dataset[0]:
+            if not isinstance(dataset[0], (dict, BatchEncoding, BatchFeature)) or model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{model_input_name}' key."
