@@ -4,6 +4,14 @@ on:
   schedule:
     # Run every night at 2 AM UTC
     - cron: "0 2 * * *"
+  pull_request:
+    paths:
+      - 'setup.py'
+      - '.github/workflows/nightly-extras-smoke-test.yml'
+      - 'utils/extract_metadata.py'
+  push:
+    branches:
+      - 'test-extras-*'  # Allow testing on branches matching this pattern
   workflow_dispatch:
 
 jobs:
