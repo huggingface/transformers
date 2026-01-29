@@ -159,11 +159,15 @@ _deps = [
     "opentelemetry-api",
     "opentelemetry-exporter-otlp",
     "opentelemetry-sdk",
-    "mistral-common[image]>=1.8.8",
 ]
 
 if PYTHON_MINOR_VERSION < 14:
-    _deps += ["sudachipy>=0.6.6", "sudachidict_core>=20220729", "ray[tune]>=2.7.0"]
+    _deps += [
+        "sudachipy>=0.6.6",
+        "sudachidict_core>=20220729",
+        "ray[tune]>=2.7.0",
+        "mistral-common[image]>=1.8.8",
+    ]
 
 if PYTHON_MINOR_VERSION < 13:
     _deps += ["kenlm"]
@@ -194,7 +198,8 @@ extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcs
 extras["kernels"] = deps_list("kernels")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
-extras["mistral-common"] = deps_list("mistral-common[image]")
+if PYTHON_MINOR_VERSION < 14:
+    extras["mistral-common"] = deps_list("mistral-common[image]")
 extras["chat_template"] = deps_list("jinja2", "jmespath")
 extras["sklearn"] = deps_list("scikit-learn")
 extras["accelerate"] = deps_list("accelerate")
@@ -208,7 +213,7 @@ if PYTHON_MINOR_VERSION < 14:
     extras["integrations"] += extras["ray"]
 extras["codecarbon"] = deps_list("codecarbon")
 extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"]
-extras["natten"] = deps_list("natten") + extras["torch"]
+extras["natten"] = extras["torch"] + deps_list("natten")
 extras["num2words"] = deps_list("num2words")
 extras["benchmark"] = deps_list("optimum-benchmark")
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "rhoknp")
