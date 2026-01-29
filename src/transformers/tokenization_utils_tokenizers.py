@@ -1198,7 +1198,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         if local_files_only or is_offline_mode():
             return tokenizer
-        
+
         if not is_local and isinstance(pretrained_model_name_or_path, str):
             _id = pretrained_model_name_or_path.lower()
             # Only continue for likely Mistral repos/ids; otherwise no-op.
