@@ -643,10 +643,6 @@ class Trainer:
             )
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
 
-        pc = getattr(self.accelerator, "parallelism_config", None)
-        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
-            self.add_callback(SPEvalCallBack)
-
         # Add JIT checkpoint callback if enabled
         if self.args.enable_jit_checkpoint:
             from .trainer_jit_checkpoint import JITCheckpointCallback
