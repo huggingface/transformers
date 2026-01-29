@@ -200,6 +200,10 @@ class DetrConfig(PreTrainedConfig):
             backbone_kwargs=backbone_kwargs,
         )
 
+        # If we are using timm backbone, we need to make sure weights get loaded after the model is initialized
+        if use_timm_backbone and use_pretrained_backbone:
+            use_pretrained_backbone = False
+
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
         self.num_channels = num_channels
