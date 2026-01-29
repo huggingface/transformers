@@ -145,6 +145,11 @@ class RequestState:
     _timestamps: list[float] = field(default_factory=list)  # Timestamps of the generated tokens
     _true_initial_tokens: int = 0  # The true number of initial tokens, useful when soft resetting requests
     # TODO: remove the attribute above to _num_initial_tokens once initial_tokens is renamed
+    _new_tokens_limit: int = 2147483647  # An int to check the max number of new tokens w/out always comparing with None
+
+    def __post_init__(self):
+        # If no max length is set, we set an absurdly high value which will never be reached
+        self._new_tokens_limit = 2147483647 if self.max_new_tokens is None else self.max_new_tokens
 
     @property
     def status(self) -> RequestStatus:
@@ -205,14 +210,14 @@ class RequestState:
 
         # Replace the temporary token if we're not finishing due to max length
         # (EOS tokens should still be added to the output)
-        if is_eos or (self.max_new_tokens is not None and current_len < self.max_new_tokens):
+        if is_eos or (current_len < self._new_tokens_limit):
             self.generated_tokens[-1] = token_id
             current_len += 1
         else:
             logger.warning(f"Request {self.request_id} generated a useless token: {token_id}")
             self.generated_tokens.pop()
 
-        if is_eos or (self.max_new_tokens is not None and current_len >= self.max_new_tokens):
+        if is_eos or current_len >= self._new_tokens_limit:
             self.status = RequestStatus.FINISHED
             return True
         return False  # We still need to process more tokens
