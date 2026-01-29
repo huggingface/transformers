@@ -2562,7 +2562,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Tie the weights
             setattr(parent, name, source_param)
             self._adjust_bias(parent, source_param)
-            # Remove from missing if necesary
+            # Remove from missing if necessary
             if missing_keys is not None and remove_from_missing:
                 missing_keys.discard(target_param_name)
 

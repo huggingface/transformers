@@ -972,7 +972,7 @@ def rename_source_key(
 ) -> tuple[str, str | None]:
     """
     Rename a source key given all the renaming and weight conversion patterns we have. Also takes care of adding/removing
-    the base model prefix during loading if necesary.
+    the base model prefix during loading if necessary.
     """
     renamed_key = source_key
     # 1. apply all renamings in turns (if multiple match, it's the responsibility of the mappings to make sure they
@@ -988,7 +988,7 @@ def rename_source_key(
         if source_pattern is not None:
             break
 
-    # 3. check if we need to add or remove prefix if necesary (only during loading, not saving)
+    # 3. check if we need to add or remove prefix if necessary (only during loading, not saving)
     if prefix is not None and meta_state_dict is not None:
         if (
             renamed_key.startswith(prefix)
