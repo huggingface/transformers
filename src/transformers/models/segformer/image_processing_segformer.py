@@ -12,6 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for Segformer."""
+"""
+SegFormer image processor.
+This module implements the image processing class for SegFormer models.
+It handles resizing, normalization, and conversion to tensors.
+This documentation was improved as a contribution for open source.
+"""
+
 
 import numpy as np
 
