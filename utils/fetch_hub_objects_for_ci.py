@@ -273,10 +273,14 @@ if __name__ == "__main__":
             from transformers.tokenization_mistral_common import MistralCommonBackend
 
             repo_id = "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503"
-            AutoTokenizer.from_pretrained(repo_id, tokenizer_type="mistral")
 
             # determine if we already have this downloaded
             local_files_only = len(list_local_hf_repo_files(repo_id, revision=None)) > 0
+
+            # This will go the path `transformers/tokenization_mistral_common.py::MistralCommonBackend::from_pretrained --> mistral_common.tokens.tokenizers.utils.download_tokenizer_from_hf_hub`.
+            # No idea at all why we need the statement below again (`MistralCommonBackend.from_pretrained`).
+            AutoTokenizer.from_pretrained(repo_id, tokenizer_type="mistral", local_files_only=local_files_only, revision=None)
+
             _ = MistralCommonBackend.from_pretrained(
                 repo_id,
                 local_files_only=local_files_only,
