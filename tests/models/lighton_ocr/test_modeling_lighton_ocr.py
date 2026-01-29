@@ -243,11 +243,14 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         """
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
-        # Ensure image_sizes matches the batch size of pixel_values or input_ids
-        if "pixel_values" in inputs_dict and "image_sizes" in inputs_dict:
+        # Ensure image_sizes is properly set when pixel_values is present
+        if "pixel_values" in inputs_dict:
             batch_size = inputs_dict["pixel_values"].shape[0]
-            # If image_sizes doesn't match batch size, adjust it
-            if len(inputs_dict["image_sizes"]) != batch_size:
+            # If image_sizes is missing or None, infer from pixel_values
+            if "image_sizes" not in inputs_dict or inputs_dict["image_sizes"] is None:
+                _, _, height, width = inputs_dict["pixel_values"].shape
+                inputs_dict["image_sizes"] = [(height, width)] * batch_size
+            elif len(inputs_dict["image_sizes"]) != batch_size:
                 # Take only the first batch_size entries
                 inputs_dict["image_sizes"] = inputs_dict["image_sizes"][:batch_size]
 

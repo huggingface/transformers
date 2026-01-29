@@ -928,7 +928,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         set_seed(42)
 
         model_name = "roneneldan/TinyStories-33M"
-        dataset_name = "wikitext"
+        dataset_name = "Salesforce/wikitext"
         dataset_config = "wikitext-2-raw-v1"
         dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:40]")
         tokenizer = AutoTokenizer.from_pretrained(model_name)

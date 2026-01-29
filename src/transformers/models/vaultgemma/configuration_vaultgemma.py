@@ -20,10 +20,10 @@
 
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class VaultGemmaConfig(PreTrainedConfig):
+class VaultGemmaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`VaultGemmaModel`]. It is used to instantiate an VaultGemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

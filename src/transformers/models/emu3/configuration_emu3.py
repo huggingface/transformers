@@ -15,7 +15,7 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
 class Emu3VQVAEConfig(PreTrainedConfig):
@@ -108,7 +108,7 @@ class Emu3VQVAEConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class Emu3TextConfig(PreTrainedConfig):
+class Emu3TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Emu3TextModel`]. It is used to instantiate a
     emu3 model according to the specified arguments, defining the model architecture. Instantiating a

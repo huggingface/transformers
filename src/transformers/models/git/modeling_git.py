@@ -1059,6 +1059,10 @@ class GitModel(GitPreTrainedModel):
                 else past_key_values.get_seq_length()
             )
 
+        # Adjust position ids by adding image seq length
+        if pixel_values is None and past_key_values is not None and input_ids.shape[1] == 1:
+            position_ids = position_ids + past_key_values_length
+
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -1398,41 +1402,20 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         is_first_iteration=False,
         **kwargs,
     ):
-        # Overwritten -- `git` has special cache handling and doesn't support generating from `inputs_embeds` atm
+        # Overwritten -- `git` has special `pixel_values` handling
 
-        # cut decoder_input_ids if past_key_values is used
-        if past_key_values is not None:
-            past_length = past_key_values.get_seq_length()
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        input_shape = input_ids.shape
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
-        model_inputs = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-            "cache_position": cache_position,
-        }
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
 
         if is_first_iteration or not use_cache:
             model_inputs["pixel_values"] = pixel_values
-
-        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
-        for key, value in kwargs.items():
-            if key not in model_inputs:
-                model_inputs[key] = value
 
         return model_inputs
 

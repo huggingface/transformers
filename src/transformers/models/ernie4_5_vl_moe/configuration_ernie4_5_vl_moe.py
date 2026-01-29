@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 
 
 class Ernie4_5_VL_MoeVisionConfig(PreTrainedConfig):
@@ -95,7 +96,7 @@ class Ernie4_5_VL_MoeVisionConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
 
 
-class Ernie4_5_VL_MoeTextConfig(PreTrainedConfig):
+class Ernie4_5_VL_MoeTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Ernie4_5_VL_MoeTextModel`]. It is used to instantiate a
     the text model portion of the complete Ernie4.5-VL Moe model according to the specified arguments, defining the model architecture.

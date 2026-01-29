@@ -154,6 +154,17 @@ class GPURawMetrics:
             "monitoring_status": self.monitoring_status.value,
         }
 
+    @classmethod
+    def from_dict(cls, data: dict[str, None | int | float | str]) -> "GPURawMetrics":
+        """Create a GPURawMetrics instance from a dictionary."""
+        return cls(
+            utilization=data["utilization"],
+            memory_used=data["memory_used"],
+            timestamps=data["timestamps"],
+            timestamp_0=data["timestamp_0"],
+            monitoring_status=GPUMonitoringStatus(data["monitoring_status"]),
+        )
+
 
 # Main class, used to monitor the GPU utilization during benchmark execution
 class GPUMonitor:

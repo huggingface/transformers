@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_flash_attn_2_available, logging
 from ...utils.generic import is_flash_attention_requested
@@ -54,7 +54,7 @@ else:
 logger = logging.get_logger(__name__)
 
 
-class ModernBertConfig(PreTrainedConfig):
+class ModernBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`ModernBertModel`]. It is used to instantiate an ModernBert
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
