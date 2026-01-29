@@ -216,7 +216,7 @@ class PreTrainedConfig(PushToHubMixin):
         # BC for rotary embeddings. We will pop out legacy keys from kwargs and rename to new format
         if hasattr(self, "rope_parameters"):
             ignore_keys_at_rope_validation = kwargs.pop("ignore_keys_at_rope_validation", None)
-            if not hasattr(self, "RotaryEmbeddingConfigMixin"):
+            if not hasattr(self, "convert_rope_params_to_dict"):
                 kwargs = RotaryEmbeddingConfigMixin.convert_rope_params_to_dict(
                     self, ignore_keys_at_rope_validation=ignore_keys_at_rope_validation, **kwargs
                 )
