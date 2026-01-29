@@ -2326,7 +2326,7 @@ class Trainer:
                 # configure fsdp plugin for qlora if any
                 self._fsdp_qlora_plugin_updates()
                 if self.accelerator.mixed_precision != "fp8":
-                    self.model = self.accelerator.prepare(self.model)
+                    model = self.accelerator.prepare(self.model)
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
         # prepare using `accelerator` prepare
