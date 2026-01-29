@@ -24,6 +24,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install setuptools
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools
+
       - name: Extract Python versions from setup.py
         id: extract-versions
         run: |
@@ -50,6 +55,11 @@ jobs:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
 
+      - name: Install base dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools
+
       - name: Extract extras for this Python version
         id: get-extras
         run: |
@@ -59,7 +69,6 @@ jobs:
 
       - name: Install base package
         run: |
-          python -m pip install --upgrade pip
           echo "Installing base package..."
           pip install -e .
 
