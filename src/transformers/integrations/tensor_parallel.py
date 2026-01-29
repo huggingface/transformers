@@ -1165,6 +1165,32 @@ class ParallelInterface(GeneralInterface):
         else {}
     )
 
+    # Map plan names to sharding dimensions for weights
+    # For weights: colwise shards dim -2, rowwise shards dim -1
+    # For embedding: rowwise shards dim 0 (vocab), colwise shards dim -2 (hidden)
+    plan_to_weight_dim: dict[str, int | None] = {
+        "colwise": -2,
+        "colwise_gather_output": -2,
+        "packed_colwise": -2,
+        "rowwise": -1,
+        "rowwise_split_input": -1,
+        "packed_rowwise": -1,
+        "embedding_rowwise": 0,
+        "sequence_parallel": None,
+    }
+
+    # Bias sharding: colwise shards bias, rowwise doesn't (bias is replicated and all-reduced)
+    plan_to_bias_dim: dict[str, int | None] = {
+        "colwise": -1,
+        "colwise_gather_output": -1,
+        "packed_colwise": -1,
+        "rowwise": None,
+        "rowwise_split_input": None,
+        "packed_rowwise": None,
+        "embedding_rowwise": None,
+        "sequence_parallel": None,
+    }
+
 
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
@@ -1221,31 +1247,9 @@ def gather_state_dict_for_save(
     Returns:
         State dict with full (gathered) tensors
     """
-    # Map plan names to sharding dimensions
-    # For weights: colwise shards dim -2, rowwise shards dim -1
-    # For embedding: rowwise shards dim 0 (vocab), colwise shards dim -2 (hidden)
-    plan_to_weight_dim = {
-        "colwise": -2,
-        "colwise_gather_output": -2,
-        "packed_colwise": -2,
-        "rowwise": -1,
-        "rowwise_split_input": -1,
-        "packed_rowwise": -1,
-        "embedding_rowwise": 0,
-        "sequence_parallel": None,
-    }
-
-    # Bias sharding: colwise shards bias, rowwise doesn't (bias is replicated and all-reduced)
-    plan_to_bias_dim = {
-        "colwise": -1,
-        "colwise_gather_output": -1,
-        "packed_colwise": -1,
-        "rowwise": None,
-        "rowwise_split_input": None,
-        "packed_rowwise": None,
-        "embedding_rowwise": None,
-        "sequence_parallel": None,
-    }
+    # Use the global mappings from ParallelInterface (can be extended by users)
+    plan_to_weight_dim = ALL_PARALLEL_STYLES.plan_to_weight_dim
+    plan_to_bias_dim = ALL_PARALLEL_STYLES.plan_to_bias_dim
 
     result = {}
     for key, tensor in state_dict.items():
