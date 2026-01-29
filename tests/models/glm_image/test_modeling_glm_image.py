@@ -19,7 +19,6 @@ import pytest
 from parameterized import parameterized
 
 from transformers import (
-    AutoProcessor,
     GlmImageConfig,
     GlmImageForConditionalGeneration,
     GlmImageModel,
@@ -495,21 +494,22 @@ class GlmImageIntegrationTest(unittest.TestCase):
 
     def test_processor_image_to_image(self):
         """Test processor correctly prepares image-to-image inputs."""
-        from PIL import Image
-        import requests
         from io import BytesIO
-        
+
+        import requests
+        from PIL import Image
+
         # Load the image
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
         response = requests.get(url)
         image = Image.open(BytesIO(response.content))
-        
+
         # Create prompt with target shape and image token
         text = "<|dit_token_16384|><|image|><|dit_token_16385|>Add a red hat to this cat<sop>28 40<eop>"
-        
+
         # Process with actual images (nested list for batched processing)
         inputs = self.processor(text=[text], images=[[image]], return_tensors="pt")
-        
+
         # For I2I, there should be pixel_values from the source image
         self.assertIn("input_ids", inputs)
         self.assertIn("attention_mask", inputs)
