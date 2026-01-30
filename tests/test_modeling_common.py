@@ -4041,6 +4041,9 @@ class ModelTesterMixin:
             # Skip models that use get_rope_index which is not torch exportable
             if "get_rope_index" in source_code:
                 self.skipTest(reason="Model architecture uses get_rope_index which is not torch exportable")
+            # Skip checking args in torch distributions as internals are not using `torch._check` properly
+            if "torch.distributions.Distribution" in source_code:
+                torch.distributions.Distribution.set_default_validate_args(False)
 
         def _is_pure_python_object(obj) -> bool:
             if isinstance(obj, (int, float, bool, str)) or obj is None:
