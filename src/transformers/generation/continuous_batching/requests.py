@@ -129,7 +129,7 @@ class RequestState:
         position_offset (int): The current position in the sequence for position_ids.
         status (RequestStatus): The status of the request: can be one of PENDING, PREFILLING, PREFILLING_SPLIT,
                                 SPLIT_PENDING_REMAINDER, DECODING, FINISHED, FAILED
-        max_new_tokens (int): The maximum number of new tokens to generate.
+        max_new_tokens (int | None): The maximum number of new tokens to generate.
         eos_token_id (int): The ID of the end-of-sequence token.
         streaming (bool): Whether to stream tokens as they're generated
         created_time (float): The time the request was created.
@@ -149,7 +149,7 @@ class RequestState:
     allocated_blocks: int = 0  # Number of blocks allocated to the request
     position_offset: int = 0  # Current position in the sequence for position_ids
     _status: RequestStatus = RequestStatus.PENDING  # Status of the request, hidden behind a property
-    max_new_tokens: int = 20  # Maximum number of new tokens to generate
+    max_new_tokens: int | None = 20  # Maximum number of new tokens to generate. None means no limit. Default to 20.
     eos_token_id: int = -1  # ID of the end-of-sequence token
     streaming: bool = False  # Whether to stream tokens as they're generated
     created_time: float = field(default_factory=time.perf_counter)  # Time the request was created
@@ -158,6 +158,11 @@ class RequestState:
     _timestamps: list[float] = field(default_factory=list)  # Timestamps of the generated tokens
     _true_initial_tokens: int = 0  # The true number of initial tokens, useful when soft resetting requests
     # TODO: remove the attribute above to _num_initial_tokens once initial_tokens is renamed
+    _new_tokens_limit: int = 2147483647  # An int to check the max number of new tokens w/out always comparing w/ None
+
+    def __post_init__(self):
+        # If no max length is set, we set an absurdly high value which will never be reached
+        self._new_tokens_limit = 2147483647 if self.max_new_tokens is None else self.max_new_tokens
 
     @property
     def status(self) -> RequestStatus:
@@ -218,14 +223,14 @@ class RequestState:
 
         # Replace the temporary token if we're not finishing due to max length
         # (EOS tokens should still be added to the output)
-        if is_eos or (current_len < self.max_new_tokens):
+        if is_eos or (current_len < self._new_tokens_limit):
             self.generated_tokens[-1] = token_id
             current_len += 1
         else:
             logger.warning(f"Request {self.request_id} generated a useless token: {token_id}")
             self.generated_tokens.pop()
 
-        if is_eos or current_len >= self.max_new_tokens:
+        if is_eos or current_len >= self._new_tokens_limit:
             self.status = RequestStatus.FINISHED
             return True
         return False  # We still need to process more tokens
@@ -294,13 +299,14 @@ class RequestState:
         # Remove the temporary token if it exists
         if self.generated_tokens and self.generated_tokens[-1] == TMP_TOKEN_ID:
             self.generated_tokens.pop()
+        max_new_tokens = None if self.max_new_tokens is None else (self.max_new_tokens - len(self.generated_tokens))
         new_state = RequestState(
             request_id=self.request_id,
             initial_tokens=self.initial_tokens + self.generated_tokens,
             num_children=self.num_children,
             record_timestamps=self.record_timestamps,
             tokens_to_process=self.initial_tokens + self.generated_tokens,
-            max_new_tokens=self.max_new_tokens - len(self.generated_tokens),
+            max_new_tokens=max_new_tokens,
             eos_token_id=self.eos_token_id,
             streaming=self.streaming,
         )
