@@ -802,9 +802,7 @@ class RfDetrModel(LwDetrModel):
             query_feat = self.query_feat.weight[: self.num_queries]
 
         # Prepare decoder inputs (by flattening)
-        source_flatten = []
-        mask_flatten = []
-        spatial_shapes_list = []
+        source_flatten, mask_flatten, spatial_shapes_list = [], [], []
         for source, mask in zip(sources, masks):
             batch_size, num_channels, height, width = source.shape
             spatial_shape = (height, width)
