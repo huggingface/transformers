@@ -771,6 +771,16 @@ class TrainingArguments:
     # We need to track what fields those can be. Each time a new arg
     # has a dict type, it must be added to this list.
     # Important: These should be typed with Optional[Union[dict,str,...]]
+
+    save_checkpoint_limit: Optional[int] = field(
+        default=None,
+        metadata={"help": "Number of full checkpoints to keep."},
+    )
+    save_model_limit: Optional[int] = field(
+        default=None,
+        metadata={"help": "Number of model weight files to keep."},
+    )
+    
     _VALID_DICT_FIELDS = [
         "accelerator_config",
         "fsdp_config",
