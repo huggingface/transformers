@@ -13,11 +13,10 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class GlmAsrEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class GlmAsrEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GlmAsrEncoder`]. It is used to instantiate a
     glmasr audio encoder according to the specified arguments, defining the model architecture. Instantiating a

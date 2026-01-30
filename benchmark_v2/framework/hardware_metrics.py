@@ -1,14 +1,22 @@
-import json
 import logging
 import subprocess
 import sys
-import threading
 import time
 from dataclasses import dataclass
 from enum import Enum
 from logging import Logger
+from multiprocessing import Pipe, Process
+from multiprocessing.connection import Connection
 
-import gpustat
+from transformers.utils.import_utils import is_cuda_platform, is_rocm_platform
+
+
+if is_cuda_platform():
+    import pynvml
+
+if is_rocm_platform():
+    import amdsmi
+
 import psutil
 import torch
 
@@ -55,15 +63,11 @@ class HardwareInfo:
 
 
 # Functions to get information about the GPU
-def get_amd_gpu_stats() -> tuple[int, float]:
-    """Returns the utilization and memory used of an AMD GPU, both in percent"""
-    rocm_smi_output = subprocess.check_output(["rocm-smi", "--json", "--showuse", "--showmeminfo", "VRAM"])
-    gpu_stats = json.loads(rocm_smi_output.decode("utf-8"))
-    gpu_stats = [
-        (card_id, stats["GPU use (%)"], stats["VRAM Total Used Memory (B)"]) for card_id, stats in gpu_stats.items()
-    ]
-    gpu_stats.sort(key=lambda x: x[1], reverse=True)
-    return int(gpu_stats[0][1]), float(gpu_stats[0][2]) / 1024**3
+def get_amd_gpu_stats(device_handle) -> tuple[int, float]:
+    """Get AMD GPU stats using amdsmi library."""
+    utilization = amdsmi.amdsmi_get_gpu_activity(device_handle)["gfx_activity"]
+    memory_used = amdsmi.amdsmi_get_gpu_vram_usage(device_handle)["vram_used"]
+    return int(utilization), float(memory_used) / 1024**3  # Convert bytes to GB
 
 
 def get_intel_xpu_stats() -> tuple[int, float]:
@@ -96,33 +100,12 @@ def get_intel_xpu_stats() -> tuple[int, float]:
     return utilization, memory_used_gb
 
 
-def get_nvidia_gpu_stats() -> tuple[int, float]:
-    """Returns the utilization and memory used of an NVIDIA GPU, both in percent"""
-    gpu_stats = gpustat.GPUStatCollection.new_query()
-    gpu_stats = gpu_stats[0]
-    return int(gpu_stats["utilization.gpu"]), float(gpu_stats["memory.used"]) / 1024**3
-
-
-class GPUStatsCollector:
-    """A class to get statistics about the GPU. It serves as a wrapper that holds the GPU total memory and its name,
-    which is used to call the right function to get the utilization and memory used."""
-
-    def __init__(self) -> None:
-        self.device_name, self.device_memory_total = get_device_name_and_memory_total()
-        device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
-        # Monkey patch the get_utilization_and_memory_used method based on the GPU type
-        if "amd" in self.device_name.lower():
-            self.get_utilization_and_memory_used = get_amd_gpu_stats
-        elif "nvidia" in self.device_name.lower():
-            self.get_utilization_and_memory_used = get_nvidia_gpu_stats
-        elif "intel" in self.device_name.lower() or device_type == "xpu":
-            self.get_utilization_and_memory_used = get_intel_xpu_stats
-        else:
-            raise RuntimeError(f"Unsupported GPU: {self.device_name}")
-
-    def get_measurements(self) -> tuple[int, float]:
-        """Get the utilization and memory used of the GPU, both in percent"""
-        raise NotImplementedError("This method is meant to be monkey patched during __init__")
+def get_nvidia_gpu_stats(device_handle) -> tuple[int, float]:
+    """Returns the utilization and memory used of an NVIDIA GPU using pynvml."""
+    utilization = pynvml.nvmlDeviceGetUtilizationRates(device_handle).gpu
+    memory_info = pynvml.nvmlDeviceGetMemoryInfo(device_handle)
+    memory_used_gb = memory_info.used / 1024**3
+    return int(utilization), float(memory_used_gb)
 
 
 # Simple data classes to hold the raw GPU metrics
@@ -168,54 +151,171 @@ class GPURawMetrics:
 
 # Main class, used to monitor the GPU utilization during benchmark execution
 class GPUMonitor:
-    """Monitor GPU utilization during benchmark execution."""
+    """Monitor GPU utilization during benchmark execution using a separate process."""
 
-    def __init__(self, sample_interval_sec: float = 0.1, logger: Logger | None = None):
+    def __init__(self, sample_interval_sec: float = 0.05, logger: Logger | None = None):
         self.sample_interval_sec = sample_interval_sec
         self.logger = logger if logger is not None else logging.getLogger(__name__)
+        self.gpu_type = None
+        self.process = None
 
         device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
         torch_accelerator_module = getattr(torch, device_type, torch.cuda)
         self.num_available_gpus = torch_accelerator_module.device_count()
         if self.num_available_gpus == 0:
-            raise RuntimeError(f"No GPUs detected by torch.{device_type}.device_count().")
-        self.gpu_stats_getter = GPUStatsCollector()
+            self.logger.warning(f"No GPUs detected by torch.{device_type}.device_count().")
+            return
+
+        # Determine GPU type
+        device_name, _ = get_device_name_and_memory_total()
+        if "amd" in device_name.lower():
+            self.gpu_type = "amd"
+        elif "nvidia" in device_name.lower():
+            self.gpu_type = "nvidia"
+        elif "intel" in device_name.lower() or device_type == "xpu":
+            self.gpu_type = "intel"
+        else:
+            self.logger.warning(f"Unsupported GPU for monitoring: {device_name}")
+
+    @staticmethod
+    def _monitor_worker(gpu_type: str, sample_interval_sec: float, connection: Connection):
+        """Worker process for GPU monitoring."""
+        gpu_utilization = []
+        gpu_memory_used = []
+        timestamps = []
+        device_handle = None
+
+        # Initialize GPU-specific monitoring
+        if gpu_type == "amd":
+            amdsmi.amdsmi_init()
+            device_handle = amdsmi.amdsmi_get_processor_handles()[0]
+        elif gpu_type == "nvidia":
+            pynvml.nvmlInit()
+            device_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+
+        # Signal ready
+        try:
+            connection.send(0)
+        except Exception:
+            return
+
+        # Monitoring loop
+        stop = False
+        while not stop:
+            try:
+                if gpu_type == "amd":
+                    utilization, memory_used = get_amd_gpu_stats(device_handle)
+                elif gpu_type == "nvidia":
+                    utilization, memory_used = get_nvidia_gpu_stats(device_handle)
+                elif gpu_type == "intel":
+                    utilization, memory_used = get_intel_xpu_stats()
+                else:
+                    break
+
+                gpu_utilization.append(utilization)
+                gpu_memory_used.append(memory_used)
+                timestamps.append(time.time())
+            except Exception:
+                pass  # Skip failed measurements
+
+            stop = connection.poll(sample_interval_sec)
+
+        # Cleanup
+        if gpu_type == "amd":
+            try:
+                amdsmi.amdsmi_shut_down()
+            except Exception:
+                pass
+        elif gpu_type == "nvidia":
+            try:
+                pynvml.nvmlShutdown()
+            except Exception:
+                pass
+
+        # Send results back
+        try:
+            connection.send((gpu_utilization, gpu_memory_used, timestamps))
+        except Exception:
+            pass
+
+        connection.close()
 
     def start(self):
-        """Start monitoring GPU metrics."""
-        # Clear the stop event to enable monitoring
-        self.stop_event = threading.Event()
-        self.gpu_utilization = []
-        self.gpu_memory_used = []
-        self.timestamps = []
-        self.thread = threading.Thread(target=self._monitor_loop)
-        self.thread.start()
-        self.logger.debug("GPU monitoring started")
+        """Start monitoring GPU metrics in a separate process."""
+        if self.gpu_type is None:
+            self.logger.debug("GPU monitoring skipped (no supported GPU)")
+            return
+
+        self.child_connection, self.parent_connection = Pipe()
+        self.process = Process(
+            target=GPUMonitor._monitor_worker,
+            args=(self.gpu_type, self.sample_interval_sec, self.child_connection),
+            daemon=True,
+        )
+        self.process.start()
+
+        # Wait for worker to signal ready
+        if self.process.is_alive():
+            self.parent_connection.recv()
+        self.logger.debug("GPU monitoring started (multiprocessing)")
 
     def stop_and_collect(self) -> GPURawMetrics:
         """Stop monitoring and return collected metrics."""
-        self.stop_event.set()
-        self.thread.join()
-        if self.gpu_utilization:
-            timestamp_0 = self.timestamps[0]
+        # No GPU available or unsupported GPU
+        if self.process is None:
+            return GPURawMetrics(
+                utilization=[],
+                memory_used=[],
+                timestamps=[],
+                timestamp_0=0.0,
+                monitoring_status=GPUMonitoringStatus.NO_GPUS_AVAILABLE,
+            )
+
+        # Process crashed before we could collect results
+        process_failed = False
+        if not self.process.is_alive():
+            process_failed = True
+            gpu_utilization, gpu_memory_used, timestamps = [], [], []
+        else:
+            # Signal stop
+            self.parent_connection.send(0)
+            # Get results
+            try:
+                gpu_utilization, gpu_memory_used, timestamps = self.parent_connection.recv()
+            except Exception:
+                process_failed = True
+                gpu_utilization, gpu_memory_used, timestamps = [], [], []
+
+        self.parent_connection.close()
+        self.process.join(timeout=2.0)
+        if self.process.is_alive():
+            self.process.terminate()
+
+        if gpu_utilization:
+            timestamp_0 = timestamps[0]
             metrics = GPURawMetrics(
-                utilization=self.gpu_utilization,
-                memory_used=self.gpu_memory_used,
-                timestamps=[t - timestamp_0 for t in self.timestamps],
+                utilization=gpu_utilization,
+                memory_used=gpu_memory_used,
+                timestamps=[t - timestamp_0 for t in timestamps],
                 timestamp_0=timestamp_0,
                 monitoring_status=GPUMonitoringStatus.SUCCESS,
             )
-            self.logger.debug(f"GPU monitoring completed: {len(self.gpu_utilization)} samples collected")
+            self.logger.debug(f"GPU monitoring completed: {len(gpu_utilization)} samples collected")
+        elif process_failed:
+            metrics = GPURawMetrics(
+                utilization=[],
+                memory_used=[],
+                timestamps=[],
+                timestamp_0=0.0,
+                monitoring_status=GPUMonitoringStatus.FAILED,
+            )
+            self.logger.warning("GPU monitoring failed (process crashed or timed out)")
         else:
-            metrics = GPURawMetrics(monitoring_status=GPUMonitoringStatus.NO_SAMPLES_COLLECTED)
+            metrics = GPURawMetrics(
+                utilization=[],
+                memory_used=[],
+                timestamps=[],
+                timestamp_0=0.0,
+                monitoring_status=GPUMonitoringStatus.NO_SAMPLES_COLLECTED,
+            )
         return metrics
-
-    def _monitor_loop(self):
-        """Background monitoring loop using threading.Event for communication."""
-        while not self.stop_event.is_set():
-            utilization, memory_used = self.gpu_stats_getter.get_utilization_and_memory_used()
-            self.gpu_utilization.append(utilization)
-            self.gpu_memory_used.append(memory_used)
-            self.timestamps.append(time.time())
-            if self.stop_event.wait(timeout=self.sample_interval_sec):
-                break
