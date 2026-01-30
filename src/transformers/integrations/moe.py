@@ -12,14 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from functools import wraps
 
+from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available
 
 
 if is_torch_available():
     import torch
+
+logger = logging.get_logger(__name__)
 
 # Examples of experts class with its eager mm implementation
 # class Experts(nn.Module):
@@ -265,6 +269,20 @@ class ExpertsInterface(GeneralInterface):
         "grouped_mm": grouped_mm_experts_forward,
     }
 
+    def get_interface(self, experts_implementation: str, default: Callable) -> Callable:
+        """Return the requested `experts_implementation`. Also strictly check its validity, and raise if invalid."""
+        if experts_implementation is None:
+            logger.warning_once(
+                "You tried to access the `ExpertsInterface` with a `config._experts_implementation` set to `None`. This "
+                "is expected if you use an Expert Module as a standalone Module. If this is not the case, something went "
+                "wrong with the dispatch of `config._experts_implementation`"
+            )
+        elif experts_implementation != "eager" and experts_implementation not in self:
+            raise KeyError(
+                f"`{experts_implementation}` is not a valid experts implementation registered in the `ExpertsInterface`"
+            )
+        return super().get(experts_implementation, default)
+
 
 ALL_EXPERTS_FUNCTIONS = ExpertsInterface()
 
@@ -313,11 +331,9 @@ def use_experts_implementation(
 
         @wraps(original_forward)
         def forward(self, *args, **kwargs):
-            experts_forward = original_forward
-
-            if self.config._experts_implementation != "eager":
-                experts_forward = ALL_EXPERTS_FUNCTIONS[self.config._experts_implementation]
-
+            experts_forward = ALL_EXPERTS_FUNCTIONS.get_interface(
+                self.config._experts_implementation, original_forward
+            )
             return experts_forward(self, *args, **kwargs)
 
         if not hasattr(experts_class, "_apply_gate"):

@@ -32,13 +32,10 @@ import torch
 
 from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
-from .utils import is_env_variable_true, is_torch_greater_or_equal, logging
+from .utils import is_env_variable_true, logging
 
 
 _torch_distributed_available = torch.distributed.is_available()
-_is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
-if _is_dtensor_available:
-    from torch.distributed.tensor import DTensor, Replicate
 
 if TYPE_CHECKING:
     from .integrations.tensor_parallel import TensorParallelLayer
@@ -886,23 +883,20 @@ def set_param_for_module(
         unexpected_keys.add(target_name)
     else:
         if not isinstance(param_value, torch.nn.Parameter):
-            if distributed_operation is not None:
-                if getattr(distributed_operation, "use_dtensor", False):
-                    param_value = DTensor.from_local(
-                        param_value,
-                        distributed_operation.device_mesh,
-                        getattr(distributed_operation, "shard", Replicate()),
-                        run_check=False,
-                        shape=ref.size(),
-                        stride=ref.stride(),
-                    )
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
         # Remove from missing keys (it's either mismatched, or all good)
         missing_keys.discard(target_name)
-        if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
-            mismatch_keys.add((target_name, param_value.shape, ref.shape))
+
+        # Determine expected shape: for TP, use sharded shape; otherwise, use full shape
+        if distributed_operation is not None:
+            expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
+        else:
+            expected_shape = ref.shape
+
+        if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
+            mismatch_keys.add((target_name, param_value.shape, expected_shape))
         else:
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
