@@ -24,7 +24,6 @@ import json
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import List
 
 
 def get_setup_module() -> ModuleType:
@@ -49,7 +48,7 @@ def extract_python_versions() -> None:
     min_ver: int
     max_ver: int
     min_ver, max_ver = setup.SUPPORTED_PYTHON_VERSIONS
-    versions: List[str] = [f"3.{v}" for v in range(min_ver, max_ver + 1)]
+    versions: list[str] = [f"3.{v}" for v in range(min_ver, max_ver + 1)]
     print(json.dumps(versions))
 
 
