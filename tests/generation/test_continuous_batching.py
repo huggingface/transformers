@@ -39,6 +39,7 @@ from transformers.testing_utils import (
     Expectations,
     require_deterministic_for_xpu,
     require_flash_attn,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -252,6 +253,7 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
         )
 
 
+@require_torch_accelerator
 class ContinuousBatchingGenerationTest(unittest.TestCase):
     # -----------------------------------------------Parity tests----------------------------------------------- #
     #         Ensure continuous batching and non-continuous batching generation produce the same outputs         #
