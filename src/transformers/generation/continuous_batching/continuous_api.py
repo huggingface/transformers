@@ -1069,14 +1069,17 @@ class ContinuousBatchingManager:
         streaming: bool = False,
         record_timestamps: bool = False,
     ) -> None:
-        # If there is prefix sharing, we sort the inputs to maximize cache hits
+        # Infer the request ids of all incoming requests
+        with self._request_lock:
+            request_ids = [f"req_{i}" for i in range(self._request_counter, self._request_counter + len(inputs))]
+            self._request_counter += len(inputs)
+        # If there is prefix sharing, we sort the inputs to maximize cache hits but keep the order of the requests
+        ids_and_inputs = list(zip(request_ids, inputs))
         if self._use_prefix_sharing:
-            inputs = sorted(inputs, reverse=True)
+            ids_and_inputs = sorted(ids_and_inputs, key=lambda x: x[1], reverse=True)
         # Add requests in order
-        for input_ids in inputs:
-            self.add_request(
-                input_ids, max_new_tokens=max_new_tokens, streaming=streaming, record_timestamps=record_timestamps
-            )
+        for request_id, input_ids in ids_and_inputs:
+            self.add_request(input_ids, request_id, max_new_tokens, streaming, record_timestamps)
 
     def cancel_request(self, request_id: str) -> None:
         """Cancel a request by its ID.
