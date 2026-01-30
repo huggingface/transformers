@@ -273,13 +273,13 @@ class ExpertsInterface(GeneralInterface):
         """Return the requested `experts_implementation`. Also strictly check its validity, and raise if invalid."""
         if experts_implementation is None:
             logger.warning_once(
-                "You tried to access the `ExpertsInterface` with a `config.experts_implementation` set to `None`. This "
+                "You tried to access the `ExpertsInterface` with a `config._experts_implementation` set to `None`. This "
                 "is expected if you use an Expert Module as a standalone Module. If this is not the case, something went "
-                "wrong with the dispatch of `config.experts_implementation`"
+                "wrong with the dispatch of `config._experts_implementation`"
             )
         elif experts_implementation != "eager" and experts_implementation not in self:
             raise KeyError(
-                f"{experts_implementation} is not a valid experts implementation registered in the `ExpertsInterface`"
+                f"`{experts_implementation}` is not a valid experts implementation registered in the `ExpertsInterface`"
             )
         return super().get(experts_implementation, default)
 

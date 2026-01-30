@@ -3110,6 +3110,10 @@ class TestAttentionImplementation(unittest.TestCase):
         self.assertIn(
             "You tried to access the `AttentionInterface` with a `config._attn_implementation` set to `None`.", cl.out
         )
+        # With a wrong _attn_implementation, it should raise a proper exception
+        attn_module.config._attn_implementation = "foobar"
+        with self.assertRaisesRegex(KeyError, "`foobar` is not a valid attention implementation registered"):
+            _ = attn_module(hidden_states, dummy_embeddings, None)
 
         # Try the Experts (check it works + raises the warning)
         hidden_states = hidden_states.reshape(-1, hidden_size)
@@ -3118,8 +3122,12 @@ class TestAttentionImplementation(unittest.TestCase):
         with CaptureLogger(logging.get_logger("transformers.integrations.moe")) as cl:
             _ = experts_module(hidden_states, dummy_indices, dummy_scores)
         self.assertIn(
-            "You tried to access the `ExpertsInterface` with a `config.experts_implementation` set to `None`.", cl.out
+            "You tried to access the `ExpertsInterface` with a `config._experts_implementation` set to `None`.", cl.out
         )
+        # With a wrong _experts_implementation, it should raise a proper exception
+        experts_module.config._experts_implementation = "foobar"
+        with self.assertRaisesRegex(KeyError, "`foobar` is not a valid experts implementation registered"):
+            _ = experts_module(hidden_states, dummy_indices, dummy_scores)
 
 
 @require_torch

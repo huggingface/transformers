@@ -4789,7 +4789,7 @@ class AttentionInterface(GeneralInterface):
             )
         elif attn_implementation != "eager" and attn_implementation not in self:
             raise KeyError(
-                f"{attn_implementation} is not a valid attention implementation registered in the `AttentionInterface`"
+                f"`{attn_implementation}` is not a valid attention implementation registered in the `AttentionInterface`"
             )
         return super().get(attn_implementation, default)
 
