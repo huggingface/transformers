@@ -19,10 +19,10 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class SolarOpenConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class SolarOpenConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SolarOpenModel`]. It is used to instantiate a
     SolarOpen model according to the specified arguments, defining the model architecture.

@@ -14,59 +14,37 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Serving
+# Serve CLI
 
-Transformer models can be efficiently deployed using libraries such as vLLM, Text Generation Inference (TGI), and others. These libraries are designed for production-grade user-facing services, and can scale to multiple servers and millions of concurrent users. Refer to [Transformers as Backend for Inference Servers](./transformers_as_backend) for usage examples.
+The `transformers serve` CLI is a lightweight option for local or self-hosted servers. It avoids the extra runtime and operational overhead of dedicated inference engines like vLLM. Use it for evaluation, experimentation, and moderate load deployments. Features like [continuous batching](../continuous_batching) increases throughput and lowers latency.
 
 > [!TIP]
-> Responses API is now supported as an experimental API! Read more about it [here](#responses-api).
+> For large scale production deployments, use vLLM, SGLang or TGI with a Transformer model as the backend. Learn more in the [Inference backends](../community_integrations/transformers_as_backend) guide.
 
-You can also serve transformer models with the `transformers serve` CLI. With Continuous Batching, `serve` now delivers solid throughput and latency well suited for evaluation, experimentation, and moderate-load local or self-hosted deployments. While vLLM, SGLang, or other inference engines remain our recommendations for large-scale production, `serve` avoids the extra runtime and operational overhead, and is on track to gain more production-oriented features.
+The `transformers serve` command spawns a local server compatible with the [OpenAI SDK](https://platform.openai.com/docs/overview). The server works with many third-party applications and supports the REST APIs below.
 
-In this document, we dive into the different supported endpoints and modalities; we also cover the setup of several user interfaces that can be used on top of `transformers serve` in the following guides:
+- `/v1/chat/completions` for text and image requests
+- `/v1/responses` supports the [Responses API](https://platform.openai.com/docs/api-reference/responses)
+- `/v1/audio/transcriptions` for audio transcriptions
+- `/v1/models` lists available models for third-party integrations
 
-- [Jan (text and MCP user interface)](./jan)
-- [Cursor (IDE)](./cursor)
-- [Open WebUI (text, image, speech user interface)](./open_webui)
-- [Tiny-Agents (text and MCP CLI tool)](./tiny_agents)
+Install the serving dependencies.
 
-## Serve CLI
-
-> [!WARNING]
-> This section is experimental and subject to change in future versions
-
-You can serve models of diverse modalities supported by `transformers` with the `transformers serve` CLI. It spawns a local server that offers compatibility with the OpenAI SDK, which is the _de facto_ standard for LLM conversations and other related tasks. This way, you can use the server from many third party applications, or test it using the `transformers chat` CLI ([docs](conversations#chat-cli)).
-
-The server supports the following REST APIs:
-
-- `/v1/chat/completions`
-- `/v1/responses`
-- `/v1/audio/transcriptions`
-- `/v1/models`
-
-Please make sure to have the correct dependencies installed for the instructions below:
-
-```shell
+```bash
 pip install transformers[serving]
 ```
 
-To launch a server, simply use the `transformers serve` CLI command:
+Run `transformers serve` to launch a server. The default server address is http://localhost:8000.
 
 ```shell
 transformers serve
 ```
 
-The simplest way to interact with the server is through our `transformers chat` CLI
+## v1/chat/completions
 
-```shell
-transformers chat Qwen/Qwen3-4B
-```
+The `v1/chat/completions` API is based on the [Chat Completions API](https://platform.openai.com/docs/api-reference/chat). It supports text and image-based requests for LLMs and VLMs. Use it with `curl`, the [`~huggingface_hub.AsyncInferenceClient`], or the [OpenAI](https://platform.openai.com/docs/quickstart) client.
 
-or by sending an HTTP request, like we'll see below.
-
-## Chat Completions - text-based
-
-See below for examples for text-based requests. Both LLMs and VLMs should handle
+### Text-based completions
 
 <hfoptions id="chat-completion-http">
 <hfoption id="curl">
@@ -75,7 +53,7 @@ See below for examples for text-based requests. Both LLMs and VLMs should handle
 curl -X POST http://localhost:8000/v1/chat/completions -H "Content-Type: application/json" -d '{"messages": [{"role": "system", "content": "hello"}], "temperature": 0.9, "max_tokens": 1000, "stream": true, "model": "Qwen/Qwen2.5-0.5B-Instruct"}'
 ```
 
-from which you'll receive multiple chunks in the Completions API format
+The command returns the following response.
 
 ```shell
 data: {"object": "chat.completion.chunk", "id": "req_0", "created": 1751377863, "model": "Qwen/Qwen2.5-0.5B-Instruct", "system_fingerprint": "", "choices": [{"delta": {"role": "assistant", "content": "", "tool_call_id": null, "tool_calls": null}, "index": 0, "finish_reason": null, "logprobs": null}]}
@@ -86,7 +64,7 @@ data: {"object": "chat.completion.chunk", "id": "req_0", "created": 1751377863, 
 ```
 
 </hfoption>
-<hfoption id="python - huggingface_hub">
+<hfoption id="huggingface_hub">
 
 ```python
 import asyncio
@@ -105,14 +83,14 @@ asyncio.run(responses_api_test_async())
 asyncio.run(client.close())
 ```
 
-From which you should get an iterative string printed:
+The [`~huggingface_hub.AsyncInferenceClient`] returns a printed string.
 
 ```shell
 The Transformers library is primarily known for its ability to create and manipulate large-scale language models [...]
 ```
 
 </hfoption>
-<hfoption id="python - openai">
+<hfoption id="openai">
 
 ```python
 from openai import OpenAI
@@ -136,7 +114,7 @@ for chunk in completion:
         print(token, end='')
 ```
 
-From which you should get an iterative string printed:
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
 
 ```shell
 The Transformers library is primarily known for its ability to create and manipulate large-scale language models [...]
@@ -145,9 +123,7 @@ The Transformers library is primarily known for its ability to create and manipu
 </hfoption>
 </hfoptions>
 
-## Chat Completions - VLMs
-
-The Chat Completion API also supports images; see below for examples for text-and-image-based requests.
+### Text and image-based completions
 
 <hfoptions id="chat-completion-http-images">
 <hfoption id="curl">
@@ -180,7 +156,7 @@ curl http://localhost:8000/v1/chat/completions \
 
 ```
 
-from which you'll receive multiple chunks in the Completions API format
+The command returns the following response.
 
 ```shell
 data: {"id":"req_0","choices":[{"delta":{"role":"assistant"},"index":0}],"created":1753366665,"model":"Qwen/Qwen2.5-VL-7B-Instruct@main","object":"chat.completion.chunk","system_fingerprint":""}
@@ -191,7 +167,7 @@ data: {"id":"req_0","choices":[{"delta":{"content":"image "},"index":0}],"create
 ```
 
 </hfoption>
-<hfoption id="python - huggingface_hub">
+<hfoption id="huggingface_hub">
 
 ```python
 import asyncio
@@ -223,14 +199,14 @@ asyncio.run(responses_api_test_async())
 asyncio.run(client.close())
 ```
 
-From which you should get an iterative string printed:
+The [`~huggingface_hub.AsyncInferenceClient`] returns a printed string.
 
 ```xmp
 The image depicts an astronaut in a space suit standing on what appears to be the surface of the moon, given the barren, rocky landscape and the dark sky in the background. The astronaut is holding a large egg that has cracked open, revealing a small creature inside. The scene is imaginative and playful, combining elements of space exploration with a whimsical twist involving the egg and the creature.
 ```
 
 </hfoption>
-<hfoption id="python - openai">
+<hfoption id="openai">
 
 ```python
 from openai import OpenAI
@@ -262,7 +238,7 @@ for chunk in completion:
         print(token, end='')
 ```
 
-From which you should get an iterative string printed:
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
 
 ```xmp
 The image depicts an astronaut in a space suit standing on what appears to be the surface of the moon, given the barren, rocky landscape and the dark sky in the background. The astronaut is holding a large egg that has cracked open, revealing a small creature inside. The scene is imaginative and playful, combining elements of space exploration with a whimsical twist involving the egg and the creature.
@@ -271,18 +247,14 @@ The image depicts an astronaut in a space suit standing on what appears to be th
 </hfoption>
 </hfoptions>
 
-## Responses API
+## v1/responses
 
-The Responses API is the newest addition to the supported APIs of `transformers serve`.
+> [!WARNING]
+> The `v1/responses` API is still experimental and there may be bugs. Please open an issue if you encounter any errors.
 
-> [!TIP]
-> This API is still experimental: expect bug patches and additition of new features in the coming weeks.
-> If you run into any issues, please let us know and we'll work on fixing them ASAP.
+The [Responses API](https://platform.openai.com/docs/api-reference/responses) is OpenAI's latest API endpoint for generation. It supports stateful interactions and integrates built-in tools to extend a model's capabilities. OpenAI [recommends](https://platform.openai.com/docs/guides/migrate-to-responses) using the Responses API over the Chat Completions API for new projects.
 
-Instead of the previous `/v1/chat/completions` path, the Responses API lies behind the `/v1/responses` path.
-See below for examples interacting with our Responses endpoint with `curl`, as well as the Python OpenAI client.
-
-So far, this endpoint only supports text and therefore only LLMs. VLMs to come!
+The `v1/responses` API supports text-based requests for LLMs through the `curl` command and [OpenAI](https://platform.openai.com/docs/quickstart) client.
 
 <hfoptions id="responses">
 <hfoption id="curl">
@@ -297,7 +269,7 @@ curl http://localhost:8000/v1/responses \
   }'
 ```
 
-from which you'll receive multiple chunks in the Responses API format
+The command returns the following response.
 
 ```shell
 data: {"response":{"id":"resp_req_0","created_at":1754059817.783648,"model":"Qwen/Qwen2.5-0.5B-Instruct@main","object":"response","output":[],"parallel_tool_calls":false,"tool_choice":"auto","tools":[],"status":"queued","text":{"format":{"type":"text"}}},"sequence_number":0,"type":"response.created"}
@@ -318,7 +290,7 @@ data: {"content_index":0,"delta":"a ","item_id":"msg_req_0","output_index":0,"se
 ```
 
 </hfoption>
-<hfoption id="python - openai">
+<hfoption id="openai">
 
 ```python
 from openai import OpenAI
@@ -337,7 +309,7 @@ for event in response:
     print(event)
 ```
 
-From which you should get events printed out successively.
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns multiple printed strings.
 
 ```shell
 ResponseCreatedEvent(response=Response(id='resp_req_0', created_at=1754060400.3718212, error=None, incomplete_details=None, instructions='You are a helpful assistant.', metadata={'foo': 'bar'}, model='Qwen/Qwen2.5-0.5B-Instruct@main', object='response', output=[], parallel_tool_calls=False, temperature=None, tool_choice='auto', tools=[], top_p=None, background=None, max_output_tokens=None, max_tool_calls=None, previous_response_id=None, prompt=None, reasoning=None, service_tier=None, status='queued', text=ResponseTextConfig(format=ResponseFormatText(type='text')), top_logprobs=None, truncation=None, usage=None, user=None), sequence_number=0, type='response.created')
@@ -364,67 +336,125 @@ ResponseCompletedEvent(response=Response(id='resp_req_0', created_at=1754060400.
 </hfoption>
 </hfoptions>
 
-## MCP integration
+## v1/audio/transcriptions
 
-The `transformers serve` server is also an MCP client, so it can interact with MCP tools in agentic use cases. This, of course, requires the use of an LLM that is designed to use tools.
+The `v1/audio/transcriptions` endpoint transcribes audio using speech-to-text models. It follows the [Audio transcription API](https://platform.openai.com/docs/api-reference/audio/createTranscription) format.
 
-> [!TIP]
-> At the moment, MCP tool usage in `transformers` is limited to the `qwen` family of models.
+```shell
+curl -X POST http://localhost:8000/v1/audio/transcriptions \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@/path/to/audio.wav" \
+  -F "model=openai/whisper-large-v3"
+```
 
-<!-- TODO: example with a minimal python example, and explain that it is possible to pass a full generation config in the request -->
+The command returns the following response.
 
-## Continuous Batching
+```shell
+{
+  "text": "Transcribed text from the audio file",
+}
+```
 
-Continuous Batching (CB) lets the server dynamically group and interleave requests so they can share forward passes on the GPU. Instead of processing each request sequentially, `serve` adds new requests as others progress (prefill) and drops finished ones during decode. The result is significantly higher GPU utilization and better throughput without sacrificing latency for most workloads.
+## v1/models
 
-Thanks to this, evaluation, experimentation, and moderate-load local/self-hosted use can now be handled comfortably by `transformers serve` without introducing an extra runtime to operate.
+The `v1/models` endpoint scans your local Hugging Face cache and returns a list of downloaded models in the OpenAI-compatible format. Third-party tools use this endpoint to discover available models.
 
-### Enable CB in serve
+Use the command below to download a model before running `transformers serve`.
 
-CB is opt-in and currently applies to chat completions.
+```bash
+transformers download Qwen/Qwen2.5-0.5B-Instruct
+```
+
+The model is now discoverable by the `/v1/models` endpoint.
+
+```shell
+curl http://localhost:8000/v1/models
+```
+
+This command returns a JSON object containing the list of models.
+
+## Tool calling
+
+The `transformers serve` server supports OpenAI-style function calling. Models trained for tool-use generate structured function calls that your application executes.
+
+> [!NOTE]
+> Tool calling is currently limited to the Qwen model family.
+
+Define tools as a list of function specifications following the OpenAI format.
+
+```py
+import json
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<KEY>")
+
+tools = [
+  {
+    "type": "function",
+    "function": {
+      "name": "get_weather",
+      "description": "Get the current weather in a location",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "The city name, e.g. San Francisco"
+          },
+          "unit": {
+            "type": "string",
+            "enum": ["celsius", "fahrenheit"],
+            "description": "temperature unit"
+          }
+        },
+        "required": ["location"]
+      }
+    }
+  }
+]
+```
+
+Pass a dictionary of parameters from [`GenerationConfig`] to the `extra_body` argument in [create](https://platform.openai.com/docs/api-reference/responses/create) to customize model generation.
+
+```py
+generation_config = {
+  "max_new_tokens": 512,
+  "temperature": 0.7,
+  "top_p": 0.9,
+  "top_k": 50,
+  "do_sample": True,
+  "repetition_penalty": 1.1,
+  "no_repeat_ngram_size": 3,
+}
+
+response = client.responses.create(
+  model="Qwen/Qwen2.5-7B-Instruct",
+  instructions="You are a helpful weather assistant. Use the get_weather tool to answer questions.",
+  input="What's the weather like in San Francisco?",
+  tools=tools,
+  stream=True,
+  extra_body={"generation_config": json.dumps(generation_config)}
+)
+
+for event in response:
+  print(event)
+```
+
+## Port forwarding
+
+The `transformers serve` server supports port forwarding. This lets you serve models from a remote server. Make sure you have ssh access from your device to the server. Run the following command on your device to set up port forwarding.
+
+```bash
+ssh -N -f -L 8000:localhost:8000 your_server_account@your_server_IP -p port_to_ssh_into_your_server
+```
+
+## Reproducibility
+
+Add the `--force-model <repo_id>` argument to avoid per-request model hints. This produces stable, repeatable runs.
 
 ```sh
 transformers serve \
-  --continuous-batching
-  --attn_implementation "sdpa"
+  --force-model Qwen/Qwen2.5-0.5B-Instruct \
+  --continuous-batching \
+  --dtype "bfloat16"
 ```
-
-### Quantization
-
-transformers serve is compatible with all [quantization methods](https://huggingface.co/docs/transformers/main/quantization/overview) supported in transformers. Quantization can significantly reduce memory usage and improve inference speed, with two main workflows: pre-quantized models and on-the-fly quantization.
-
-#### Pre-quantized Models
-
-For models that are already quantized (e.g., GPTQ, AWQ, bitsandbytes), simply choose a quantized model name for serving.
-Make sure to install the required libraries listed in the quantization documentation.
-
-> [!TIP]
-> Pre-quantized models generally provide the best balance of performance and accuracy.
-
-#### On the fly quantization
-
-If you want to quantize a model at runtime, you can specify the --quantization flag in the CLI. Note that not all quantization methods support on-the-fly conversion. The full list of supported methods is available in the quantization [overview](https://huggingface.co/docs/transformers/main/quantization/overview).
-
-Currently, with transformers serve, we only supports some methods: ["bnb-4bit", "bnb-8bit"]
-
-For example, to enable 4-bit quantization with bitsandbytes, you need to pass add `--quantization bnb-4bit`:
-
-```sh
-transformers serve --quantization bnb-4bit
-```
-
-### Performance tips
-
-- Use an efficient attention backend when available:
-
-```sh
-transformers serve \
-  --continuous_batching \
-  --attn_implementation "flash_attention_2"
-```
-
-> [!TIP]
-
-- `--dtype {bfloat16|float16}` typically improve throughput and memory use vs. `float32`
-
-- `--force-model <repo_id>` avoids per-request model hints and helps produce stable, repeatable runs

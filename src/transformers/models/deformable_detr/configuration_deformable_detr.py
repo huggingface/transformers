@@ -126,6 +126,8 @@ class DeformableDetrConfig(PreTrainedConfig):
         disable_custom_kernels (`bool`, *optional*, defaults to `False`):
             Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
             kernels are not supported by PyTorch ONNX export.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 

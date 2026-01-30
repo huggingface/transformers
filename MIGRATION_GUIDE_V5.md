@@ -284,7 +284,8 @@ tokenizer.extra_special_tokens  # Additional tokens
 ```
 
 - `special_tokens_map_extended` and `all_special_tokens_extended`: Removed. Access `AddedToken` objects directly from `_special_tokens_map` or `_extra_special_tokens` if needed.
-- `additional_special_tokens`: Still accepted for backward compatibility but is automatically converted to `extra_special_tokens`.
+- `additional_special_tokens`: Automatically converted to `extra_special_tokens` during initialization.
+- `extra_special_tokens`: Only accepts list/tuple format and is intended for use during tokenizer initialization. For model-specific named tokens (e.g., `image_token`), pass directly as keyword arguments instead.
 
 **Deprecated Methods:**
 - `sanitize_special_tokens()`: Already deprecated in v4, removed in v5.

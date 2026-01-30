@@ -246,12 +246,23 @@ if __name__ == "__main__":
             reports = json.load(fp)
 
         for model in reports:
+            # We change the format of "new_failures.json" in PR #XXXXX, let's handle both formats for a few weeks.
+            if "failures" in reports[model]:
+                if "job_link" in reports[model]:
+                    for device, device_failures in reports[model]["failures"].items():
+                        if device in reports[model]["job_link"]:
+                            for failure in device_failures:
+                                failure["job_link"] = reports[model]["job_link"][device]
+                    del reports[model]["job_link"]
+                reports[model] = reports[model]["failures"]
+
             # TODO: make this script able to deal with both `single-gpu` and `multi-gpu` via a new argument.
             reports[model].pop("multi-gpu", None)
             failed_tests = reports[model]["single-gpu"]
 
             failed_tests_with_bad_commits = []
-            for test in failed_tests:
+            for failure in failed_tests:
+                test, trace = failure["line"], failure["trace"]
                 commit, status = find_bad_commit(
                     target_test=test, start_commit=args.start_commit, end_commit=args.end_commit
                 )
@@ -264,6 +275,7 @@ if __name__ == "__main__":
                     commit_info_cache[commit] = commit_info
 
                 info.update(commit_info)
+                info["trace"] = trace
                 failed_tests_with_bad_commits.append(info)
 
             # If no single-gpu test failures, remove the key

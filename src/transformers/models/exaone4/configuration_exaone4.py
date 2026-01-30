@@ -19,10 +19,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class Exaone4Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Exaone4Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Exaone4Model`]. It is used to
     instantiate a EXAONE 4.0 model according to the specified arguments, defining the model architecture. Instantiating a
@@ -67,6 +67,8 @@ class Exaone4Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 2):
             End of stream token id.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
@@ -139,6 +141,7 @@ class Exaone4Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         use_cache: bool | None = True,
         bos_token_id: int | None = 0,
         eos_token_id: int | None = 2,
+        pad_token_id: int | None = None,
         tie_word_embeddings: bool | None = False,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         attention_dropout: float | None = 0.0,
@@ -163,6 +166,7 @@ class Exaone4Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.sliding_window_pattern = sliding_window_pattern
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
         self.tie_word_embeddings = tie_word_embeddings
 
         self.layer_types = layer_types
