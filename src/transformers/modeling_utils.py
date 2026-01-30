@@ -4782,6 +4782,15 @@ class AttentionInterface(GeneralInterface):
         "paged|eager": eager_paged_attention_forward,
     }
 
+    def get(self, key, default):
+        if key is None:
+            logger.warning_once(
+                "You tried to access the `AttentionInterface` with a `config._attn_implementation` set to `None`. This "
+                "is expected if you use an Attention Module as a standalone Module. If this is not the case, something went "
+                "wrong with the dispatch of `config._attn_implementation`"
+            )
+        return super().get(key, default)
+
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
 ALL_ATTENTION_FUNCTIONS: AttentionInterface = AttentionInterface()

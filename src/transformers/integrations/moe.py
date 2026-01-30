@@ -14,12 +14,15 @@
 
 from functools import wraps
 
+from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available
 
 
 if is_torch_available():
     import torch
+
+logger = logging.get_logger(__name__)
 
 # Examples of experts class with its eager mm implementation
 # class Experts(nn.Module):
@@ -264,6 +267,15 @@ class ExpertsInterface(GeneralInterface):
         "batched_mm": batched_mm_experts_forward,
         "grouped_mm": grouped_mm_experts_forward,
     }
+
+    def get(self, key, default):
+        if key is None:
+            logger.warning_once(
+                "You tried to access the `ExpertsInterface` with a `config._experts_implementation` set to `None`. This "
+                "is expected if you use an Expert Module as a standalone Module. If this is not the case, something went "
+                "wrong with the dispatch of `config._experts_implementation`"
+            )
+        return super().get(key, default)
 
 
 ALL_EXPERTS_FUNCTIONS = ExpertsInterface()
