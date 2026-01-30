@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
+import socket
 import tempfile
 import time
 import unittest
-from threading import Thread
 from unittest.mock import Mock, patch
 
 import httpx
@@ -26,6 +26,13 @@ from transformers import GenerationConfig
 from transformers.cli.serve import Modality, Serve
 from transformers.testing_utils import require_openai, slow
 from transformers.utils.import_utils import is_openai_available
+
+
+def get_free_port():
+    """Gets a free port on localhost."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
 
 
 if is_openai_available():
@@ -42,6 +49,9 @@ if is_openai_available():
         ResponseOutputItemDoneEvent,
         ResponseTextDeltaEvent,
         ResponseTextDoneEvent,
+    )
+    from openai.types.responses import (
+        Response as OpenAIResponse,
     )
 
 
@@ -327,6 +337,23 @@ class ServeCompletionsMixin:
         # sets `do_sample=True`
         self.assertEqual(output_text, '<think>\nOkay, the user just asked, "')
 
+    def test_stop_strings_in_generation_config(self):
+        """Tests that stop_strings in generation_config (which requires a tokenizer) works without crashing."""
+        generation_config = GenerationConfig(stop_strings=["4"], max_new_tokens=20)
+        request = {
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "messages": [{"role": "user", "content": "Count from 1 to 10"}],
+            "stream": True,
+            "extra_body": {
+                "generation_config": generation_config.to_json_string(),
+            },
+        }
+        # This will raise an error if the server crashes (ValueError: ... tokenizer ...)
+        all_payloads = self.run_server(request)
+        contents = [payload.choices[0].delta.content for payload in all_payloads]
+        output_text = "".join([text for text in contents if text is not None])
+        self.assertGreater(len(output_text), 0)
+
     def test_early_return_due_to_length(self):
         request = {
             "model": "Qwen/Qwen2.5-0.5B-Instruct",
@@ -355,7 +382,12 @@ class ServeCompletionsMixin:
 class ServeCompletionsGenerateMockTests(unittest.TestCase):
     def test_processor_inputs_from_inbound_messages_llm(self):
         modality = Modality.LLM
-        messages = expected_outputs = [
+        messages = [
+            {"role": "user", "content": "How are you doing?"},
+            {"role": "assistant", "content": "I'm doing great, thank you for asking! How can I assist you today?"},
+            {"role": "user", "content": "Can you help me write tests?"},
+        ]
+        expected_outputs = [
             {"role": "user", "content": "How are you doing?"},
             {"role": "assistant", "content": "I'm doing great, thank you for asking! How can I assist you today?"},
             {"role": "user", "content": "Can you help me write tests?"},
@@ -489,8 +521,8 @@ class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.Te
     @classmethod
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
-        cls.port = 8001
-        cls.server = Serve(port=cls.port, non_blocking=True)
+        cls.port = get_free_port()
+        cls.server = Serve(port=cls.port, non_blocking=True, device="cpu")
 
     @classmethod
     def tearDownClass(cls):
@@ -503,14 +535,13 @@ class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.Te
 
         request = {
             # This model is a small model that's very eager to call tools
-            # TODO: this is a 4B model. Find a smaller model that's eager to call tools
-            "model": "Menlo/Jan-nano",
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
             # The request should produce a tool call
             "messages": [{"role": "user", "content": "Generate an image of a cat."}],
             "stream": True,
             "max_tokens": 50,
             # Reproducibility
-            "temperature": 0.0,
+            "temperature": 0.01,
             # This tool is a copy from the tool in the original tiny-agents demo
             "tools": [
                 {
@@ -568,8 +599,7 @@ class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.Te
 
         # Finally, the last payload should contain a finish reason
         finish_reasons = [payload.choices[0].finish_reason for payload in all_payloads]
-        # TODO: I think the finish reason for a tool call is different? double check this
-        self.assertTrue(finish_reasons[-1] in ["stop", "length"])
+        self.assertTrue(finish_reasons[-1] in ["stop", "length", "tool_calls"])
         self.assertTrue(all(reason is None for reason in finish_reasons[:-1]))
 
 
@@ -586,14 +616,16 @@ def _get_scheduler(serve_command):
 
 def _call_healthcheck(base_url: str):
     response = None
-    retries = 10
+    retries = 20
     while retries > 0:
         try:
             response = httpx.get(f"{base_url}/health")
-            break
+            if response.status_code == 200:
+                break
         except httpx.NetworkError:
-            time.sleep(0.1)
-            retries -= 1
+            pass
+        time.sleep(0.5)
+        retries -= 1
     return response
 
 
@@ -627,9 +659,14 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
     @classmethod
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
-        cls.port = 8002
+        cls.port = get_free_port()
         cls.server = Serve(
-            port=cls.port, continuous_batching=True, attn_implementation="sdpa", default_seed=42, non_blocking=True
+            port=cls.port,
+            continuous_batching=True,
+            attn_implementation="sdpa",
+            default_seed=42,
+            non_blocking=True,
+            device="cpu",
         )
 
     @classmethod
@@ -780,8 +817,8 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
-        cls.port = 8003
-        cls.server = Serve(port=cls.port, default_seed=42, non_blocking=True)
+        cls.port = get_free_port()
+        cls.server = Serve(port=cls.port, default_seed=42, non_blocking=True, device="cpu")
 
     @classmethod
     def tearDownClass(cls):
@@ -816,8 +853,6 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
     @slow
     def test_non_streaming_request(self):
         """Tests that an inference using the Responses API with stream=False returns a single Response payload."""
-        from openai import OpenAI
-        from openai.types.responses import Response as OpenAIResponse
 
         client = OpenAI(base_url=f"http://localhost:{self.port}/v1", api_key="<KEY>")
         resp = client.responses.create(
@@ -844,10 +879,12 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
 class ServeInfrastructureTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.port = 8042
-        thread = Thread(target=Serve, kwargs={"port": cls.port})
-        thread.daemon = True
-        thread.start()
+        cls.port = get_free_port()
+        cls.server = Serve(port=cls.port, non_blocking=True, device="cpu")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.kill_server()
 
     def test_healthcheck(self):
         """Tests that the healthcheck endpoint works."""
