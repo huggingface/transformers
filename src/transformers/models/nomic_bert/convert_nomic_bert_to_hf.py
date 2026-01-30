@@ -42,7 +42,11 @@ def convert_nomic_hub_to_hf(original_model_id, output_hub_path, push_to_hub):
     config.model_type = "nomic_bert"
 
     model = NomicBertModel.from_pretrained(
-        original_model_id, config=config, trust_remote_code=True, ignore_mismatched_sizes=True
+        original_model_id,
+        config=config,
+        trust_remote_code=True,
+        ignore_mismatched_sizes=False,
+        add_pooling_layer=False,
     )
 
     model.save_pretrained(output_hub_path)

@@ -99,7 +99,7 @@ class NomicBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     ```
     """
 
-    model_type = "model"
+    model_type = "nomic_bert"
 
     def __init__(
         self,
@@ -132,6 +132,10 @@ class NomicBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
                 "rope_theta": 10000.0,
             }
 
+        kwargs["is_decoder"] = kwargs.get("is_decoder", False)
+        kwargs["add_cross_attention"] = kwargs.get("add_cross_attention", False)
+        kwargs["use_cache"] = kwargs.get("use_cache", False)
+
         super().__init__(
             rope_parameters=rope_parameters,
             vocab_size=vocab_size,
@@ -144,14 +148,11 @@ class NomicBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             attention_probs_dropout_prob=attention_probs_dropout_prob,
             initializer_range=initializer_range,
             layer_norm_eps=layer_norm_eps,
-            use_cache=False,
             classifier_dropout=classifier_dropout,
-            is_decoder=False,
             type_vocab_size=type_vocab_size,
             max_position_embeddings=max_position_embeddings,
             pad_token_id=pad_token_id,
             tie_word_embeddings=tie_word_embeddings,
-            add_cross_attention=False,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             **kwargs,

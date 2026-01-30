@@ -147,6 +147,7 @@ class NomicBertModelTester:
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
+            use_cache=False,
             initializer_range=self.initializer_range,
         )
 
@@ -628,7 +629,6 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
             bert_model,
             device_map=device,
             attn_implementation=attn_implementation,
-            use_cache=True,
         )
 
         logits = model(**inputs).logits

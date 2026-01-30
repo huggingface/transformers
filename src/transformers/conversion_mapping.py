@@ -266,36 +266,38 @@ def _build_checkpoint_conversion_mapping():
             # Embeddings & Pooler
             WeightRenaming("emb_ln.weight", "embeddings.LayerNorm.weight"),
             WeightRenaming("emb_ln.bias", "embeddings.LayerNorm.bias"),
+            WeightRenaming("embeddings.token_type_embeddings.weight", "embeddings.token_type_embeddings.weight"),
+            WeightRenaming("embeddings.word_embeddings.weight", "embeddings.word_embeddings.weight"),
             # Encoder Layers Renaming
             WeightRenaming(
-                r"encoder\.layers\.(\d+)\.attn\.out_proj\.",
-                r"encoder.layer.\1.attention.output.dense.",
+                r"encoder\.layers\.(\d+)\.attn\.out_proj\.weight",
+                r"encoder.layer.\1.attention.self.out_proj.weight",
             ),
             WeightRenaming(
-                r"encoder\.layers\.(\d+)\.mlp\.fc11\.",
-                r"encoder.layer.\1.intermediate.gate_proj.",
+                r"encoder\.layers\.(\d+)\.mlp\.fc11\.weight",
+                r"encoder.layer.\1.intermediate.gate_proj.weight",
             ),
             WeightRenaming(
-                r"encoder\.layers\.(\d+)\.mlp\.fc12\.",
-                r"encoder.layer.\1.intermediate.up_proj.",
+                r"encoder\.layers\.(\d+)\.mlp\.fc12\.weight",
+                r"encoder.layer.\1.intermediate.up_proj.weight",
             ),
-            WeightRenaming(r"encoder\.layers\.(\d+)\.mlp\.fc2\.", r"encoder.layer.\1.output.dense."),
+            WeightRenaming(r"encoder\.layers\.(\d+)\.mlp\.fc2\.weight", r"encoder.layer.\1.output.dense.weight"),
             WeightRenaming(
-                r"encoder\.layers\.(\d+)\.norm1\.",
-                r"encoder.layer.\1.attention.output.LayerNorm.",
+                r"encoder\.layers\.(\d+)\.norm1",
+                r"encoder.layer.\1.attention.attention_output.LayerNorm",
             ),
             WeightRenaming(
-                r"encoder\.layers\.(\d+)\.norm2\.",
-                r"encoder.layer.\1.output.LayerNorm.",
+                r"encoder\.layers\.(\d+)\.norm2",
+                r"encoder.layer.\1.output.LayerNorm",
             ),
             # QKV Splits
             *[
                 WeightConverter(
                     source_patterns=f"encoder.layers.{i}.attn.Wqkv.weight",
                     target_patterns=[
-                        f"encoder.layer.{i}.attention.self.q_proj.weight",
-                        f"encoder.layer.{i}.attention.self.k_proj.weight",
-                        f"encoder.layer.{i}.attention.self.v_proj.weight",
+                        f"encoder.layer.{i}.attention.self.query.weight",
+                        f"encoder.layer.{i}.attention.self.key.weight",
+                        f"encoder.layer.{i}.attention.self.value.weight",
                     ],
                     operations=[Chunk(dim=0)],
                 )
