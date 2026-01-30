@@ -1628,6 +1628,18 @@ MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
 )
 
 
+MODEL_FOR_PROMPTABLE_VISUAL_SEGMENTATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Promptable Visual Segmentation mapping
+        ("sam3_tracker", "Sam3TrackerModel"),
+        ("sam2", "Sam2Model"),
+        # facebook/sam2.1-hiera-large checkpoint uses sam2_video config but can be used for single-image inference
+        ("sam2_video", "Sam2Model"),
+        ("sam", "SamModel"),
+        ("edgetam", "EdgeTamModel"),
+    ]
+)
+
 MODEL_FOR_KEYPOINT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         ("superpoint", "SuperPointForKeypointDetection"),
@@ -1797,6 +1809,10 @@ MODEL_FOR_BACKBONE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_BA
 
 MODEL_FOR_MASK_GENERATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_MASK_GENERATION_MAPPING_NAMES)
 
+MODEL_FOR_PROMPTABLE_VISUAL_SEGMENTATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_PROMPTABLE_VISUAL_SEGMENTATION_MAPPING_NAMES
+)
+
 MODEL_FOR_KEYPOINT_DETECTION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_KEYPOINT_DETECTION_MAPPING_NAMES
 )
@@ -1824,6 +1840,10 @@ MODEL_FOR_AUDIO_TOKENIZATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MO
 
 class AutoModelForMaskGeneration(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_MASK_GENERATION_MAPPING
+
+
+class AutoModelForPromptableVisualSegmentation(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_PROMPTABLE_VISUAL_SEGMENTATION_MAPPING
 
 
 class AutoModelForKeypointDetection(_BaseAutoModelClass):
@@ -2168,6 +2188,7 @@ __all__ = [
     "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
     "MODEL_FOR_OBJECT_DETECTION_MAPPING",
     "MODEL_FOR_PRETRAINING_MAPPING",
+    "MODEL_FOR_PROMPTABLE_VISUAL_SEGMENTATION_MAPPING",
     "MODEL_FOR_QUESTION_ANSWERING_MAPPING",
     "MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING",
     "MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
@@ -2214,6 +2235,7 @@ __all__ = [
     "AutoModelForNextSentencePrediction",
     "AutoModelForObjectDetection",
     "AutoModelForPreTraining",
+    "AutoModelForPromptableVisualSegmentation",
     "AutoModelForQuestionAnswering",
     "AutoModelForSemanticSegmentation",
     "AutoModelForSeq2SeqLM",
