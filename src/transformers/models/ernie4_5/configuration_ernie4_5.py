@@ -14,10 +14,10 @@
 """Ernie 4.5 model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class Ernie4_5Config(PreTrainedConfig):
+class Ernie4_5Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Ernie4_5Model`]. It is used to instantiate an Ernie 4.5
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

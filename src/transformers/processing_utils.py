@@ -1233,7 +1233,8 @@ class ProcessorMixin(PushToHubMixin):
 
         """
         # holding a copy to avoid mutating user-provided arguments
-        kwargs = kwargs.copy()
+        # Use deepcopy to also copy nested dicts (like videos_kwargs) that will be modified via pop()
+        kwargs = copy.deepcopy(kwargs)
 
         # Initialize dictionaries
         output_kwargs = {

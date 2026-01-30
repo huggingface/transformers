@@ -14,7 +14,7 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -22,7 +22,7 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class KyutaiSpeechToTextConfig(PreTrainedConfig):
+class KyutaiSpeechToTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`KyutaiSpeechToTextForConditionalGeneration`].
     It is used to instantiate a Kyutai Speech-to-Text model according to the specified arguments, defining the model

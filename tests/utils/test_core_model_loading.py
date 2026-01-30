@@ -32,6 +32,7 @@ from transformers.core_model_loading import (
     rename_source_key,
     revert_weight_conversion,
 )
+from transformers.modeling_utils import LoadStateDictConfig
 from transformers.utils.import_utils import is_triton_available
 
 from ..test_modeling_common import compare_state_dicts
@@ -205,6 +206,7 @@ class DummyMLP(nn.Module):
 
 class DummyRoot(nn.Module):
     base_model_prefix = "model"
+    config: PretrainedConfig
 
     def __init__(self, add_extra_moe=False):
         super().__init__()
@@ -258,8 +260,15 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             ),
             WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
         ]
+
+        load_config = LoadStateDictConfig(
+            weight_mapping=weight_mapping,
+        )
         missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
+            model,
+            state_dict,
+            load_config,
+            tp_plan=None,
         )
 
         self.assertEqual(
@@ -370,8 +379,14 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         ]
 
         # Use the mapping to load
+        load_config = LoadStateDictConfig(
+            weight_mapping=weight_mapping,
+        )
         missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
+            model,
+            state_dict,
+            load_config,
+            tp_plan=None,
         )
         self.assertTrue(len(missing) == 0)
         self.assertTrue(len(unexpected) == 0)
@@ -468,9 +483,9 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 operations=[Chunk(dim=0), PermuteForRope()],
             )
         ]
-
+        load_config = LoadStateDictConfig(weight_mapping=weight_mapping, hf_quantizer=quantizer)
         missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=quantizer
+            model, state_dict, load_config, tp_plan=None
         )
 
         self.assertEqual(missing, set())
@@ -566,7 +581,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
         ]
         missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping), tp_plan=None
         )
 
         self.assertEqual(missing, set())
@@ -690,7 +705,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         # Use the mapping to load
         missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping), tp_plan=None
         )
         self.assertTrue(len(missing) == 0)
         self.assertTrue(len(unexpected) == 0)

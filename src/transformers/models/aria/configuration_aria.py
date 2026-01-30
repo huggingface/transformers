@@ -18,11 +18,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class AriaTextConfig(PreTrainedConfig):
+class AriaTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This class handles the configuration for the text component of the Aria model.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the model of the Aria

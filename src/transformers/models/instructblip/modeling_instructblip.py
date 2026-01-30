@@ -1318,7 +1318,8 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         >>> from transformers import InstructBlipProcessor, InstructBlipForConditionalGeneration
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> model = InstructBlipForConditionalGeneration.from_pretrained("Salesforce/instructblip-vicuna-7b")
         >>> processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
@@ -1327,7 +1328,8 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> prompt = "What is unusual about this image?"
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt").to(device)
 

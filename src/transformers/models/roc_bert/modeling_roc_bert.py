@@ -1125,41 +1125,6 @@ class RoCBertForMaskedLM(RoCBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self, input_ids, input_shape_ids=None, input_pronunciation_ids=None, attention_mask=None, **model_kwargs
-    ):
-        input_shape = input_ids.shape
-        effective_batch_size = input_shape[0]
-
-        #  add a dummy token
-        if self.config.pad_token_id is None:
-            raise ValueError("The PAD token should be defined for generation")
-
-        attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
-        dummy_token = torch.full(
-            (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
-        )
-        input_ids = torch.cat([input_ids, dummy_token], dim=1)
-        if input_shape_ids is not None:
-            input_shape_ids = torch.cat([input_shape_ids, dummy_token], dim=1)
-        if input_pronunciation_ids is not None:
-            input_pronunciation_ids = torch.cat([input_pronunciation_ids, dummy_token], dim=1)
-
-        return {
-            "input_ids": input_ids,
-            "input_shape_ids": input_shape_ids,
-            "input_pronunciation_ids": input_pronunciation_ids,
-            "attention_mask": attention_mask,
-        }
-
-    @classmethod
-    def can_generate(cls) -> bool:
-        """
-        Legacy correction: RoCBertForMaskedLM can't call `generate()` from `GenerationMixin`, even though it has a
-        `prepare_inputs_for_generation` method.
-        """
-        return False
-
 
 @auto_docstring(
     custom_intro="""

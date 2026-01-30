@@ -511,7 +511,7 @@ class Sam3TrackerVideoAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Sam3TrackerVideoTwoWayAttentionBlock(nn.Module):
+class Sam3TrackerVideoTwoWayAttentionBlock(GradientCheckpointingLayer):
     def __init__(self, config: Sam3TrackerVideoMaskDecoderConfig, skip_first_layer_pe: bool = False):
         """
         A transformer block with four layers:
@@ -1588,6 +1588,7 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
     input_modalities = ("video", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerVideoTwoWayAttentionBlock, index=2)}
+    _tied_weights_keys = {}
     _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
     _checkpoint_conversion_mapping = {
         r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
@@ -1908,7 +1909,7 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             image_batch = inference_session.get_frame(frame_idx).unsqueeze(0)  # Add batch dimension
             image_outputs = self.get_image_features(image_batch, return_dict=True)
             vision_feats = image_outputs.fpn_hidden_states
-            vision_pos_embeds = image_outputs.fpn_position_embeddings
+            vision_pos_embeds = image_outputs.fpn_position_encoding
             # Cache features
             inference_session.cache.cache_vision_features(
                 frame_idx, {"vision_feats": vision_feats, "vision_pos_embeds": vision_pos_embeds}

@@ -1263,7 +1263,8 @@ class Blip2Model(Blip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import Blip2Processor, Blip2Model
         >>> import torch
 
@@ -1274,7 +1275,8 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> prompt = "Question: how many cats are there? Answer:"
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt").to(device, torch.float16)
@@ -1717,7 +1719,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import Blip2Processor, Blip2ForConditionalGeneration
         >>> import torch
 
@@ -1729,7 +1732,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         ... )  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         ```
 
         Image captioning (without providing a text prompt):
@@ -1987,7 +1991,8 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         ```python
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Blip2ForImageTextRetrieval
 
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -1998,7 +2003,8 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> text = "two cats laying on a pink blanket"
 
         >>> inputs = processor(images=image, text=text, return_tensors="pt").to(device, torch.float16)

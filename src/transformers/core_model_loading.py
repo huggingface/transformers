@@ -49,38 +49,6 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def process_target_pattern(pattern: str) -> tuple[str, str | None]:
-    """
-    Process a target pattern for reverse mapping (when targets become sources).
-
-    This handles several edge cases in checkpoint conversion mappings:
-    - Removes `^` prefix and `$` suffix (start/end of string anchors)
-    - Removes negative lookahead/lookbehind assertions
-    - Detects capturing groups and replaces them with `\\1` backreference
-
-    Args:
-        pattern: The target pattern to process for reverse mapping.
-
-    Returns:
-        A tuple of (processed_pattern, captured_group) where captured_group is
-        the original capturing group found (e.g., "(encoder|decoder)") or None.
-    """
-    # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
-    pattern = pattern.removeprefix("^")
-    # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
-    pattern = pattern.removesuffix("$")
-    # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
-    # Qwen2.5, Sam3, Ernie4.5 VL MoE!
-    pattern = re.sub(r"\(\?.+\)", "", pattern)
-    # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
-    capturing_group_match = re.search(r"\(.+?\)", pattern)
-    captured_group = None
-    if capturing_group_match:
-        captured_group = capturing_group_match.group(0)
-        pattern = pattern.replace(captured_group, r"\1", 1)
-    return pattern, captured_group
-
-
 def build_glob_alternation(
     globs: list[WeightRenaming | WeightConverter | str],
 ) -> tuple[re.Pattern, dict[str, str], dict[str, str]]:
@@ -508,6 +476,38 @@ class Force16BytesAlignment(ConversionOps):
         return Force16BytesAlignment()
 
 
+def process_target_pattern(pattern: str) -> tuple[str, str | None]:
+    """
+    Process a target pattern for reverse mapping (when targets become sources).
+
+    This handles several edge cases in checkpoint conversion mappings:
+    - Removes `^` prefix and `$` suffix (start/end of string anchors)
+    - Removes negative lookahead/lookbehind assertions
+    - Detects capturing groups and replaces them with `\\1` backreference
+
+    Args:
+        pattern: The target pattern to process for reverse mapping.
+
+    Returns:
+        A tuple of (processed_pattern, captured_group) where captured_group is
+        the original capturing group found (e.g., "(encoder|decoder)") or None.
+    """
+    # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
+    pattern = pattern.removeprefix("^")
+    # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
+    pattern = pattern.removesuffix("$")
+    # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
+    # Qwen2.5, Sam3, Ernie4.5 VL MoE!
+    pattern = re.sub(r"\(\?.+\)", "", pattern)
+    # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
+    capturing_group_match = re.search(r"\(.+?\)", pattern)
+    captured_group = None
+    if capturing_group_match:
+        captured_group = capturing_group_match.group(0)
+        pattern = pattern.replace(captured_group, r"\1", 1)
+    return pattern, captured_group
+
+
 @dataclass(slots=True)
 class WeightTransform:
     source_patterns: str | list[str] = field(init=True)
@@ -520,12 +520,18 @@ class WeightTransform:
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
 
-    def __post_init__(self):
-        if isinstance(self.source_patterns, str):
-            self.source_patterns = [self.source_patterns]
-        if isinstance(self.target_patterns, str):
-            self.target_patterns = [self.target_patterns]
+    def __setattr__(self, name, value):
+        if name in ("source_patterns", "target_patterns"):
+            # We do not allow to re-set the patterns, as they are linked between each other and changing one
+            # without the other can mess-up with the capturing groups/compiled sources
+            if hasattr(self, name):
+                raise ValueError(f"Cannot assign to field {name}, you should create a new instance")
+            # Switch str to list
+            elif isinstance(value, str):
+                value = [value]
+        object.__setattr__(self, name, value)
 
+    def __post_init__(self):
         # Due to how our `_checkpoint_conversion_mapping` mappings are written, we need a few exceptions here
         # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
         # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
@@ -970,16 +976,10 @@ def rename_source_key(
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
-    weight_mapping: list[WeightConverter | WeightRenaming] | None,
+    load_config: Any,
     tp_plan: dict[str, str] | None,
-    hf_quantizer: HfQuantizer | None,
-    dtype: torch.dtype | None = None,
-    device_map: dict | None = None,
     dtype_plan: dict | None = None,
-    device_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
     disk_offload_index: dict | None = None,
-    disk_offload_folder: str | None = None,
-    offload_buffers: bool = False,
 ):
     r"""
     We build a mapping from the keys obtained by renaming each of the checkpoint keys according to the weight_mapping rules.
@@ -1069,9 +1069,14 @@ def convert_and_load_state_dict_in_model(
     """
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
-    device_map = device_map or {"": "cpu"}
+    device_map = load_config.device_map or {"": "cpu"}
+    hf_quantizer = load_config.hf_quantizer
+    dtype = load_config.dtype
+    device_mesh = load_config.device_mesh
+    disk_offload_folder = load_config.disk_offload_folder
+    offload_buffers = load_config.offload_buffers
     dtype_plan = dtype_plan or {}
-    weight_mapping = weight_mapping or []
+    weight_mapping = load_config.weight_mapping or []
     meta_model_state_dict = model.state_dict()
     model_buffers = {k for k, _ in model.named_buffers()}
 

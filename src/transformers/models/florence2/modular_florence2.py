@@ -175,6 +175,8 @@ class Florence2Config(PreTrainedConfig):
             The image token index to encode the image prompt.
         is_encoder_decoder (bool, optional, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -209,6 +211,7 @@ class Florence2Config(PreTrainedConfig):
         vision_config=None,
         image_token_id=51289,
         is_encoder_decoder=True,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if isinstance(text_config, dict):
@@ -226,6 +229,7 @@ class Florence2Config(PreTrainedConfig):
         self.text_config = text_config
         self.vision_config = vision_config
         self.image_token_id = image_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
@@ -1658,7 +1662,8 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Florence2ForConditionalGeneration
 
         >>> model = Florence2ForConditionalGeneration.from_pretrained("florence-community/Florence-2-large")
@@ -1666,7 +1671,8 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
 
         >>> prompt = "<CAPTION>"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
 

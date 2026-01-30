@@ -2154,7 +2154,8 @@ class Sam3Model(Sam3PreTrainedModel):
         ```python
         >>> from transformers import Sam3Model, Sam3Processor
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> model = Sam3Model.from_pretrained("facebook/sam3")
         >>> processor = Sam3Processor.from_pretrained("facebook/sam3")
@@ -2164,8 +2165,9 @@ class Sam3Model(Sam3PreTrainedModel):
         >>> text_embeds = model.get_text_features(**text_inputs).pooler_output
 
         >>> # Reuse text embeddings for multiple images
-        >>> img_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
-        >>> image = Image.open(requests.get(img_url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000077595.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> img_inputs = processor(images=image, return_tensors="pt")
         >>> outputs = model(pixel_values=img_inputs.pixel_values, text_embeds=text_embeds)
         ```
@@ -2190,14 +2192,16 @@ class Sam3Model(Sam3PreTrainedModel):
         ```python
         >>> from transformers import Sam3Model, Sam3Processor
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> model = Sam3Model.from_pretrained("facebook/sam3")
         >>> processor = Sam3Processor.from_pretrained("facebook/sam3")
 
         >>> # Pre-compute vision embeddings
-        >>> img_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
-        >>> image = Image.open(requests.get(img_url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000077595.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> img_inputs = processor(images=image, return_tensors="pt")
         >>> vision_embeds = model.get_vision_features(pixel_values=img_inputs.pixel_values)
 
@@ -2238,16 +2242,18 @@ class Sam3Model(Sam3PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("facebook/sam3")
         >>> processor = AutoProcessor.from_pretrained("facebook/sam3")
 
-        >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> text = "car"
-        >>> inputs = processor(images=raw_image, text=text, return_tensors="pt")
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
 
         >>> # Get segmentation output
         >>> outputs = model(**inputs)

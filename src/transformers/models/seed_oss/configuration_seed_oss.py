@@ -13,11 +13,11 @@
 # limitations under the License.
 """SeedOss model configuration"""
 
-from transformers.configuration_utils import PreTrainedConfig
-from transformers.modeling_rope_utils import RopeParameters
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class SeedOssConfig(PreTrainedConfig):
+class SeedOssConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`SeedOssModel`]. It is used to instantiate an SeedOss
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

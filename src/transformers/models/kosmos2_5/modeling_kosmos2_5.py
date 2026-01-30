@@ -1430,14 +1430,16 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Kosmos2_5Model
 
         >>> model = Kosmos2_5Model.from_pretrained("microsoft/kosmos2.5")
         >>> processor = AutoProcessor.from_pretrained("microsoft/kosmos2.5")
 
         >>> url = "https://huggingface.co/microsoft/kosmos2.5/resolve/main/snowman.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> text = (
         ...     "<grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863>"
@@ -1510,7 +1512,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
     """,
     KOSMOS2_5_START_DOCSTRING,
 )
-class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
+class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
     config_class = Kosmos2_5TextConfig
     input_modalities = ("text",)
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
@@ -1602,6 +1604,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids,
+        inputs_embeds=None,
         image_embeds=None,
         image_embeds_position_mask=None,
         past_key_values=None,
@@ -1612,52 +1615,48 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
         is_first_iteration=False,
         **model_kwargs,
     ):
-        input_shape = input_ids.shape
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        position_ids = None
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            inputs_embeds=inputs_embeds,
+            image_embeds=image_embeds,
+            image_embeds_position_mask=image_embeds_position_mask,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_ids=position_ids,
+            is_first_iteration=is_first_iteration,
+            **model_kwargs,
+        )
 
-        # cut input_ids if past_key_values is used
-        if past_key_values is not None:
-            position_ids = Kosmos2_5TextSinusoidalPositionalEmbedding.create_position_ids_from_input_ids(
-                input_ids,
-                padding_idx=self.config.pad_token_id,
-                past_key_values_length=0,
-            )[:, -cache_position.shape[0] :]
+        # Pixel values are used only in the first iteration if available
+        # In subsquent iterations, they are already cached
+        if past_key_values is not None and past_key_values.get_seq_length() > 0:
+            model_inputs["image_embeds"] = None
+            model_inputs["image_embeds_position_mask"] = None
+            model_inputs["position_ids"] = (
+                Kosmos2_5TextSinusoidalPositionalEmbedding.create_position_ids_from_input_ids(
+                    input_ids,
+                    padding_idx=self.config.pad_token_id,
+                    past_key_values_length=0,
+                )[:, -cache_position.shape[0] :]
+            )
 
-            input_ids = input_ids[:, -cache_position.shape[0] :]
-            # the image info. is already encoded into the past keys/values
-            if past_key_values.get_seq_length() > 0:
-                image_embeds = None
-                image_embeds_position_mask = None
+        # appending `False` to `image_embeds_position_mask` (because `input_ids` grows during generation)
         elif image_embeds_position_mask is not None:
-            # appending `False` to `image_embeds_position_mask` (because `input_ids` grows during generation)
-            batch_size, seq_len = input_ids.size()
+            batch_size, seq_len = inputs_embeds.size()[:-1] if inputs_embeds is not None else input_ids.size()
             mask_len = image_embeds_position_mask.size()[-1]
-            image_embeds_position_mask = torch.cat(
+            model_inputs["image_embeds_position_mask"] = torch.cat(
                 (
                     image_embeds_position_mask,
                     torch.zeros(size=(batch_size, seq_len - mask_len), dtype=torch.bool, device=input_ids.device),
                 ),
                 dim=1,
             )
-
-        model_inputs = {
-            "input_ids": input_ids,
-            "image_embeds": image_embeds,
-            "image_embeds_position_mask": image_embeds_position_mask,
-            "past_key_values": past_key_values,
-            "attention_mask": attention_mask,
-            "position_ids": position_ids,
-            "use_cache": use_cache,
-        }
-
-        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
-        for key, value in model_kwargs.items():
-            if key not in model_inputs:
-                model_inputs[key] = value
+            # Kosmos2.5 has offset for position ids, so we need to create them correctly in PositionEmbedding layer
+            model_inputs.pop("position_ids", None)
 
         return model_inputs
 
@@ -1729,7 +1728,8 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
         >>> from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 
@@ -1741,7 +1741,8 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
 
         >>> url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
 
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> prompt = "<ocr>" # <md>
 

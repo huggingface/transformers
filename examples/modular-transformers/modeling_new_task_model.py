@@ -311,7 +311,8 @@ class NewTaskModelModel(NewTaskModelPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, NewTaskModelForConditionalGeneration
 
         >>> model = NewTaskModelForConditionalGeneration.from_pretrained("google/new_task_model2-3b-mix-224")
@@ -319,7 +320,8 @@ class NewTaskModelModel(NewTaskModelPreTrainedModel):
 
         >>> prompt = "Where is the cat standing?"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
 
