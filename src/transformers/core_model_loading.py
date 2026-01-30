@@ -891,7 +891,7 @@ def set_param_for_module(
 
         # Determine expected shape: for TP, use sharded shape; otherwise, use full shape
         if distributed_operation is not None:
-            expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(tuple(ref.shape), param_name))
+            expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
         else:
             expected_shape = ref.shape
 

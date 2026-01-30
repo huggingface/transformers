@@ -671,19 +671,18 @@ class TensorParallelLayer:
             self._prepare_output_fn,
         )
 
-    def get_expected_sharded_shape(self, full_shape: tuple[int, ...], param_name: str) -> tuple[int, ...]:
+    def get_expected_sharded_shape(self, full_shape: tuple[int, ...] | torch.Size) -> tuple[int, ...]:
         """
         Compute the expected shape after TP sharding for a given full shape.
 
         Args:
             full_shape: The full (unsharded) parameter shape
-            param_name: The parameter name (to determine if it's weight or bias)
 
         Returns:
             The expected sharded shape for this rank
         """
         # Default: no sharding, return full shape
-        return full_shape
+        return tuple(full_shape)
 
 
 class ColwiseParallel(TensorParallelLayer):
@@ -725,7 +724,7 @@ class ColwiseParallel(TensorParallelLayer):
             self._prepare_output_fn,
         )
 
-    def get_expected_sharded_shape(self, full_shape: tuple[int, ...], param_name: str) -> tuple[int, ...]:
+    def get_expected_sharded_shape(self, full_shape: tuple[int, ...] | torch.Size) -> tuple[int, ...]:
         world_size = self.device_mesh.size()
         shape = list(full_shape)
         # Colwise shards dim -2, but 1D tensors (bias) shard on dim -1
@@ -793,10 +792,10 @@ class RowwiseParallel(TensorParallelLayer):
             self._prepare_output_fn,
         )
 
-    def get_expected_sharded_shape(self, full_shape: tuple[int, ...], param_name: str) -> tuple[int, ...]:
+    def get_expected_sharded_shape(self, full_shape: tuple[int, ...] | torch.Size) -> tuple[int, ...]:
         # 1D tensors (bias) are NOT sharded in rowwise
         if len(full_shape) == 1:
-            return full_shape
+            return tuple(full_shape)
         world_size = self.device_mesh.size()
         shape = list(full_shape)
         dim = -1
@@ -911,7 +910,7 @@ class EmbeddingParallel(TensorParallelLayer):
             self._prepare_output_fn,
         )
 
-    def get_expected_sharded_shape(self, full_shape: tuple[int, ...], param_name: str) -> tuple[int, ...]:
+    def get_expected_sharded_shape(self, full_shape: tuple[int, ...] | torch.Size) -> tuple[int, ...]:
         world_size = self.device_mesh.size()
         shape = list(full_shape)
         # EmbeddingParallel shards on self.embedding_dim_sharding (default 0)
@@ -979,7 +978,7 @@ class GroupedGemmParallel(TensorParallelLayer):
             device=device, dtype=dtype
         )
 
-    def get_expected_sharded_shape(self, full_shape: tuple[int, ...], param_name: str) -> tuple[int, ...]:
+    def get_expected_sharded_shape(self, full_shape: tuple[int, ...] | torch.Size) -> tuple[int, ...]:
         # GroupedGemm shards on dim 0 (experts dimension)
         world_size = self.device_mesh.size()
         shape = list(full_shape)
