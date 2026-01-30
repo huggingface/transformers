@@ -779,11 +779,6 @@ class ContinuousBatchProcessor:
 
         # Decode-only states.
         states_for_next_token = [state for state in self.requests_in_batch if len(state.remaining_prefill_tokens) == 0]
-        if len(states_for_next_token) != next_token_positions.numel():
-            # Defensive length match.
-            length = min(len(states_for_next_token), next_token_positions.numel())
-            states_for_next_token = states_for_next_token[:length]
-            next_token_positions = next_token_positions[:length]
 
         for state, position in zip(states_for_next_token, next_token_positions):
             position = position.item()
