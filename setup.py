@@ -92,6 +92,7 @@ _deps = [
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "jmespath>=1.0.1",
+    "kenlm",
     "kernels>=0.10.2,<0.11",
     "librosa",
     "mistral-common[image]>=1.8.8",
@@ -137,6 +138,8 @@ _deps = [
     "scipy",
     "sentencepiece>=0.1.91,!=0.1.92",
     "starlette",
+    "sudachipy>=0.6.6",
+    "sudachidict_core>=20220729",
     "tensorboard",
     "timeout-decorator",
     "tiktoken",
@@ -155,20 +158,12 @@ _deps = [
     "pytest-rich",
     "libcst",
     "rich",
+    "ray[tune]>=2.7.0",
     "opentelemetry-api",
     "opentelemetry-exporter-otlp",
     "opentelemetry-sdk",
 ]
 
-if PYTHON_MINOR_VERSION < 14:
-    _deps += [
-        "sudachipy>=0.6.6",
-        "sudachidict_core>=20220729",
-        "ray[tune]>=2.7.0",
-    ]
-
-if PYTHON_MINOR_VERSION < 13:
-    _deps += ["kenlm"]
 # This is a lookup table with items like: {"tokenizers": "tokenizers==0.9.4", "packaging": "packaging"}, i.e.
 # some of the values are versioned whereas others aren't.
 deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] for x in _deps)}
@@ -191,7 +186,8 @@ extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcs
 extras["kernels"] = deps_list("kernels")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
-extras["mistral-common"] = deps_list("mistral-common[image]")
+if PYTHON_MINOR_VERSION < 14:
+    extras["mistral-common"] = deps_list("mistral-common[image]")
 extras["chat_template"] = deps_list("jinja2", "jmespath")
 extras["sklearn"] = deps_list("scikit-learn")
 extras["accelerate"] = deps_list("accelerate")
@@ -238,12 +234,13 @@ extras["testing"] = (
         "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
         "filelock",  # filesystem locks, e.g., to prevent parallel downloads
     )
-    + extras["mistral-common"]
     + extras["quality"]
     + extras["retrieval"]
     + extras["sentencepiece"]
     + extras["serving"]
 )
+if PYTHON_MINOR_VERSION < 14:
+    extras["testing"] += extras["mistral-common"]
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 extras["all"] = (
