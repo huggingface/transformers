@@ -7,7 +7,7 @@ on:
   pull_request:
     paths:
       - 'setup.py'
-      - '.github/workflows/nightly-extras-smoke-test.yml'
+      - '.github/workflows/extras-smoke-test.yml'
       - 'utils/extract_metadata.py'
   workflow_dispatch:
 
