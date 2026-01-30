@@ -59,12 +59,7 @@ The example below demonstrates how to perform object detection with the [`Pipeli
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(
-    "object-detection",
-    model="stevenbucaille/rfdetr_small_60e_coco",
-    dtype=torch.float16,
-    device_map=0
-)
+pipeline = pipeline("object-detection", model="stevenbucaille/rfdetr_small_60e_coco")
 
 pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
 ```
