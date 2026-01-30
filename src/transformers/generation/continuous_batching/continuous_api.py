@@ -395,6 +395,7 @@ class ContinuousBatchProcessor:
         # some NaNs in the output logits even for non-padded tokens.
         if use_padding:
             self.max_seqlen_q = max(self.max_seqlen_q, q_len - self.total_seqlen_q)
+            kwargs.max_seqlen_q = self.max_seqlen_q  # Update kwargs with the new value
             self.cumulative_seqlens_q[self.actual_batch_size + 1 :] = q_len
             # FIXME: is there another way to avoid this? It has a very slight impact on performance (~5 tok/s)
 
@@ -929,6 +930,11 @@ class ContinuousBatchingManager:
         If none of the above criteria are met, we use a default heuristic based on the attention implementation: we turn
         on cuda graphs if and only if no attention mask is needed.
         """
+        # If cuda is not available, we cannot use cuda graphs
+        if not torch.cuda.is_available():
+            if use_cuda_graph:
+                logger.warning(f"use_cuda_graph is True but {torch.cuda.is_available() = }: turning off cuda graphs.")
+            return False
         # If use_cuda_graph is specified, we follow the user's choice
         if use_cuda_graph is not None:
             return use_cuda_graph

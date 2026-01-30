@@ -122,6 +122,7 @@ class GPTNeoXConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         use_cache: bool | None = True,
         bos_token_id: int | None = 0,
         eos_token_id: int | None = 2,
+        pad_token_id: int | None = None,
         tie_word_embeddings: bool | None = False,
         use_parallel_residual: bool | None = True,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
@@ -132,6 +133,7 @@ class GPTNeoXConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.is_decoder = is_decoder
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
