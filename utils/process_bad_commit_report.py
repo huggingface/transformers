@@ -71,6 +71,10 @@ if __name__ == "__main__":
         repo_type="dataset",
         token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
     )
+    url = f"https://huggingface.co/datasets/{report_repo_id}/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/new_failures_with_bad_commit.json"
+
+    with open("new_failures_with_bad_commit_url.txt", "w") as fp:
+        fp.write(url)
 
     # TODO: extend
     team_members = [
