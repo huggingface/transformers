@@ -622,7 +622,6 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 class ModernBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-
         model = ModernBertForMaskedLM.from_pretrained("answerdotai/ModernBERT-base", attn_implementation="sdpa")
         tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
 
@@ -640,7 +639,6 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-
         model = ModernBertModel.from_pretrained("answerdotai/ModernBERT-base", attn_implementation="sdpa")
         tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
 
@@ -768,7 +766,6 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
     @pytest.mark.flash_attn_test
     @slow
     def test_inference_masked_lm_flash_attention_2(self):
-
         model = ModernBertForMaskedLM.from_pretrained("answerdotai/ModernBERT-base", dtype=torch.float16).to(
             torch_device
         )
