@@ -259,8 +259,8 @@ class Ernie4_5_VL_MoeTextAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = getattr(
-            ALL_ATTENTION_FUNCTIONS, self.config._attn_implementation, eager_attention_forward
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get(
+            self.config._attn_implementation, eager_attention_forward
         )
 
         attn_output, attn_weights = attention_interface(
@@ -606,8 +606,8 @@ class Ernie4_5_VL_MoeVisionAttention(nn.Module):
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
-        attention_interface: Callable = getattr(
-            ALL_ATTENTION_FUNCTIONS, self.config._attn_implementation, eager_attention_forward
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get(
+            self.config._attn_implementation, eager_attention_forward
         )
 
         if is_flash_attention_requested(self.config):

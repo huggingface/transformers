@@ -312,8 +312,8 @@ class VideoLlama3VisionAttention(SiglipAttention):
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
-        attention_interface: Callable = getattr(
-            ALL_ATTENTION_FUNCTIONS, self.config._attn_implementation, eager_attention_forward
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get(
+            self.config._attn_implementation, eager_attention_forward
         )
 
         if is_flash_attention_requested(self.config):

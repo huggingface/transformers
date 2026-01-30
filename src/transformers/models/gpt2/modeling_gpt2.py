@@ -243,8 +243,8 @@ class GPT2Attention(nn.Module):
                 past_key_values.is_updated[self.layer_idx] = True
 
         using_eager = self.config._attn_implementation == "eager"
-        attention_interface: Callable = getattr(
-            ALL_ATTENTION_FUNCTIONS, self.config._attn_implementation, eager_attention_forward
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get(
+            self.config._attn_implementation, eager_attention_forward
         )
 
         if using_eager and self.reorder_and_upcast_attn:

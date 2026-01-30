@@ -313,7 +313,7 @@ def use_experts_implementation(
 
         @wraps(original_forward)
         def forward(self, *args, **kwargs):
-            experts_forward = getattr(ALL_EXPERTS_FUNCTIONS, self.config._experts_implementation, original_forward)
+            experts_forward = ALL_EXPERTS_FUNCTIONS.get(self.config._experts_implementation, original_forward)
             return experts_forward(self, *args, **kwargs)
 
         if not hasattr(experts_class, "_apply_gate"):

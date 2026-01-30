@@ -331,8 +331,8 @@ class MoonshineAttention(nn.Module):
                     key_states, value_states, self.layer_idx, cache_kwargs
                 )
 
-        attention_interface: Callable = getattr(
-            ALL_ATTENTION_FUNCTIONS, self.config._attn_implementation, eager_attention_forward
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get(
+            self.config._attn_implementation, eager_attention_forward
         )
 
         is_causal = self.is_causal and attention_mask is None and q_len > 1
