@@ -163,7 +163,7 @@ def copy_(tensor: torch.Tensor, other: torch.Tensor) -> torch.Tensor:
     return tensor
 
 
-def variance_scaling_(tensor, mode="fan_in", distribution="normal"):
+def _variance_scaling_(tensor, mode="fan_in", distribution="normal"):
     fan_in, fan_out = torch.nn.init._calculate_fan_in_and_fan_out(tensor)
     if mode == "fan_in":
         denom = fan_in
