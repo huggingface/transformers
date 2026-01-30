@@ -4090,9 +4090,6 @@ class ModelTesterMixin:
                     # disable returning loss for every submodel
                     if hasattr(module.config, "return_loss"):
                         module.config.return_loss = False
-                    # disable reference compile for every submodel (modernbert)
-                    if hasattr(module.config, "reference_compile"):
-                        module.config.reference_compile = False
                     # disable mamba kernels for every submodel (mamba, jamba)
                     if hasattr(module.config, "use_mamba_kernels"):
                         module.config.use_mamba_kernels = False
