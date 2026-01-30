@@ -42,7 +42,6 @@ To create the package for pypi.
 import re
 import shutil
 import sys
-from collections import OrderedDict
 from pathlib import Path
 
 from setuptools import Command, find_packages, setup
@@ -184,7 +183,7 @@ def deps_list(*pkgs):
     return [deps[pkg] for pkg in pkgs]
 
 
-extras = OrderedDict()
+extras = {}
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["vision"] = deps_list("torchvision", "Pillow")
