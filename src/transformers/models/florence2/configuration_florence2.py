@@ -153,6 +153,8 @@ class Florence2Config(PreTrainedConfig):
             The image token index to encode the image prompt.
         is_encoder_decoder (bool, optional, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -187,6 +189,7 @@ class Florence2Config(PreTrainedConfig):
         vision_config=None,
         image_token_id=51289,
         is_encoder_decoder=True,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if isinstance(text_config, dict):
@@ -204,6 +207,7 @@ class Florence2Config(PreTrainedConfig):
         self.text_config = text_config
         self.vision_config = vision_config
         self.image_token_id = image_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
