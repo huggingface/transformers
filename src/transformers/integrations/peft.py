@@ -229,10 +229,9 @@ def _build_peft_weight_mapping(
         if orig_conversion.target_patterns == ["mlp.experts.gate_up_proj"]:
             # gate_up_proj requires both merging the experts and concatenating for the fusion of w1 and w3
             for lora in ("lora_A", "lora_B"):  # TODO: lora_embedding_A and lora_embedding_B
-                conversion = copy.deepcopy(orig_conversion)
                 # deal with operations
                 peft_weight_operations = []
-                for i, op in enumerate(conversion.operations):
+                for op in orig_conversion.operations:
                     if isinstance(op, Concatenate):
                         if lora == "lora_B":  # block diagonal concat
                             peft_weight_operations.append(PeftConcatenate(dim=op.dim))
@@ -241,31 +240,37 @@ def _build_peft_weight_mapping(
                             peft_weight_operations.append(FlattenDims(dims=(0, 1)))
                     elif isinstance(op, MergeModulelist):
                         peft_weight_operations.append(op)
-                conversion.operations = peft_weight_operations
 
                 # TODO: this assumption may not hold for models != mixtral
                 # For source, we capture the orignal weights + the lora weights
                 new_source_patterns = []
-                for pat in list(conversion.source_patterns):
+                for pat in list(orig_conversion.source_patterns):
                     # we replace the weight pattern to colllect loras
                     pat = pat.rsplit(".", 1)[0]
                     # note: the source state_dict does *not* contain the adapter name
                     new_source_patterns.append(f"{pat}.{lora}.*")
-                conversion.source_patterns = new_source_patterns
 
                 # the gate_up_proj is the innner PEFT ParamWrapper, so we need to use base_layer
-                pat = conversion.target_patterns[0]
+                pat = orig_conversion.target_patterns[0]
                 pat = pat.replace("gate_up_proj", "base_layer")
                 # we make sure the target key is correct, add '.weight' because the parameter is targeted directly
-                conversion.target_patterns = [f"{pat}.{lora}.{adapter_name}.weight"]
-                new_weight_conversions.append(conversion)
+                new_target_patterns = [f"{pat}.{lora}.{adapter_name}.weight"]
+
+                # Instantiate a new object that correctly post process patterns if needed
+                new_conversion = orig_conversion.__class__(
+                    source_patterns=new_source_patterns,
+                    target_patterns=new_target_patterns,
+                    distributed_operation=orig_conversion.distributed_operation,
+                    quantization_operation=orig_conversion.quantizatin_operations,
+                    operations=new_weight_conversions,
+                )
+                new_weight_conversions.append(new_conversion)
 
         elif orig_conversion.target_patterns == ["mlp.experts.down_proj"]:
             # down_proj only requires merging of experts
             for lora in ("lora_A", "lora_B"):  # TODO: lora_embedding_A and lora_embedding_B
-                conversion = copy.deepcopy(orig_conversion)
                 peft_weight_operations = []
-                for i, op in enumerate(conversion.operations):
+                for op in orig_conversion.operations:
                     if isinstance(op, MergeModulelist):
                         peft_weight_operations.append(op)
                         if lora == "lora_A":
@@ -274,24 +279,31 @@ def _build_peft_weight_mapping(
                             peft_weight_operations.append(PermuteDims(dims=(2, 0, 1)))
                             peft_weight_operations.append(FlattenDims(dims=(0, 1)))
                             peft_weight_operations.append(Transpose(dim0=0, dim1=1))
-                conversion.operations = peft_weight_operations
 
                 # TODO: this assumption may not hold for models != mixtral
                 # For source, we capture the orignal weights + the lora weights
                 new_source_patterns = []
-                for pat in list(conversion.source_patterns):
+                for pat in list(orig_conversion.source_patterns):
                     # we replace the weight pattern to colllect loras
                     pat = pat.rsplit(".", 1)[0]
                     # note: the source state_dict does *not* contain the adapter name
                     new_source_patterns.append(f"{pat}.{lora}.*")
-                conversion.source_patterns = new_source_patterns
 
                 # the down_proj is the outer PEFT ParamWrapper, so we remove the prefix
-                pat = conversion.target_patterns[0]
+                pat = orig_conversion.target_patterns[0]
                 pat = pat.replace(".down_proj", "")
                 # we make sure the target key is correct, add '.weight' because the parameter is targeted directly
-                conversion.target_patterns = [f"{pat}.{lora}.{adapter_name}.weight"]
-                new_weight_conversions.append(conversion)
+                new_target_patterns = [f"{pat}.{lora}.{adapter_name}.weight"]
+
+                # Instantiate a new object that correctly post process patterns if needed
+                new_conversion = orig_conversion.__class__(
+                    source_patterns=new_source_patterns,
+                    target_patterns=new_target_patterns,
+                    distributed_operation=orig_conversion.distributed_operation,
+                    quantization_operation=orig_conversion.quantizatin_operations,
+                    operations=new_weight_conversions,
+                )
+                new_weight_conversions.append(new_conversion)
 
     return new_weight_conversions
 
