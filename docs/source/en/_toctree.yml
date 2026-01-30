@@ -250,6 +250,20 @@
     - local: community_integrations/mlx
       title: MLX
     title: Local deployment
+  - sections:
+    - local: community_integrations/nanotron
+      title: Nanotron
+    - local: community_integrations/torchtitan
+      title: torchtitan
+    title: Pretraining
+  - sections:
+    - local: community_integrations/axolotl
+      title: Axolotl
+    - local: community_integrations/trl
+      title: TRL
+    - local: community_integrations/unsloth
+      title: Unsloth
+    title: Fine-tuning
   title: Ecosystem integrations
 - isExpanded: false
   sections:
