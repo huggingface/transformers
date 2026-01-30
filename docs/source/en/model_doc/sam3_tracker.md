@@ -43,7 +43,45 @@ This model was contributed by [yonigozlan](https://huggingface.co/yonigozlan) an
 
 ## Usage example
 
-### Automatic Mask Generation with Pipeline
+### Promptable Visual Segmentation Pipeline
+
+The easiest way to use Sam3Tracker is through the `promptable-visual-segmentation` pipeline:
+
+```python
+>>> from transformers import pipeline
+
+>>> segmenter = pipeline(model="facebook/sam3", task="promptable-visual-segmentation")
+>>> # Single point prompt
+>>> segmenter(
+...     "http://images.cocodataset.org/val2017/000000077595.jpg",
+...     input_points=[[[[450, 600]]]],
+...     input_labels=[[[1]]],
+... )
+[[{'score': 0.87, 'mask': tensor([...])}]]
+
+>>> # Box prompt
+>>> segmenter(
+...     "http://images.cocodataset.org/val2017/000000136466.jpg",
+...     input_boxes=[[[59, 144, 76, 163]]],
+... )
+[[{'score': 0.92, 'mask': tensor([...])}]]
+
+>>> # Multiple points for refinement
+>>> segmenter(
+...     "http://images.cocodataset.org/val2017/000000136466.jpg",
+...     input_points=[[[[450, 600], [500, 620]]]],
+...     input_labels=[[[1, 0]]],  # 1=positive, 0=negative
+... )
+[[{'score': 0.85, 'mask': tensor([...])}]]
+```
+
+<Tip>
+
+**Note:** The pipeline output format differs from using the model and processor manually. The pipeline returns a standardized format (list of lists of dicts with `score` and `mask`) to ensure consistency across all transformers pipelines, while the processor's `post_process_masks()` returns raw tensors.
+
+</Tip>
+
+### Automatic Mask Generation Pipeline
 
 Sam3Tracker can be used for automatic mask generation to segment all objects in an image using the `mask-generation` pipeline:
 

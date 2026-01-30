@@ -1627,16 +1627,16 @@ MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-
+# Model for Promptable Visual Segmentation mapping
+# facebook/sam2.1-hiera-large checkpoint uses sam2_video config but can be used for single-image inference
 MODEL_FOR_PROMPTABLE_VISUAL_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
-        # Model for Promptable Visual Segmentation mapping
-        ("sam3_tracker", "Sam3TrackerModel"),
-        ("sam2", "Sam2Model"),
-        # facebook/sam2.1-hiera-large checkpoint uses sam2_video config but can be used for single-image inference
-        ("sam2_video", "Sam2Model"),
-        ("sam", "SamModel"),
         ("edgetam", "EdgeTamModel"),
+        ("sam", "SamModel"),
+        ("sam2", "Sam2Model"),
+        ("sam2_video", "Sam2Model"),
+        ("sam3_tracker", "Sam3TrackerModel"),
+        ("sam3_video", "Sam3TrackerModel"),
     ]
 )
 

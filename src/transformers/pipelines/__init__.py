@@ -303,7 +303,7 @@ SUPPORTED_TASKS = {
     "promptable-visual-segmentation": {
         "impl": PromptableVisualSegmentationPipeline,
         "pt": (AutoModelForPromptableVisualSegmentation,) if is_torch_available() else (),
-        "default": {"model": ("facebook/sam3", "main")},
+        "default": {"model": ("facebook/sam3", "3c879f3")},
         "type": "multimodal",
     },
     "any-to-any": {

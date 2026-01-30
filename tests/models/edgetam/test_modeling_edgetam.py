@@ -232,7 +232,13 @@ class EdgeTamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     all_model_classes = (EdgeTamModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": EdgeTamModel, "mask-generation": EdgeTamModel} if is_torch_available() else {}
+        {
+            "feature-extraction": EdgeTamModel,
+            "mask-generation": EdgeTamModel,
+            "promptable-visual-segmentation": EdgeTamModel,
+        }
+        if is_torch_available()
+        else {}
     )
 
     test_resize_embeddings = False
