@@ -3588,8 +3588,16 @@ def _patch_with_call_info(module_or_class, attr_name, _parse_call_info_func, tar
         return
 
     def patched(*args, **kwargs):
+        full_test_name = os.environ.get("PYTEST_CURRENT_TEST", "").split(" ")[0]
+
         # If the target callable is not called within a test, simply call it without modification.
-        if not os.environ.get("PYTEST_CURRENT_TEST", ""):
+        if not full_test_name:
+            return orig_method(*args, **kwargs)
+
+        # This patch only makes (more) sense for integration tests. For other tests, it produces more noise than useful
+        # information to work with. (We can make it more flexible in the future however).
+        _, test_class, _ = full_test_name.split("::")
+        if "IntegrationTest" not in test_class:
             return orig_method(*args, **kwargs)
 
         try:
