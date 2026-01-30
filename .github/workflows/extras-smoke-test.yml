@@ -117,7 +117,7 @@ jobs:
     name: Notify failures to Slack
     needs: test-extras
     runs-on: ubuntu-latest
-    if: always()
+    if: always() && secrets.SLACK_CIFEEDBACK_BOT_TOKEN != ''
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -185,4 +185,4 @@ jobs:
               ]
             }
         env:
-          SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
