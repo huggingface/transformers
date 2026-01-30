@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from functools import wraps
 
 from ..utils import logging
@@ -330,7 +331,9 @@ def use_experts_implementation(
 
         @wraps(original_forward)
         def forward(self, *args, **kwargs):
-            experts_forward = ALL_EXPERTS_FUNCTIONS.get_interface(self.config._experts_implementation, original_forward)
+            experts_forward = ALL_EXPERTS_FUNCTIONS.get_interface(
+                self.config._experts_implementation, original_forward
+            )
             return experts_forward(self, *args, **kwargs)
 
         if not hasattr(experts_class, "_apply_gate"):
