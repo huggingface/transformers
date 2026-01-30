@@ -13,41 +13,43 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Script to extract metadata from setup.py for CI testing.
+"""Extract metadata from setup.py for CI testing.
 
 Usage:
-    python utils/extract_metadata.py extras          # Lists all extras, one per line
-    python utils/extract_metadata.py python-versions # Outputs JSON array of supported Python versions
+    python utils/extract_metadata.py extras          # List all extras (one per line)
+    python utils/extract_metadata.py python-versions # Output JSON array of Python versions
 """
 
 import json
 import sys
 from pathlib import Path
+from types import ModuleType
+from typing import List
 
 
-def get_setup_module():
+def get_setup_module() -> ModuleType:
     """Import and return the setup module."""
-    repo_root = Path(__file__).parent.parent
+    repo_root: Path = Path(__file__).parent.parent
     sys.path.insert(0, str(repo_root))
     import setup
 
     return setup
 
 
-def extract_extras():
-    """Extract all extras for the current Python version in definition order."""
-    setup = get_setup_module()
-    # extras is an OrderedDict, preserve the original order (torch comes first, etc.)
+def extract_extras() -> None:
+    """Print all extras in definition order (one per line)."""
+    setup: ModuleType = get_setup_module()
     for extra in setup.extras.keys():
         print(extra)
 
 
-def extract_python_versions():
-    """Extract supported Python versions as JSON array."""
-    setup = get_setup_module()
+def extract_python_versions() -> None:
+    """Print supported Python versions as a JSON array."""
+    setup: ModuleType = get_setup_module()
+    min_ver: int
+    max_ver: int
     min_ver, max_ver = setup.SUPPORTED_PYTHON_VERSIONS
-    versions = [f"3.{v}" for v in range(min_ver, max_ver + 1)]
+    versions: List[str] = [f"3.{v}" for v in range(min_ver, max_ver + 1)]
     print(json.dumps(versions))
 
 
@@ -56,7 +58,7 @@ if __name__ == "__main__":
         print("Usage: python utils/extract_metadata.py {extras|python-versions}", file=sys.stderr)
         sys.exit(1)
 
-    command = sys.argv[1]
+    command: str = sys.argv[1]
 
     if command == "extras":
         extract_extras()
