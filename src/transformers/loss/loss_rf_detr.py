@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -38,140 +40,161 @@ def sigmoid_cross_entropy_loss(
     return loss
 
 
-def point_sample(input, point_coords, **kwargs):
-    """
-    A wrapper around :function:`torch.nn.functional.grid_sample` to support 3D point_coords tensors.
-    Unlike :function:`torch.nn.functional.grid_sample` it assumes `point_coords` to lie inside
-    [0, 1] x [0, 1] square.
+# Copied from transformers.models.maskformer.modeling_maskformer.pair_wise_sigmoid_cross_entropy_loss
+def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+    r"""
+    A pair wise version of the cross entropy loss, see `sigmoid_cross_entropy_loss` for usage.
 
     Args:
-        input (Tensor): A tensor of shape (N, C, H, W) that contains features map on a H x W grid.
-        point_coords (Tensor): A tensor of shape (N, P, 2) or (N, Hgrid, Wgrid, 2) that contains
-        [0, 1] x [0, 1] normalized point coordinates.
+        inputs (`torch.Tensor`):
+            A tensor representing a mask.
+        labels (`torch.Tensor`):
+            A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
+            (0 for the negative class and 1 for the positive class).
 
     Returns:
-        output (Tensor): A tensor of shape (N, C, P) or (N, C, Hgrid, Wgrid) that contains
-            features for points in `point_coords`. The features are obtained via bilinear
-            interplation from `input` the same way as :function:`torch.nn.functional.grid_sample`.
+        loss (`torch.Tensor`): The computed loss between each pairs.
     """
-    add_dim = False
-    if point_coords.dim() == 3:
-        add_dim = True
-        point_coords = point_coords.unsqueeze(2)
-    output = F.grid_sample(input, 2.0 * point_coords - 1.0, **kwargs)
-    if add_dim:
-        output = output.squeeze(3)
-    return output
+
+    height_and_width = inputs.shape[1]
+
+    criterion = nn.BCEWithLogitsLoss(reduction="none")
+    cross_entropy_loss_pos = criterion(inputs, torch.ones_like(inputs))
+    cross_entropy_loss_neg = criterion(inputs, torch.zeros_like(inputs))
+
+    loss_pos = torch.matmul(cross_entropy_loss_pos / height_and_width, labels.T)
+    loss_neg = torch.matmul(cross_entropy_loss_neg / height_and_width, (1 - labels).T)
+    loss = loss_pos + loss_neg
+    return loss
 
 
-def get_uncertain_point_coords_with_randomness(
-    coarse_logits, uncertainty_func, num_points, oversample_ratio=3, importance_sample_ratio=0.75
-):
+# Copied from transformers.models.mask2former.modeling_mask2former.pair_wise_dice_loss
+def pair_wise_dice_loss(inputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
     """
-    Sample points in [0, 1] x [0, 1] coordinate space based on their uncertainty. The unceratinties
-        are calculated for each point using 'uncertainty_func' function that takes point's logit
-        prediction as input.
-    See PointRend paper for details.
+    A pair wise version of the dice loss, see `dice_loss` for usage.
 
     Args:
-        coarse_logits (Tensor): A tensor of shape (N, C, Hmask, Wmask) or (N, 1, Hmask, Wmask) for
-            class-specific or class-agnostic prediction.
-        uncertainty_func: A function that takes a Tensor of shape (N, C, P) or (N, 1, P) that
-            contains logit predictions for P points and returns their uncertainties as a Tensor of
-            shape (N, 1, P).
-        num_points (int): The number of points P to sample.
-        oversample_ratio (int): Oversampling parameter.
-        importance_sample_ratio (float): Ratio of points that are sampled via importnace sampling.
+        inputs (`torch.Tensor`):
+            A tensor representing a mask
+        labels (`torch.Tensor`):
+            A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
+            (0 for the negative class and 1 for the positive class).
 
     Returns:
-        point_coords (Tensor): A tensor of shape (N, P, 2) that contains the coordinates of P
-            sampled points.
+        `torch.Tensor`: The computed loss between each pairs.
     """
-    assert oversample_ratio >= 1
-    assert importance_sample_ratio <= 1 and importance_sample_ratio >= 0
-    num_boxes = coarse_logits.shape[0]
-    num_sampled = int(num_points * oversample_ratio)
-    point_coords = torch.rand(num_boxes, num_sampled, 2, device=coarse_logits.device)
-    point_logits = point_sample(coarse_logits, point_coords, align_corners=False)
-    # It is crucial to calculate uncertainty based on the sampled prediction value for the points.
-    # Calculating uncertainties of the coarse predictions first and sampling them for points leads
-    # to incorrect results.
-    # To illustrate this: assume uncertainty_func(logits)=-abs(logits), a sampled point between
-    # two coarse predictions with -1 and 1 logits has 0 logits, and therefore 0 uncertainty value.
-    # However, if we calculate uncertainties for the coarse predictions first,
-    # both will have -1 uncertainty, and the sampled point will get -1 uncertainty.
-    point_uncertainties = uncertainty_func(point_logits)
-    num_uncertain_points = int(importance_sample_ratio * num_points)
-    num_random_points = num_points - num_uncertain_points
-    idx = torch.topk(point_uncertainties[:, 0, :], k=num_uncertain_points, dim=1)[1]
-    shift = num_sampled * torch.arange(num_boxes, dtype=torch.long, device=coarse_logits.device)
-    idx += shift[:, None]
-    point_coords = point_coords.view(-1, 2)[idx.view(-1), :].view(num_boxes, num_uncertain_points, 2)
-    if num_random_points > 0:
-        point_coords = torch.cat(
-            [
-                point_coords,
-                torch.rand(num_boxes, num_random_points, 2, device=coarse_logits.device),
-            ],
-            dim=1,
-        )
-    return point_coords
-
-
-def calculate_uncertainty(logits):
-    """
-    We estimate uncerainty as L1 distance between 0.0 and the logit prediction in 'logits' for the
-        foreground class in `classes`.
-    Args:
-        logits (Tensor): A tensor of shape (R, 1, ...) for class-specific or
-            class-agnostic, where R is the total number of predicted masks in all images and C is
-            the number of foreground classes. The values are logits.
-    Returns:
-        scores (Tensor): A tensor of shape (R, 1, ...) that contains uncertainty scores with
-            the most uncertain locations having the highest uncertainty score.
-    """
-    assert logits.shape[1] == 1
-    gt_class_logits = logits.clone()
-    return -(torch.abs(gt_class_logits))
-
-
-def batch_sigmoid_cross_entropy_loss(inputs: torch.Tensor, targets: torch.Tensor):
-    """
-    Args:
-        inputs: A float tensor of arbitrary shape.
-                The predictions for each example.
-        targets: A float tensor with the same shape as inputs. Stores the binary
-                 classification label for each element in inputs
-                (0 for the negative class and 1 for the positive class).
-    Returns:
-        Loss tensor
-    """
-    hw = inputs.shape[1]
-
-    pos = F.binary_cross_entropy_with_logits(inputs, torch.ones_like(inputs), reduction="none")
-    neg = F.binary_cross_entropy_with_logits(inputs, torch.zeros_like(inputs), reduction="none")
-
-    loss = torch.einsum("nc,mc->nm", pos, targets) + torch.einsum("nc,mc->nm", neg, (1 - targets))
-
-    return loss / hw
-
-
-def batch_dice_loss(inputs: torch.Tensor, targets: torch.Tensor):
-    """
-    Compute the DICE loss, similar to generalized IOU for masks
-    Args:
-        inputs: A float tensor of arbitrary shape.
-                The predictions for each example.
-        targets: A float tensor with the same shape as inputs. Stores the binary
-                 classification label for each element in inputs
-                (0 for the negative class and 1 for the positive class).
-    """
-    inputs = inputs.sigmoid()
-    inputs = inputs.flatten(1)
-    numerator = 2 * torch.einsum("nc,mc->nm", inputs, targets)
-    denominator = inputs.sum(-1)[:, None] + targets.sum(-1)[None, :]
+    inputs = inputs.sigmoid().flatten(1)
+    numerator = 2 * torch.matmul(inputs, labels.T)
+    # using broadcasting to get a [num_queries, NUM_CLASSES] matrix
+    denominator = inputs.sum(-1)[:, None] + labels.sum(-1)[None, :]
     loss = 1 - (numerator + 1) / (denominator + 1)
     return loss
+
+
+# Copied from transformers.models.mask2former.modeling_mask2former.sample_point
+def sample_point(
+    input_features: torch.Tensor, point_coordinates: torch.Tensor, add_dim=False, **kwargs
+) -> torch.Tensor:
+    """
+    A wrapper around `torch.nn.functional.grid_sample` to support 3D point_coordinates tensors.
+
+    Args:
+        input_features (`torch.Tensor` of shape (batch_size, channels, height, width)):
+            A tensor that contains features map on a height * width grid
+        point_coordinates (`torch.Tensor` of shape (batch_size, num_points, 2) or (batch_size, grid_height, grid_width,:
+        2)):
+            A tensor that contains [0, 1] * [0, 1] normalized point coordinates
+        add_dim (`bool`):
+            boolean value to keep track of added dimension
+
+    Returns:
+        point_features (`torch.Tensor` of shape (batch_size, channels, num_points) or (batch_size, channels,
+        height_grid, width_grid):
+            A tensor that contains features for points in `point_coordinates`.
+    """
+    if point_coordinates.dim() == 3:
+        add_dim = True
+        point_coordinates = point_coordinates.unsqueeze(2)
+
+    # use nn.function.grid_sample to get features for points in `point_coordinates` via bilinear interpolation
+    point_features = torch.nn.functional.grid_sample(input_features, 2.0 * point_coordinates - 1.0, **kwargs)
+    if add_dim:
+        point_features = point_features.squeeze(3)
+
+    return point_features
+
+
+# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerLoss.calculate_uncertainty
+def calculate_uncertainty(logits: torch.Tensor) -> torch.Tensor:
+    """
+    In Mask2Former paper, uncertainty is estimated as L1 distance between 0.0 and the logit prediction in 'logits'
+    for the foreground class in `classes`.
+
+    Args:
+        logits (`torch.Tensor`):
+        A tensor of shape (R, 1, ...) for class-specific or class-agnostic, where R is the total number of predicted masks in all images and C is:
+        the number of foreground classes. The values are logits.
+
+    Returns:
+        scores (`torch.Tensor`): A tensor of shape (R, 1, ...) that contains uncertainty scores with the most
+        uncertain locations having the highest uncertainty score.
+    """
+    uncertainty_scores = -(torch.abs(logits))
+    return uncertainty_scores
+
+
+# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerLoss.sample_points_using_uncertainty
+def sample_points_using_uncertainty(
+    logits: torch.Tensor,
+    uncertainty_function: Callable[[torch.Tensor], torch.Tensor],
+    num_points: int,
+    oversample_ratio: int,
+    importance_sample_ratio: float,
+) -> torch.Tensor:
+    """
+    This function is meant for sampling points in [0, 1] * [0, 1] coordinate space based on their uncertainty. The
+    uncertainty is calculated for each point using the passed `uncertainty function` that takes points logit
+    prediction as input.
+
+    Args:
+        logits (`float`):
+            Logit predictions for P points.
+        uncertainty_function:
+            A function that takes logit predictions for P points and returns their uncertainties.
+        num_points (`int`):
+            The number of points P to sample.
+        oversample_ratio (`int`):
+            Oversampling parameter.
+        importance_sample_ratio (`float`):
+            Ratio of points that are sampled via importance sampling.
+
+    Returns:
+        point_coordinates (`torch.Tensor`):
+            Coordinates for P sampled points.
+    """
+
+    num_boxes = logits.shape[0]
+    num_points_sampled = int(num_points * oversample_ratio)
+
+    # Get random point coordinates
+    point_coordinates = torch.rand(num_boxes, num_points_sampled, 2, device=logits.device)
+    # Get sampled prediction value for the point coordinates
+    point_logits = sample_point(logits, point_coordinates, align_corners=False)
+    # Calculate the uncertainties based on the sampled prediction values of the points
+    point_uncertainties = uncertainty_function(point_logits)
+
+    num_uncertain_points = int(importance_sample_ratio * num_points)
+    num_random_points = num_points - num_uncertain_points
+
+    idx = torch.topk(point_uncertainties[:, 0, :], k=num_uncertain_points, dim=1)[1]
+    point_coordinates = torch.gather(point_coordinates, 1, idx.unsqueeze(-1).expand(-1, -1, 2))
+
+    if num_random_points > 0:
+        point_coordinates = torch.cat(
+            [point_coordinates, torch.rand(num_boxes, num_random_points, 2, device=logits.device)],
+            dim=1,
+        )
+    return point_coordinates
 
 
 class RfDetrHungarianMatcher(nn.Module):
@@ -234,18 +257,23 @@ class RfDetrHungarianMatcher(nn.Module):
         giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
 
         # Compute mask cost
-        num_points = out_masks.shape[-2] * out_masks.shape[-1] // self.mask_point_sample_ratio
-        tgt_masks = target_masks.to(out_masks.dtype)
+        height, width = out_bbox.shape[:2]
+        num_points = height * width // self.mask_point_sample_ratio
+        target_masks = target_masks.to(out_masks.dtype)
         point_coords = torch.rand(1, num_points, 2, device=out_masks.device)
-        pred_masks_logits = point_sample(
-            out_masks.unsqueeze(1), point_coords.repeat(out_masks.shape[0], 1, 1), align_corners=False
-        ).squeeze(1)
-        tgt_masks_flat = point_sample(
-            tgt_masks.unsqueeze(1), point_coords.repeat(tgt_masks.shape[0], 1, 1), align_corners=False, mode="nearest"
-        ).squeeze(1)
 
-        cost_mask_class = batch_sigmoid_cross_entropy_loss(pred_masks_logits, tgt_masks_flat)
-        cost_mask_dice = batch_dice_loss(pred_masks_logits, tgt_masks_flat)
+        pred_point_coords = point_coords.repeat(out_masks.shape[0], 1, 1)
+        out_masks = out_masks.unsqueeze(1)
+        pred_masks_logits = sample_point(out_masks, pred_point_coords, align_corners=False)
+        pred_masks_logits = torch.squeeze(pred_masks_logits, (-1, 1))
+
+        target_point_coords = point_coords.repeat(target_masks.shape[0], 1, 1)
+        target_masks = target_masks.unsqueeze(1)
+        target_masks = sample_point(target_masks, target_point_coords, align_corners=False, mode="nearest")
+        target_masks = torch.squeeze(target_masks, (-1, 1))
+
+        cost_mask_class = pair_wise_sigmoid_cross_entropy_loss(pred_masks_logits, target_masks)
+        cost_mask_dice = pair_wise_dice_loss(pred_masks_logits, target_masks)
 
         # Final cost matrix
         cost_matrix = (
@@ -279,7 +307,10 @@ class RfDetrHungarianMatcher(nn.Module):
                     )
                     for indice1, indice2 in zip(indices, group_indices)
                 ]
-        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
+        matched_indices = [
+            (torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices
+        ]
+        return matched_indices
 
 
 class RfDetrImageLoss(LwDetrImageLoss):
@@ -322,26 +353,13 @@ class RfDetrImageLoss(LwDetrImageLoss):
 
         with torch.no_grad():
             # sample point_coords
-            point_coords = get_uncertain_point_coords_with_randomness(
-                source_masks,
-                lambda logits: calculate_uncertainty(logits),
-                num_points,
-                3,
-                0.75,
+            point_coords = sample_points_using_uncertainty(
+                source_masks, lambda logits: calculate_uncertainty(logits), num_points, 3, 0.75
             )
             # get gt labels
-            point_labels = point_sample(
-                target_masks,
-                point_coords,
-                align_corners=False,
-                mode="nearest",
-            ).squeeze(1)
+            point_labels = sample_point(target_masks, point_coords, align_corners=False, mode="nearest").squeeze(1)
 
-        point_logits = point_sample(
-            source_masks,
-            point_coords,
-            align_corners=False,
-        ).squeeze(1)
+        point_logits = sample_point(source_masks, point_coords, align_corners=False).squeeze(1)
 
         losses = {
             "loss_mask_ce": sigmoid_cross_entropy_loss(point_logits, point_labels, num_boxes),
