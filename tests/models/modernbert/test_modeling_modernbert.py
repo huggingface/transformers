@@ -17,7 +17,6 @@ import tempfile
 import unittest
 
 import pytest
-from packaging import version
 from pytest import mark
 
 from transformers import AutoTokenizer, ModernBertConfig, is_torch_available
@@ -623,8 +622,6 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 class ModernBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
         model = ModernBertForMaskedLM.from_pretrained("answerdotai/ModernBERT-base", attn_implementation="sdpa")
         tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
@@ -643,8 +640,6 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
         model = ModernBertModel.from_pretrained("answerdotai/ModernBERT-base", attn_implementation="sdpa")
         tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
@@ -773,8 +768,6 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
     @pytest.mark.flash_attn_test
     @slow
     def test_inference_masked_lm_flash_attention_2(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
         model = ModernBertForMaskedLM.from_pretrained("answerdotai/ModernBERT-base", dtype=torch.float16).to(
             torch_device
