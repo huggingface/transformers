@@ -787,11 +787,11 @@ class ContinuousBatchProcessor:
                 state.initial_tokens + state.generated_tokens, device=logits.device, dtype=torch.long
             ).unsqueeze(0)
             # Slice next-token logits.
-            scores = logits[0, position].unsqueeze(0)
+            scores = logits[:, position]
             # Apply processor.
             processed_scores = logit_processor(input_ids, scores)
             # Write back in-place.
-            logits[0, position] = processed_scores[0]
+            logits[:, position] = processed_scores
 
         return logits
 
