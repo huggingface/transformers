@@ -4,12 +4,8 @@ on:
   schedule:
     # Run every night at 3 AM UTC
     - cron: "0 3 * * *"
-  pull_request:
-    paths:
-      - 'setup.py'
-      - '.github/workflows/extras-smoke-test.yml'
-      - 'utils/extract_metadata.py'
   workflow_dispatch:
+  pull_request:
 
 jobs:
   get-python-versions:
@@ -70,14 +66,196 @@ jobs:
           pip install -e .
 
       - name: Test all extras
+        id: test-extras
         run: |
-          set -e
+          mkdir -p failure_reports
+          failed=0
+
           while IFS= read -r extra; do
               echo "=== Testing extra: $extra on Python ${{ matrix.python-version }} ==="
-              pip install -e .[$extra]
+              if ! pip install -e .[$extra]; then
+                  echo "❌ Failed to install extra: $extra"
+                  cat > failure_reports/failure-${{ matrix.python-version }}-${extra}.json << EOF
+          {
+            "python_version": "${{ matrix.python-version }}",
+            "extra": "${extra}",
+            "job_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+                  failed=$((failed + 1))
+              else
+                  echo "✓ Successfully installed extra: $extra"
+              fi
           done < extras_list.txt
+
+          if [ $failed -gt 0 ]; then
+              echo "❌ $failed extra(s) failed to install"
+              exit 1
+          fi
 
       - name: Verify installation
         run: |
           python -c "import transformers; print(f'Transformers version: {transformers.__version__}')"
           python -c "from transformers import pipeline; print('Successfully imported pipeline')"
+
+      - name: Upload failure report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-report-${{ matrix.python-version }}
+          path: failure_reports/
+          retention-days: 1
+          if-no-files-found: ignore
+
+  notify-failures:
+    name: Notify failures to Slack
+    needs: test-extras
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download all failure reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: failure-report-*
+          path: failure_reports/
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Aggregate failures
+        run: |
+          # Aggregate all failure reports
+          echo "[]" > all_failures.json
+
+          if [ -d "failure_reports" ] && [ "$(ls -A failure_reports)" ]; then
+            python << 'PYTHON_SCRIPT'
+          import json
+          import os
+          from pathlib import Path
+
+          failures = []
+          failure_dir = Path("failure_reports")
+
+          if failure_dir.exists():
+              for failure_file in failure_dir.glob("*.json"):
+                  try:
+                      with open(failure_file) as f:
+                          failure_data = json.load(f)
+                          failures.append(failure_data)
+                  except Exception as e:
+                      print(f"Error reading {failure_file}: {e}")
+
+          with open("all_failures.json", "w") as f:
+              json.dump(failures, f, indent=2)
+
+          print(f"Aggregated {len(failures)} failure(s)")
+          PYTHON_SCRIPT
+          fi
+
+      - name: Format Slack message
+        id: format-message
+        run: |
+          python << 'PYTHON_SCRIPT'
+          import json
+          import os
+
+          # Read failures
+          with open("all_failures.json") as f:
+              failures = json.load(f)
+
+          workflow_url = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          if not failures:
+              # Success case
+              title = "✓ *Extras Smoke Test* - All tests passed"
+              message = "All extras installed successfully across all Python versions."
+              emoji = ":white_check_mark:"
+          else:
+              # Failure case - group by Python version
+              failures_by_python = {}
+              for failure in failures:
+                  py_ver = failure.get("python_version", "unknown")
+                  extra = failure.get("extra", "unknown")
+
+                  if py_ver not in failures_by_python:
+                      failures_by_python[py_ver] = []
+                  failures_by_python[py_ver].append(extra)
+
+              title = f":x: *Extras Smoke Test Failed*\\n{len(failures)} failure(s) detected"
+              emoji = ":x:"
+
+              # Build failure details
+              details = []
+              for py_ver in sorted(failures_by_python.keys()):
+                  extras = failures_by_python[py_ver]
+                  extras_list = "\\n".join([f"• `{extra}`" for extra in sorted(extras)])
+                  details.append(f"*Python {py_ver}*\\n{extras_list}")
+
+              message = "\\n\\n".join(details)
+
+          # Set outputs
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"title={title}\n")
+              # Escape newlines and quotes for the message
+              message_escaped = message.replace('\n', '\\n').replace('"', '\\"')
+              f.write(f"message={message_escaped}\n")
+              f.write(f"workflow_url={workflow_url}\n")
+              f.write(f"emoji={emoji}\n")
+          PYTHON_SCRIPT
+
+      - name: Send Slack notification
+        if: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN != '' }}
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
+        with:
+          channel-id: '#transformers-gh-ci-central'
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "Extras Smoke Test Results"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ steps.format-message.outputs.title }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ steps.format-message.outputs.message }}"
+                  }
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "<${{ steps.format-message.outputs.workflow_url }}|View workflow run>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+
+      - name: Slack notification skipped
+        if: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN == '' }}
+        run: |
+          echo "⚠️  SLACK_CIFEEDBACK_BOT_TOKEN secret not configured. Skipping Slack notification."
+          echo "To enable Slack notifications, add SLACK_CIFEEDBACK_BOT_TOKEN to repository secrets."
