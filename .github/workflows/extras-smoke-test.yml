@@ -160,7 +160,6 @@ jobs:
           fi
 
       - name: Format Slack message
-        id: format-message
         run: |
           python << 'PYTHON_SCRIPT'
           import json
@@ -174,9 +173,8 @@ jobs:
 
           if not failures:
               # Success case
-              title = "✓ *Extras Smoke Test* - All tests passed"
+              title = "Extras Smoke Test - All tests passed"
               message = "All extras installed successfully across all Python versions."
-              emoji = ":white_check_mark:"
           else:
               # Failure case - group by Python version
               failures_by_python = {}
@@ -188,8 +186,7 @@ jobs:
                       failures_by_python[py_ver] = []
                   failures_by_python[py_ver].append(extra)
 
-              title = f":x: *Extras Smoke Test Failed*\\n{len(failures)} failure(s) detected"
-              emoji = ":x:"
+              title = f"Extras Smoke Test Failed - {len(failures)} failure(s)"
 
               # Build failure details
               details = []
@@ -200,18 +197,18 @@ jobs:
 
               message = "\\n\\n".join(details)
 
-          # Set outputs
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f"title={title}\n")
-              # Escape newlines and quotes for the message
-              message_escaped = message.replace('\n', '\\n').replace('"', '\\"')
-              f.write(f"message={message_escaped}\n")
-              f.write(f"workflow_url={workflow_url}\n")
-              f.write(f"emoji={emoji}\n")
+          # Set environment variables
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              f.write(f"SLACK_TITLE={title}\n")
+              f.write(f"SLACK_WORKFLOW_URL={workflow_url}\n")
+              # Use heredoc for multiline message
+              f.write("SLACK_MESSAGE<<EOF\n")
+              f.write(f"{message}\n")
+              f.write("EOF\n")
           PYTHON_SCRIPT
 
       - name: Send Slack notification
-        if: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN != '' }}
+        if: ${{ env.SLACK_MESSAGE != '' }}
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
         with:
           channel-id: '#transformers-gh-ci-central'
@@ -222,21 +219,14 @@ jobs:
                   "type": "header",
                   "text": {
                     "type": "plain_text",
-                    "text": "Extras Smoke Test Results"
+                    "text": "${{ env.SLACK_TITLE }}"
                   }
                 },
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "${{ steps.format-message.outputs.title }}"
-                  }
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "${{ steps.format-message.outputs.message }}"
+                    "text": "${{ env.SLACK_MESSAGE }}"
                   }
                 },
                 {
@@ -246,16 +236,10 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "<${{ steps.format-message.outputs.workflow_url }}|View workflow run>"
+                    "text": "<${{ env.SLACK_WORKFLOW_URL }}|View workflow run>"
                   }
                 }
               ]
             }
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
-
-      - name: Slack notification skipped
-        if: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN == '' }}
-        run: |
-          echo "⚠️  SLACK_CIFEEDBACK_BOT_TOKEN secret not configured. Skipping Slack notification."
-          echo "To enable Slack notifications, add SLACK_CIFEEDBACK_BOT_TOKEN to repository secrets."
