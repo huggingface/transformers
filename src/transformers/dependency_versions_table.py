@@ -49,6 +49,7 @@ deps = {
     "pytest-random-order": "pytest-random-order",
     "pytest-rerunfailures": "pytest-rerunfailures<16.0",
     "pytest-timeout": "pytest-timeout",
+    "pytest-env": "pytest-env",
     "pytest-xdist": "pytest-xdist",
     "pytest-order": "pytest-order",
     "python": "python>=3.10.0",
