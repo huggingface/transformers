@@ -343,9 +343,9 @@ class EsmSelfAttention(nn.Module):
         if self.position_embedding_type == "rotary":
             query_layer, key_layer = self.rotary_embeddings(query_layer, key_layer)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = getattr(
+            ALL_ATTENTION_FUNCTIONS, self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
