@@ -14,14 +14,14 @@
 """Blt model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BltLocalEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class BltLocalEncoderConfig(PreTrainedConfig):
     """
     Configuration class for the Blt Local Encoder component.
     """
@@ -70,7 +70,7 @@ class BltLocalEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         super().__init__(**kwargs, tie_word_embeddings=False)
 
 
-class BltLocalDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class BltLocalDecoderConfig(PreTrainedConfig):
     """
     Configuration class for the Blt Local Decoder component.
     """
@@ -125,7 +125,7 @@ class BltLocalDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         super().__init__(**kwargs)
 
 
-class BltGlobalTransformerConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class BltGlobalTransformerConfig(PreTrainedConfig):
     """
     Configuration class for the Blt Global Transformer component.
     """
@@ -166,7 +166,7 @@ class BltGlobalTransformerConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         super().__init__(**kwargs)
 
 
-class BltPatcherConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class BltPatcherConfig(PreTrainedConfig):
     r"""
     Configuration class for the Blt Patcher/Entropy model component.
 
@@ -240,7 +240,7 @@ class BltPatcherConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         super().__init__(**kwargs)
 
 
-class BltConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class BltConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BltModel`]. It is used to instantiate a
     Blt model according to the specified arguments, defining the model architecture.

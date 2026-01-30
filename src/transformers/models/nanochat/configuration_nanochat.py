@@ -13,10 +13,10 @@
 # limitations under the License.
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class NanoChatConfig(PretrainedConfig, RotaryEmbeddingConfigMixin):
+class NanoChatConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NanoChatModel`]. It is used to instantiate a
     NanoChat model according to the specified arguments, defining the model architecture. Instantiating a configuration

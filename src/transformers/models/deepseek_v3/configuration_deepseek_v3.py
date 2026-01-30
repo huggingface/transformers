@@ -16,13 +16,13 @@
 """DeepSeekV3 model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
 DEEPSEEK_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
-class DeepseekV3Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class DeepseekV3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeepseekV3Model`]. It is used to instantiate an DeepSeek
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

@@ -14,10 +14,10 @@
 """openai model configuration"""
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class GptOssConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class GptOssConfig(PreTrainedConfig):
     r"""
     This will yield a configuration to that of the BERT
     [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased) architecture.

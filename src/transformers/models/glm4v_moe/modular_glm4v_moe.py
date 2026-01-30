@@ -22,7 +22,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -55,7 +55,7 @@ from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
 logger = logging.get_logger(__name__)
 
 
-class Glm4vMoeTextConfig(Glm4MoeConfig, RotaryEmbeddingConfigMixin):
+class Glm4vMoeTextConfig(Glm4MoeConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vMoeModel`]. It is used to instantiate a
     GLM-4.5V model according to the specified arguments, defining the model architecture. Instantiating a

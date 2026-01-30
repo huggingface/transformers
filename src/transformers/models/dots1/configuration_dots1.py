@@ -13,14 +13,14 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Dots1Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Dots1Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Dots1Model`]. It is used to instantiate a
     `dots.llm1` model according to the specified arguments, defining the model architecture. Instantiating a
