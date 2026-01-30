@@ -143,7 +143,7 @@ def _build_checkpoint_conversion_mapping():
         ],
         "phimoe": [
             WeightRenaming(".block_sparse_moe.", ".mlp."),
-            WeightRenaming(".gate", ".router"),
+            WeightRenaming(r".gate$", ".router"),
             WeightConverter(
                 source_patterns=[
                     ".experts.*.w1.weight",
