@@ -11,13 +11,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
+import tempfile
 import unittest
+
+from pytest import mark
 
 from transformers import PeAudioConfig, PeAudioEncoderConfig
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
+    force_serialization_as_bin_files,
+    require_accelerate,
+    require_non_hpu,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
+    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
@@ -41,6 +50,7 @@ if is_torch_available():
         PeAudioFrameLevelModel,
         PeAudioModel,
     )
+    from transformers.integrations.accelerate import compute_module_sizes
 
 
 class PeAudioEncoderTester:
@@ -250,11 +260,14 @@ class PeAudioModelTester:
     def get_config(self):
         text_config = self.text_model_tester.get_config()
         audio_config = self.audio_model_tester.get_config()
-        return PeAudioConfig(
+        config = PeAudioConfig(
             text_config=text_config.to_dict(),
             audio_config=audio_config.to_dict(),
             projection_dim=32,
         )
+        # Use SDPA as the default attention implementation for testing
+        config._attn_implementation = "sdpa"
+        return config
 
     def create_and_check_model(self, config, input_ids, attention_mask, input_values, padding_mask):
         model = PeAudioModel(config).to(torch_device).eval()
@@ -330,6 +343,204 @@ class PeAudioModelTest(ModelTesterMixin, unittest.TestCase):
     @require_torch_gpu  # pe-audio contains triton code which cannot run on CPU, so we only test on GPU
     def test_all_tensors_are_parameter_or_buffer(self):
         super().test_all_tensors_are_parameter_or_buffer()
+
+    # Override tests(from test_cpu_offload to test_model_parallelism) that use from_pretrained to ensure SDPA attention is used instead of FlashAttention.
+    # ModernBERT defaults to FlashAttention when available, but FA only supports fp16 and bf16 data types,
+    # so these tests would fail with fp32. We force SDPA here for dtype compatibility.
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_cpu_offload(self, rtol=1e-5, atol=1e-5):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(copy.deepcopy(config)).eval()
+            model = model.to(torch_device)
+
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
+
+            model_size = compute_module_sizes(model)[0][""]
+            # We test several splits of sizes to make sure it works.
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                for max_size in max_gpu_sizes:
+                    max_memory = {0: max_size, "cpu": model_size * 2}
+                    # Force SDPA attention for FA dtype compatibility (FA only supports fp16/bf16)
+                    new_model = model_class.from_pretrained(
+                        tmp_dir, device_map="auto", max_memory=max_memory, attn_implementation="sdpa"
+                    )
+                    # Making sure part of the model will actually end up offloaded
+                    self.assertSetEqual(set(new_model.hf_device_map.values()), {0, "cpu"})
+
+                    self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+
+                    torch.manual_seed(0)
+                    new_output = new_model(**inputs_dict_class)
+
+                    if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
+                        [
+                            torch.testing.assert_close(a, b, rtol=rtol, atol=atol)
+                            for a, b in zip(base_output[0], new_output[0])
+                        ]
+                    else:
+                        torch.testing.assert_close(base_output[0], new_output[0], rtol=rtol, atol=atol)
+
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_disk_offload_bin(self, rtol=1e-5, atol=1e-5):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(copy.deepcopy(config)).eval()
+            model = model.to(torch_device)
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
+
+            model_size = compute_module_sizes(model)[0][""]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                # Since we don't support saving with bins files anymore, but still support loading we use this context
+                # to easily create the bins files and try to load them
+                with force_serialization_as_bin_files():
+                    model.cpu().save_pretrained(tmp_dir)
+
+                with self.assertRaises(ValueError):
+                    max_size = int(self.model_split_percents[0] * model_size)
+                    max_memory = {0: max_size, "cpu": max_size}
+                    # This errors out cause it's missing an offload folder
+                    # Force SDPA attention for FA dtype compatibility (FA only supports fp16/bf16)
+                    new_model = model_class.from_pretrained(
+                        tmp_dir,
+                        device_map="auto",
+                        max_memory=max_memory,
+                        use_safetensors=False,
+                        attn_implementation="sdpa",
+                    )
+
+                max_size = int(self.model_split_percents[1] * model_size)
+                max_memory = {0: max_size, "cpu": max_size}
+                # Force SDPA attention for FA dtype compatibility (FA only supports fp16/bf16)
+                new_model = model_class.from_pretrained(
+                    tmp_dir,
+                    device_map="auto",
+                    max_memory=max_memory,
+                    offload_folder=tmp_dir,
+                    use_safetensors=False,
+                    attn_implementation="sdpa",
+                )
+
+                self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                torch.manual_seed(0)
+                new_output = new_model(**inputs_dict_class)
+
+                if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
+                    [
+                        torch.testing.assert_close(a, b, rtol=rtol, atol=atol)
+                        for a, b in zip(base_output[0], new_output[0])
+                    ]
+                else:
+                    torch.testing.assert_close(base_output[0], new_output[0], rtol=rtol, atol=atol)
+
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_disk_offload_safetensors(self, rtol=1e-5, atol=1e-5):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(copy.deepcopy(config)).eval()
+            model = model.to(torch_device)
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
+
+            model_size = compute_module_sizes(model)[0][""]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                max_size = int(self.model_split_percents[1] * model_size)
+                max_memory = {0: max_size, "cpu": max_size}
+
+                # This doesn't error out as it's in safetensors and doesn't need an offload folder
+                # Force SDPA attention for FA dtype compatibility (FA only supports fp16/bf16)
+                new_model = model_class.from_pretrained(
+                    tmp_dir,
+                    device_map="auto",
+                    max_memory=max_memory,
+                    offload_folder=tmp_dir,
+                    attn_implementation="sdpa",
+                )
+
+                self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                torch.manual_seed(0)
+                new_output = new_model(**inputs_dict_class)
+
+                if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
+                    [
+                        torch.testing.assert_close(a, b, rtol=rtol, atol=atol)
+                        for a, b in zip(base_output[0], new_output[0])
+                    ]
+                else:
+                    torch.testing.assert_close(base_output[0], new_output[0], rtol=rtol, atol=atol)
+
+    @require_non_hpu
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_multi_accelerator
+    def test_model_parallelism(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(copy.deepcopy(config)).eval()
+            model = model.to(torch_device)
+
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
+
+            model_size = compute_module_sizes(model)[0][""]
+            # We test several splits of sizes to make sure it works.
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                for max_size in max_gpu_sizes:
+                    max_memory = {0: max_size, 1: model_size * 2, "cpu": model_size * 2}
+                    # Force SDPA attention for FA dtype compatibility (FA only supports fp16/bf16)
+                    new_model = model_class.from_pretrained(
+                        tmp_dir, device_map="auto", max_memory=max_memory, attn_implementation="sdpa"
+                    )
+                    # Making sure part of the model will actually end up offloaded
+                    self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
+                    self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+
+                    torch.manual_seed(0)
+                    new_output = new_model(**inputs_dict_class)
+
+                    if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
+                        [
+                            torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
+                            for a, b in zip(base_output[0], new_output[0])
+                        ]
+                    else:
+                        torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
 
 @require_torch
