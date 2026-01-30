@@ -229,9 +229,9 @@ class GPTNeoXAttention(nn.Module):
             }
             key_states, value_states = layer_past.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         # Compute attention
         attn_output, attn_weights = attention_interface(

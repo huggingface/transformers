@@ -1940,10 +1940,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             code = f.read()
         # heuristic -> if we find those patterns, the model uses the correct interface
         if re.search(r"class \w+Attention\(nn.Module\)", code):
-            return (
-                "eager_attention_forward" in code
-                and "ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]" in code
-            )
+            return "eager_attention_forward" in code and "ALL_ATTENTION_FUNCTIONS.get_interface(" in code
         else:
             # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
             return True
@@ -4729,6 +4726,20 @@ class AttentionInterface(GeneralInterface):
         "paged|sdpa": sdpa_attention_paged_forward,
         "paged|eager": eager_paged_attention_forward,
     }
+
+    def get_interface(self, attn_implementation: str, default: Callable) -> Callable:
+        """Return the requested `attn_implementation`. Also strictly check its validity, and raise if invalid."""
+        if attn_implementation is None:
+            logger.warning_once(
+                "You tried to access the `AttentionInterface` with a `config._attn_implementation` set to `None`. This "
+                "is expected if you use an Attention Module as a standalone Module. If this is not the case, something went "
+                "wrong with the dispatch of `config._attn_implementation`"
+            )
+        elif attn_implementation != "eager" and attn_implementation not in self:
+            raise KeyError(
+                f"`{attn_implementation}` is not a valid attention implementation registered in the `AttentionInterface`"
+            )
+        return super().get(attn_implementation, default)
 
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
