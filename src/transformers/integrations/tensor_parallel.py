@@ -716,14 +716,6 @@ class ColwiseParallel(TensorParallelLayer):
             parameter = get_tensor_shard(param, self.empty_param, self.device_mesh, self.rank, -2, tensor_idx)
         return parameter.to(device=device, dtype=dtype)
 
-    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
-        distribute_module(
-            module,
-            device_mesh,
-            self._prepare_input_fn,
-            self._prepare_output_fn,
-        )
-
     def get_expected_sharded_shape(self, full_shape: tuple[int, ...] | torch.Size) -> tuple[int, ...]:
         world_size = self.device_mesh.size()
         shape = list(full_shape)
@@ -782,15 +774,6 @@ class RowwiseParallel(TensorParallelLayer):
                 param, self.empty_param, self.device_mesh, self.rank, -1, tensor_idx=tensor_idx
             )
         return parameter.to(device=device, dtype=dtype)
-
-    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
-        module._distribute_module_applied = True
-        distribute_module(
-            module,
-            device_mesh,
-            self._prepare_input_fn,
-            self._prepare_output_fn,
-        )
 
     def get_expected_sharded_shape(self, full_shape: tuple[int, ...] | torch.Size) -> tuple[int, ...]:
         # 1D tensors (bias) are NOT sharded in rowwise
@@ -901,15 +884,6 @@ class EmbeddingParallel(TensorParallelLayer):
             )
         return parameter.to(device=device, dtype=dtype)
 
-    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
-        module._distribute_module_applied = True
-        distribute_module(
-            module,
-            device_mesh,
-            self._prepare_input_fn,
-            self._prepare_output_fn,
-        )
-
     def get_expected_sharded_shape(self, full_shape: tuple[int, ...] | torch.Size) -> tuple[int, ...]:
         world_size = self.device_mesh.size()
         shape = list(full_shape)
@@ -947,14 +921,6 @@ class SequenceParallel(TensorParallelLayer):
         self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
     ) -> torch.Tensor:
         return param[...].to(device=device, dtype=dtype)
-
-    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
-        distribute_module(
-            module,
-            device_mesh,
-            self._prepare_input_fn,
-            self._prepare_output_fn,
-        )
 
 
 class GroupedGemmParallel(TensorParallelLayer):
@@ -1058,14 +1024,6 @@ class RouterParallel(TensorParallelLayer):
     ) -> torch.Tensor:
         return param[...].to(device=device, dtype=dtype)
 
-    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
-        distribute_module(
-            module,
-            device_mesh,
-            self._prepare_input_fn,
-            self._prepare_output_fn,
-        )
-
 
 class MoeTensorParalellExperts(TensorParallelLayer):
     """
@@ -1106,14 +1064,6 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         # This class doesn't shard tensors - sharding is handled by packed_colwise/rowwise
         # on the individual weight tensors (gate_up_proj/down_proj)
         return param[...].to(device=device, dtype=dtype)
-
-    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
-        distribute_module(
-            module,
-            device_mesh,
-            self._prepare_input_fn,
-            self._prepare_output_fn,
-        )
 
 
 class ParallelInterface(GeneralInterface):
