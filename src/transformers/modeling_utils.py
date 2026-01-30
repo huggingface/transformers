@@ -113,7 +113,6 @@ from .utils import (
     is_grouped_mm_available,
     is_kernels_available,
     is_torch_flex_attn_available,
-    is_torch_greater_or_equal,
     is_torch_mlu_available,
     is_torch_npu_available,
     is_torch_xpu_available,
