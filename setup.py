@@ -95,7 +95,6 @@ _deps = [
     "jmespath>=1.0.1",
     "kernels>=0.10.2,<0.11",
     "librosa",
-    # "natten>=0.14.6,<0.15.0",  # Commented out - see natten extra below for explanation
     "nltk<=3.8.1",
     "num2words",
     "numpy>=1.17",
@@ -213,18 +212,6 @@ if PYTHON_MINOR_VERSION < 14:
     extras["integrations"] += extras["ray"]
 extras["codecarbon"] = deps_list("codecarbon")
 extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"]
-# NATTEN INSTALLATION ISSUE:
-# The natten extra is currently disabled due to installation incompatibilities:
-# - natten 0.14.6 is incompatible with PyTorch 2.9+ (C++ compilation errors)
-# - natten 0.15-0.17.x requires CMake and has build-time torch dependency issues
-# - natten 0.20+ is compatible with PyTorch 2.7+ but has a completely different API
-#
-# natten is only required for the DiNAT model. If you need DiNAT support, install natten manually:
-#   pip install --no-build-isolation natten>=0.17.0,<0.18.0
-# Note: This requires torch to be installed first and CMake to be available.
-#
-# For more information, see: https://natten.org/install/
-# extras["natten"] = extras["torch"] + deps_list("natten")
 extras["num2words"] = deps_list("num2words")
 extras["benchmark"] = deps_list("optimum-benchmark")
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "rhoknp")
