@@ -873,7 +873,7 @@ class ContinuousBatchingManager:
             num_kv_padding_intervals=num_kv_padding_intervals,
             compile_config=getattr(generation_config, "compile_config", None),
         )
-        if isinstance(self.logit_processor, list) and len(self.logit_processor) > 0:
+        if self.logit_processor:
             # Processors need eager.
             if self.use_cuda_graph:
                 logger.warning(
