@@ -4,14 +4,9 @@ on:
   schedule:
     # Run every night at 3 AM UTC
     - cron: "0 3 * * *"
-  workflow_dispatch:
-    inputs:
-      slack_report_channel:
-        description: 'Slack channel to report to'
-        required: false
-        default: '#transformers-gh-ci-central'
-        type: string
-  pull_request:
+
+env:
+  SLACK_CHANNEL_ID: '#transformers-gh-ci-central'
 
 jobs:
   get-python-versions:
@@ -133,7 +128,7 @@ jobs:
     name: Notify failures to Slack
     needs: [test-extras, precheck-slack]
     runs-on: ubuntu-latest
-    if: always() && needs.precheck-slack.outputs.has_slack_token == 'true'
+    if: always() && needs.precheck-slack.outputs.has_slack_token == 'true' && needs.test-extras.result != 'success'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -170,7 +165,7 @@ jobs:
         if: env.SLACK_MESSAGE != ''
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
         with:
-          channel-id: ${{ inputs.slack_report_channel || '#transformers-gh-ci-central' }}
+          channel-id: ${{ env.SLACK_CHANNEL_ID }}
           payload: |
             {
               "blocks": [
