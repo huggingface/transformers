@@ -1957,10 +1957,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             code = f.read()
         # heuristic -> if we find those patterns, the model uses the correct interface
         if re.search(r"class \w+Attention\(nn.Module\)", code):
-            return (
-                "eager_attention_forward" in code
-                and "ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]" in code
-            )
+            return "eager_attention_forward" in code and "ALL_ATTENTION_FUNCTIONS.get_interface(" in code
         else:
             # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
             return True
