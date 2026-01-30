@@ -26,6 +26,7 @@ deps = {
     "jmespath": "jmespath>=1.0.1",
     "kernels": "kernels>=0.10.2,<0.11",
     "librosa": "librosa",
+    "mistral-common[image]": "mistral-common[image]>=1.8.8",
     "nltk": "nltk<=3.8.1",
     "num2words": "num2words",
     "numpy": "numpy>=1.17",
@@ -89,6 +90,5 @@ deps = {
     "sudachipy": "sudachipy>=0.6.6",
     "sudachidict_core": "sudachidict_core>=20220729",
     "ray[tune]": "ray[tune]>=2.7.0",
-    "mistral-common[image]": "mistral-common[image]>=1.8.8",
     "kenlm": "kenlm",
 }
