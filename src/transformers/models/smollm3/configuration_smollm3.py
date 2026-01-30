@@ -19,10 +19,10 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class SmolLM3Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class SmolLM3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SmolLM3Model`]. It is used to instantiate a
     SmolLM3 model according to the specified arguments, defining the model architecture. Instantiating a configuration

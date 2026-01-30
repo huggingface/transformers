@@ -14,7 +14,7 @@
 """Evolla model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -102,7 +102,7 @@ class SaProtConfig(PreTrainedConfig):
         self.token_dropout = token_dropout
 
 
-class EvollaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class EvollaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EvollaModel`]. It is used to instantiate an
     Evolla model according to the specified arguments, defining the model architecture. Instantiating a configuration
