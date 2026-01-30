@@ -5,6 +5,12 @@ on:
     # Run every night at 3 AM UTC
     - cron: "0 3 * * *"
   workflow_dispatch:
+    inputs:
+      slack_report_channel:
+        description: 'Slack channel to report to'
+        required: false
+        default: '#transformers-gh-ci-central'
+        type: string
   pull_request:
 
 jobs:
@@ -148,7 +154,7 @@ jobs:
         if: ${{ env.SLACK_MESSAGE != '' }}
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
         with:
-          channel-id: '#transformers-gh-ci-central'
+          channel-id: ${{ inputs.slack_report_channel || '#transformers-gh-ci-central' }}
           payload: |
             {
               "blocks": [
@@ -179,4 +185,4 @@ jobs:
               ]
             }
         env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+          SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
