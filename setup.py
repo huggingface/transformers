@@ -323,6 +323,11 @@ if __name__ == "__main__":
     for minor in range(min_version, max_version + 1):
         python_classifiers.append(f"Programming Language :: Python :: 3.{minor}")
 
+    if SUPPORTED_PYTHON_VERSIONS[0] == PYTHON_MINOR_VERSION:
+        cmdclass = {"deps_table_update": DepsTableUpdateCommand}
+    else:
+        cmdclass = {}
+
     setup(
         name="transformers",
         version="5.0.1.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
@@ -354,5 +359,5 @@ if __name__ == "__main__":
         + [
             "Topic :: Scientific/Engineering :: Artificial Intelligence",
         ],
-        cmdclass={"deps_table_update": DepsTableUpdateCommand},
+        cmdclass=cmdclass,
     )
