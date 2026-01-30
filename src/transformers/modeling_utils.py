@@ -4079,7 +4079,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             download_kwargs=download_kwargs,
         )
         loading_info, disk_offload_index = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)
-        loading_info = cls._finalize_load_state_dict(model, load_config, loading_info)
+        loading_info = cls._finalize_model_loading(model, load_config, loading_info)
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)
 
@@ -4213,10 +4213,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return loading_info, disk_offload_index
 
     @staticmethod
-    def _finalize_load_state_dict(
+    def _finalize_model_loading(
         model, load_config: LoadStateDictConfig, loading_info: LoadStateDictInfo
     ) -> LoadStateDictInfo:
-        """Performs all post processing operations after having loaded some checkpoints into a model, such as moving
+        """Perform all post processing operations after having loaded some checkpoints into a model, such as moving
         missing keys from meta device to their expected device, reinitializing missing weights according to proper
         distributions, tying the weights and logging the loading report."""
 
