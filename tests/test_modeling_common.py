@@ -4018,12 +4018,21 @@ class ModelTesterMixin:
             inputs_dict.pop("use_cache", None)
             # we don't test loss computation for now
             inputs_dict.pop("return_loss", None)
+            # we don't test loss computation for now
+            inputs_dict.pop("future_values", None)
 
             # set experts implementation to batched_mm for export
             if model._can_set_experts_implementation():
                 model.set_experts_implementation("batched_mm")
 
             for module in model.modules():
+                try:
+                    # set attention implementation to sdpa for every submodel
+                    # (avoids issues with submodules that do not support sdpa)
+                    module.set_attn_implementation("sdpa")
+                except Exception:
+                    pass
+
                 if hasattr(module, "config"):
                     # disable cache usage for every submodel
                     if hasattr(module.config, "use_cache"):
