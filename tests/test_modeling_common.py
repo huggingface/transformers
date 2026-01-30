@@ -4025,14 +4025,14 @@ class ModelTesterMixin:
             if model._can_set_experts_implementation():
                 model.set_experts_implementation("batched_mm")
 
-            for module in model.modules():
+            # set attention implementation to sdpa for export
+            if model._can_set_attn_implementation() and model.config.model_type != "videomae":
                 try:
-                    # set attention implementation to sdpa for every submodel
-                    # (avoids issues with submodules that do not support sdpa)
-                    module.set_attn_implementation("sdpa")
+                    model.set_attn_implementation("sdpa")
                 except Exception:
                     pass
 
+            for module in model.modules():
                 if hasattr(module, "config"):
                     # disable cache usage for every submodel
                     if hasattr(module.config, "use_cache"):
