@@ -94,6 +94,7 @@ _deps = [
     "jmespath>=1.0.1",
     "kernels>=0.10.2,<0.11",
     "librosa",
+    "mistral-common[image]>=1.8.8",
     "nltk<=3.8.1",
     "num2words",
     "numpy>=1.17",
@@ -164,7 +165,6 @@ if PYTHON_MINOR_VERSION < 14:
         "sudachipy>=0.6.6",
         "sudachidict_core>=20220729",
         "ray[tune]>=2.7.0",
-        "mistral-common[image]>=1.8.8",
     ]
 
 if PYTHON_MINOR_VERSION < 13:
@@ -191,8 +191,7 @@ extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcs
 extras["kernels"] = deps_list("kernels")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
-if PYTHON_MINOR_VERSION < 14:
-    extras["mistral-common"] = deps_list("mistral-common[image]")
+extras["mistral-common"] = deps_list("mistral-common[image]")
 extras["chat_template"] = deps_list("jinja2", "jmespath")
 extras["sklearn"] = deps_list("scikit-learn")
 extras["accelerate"] = deps_list("accelerate")
@@ -239,13 +238,12 @@ extras["testing"] = (
         "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
         "filelock",  # filesystem locks, e.g., to prevent parallel downloads
     )
+    + extras["mistral-common"]
     + extras["quality"]
     + extras["retrieval"]
     + extras["sentencepiece"]
     + extras["serving"]
 )
-if PYTHON_MINOR_VERSION < 14:
-    extras["testing"] += extras["mistral-common"]
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 extras["all"] = (
