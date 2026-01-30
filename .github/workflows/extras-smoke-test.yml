@@ -4,7 +4,6 @@ on:
   schedule:
     # Run every night at 3 AM UTC
     - cron: "0 3 * * *"
-  pull_request:
 env:
   SLACK_CHANNEL_ID: '#transformers-gh-ci-central'
 
