@@ -131,81 +131,18 @@ jobs:
 
       - name: Aggregate failures
         run: |
-          # Aggregate all failure reports
-          echo "[]" > all_failures.json
-
-          if [ -d "failure_reports" ] && [ "$(ls -A failure_reports)" ]; then
-            python << 'PYTHON_SCRIPT'
-          import json
-          import os
-          from pathlib import Path
-
-          failures = []
-          failure_dir = Path("failure_reports")
-
-          if failure_dir.exists():
-              for failure_file in failure_dir.glob("*.json"):
-                  try:
-                      with open(failure_file) as f:
-                          failure_data = json.load(f)
-                          failures.append(failure_data)
-                  except Exception as e:
-                      print(f"Error reading {failure_file}: {e}")
-
-          with open("all_failures.json", "w") as f:
-              json.dump(failures, f, indent=2)
-
-          print(f"Aggregated {len(failures)} failure(s)")
-          PYTHON_SCRIPT
-          fi
+          python utils/aggregate_failure_reports.py \
+            --input-dir failure_reports \
+            --output all_failures.json
 
       - name: Format Slack message
+        env:
+          FAILURES_FILE: all_failures.json
+          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          python << 'PYTHON_SCRIPT'
-          import json
-          import os
-
-          # Read failures
-          with open("all_failures.json") as f:
-              failures = json.load(f)
-
-          workflow_url = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-          if not failures:
-              # Success case
-              title = "Extras Smoke Test - All tests passed"
-              message = "All extras installed successfully across all Python versions."
-          else:
-              # Failure case - group by Python version
-              failures_by_python = {}
-              for failure in failures:
-                  py_ver = failure.get("python_version", "unknown")
-                  extra = failure.get("extra", "unknown")
-
-                  if py_ver not in failures_by_python:
-                      failures_by_python[py_ver] = []
-                  failures_by_python[py_ver].append(extra)
-
-              title = f"Extras Smoke Test Failed - {len(failures)} failure(s)"
-
-              # Build failure details
-              details = []
-              for py_ver in sorted(failures_by_python.keys()):
-                  extras = failures_by_python[py_ver]
-                  extras_list = "\\n".join([f"• `{extra}`" for extra in sorted(extras)])
-                  details.append(f"*Python {py_ver}*\\n{extras_list}")
-
-              message = "\\n\\n".join(details)
-
-          # Set environment variables
-          with open(os.environ['GITHUB_ENV'], 'a') as f:
-              f.write(f"SLACK_TITLE={title}\n")
-              f.write(f"SLACK_WORKFLOW_URL={workflow_url}\n")
-              # Use heredoc for multiline message
-              f.write("SLACK_MESSAGE<<EOF\n")
-              f.write(f"{message}\n")
-              f.write("EOF\n")
-          PYTHON_SCRIPT
+          python utils/format_extras_slack_message.py \
+            --failures "$FAILURES_FILE" \
+            --workflow-url "$WORKFLOW_URL"
 
       - name: Send Slack notification
         if: ${{ env.SLACK_MESSAGE != '' }}
