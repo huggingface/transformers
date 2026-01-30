@@ -1812,7 +1812,7 @@ class GenerationMixin(ContinuousMixin):
             generation_config.cache_implementation = None
 
         # It doesn't make sense to allow kwargs and `generation_config`, that should be mutually exclusive
-        if generation_config_provided is not None and set(kwargs.keys()) - set(model_kwargs.keys()):
+        if generation_config_provided and set(kwargs.keys()) - set(model_kwargs.keys()):
             generation_kwargs = set(kwargs.keys()) - set(model_kwargs.keys())
             logger.warning_once(
                 f"Passing `generation_config` together with generation-related "
@@ -2198,7 +2198,9 @@ class GenerationMixin(ContinuousMixin):
     @contextmanager
     def _optimize_model_for_decode(self):
         original_experts_implementation = self.config._experts_implementation
-        if original_experts_implementation == "grouped_mm":
+        # On non-CPU devices, 'batched_mm' can trade off a bit of memory (by duplicating selected experts weights)
+        # for much better speed during decoding, especially for smaller inputs. On CPU, grouped_mm is usually better.
+        if original_experts_implementation == "grouped_mm" and self.device.type != "cpu":
             logger.info_once(
                 "We will be switching to 'batched_mm' for the decoding stage as it is much more performant than 'grouped_mm' on smaller inputs. "
                 "If you experience any issues with this, please open an issue on the Hugging Face Transformers GitHub repository.",
@@ -2208,7 +2210,7 @@ class GenerationMixin(ContinuousMixin):
         try:
             yield
         finally:
-            if original_experts_implementation == "grouped_mm":
+            if original_experts_implementation == "grouped_mm" and self.device.type != "cpu":
                 self.set_experts_implementation(original_experts_implementation)
 
     def _get_deprecated_gen_repo(

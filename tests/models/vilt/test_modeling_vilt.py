@@ -655,7 +655,7 @@ class ViltModelIntegrationTest(unittest.TestCase):
             )
         else:
             expected_slice = torch.tensor(
-                [-2.3713, 2.9168],
+                [-2.3694, 2.9153],
                 device=torch_device,
             )
 

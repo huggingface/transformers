@@ -31,12 +31,24 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
+
+
+@dataclass
+@auto_docstring
+class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithPooling):
+    r"""
+    visual_indicator_features (`torch.FloatTensor` of shape `(batch_size, visual_indicator_size)`):
+        Visual indicator features extracted from the model, which can be used for auxiliary tasks or further processing.
+    """
+
+    visual_indicator_features: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -260,71 +272,10 @@ class Ovis2MLP(nn.Module):
         return down_proj
 
 
-class Ovis2Attention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-        self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
-        self.is_causal = False
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Input shape: Batch x Time x Channel"""
-
-        batch_size, seq_length, embed_dim = hidden_states.shape
-
-        queries = self.q_proj(hidden_states)
-        keys = self.k_proj(hidden_states)
-        values = self.v_proj(hidden_states)
-
-        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            is_causal=self.is_causal,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
-        )
-
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights
-
-
 class Ovis2VisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Ovis2VisionConfig):
         super().__init__()
-        self.attention = Ovis2Attention(config)
+        self.attention = Ovis2VisionAttention(config)
         self.ffn = Ovis2MLP(config)
         self.rms_norm1 = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.rms_norm2 = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
@@ -447,6 +398,10 @@ def hard_softmax(logits: torch.Tensor, dim: int):
 
 class Ovis2VisionModel(Ovis2PreTrainedModel):
     config: Ovis2VisionConfig
+    _can_record_outputs = {
+        "hidden_states": Ovis2VisionEncoderLayer,
+        "attentions": Ovis2VisionAttention,
+    }
 
     def __init__(self, config: Ovis2VisionConfig):
         super().__init__(config)
@@ -463,7 +418,10 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
 
         self.post_init()
 
-    def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
+    @check_model_inputs
+    def forward(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
         outputs = self.transformer(pixel_values, **kwargs)
         last_hidden_state = outputs[0]
         if self.config.hidden_stride > 1:
@@ -496,7 +454,10 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
         elif self.config.tokenize_function == "softmax":
             prob_token = nn.functional.softmax(logits, dim=-1)
 
-        return prob_token
+        return BaseModelOutputWithVisualIndicatorFeatures(
+            last_hidden_state=last_hidden_state,
+            pooler_output=prob_token,
+        )
 
 
 @auto_docstring(
@@ -524,27 +485,17 @@ class Ovis2Model(Ovis2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-    ) -> torch.FloatTensor:
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
-               The tensors corresponding to the input images.
-            vision_feature_layer (`Union[int, list[int]]`, *optional*):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-            vision_feature_select_strategy (`str`, *optional*):
-                The feature selection strategy used to select the vision feature from the vision backbone.
-                Can be one of `"default"` or `"full"`
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
-        """
-        image_features = self.vision_tower(pixel_values)
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
+        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
+        image_features = image_outputs.pooler_output
         batch_size, img_seq_len, _ = image_features.shape
         padding_tensor = torch.zeros(
             (batch_size, img_seq_len, self.vision_tower.num_visual_indicator_tokens),
@@ -561,9 +512,10 @@ class Ovis2Model(Ovis2PreTrainedModel):
             self.visual_vocab_size,
             dtype=torch.long,
         ).to(image_features.device)
-        visual_indicator_features = self.visual_embeddings_table(visual_indicator)
+        image_outputs.pooler_output = image_features
+        image_outputs.visual_indicator_features = self.visual_embeddings_table(visual_indicator)
 
-        return image_features, visual_indicator_features
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -581,12 +533,12 @@ class Ovis2Model(Ovis2PreTrainedModel):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
         return special_image_mask
 
     @can_return_tuple
@@ -620,7 +572,9 @@ class Ovis2Model(Ovis2PreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_features, visual_indicator_features = self.get_image_features(pixel_values=pixel_values)
+            image_outputs = self.get_image_features(pixel_values=pixel_values, return_dict=True)
+            image_features = image_outputs.pooler_output
+            visual_indicator_features = image_outputs.visual_indicator_features
 
             special_image_mask = self.get_placeholder_mask(
                 input_ids,
@@ -688,8 +642,11 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def get_image_features(self, pixel_values: torch.FloatTensor):
-        return self.model.get_image_features(pixel_values=pixel_values)
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
+        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -720,7 +677,8 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Ovis2ForConditionalGeneration
 
         >>> model = Ovis2ForConditionalGeneration.from_pretrained("thisisiron/Ovis2-2B-hf")
@@ -728,7 +686,8 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
 
         >>> prompt = "<|im_start|>user\n<image>\nDescribe the image.<|im_end|>\n<|im_start|>assistant\n"
         >>> url = "http://images.cocodataset.org/val2014/COCO_val2014_000000537955.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
 

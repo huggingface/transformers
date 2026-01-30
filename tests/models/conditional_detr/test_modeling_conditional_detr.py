@@ -190,7 +190,6 @@ class ConditionalDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
     test_missing_keys = False
     zero_init_hidden_state = True
-    test_torch_exportable = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

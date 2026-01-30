@@ -751,11 +751,6 @@ def is_flute_available() -> bool:
 
 
 @lru_cache
-def is_ftfy_available() -> bool:
-    return _is_package_available("ftfy")
-
-
-@lru_cache
 def is_g2p_en_available() -> bool:
     return _is_package_available("g2p_en")
 
@@ -1314,19 +1309,23 @@ def is_torchdynamo_exporting() -> bool:
 
         return torch.compiler.is_exporting()
     except Exception:
-        try:
-            import torch._dynamo as dynamo
-
-            return dynamo.is_exporting()
-        except Exception:
-            return False
+        return False
 
 
-def is_torch_fx_proxy(x):
+def is_torch_fx_proxy(x) -> bool:
     try:
         import torch.fx
 
         return isinstance(x, torch.fx.Proxy)
+    except Exception:
+        return False
+
+
+def is_fake_tensor(x) -> bool:
+    try:
+        import torch
+
+        return isinstance(x, torch._subclasses.FakeTensor)
     except Exception:
         return False
 
@@ -1379,14 +1378,56 @@ def is_cuda_stream_capturing() -> bool:
 
 def is_tracing(tensor=None) -> bool:
     """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, torch.fx, jax.jit (with torchax) or
-    CUDA stream capturing"""
+    CUDA stream capturing or FakeTensor"""
+
     # Note that `is_torchdynamo_compiling` checks both compiling and exporting (the export check is stricter and
     # only checks export)
     _is_tracing = is_torchdynamo_compiling() or is_jit_tracing() or is_cuda_stream_capturing()
     if tensor is not None:
         _is_tracing |= is_torch_fx_proxy(tensor)
+        _is_tracing |= is_fake_tensor(tensor)
         _is_tracing |= is_jax_jitting(tensor)
+
     return _is_tracing
+
+
+def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: type[Exception] = ValueError) -> None:
+    """
+    Combines the functionalities of `torch._check`, `torch._check_with` and `torch._check_tensor_all_with` to provide a
+    unified way to perform checks that are compatible with TorchDynamo (torch.compile & torch.export).
+
+    The advantage of using `torch._check(cond, msg, error_type)` over `if cond: raise error_type(msg)` is that the former
+    works as a truthfulness hint for TorchDynamo, instead of failing with a data-dependent control flow error during compilation.
+
+    All checks using this method can be disabled in production environments by setting `TRANSFORMERS_DISABLE_TORCH_CHECK=1`.
+
+    Args:
+        cond (`bool`, `torch.Tensor` or `Callable[[], bool | torch.Tensor]`): The condition to check.
+        msg (`str` or `Callable[[], str]`): The error message to display if the condition is not met.
+        error_type (`type[Exception]`, *optional*, defaults to `ValueError`): The type of error to raise if the condition is not met.
+
+    Raises:
+        error_type: If the condition is not met.
+    """
+    if os.getenv("TRANSFORMERS_DISABLE_TORCH_CHECK", "0") == "1":
+        return
+
+    import torch
+
+    if not callable(msg):
+        # torch._check requires msg to be a callable but we want to keep the API simple for users
+        def msg_callable():
+            return msg
+    else:
+        msg_callable = msg
+
+    if callable(cond):
+        cond = cond()
+
+    if isinstance(cond, torch.Tensor):
+        torch._check_tensor_all_with(error_type, cond, msg_callable)
+    else:
+        torch._check_with(error_type, cond, msg_callable)
 
 
 @lru_cache
@@ -1596,13 +1637,6 @@ that match your environment. Please note that you may need to restart your runti
 """
 
 
-# docstyle-ignore
-FTFY_IMPORT_ERROR = """
-{0} requires the ftfy library but it was not found in your environment. Check out the instructions on the
-installation section: https://github.com/rspeer/python-ftfy/tree/master#installing and follow the ones
-that match your environment. Please note that you may need to restart your runtime after installation.
-"""
-
 LEVENSHTEIN_IMPORT_ERROR = """
 {0} requires the python-Levenshtein library but it was not found in your environment. You can install it with pip: `pip
 install python-Levenshtein`. Please note that you may need to restart your runtime after installation.
@@ -1809,7 +1843,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("essentia", (is_essentia_available, ESSENTIA_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
-        ("ftfy", (is_ftfy_available, FTFY_IMPORT_ERROR)),
         ("g2p_en", (is_g2p_en_available, G2P_EN_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),

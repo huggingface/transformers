@@ -930,7 +930,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
     """
 )
 class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {}
+    _tied_weights_keys = {"lm_head.weight": "backbone.embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -956,41 +956,34 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         is_first_iteration: bool | None = False,
         **kwargs,
     ):
-        # Overwritten -- uses `cache_params` as opposed to `past_key_values`
-        model_inputs = {"input_ids": input_ids.contiguous()}
+        # Overwritten -- has custom cache class `Mamba2Cache`
+
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            cache_params=cache_params,
+            cache_position=cache_position,
+            attention_mask=attention_mask,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+
         if use_cache and cache_params is None:
             # we initialize the `cache_position` to full size of `conv_states` at prefill stage
             # considering padding will be applied when input length is shorter, and truncation
             # will be applied when it is longer, so it will be equivalent to always have it match
             # the length of `cache_params.conv_states`, which is `config.conv_kernel`
-            cache_position = torch.arange(0, self.backbone.config.conv_kernel, device=input_ids.device)
+            model_inputs["cache_position"] = torch.arange(0, self.backbone.config.conv_kernel, device=input_ids.device)
             if inputs_embeds is not None:
-                model_inputs = {"inputs_embeds": inputs_embeds}
                 max_batch_size = inputs_embeds.size(0)
             else:
                 max_batch_size = input_ids.size(0)
-            cache_params = Mamba2Cache(self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype)
-
-        if use_cache and cache_position[0] > 0:
-            model_inputs["input_ids"] = input_ids[:, -1].unsqueeze(-1).contiguous()
-            attention_mask = None
-
-        if not use_cache and inputs_embeds is not None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-
-        model_inputs.update(
-            {
-                "cache_params": cache_params,
-                "use_cache": use_cache,
-                "cache_position": cache_position,
-                "attention_mask": attention_mask,
-            }
-        )
-
-        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
-        for key, value in kwargs.items():
-            if key not in model_inputs:
-                model_inputs[key] = value
+            model_inputs["cache_params"] = Mamba2Cache(
+                self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype
+            )
+        elif use_cache and cache_position[0] > 0:
+            model_inputs["attention_mask"] = None
 
         return model_inputs
 

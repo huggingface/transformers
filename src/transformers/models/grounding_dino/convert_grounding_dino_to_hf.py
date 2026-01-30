@@ -16,8 +16,9 @@
 URL: https://github.com/IDEA-Research/GroundingDINO"""
 
 import argparse
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from PIL import Image
 from torchvision import transforms as T
@@ -379,7 +380,8 @@ def read_in_q_k_v_decoder(state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read())).convert("RGB")
     return image
 
 

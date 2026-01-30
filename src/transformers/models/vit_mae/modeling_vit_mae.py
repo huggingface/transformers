@@ -586,10 +586,12 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, ViTMAEModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/vit-mae-base")
         >>> model = ViTMAEModel.from_pretrained("facebook/vit-mae-base")
@@ -878,10 +880,12 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, ViTMAEForPreTraining
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
 
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/vit-mae-base")
         >>> model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base")

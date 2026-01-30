@@ -238,6 +238,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_model_classes = (Mamba2Model, Mamba2ForCausalLM) if is_torch_available() else ()
     has_attentions = False  # Mamba does not support attentions
     test_missing_keys = False
+    test_torch_exportable = False  # uses custom kernels by default, not compatible with torch.export
 
     pipeline_model_mapping = (
         {"feature-extraction": Mamba2Model, "text-generation": Mamba2ForCausalLM} if is_torch_available() else {}
@@ -339,6 +340,26 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+    def test_tied_weight_embeddings(self):
+        """Regression test for https://github.com/huggingface/transformers/issues/43206."""
+        config = self.model_tester.get_config()
+
+        config.tie_word_embeddings = True
+        model = Mamba2ForCausalLM(config)
+
+        self.assertEqual(
+            model.lm_head.weight.data_ptr(),
+            model.backbone.embeddings.weight.data_ptr(),
+        )
+
+        config.tie_word_embeddings = False
+        model = Mamba2ForCausalLM(config)
+
+        self.assertNotEqual(
+            model.lm_head.weight.data_ptr(),
+            model.backbone.embeddings.weight.data_ptr(),
+        )
 
 
 @require_torch

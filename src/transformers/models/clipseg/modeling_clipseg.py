@@ -28,7 +28,8 @@ from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepa
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs, logging, torch_int
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from ...utils.generic import is_flash_attention_requested
 from .configuration_clipseg import CLIPSegConfig, CLIPSegTextConfig, CLIPSegVisionConfig
 
@@ -786,14 +787,16 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, CLIPSegVisionModel
 
         >>> processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
         >>> model = CLIPSegVisionModel.from_pretrained("CIDAS/clipseg-rd64-refined")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -850,19 +853,16 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`CLIPSegTextModel`].
-
         Examples:
 
         ```python
@@ -880,24 +880,23 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            return_dict=True,
+            **kwargs,
         )
         pooled_output = text_outputs.pooler_output
-        text_features = self.text_projection(pooled_output)
+        text_outputs.pooler_output = self.text_projection(pooled_output)
 
-        return text_features
+        return text_outputs
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = True,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`CLIPSegVisionModel`].
-
         Examples:
 
         ```python
@@ -919,11 +918,13 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
+            **kwargs,
         )
         pooled_output = vision_outputs.pooler_output
-        image_features = self.visual_projection(pooled_output)
+        vision_outputs.pooler_output = self.visual_projection(pooled_output)
 
-        return image_features
+        return vision_outputs
 
     @auto_docstring
     def forward(
@@ -1219,13 +1220,13 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             with torch.no_grad():
                 conditional_embeddings = self.clip.get_text_features(
                     input_ids, attention_mask=attention_mask, position_ids=position_ids
-                )
+                ).pooler_output
         elif conditional_pixel_values is not None:
             # compute conditional embeddings from images
             if len(conditional_pixel_values) != batch_size:
                 raise ValueError("Make sure to pass as many prompt images as there are query images")
             with torch.no_grad():
-                conditional_embeddings = self.clip.get_image_features(conditional_pixel_values)
+                conditional_embeddings = self.clip.get_image_features(conditional_pixel_values).pooler_output
         else:
             raise ValueError(
                 "Invalid conditional, should be either provided as `input_ids` or `conditional_pixel_values`"

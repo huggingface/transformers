@@ -15,7 +15,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tokenizers import normalizers
 
+from transformers.models.gemma.tokenization_gemma import GemmaTokenizer
 from transformers.models.siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from transformers.models.siglip.modeling_siglip import (
     BaseModelOutput,
@@ -34,8 +36,48 @@ from transformers.models.siglip.modeling_siglip import (
 )
 
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...utils import auto_docstring, filter_out_non_signature_kwargs
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs, is_flash_attention_requested
+
+
+class Siglip2Tokenizer(GemmaTokenizer):
+    """
+    Gemma tokenizer + SigLIP2 training default: lowercase normalization.
+    """
+
+    def __init__(
+        self,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
+        unk_token: str = "<unk>",
+        bos_token: str = "<bos>",
+        eos_token: str = "<eos>",
+        pad_token: str = "<pad>",
+        mask_token: str = "<mask>",
+        **kwargs,
+    ):
+        super().__init__(
+            vocab=vocab,
+            merges=merges,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            **kwargs,
+        )
+
+        # Persist for save/load + push_to_hub dynamic tokenizer test
+        if hasattr(self, "init_kwargs") and isinstance(self.init_kwargs, dict):
+            self.init_kwargs.setdefault("tokenizer_class", self.__class__.__name__)
+
+        backend = getattr(self, "_tokenizer", None)
+        if backend is not None and backend.normalizer is not None:
+            backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), backend.normalizer])
+
+    def _unk_id(self) -> int:
+        raise AttributeError("_unk_id is not needed for SigLIP2.")
 
 
 class Siglip2TextConfig(SiglipTextConfig):
@@ -321,9 +363,7 @@ class Siglip2VisionModel(SiglipVisionModel):
         pixel_values: torch.FloatTensor,
         pixel_attention_mask: torch.Tensor,
         spatial_shapes: torch.LongTensor,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
@@ -335,14 +375,16 @@ class Siglip2VisionModel(SiglipVisionModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Siglip2VisionModel
 
         >>> model = Siglip2VisionModel.from_pretrained("google/siglip2-base-patch16-224")
         >>> processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -354,30 +396,26 @@ class Siglip2VisionModel(SiglipVisionModel):
             pixel_values=pixel_values,
             attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
 
 class Siglip2Model(SiglipModel):
     # Update: add `spatial_shapes` and `pixel_attention_mask`
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor | None = None,
         pixel_attention_mask: torch.Tensor | None = None,
         spatial_shapes: torch.LongTensor | None = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
             Mask to avoid performing attention on padding pixel indices.
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
             Tensor containing the spatial dimensions (height, width) of the input images.
-
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`Siglip2VisionModel`].
 
         Examples:
 
@@ -398,14 +436,12 @@ class Siglip2Model(SiglipModel):
         ...     image_features = model.get_image_features(**inputs)
         ```
         """
-        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
+        return self.vision_model(
             pixel_values=pixel_values,
             attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
+            **kwargs,
         )
-        pooled_output = vision_outputs.pooler_output
-
-        return pooled_output
 
     # Update: add `spatial_shapes` and `pixel_attention_mask`
     def forward(
@@ -433,7 +469,8 @@ class Siglip2Model(SiglipModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, AutoModel
         >>> import torch
 
@@ -441,7 +478,8 @@ class Siglip2Model(SiglipModel):
         >>> processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> texts = ["a photo of 2 cats", "a photo of 2 dogs"]
         >>> # important: we pass `padding=max_length` since the model was trained with this
@@ -541,11 +579,13 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
         >>> from transformers import AutoImageProcessor, Siglip2ForImageClassification
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> # note: we are loading a `Siglip2Model` from the hub here,
         >>> # so the head will be randomly initialized, hence the predictions will be random if seed is not set above.
@@ -607,4 +647,5 @@ __all__ = [
     "Siglip2TextModel",
     "Siglip2VisionModel",
     "Siglip2ForImageClassification",
+    "Siglip2Tokenizer",
 ]

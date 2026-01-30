@@ -21,7 +21,7 @@
 import math
 from typing import Optional, Union
 
-import torch.nn.functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
@@ -97,7 +97,7 @@ class GlmImageImageProcessorFast(BaseImageProcessorFast):
     temporal_patch_size = 2
     merge_size = 2
     valid_kwargs = GlmImageImageProcessorKwargs
-    model_input_names = ["pixel_values", "image_grid_thw"]
+    model_input_names = ["pixel_values", "image_grid_thw", "images_per_sample"]
 
     def __init__(self, **kwargs: Unpack[GlmImageImageProcessorKwargs]):
         size = kwargs.pop("size", None)
@@ -173,7 +173,7 @@ class GlmImageImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

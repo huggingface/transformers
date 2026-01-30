@@ -22,8 +22,8 @@ import math
 from typing import Any, Optional, Union
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 from torch import nn
-from torchvision.transforms.v2 import functional as F
 
 from transformers.image_transforms import get_size_with_aspect_ratio
 
@@ -144,7 +144,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         image: torch.Tensor,
         size: SizeDict,
         size_divisor: int = 0,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -169,7 +169,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
             interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 Resampling filter to use if resizing the image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
@@ -193,7 +193,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
             width = int(math.ceil(width / size_divisor) * size_divisor)
             new_size = (height, width)
 
-        image = F.resize(
+        image = tvF.resize(
             image,
             size=new_size,
             interpolation=interpolation,
@@ -219,9 +219,9 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
             )
         if original_size != padded_size:
             padding = [0, 0, padding_right, padding_bottom]
-            images = F.pad(images, padding, fill=fill)
+            images = tvF.pad(images, padding, fill=fill)
             if segmentation_maps is not None:
-                segmentation_maps = [F.pad(mask, padding, fill=ignore_index) for mask in segmentation_maps]
+                segmentation_maps = [tvF.pad(mask, padding, fill=ignore_index) for mask in segmentation_maps]
 
         # Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
         pixel_mask = torch.zeros((images.shape[0], *padded_size), dtype=torch.int64, device=images.device)
@@ -287,7 +287,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         size: SizeDict | None,
         pad_size: SizeDict | None,
         size_divisor: int | None,
-        interpolation: Union["PILImageResampling", "F.InterpolationMode"] | None,
+        interpolation: Union["PILImageResampling", "tvF.InterpolationMode"] | None,
         do_rescale: bool | None,
         rescale_factor: float | None,
         do_normalize: bool | None,
@@ -322,7 +322,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
                         image=stacked_segmentation_maps,
                         size=size,
                         size_divisor=size_divisor,
-                        interpolation=F.InterpolationMode.NEAREST_EXACT,
+                        interpolation=tvF.InterpolationMode.NEAREST_EXACT,
                     )
             resized_images_grouped[shape] = stacked_images
             if segmentation_maps is not None:

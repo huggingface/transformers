@@ -31,7 +31,7 @@ from ...image_transforms import center_to_corners_format, corners_to_center_form
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, auto_docstring, is_torchdynamo_compiling, torch_int
+from ...utils import ModelOutput, auto_docstring, torch_compilable_check, torch_int
 from ...utils.backbone_utils import load_backbone
 from .configuration_d_fine import DFineConfig
 
@@ -151,10 +151,10 @@ class DFineMultiscaleDeformableAttention(nn.Module):
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
 
-        if not is_torchdynamo_compiling() and (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
+        torch_compilable_check(
+            (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
         # Reshape for multi-head attention
         value = encoder_hidden_states.reshape(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
@@ -1274,10 +1274,12 @@ class DFineModel(DFinePreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DFineModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/DFine_r50vd")
         >>> model = DFineModel.from_pretrained("PekingU/DFine_r50vd")

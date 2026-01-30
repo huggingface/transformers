@@ -19,10 +19,10 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class Glm4MoeConfig(PreTrainedConfig):
+class Glm4MoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Glm4MoeModel`]. It is used to instantiate a
     Glm4Moe model according to the specified arguments, defining the model architecture. Instantiating a configuration

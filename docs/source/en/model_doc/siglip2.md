@@ -145,7 +145,69 @@ logits_per_image = outputs.logits_per_image
 probs = torch.sigmoid(logits_per_image)
 print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 ```
+## Text embeddings and retrieval
 
+SigLIP2 can be used to generate text embeddings for retrieval or similarity-based tasks (for example, product or caption retrieval).
+
+For best results, the same text preprocessing used during training must be applied. When loading SigLIP2 checkpoints via [AutoProcessor], this preprocessing is handled automatically by the processor.
+
+### Default text preprocessing (handled automatically)
+
+For SigLIP2 models, the processor applies the following defaults for text inputs:
+- **Lowercasing** all input text
+- **Fixed padding and truncation**: `padding="max_length"`, `max_length=64`, `truncation=True`
+
+These defaults ensure consistent and correct text embeddings. Overriding them may lead to degraded retrieval quality.
+
+### Example: computing text embeddings
+
+```py
+import torch
+from transformers import AutoModel, AutoProcessor
+
+model_id = "google/siglip2-so400m-patch14-384"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModel.from_pretrained(model_id).eval()
+
+texts = [
+    "HOME084 Timbangan Badan Digital Kaca Transparan 28CM Body Scale Personal Scale",
+    "26cm Timbangan Badan digital personal scale weight",
+    "33cm Timbangan Badan digital personal scale weight",
+]
+
+# NOTE: lowercasing and padding/truncation to length 64 are applied automatically by the processor pipeline.
+inputs = processor(text=texts, return_tensors="pt")
+
+with torch.no_grad():
+    text_features = model.get_text_features(**inputs)
+
+# Normalize embeddings for cosine similarity
+text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)
+
+```
+### Text-only usage: Siglip2Tokenizer
+
+If you are encoding text without a processor (for example, via [AutoTokenizer]), use [Siglip2Tokenizer].
+
+- Siglip2Tokenizer applies lowercasing at the tokenizer backend level (matching SigLIP2 training time normalization), while keeping the same tokenization as the original tokenizer.
+
+- When using the tokenizer directly, you should explicitly apply the same padding/truncation settings as used during training (e.g. max_length=64):
+
+
+```py
+from transformers import Siglip2Tokenizer
+
+model_id = "google/siglip2-so400m-patch14-384"
+tokenizer = Siglip2Tokenizer.from_pretrained(model_id)
+
+inputs = tokenizer(
+    ["HELLO WORLD"],
+    padding="max_length",
+    truncation=True,
+    max_length=64,
+    return_tensors="pt",
+)
+```
 ## Notes
 
 - Training is supported for DDP and FSDP on single-node multi-accelerator setups. However, it does not use [torch.distributed](https://pytorch.org/tutorials/beginner/dist_overview.html) utilities which may limit the scalability of batch size.
@@ -218,3 +280,8 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 
 [[autodoc]] Siglip2ForImageClassification
     - forward
+
+## Siglip2Tokenizer
+
+[[autodoc]] Siglip2Tokenizer
+    - __call__

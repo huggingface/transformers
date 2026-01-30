@@ -36,6 +36,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPooling,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
     SequenceClassifierOutput,
@@ -44,7 +45,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
 from ..auto import AutoModel
 from .configuration_t5gemma2 import T5Gemma2Config, T5Gemma2DecoderConfig, T5Gemma2EncoderConfig, T5Gemma2TextConfig
@@ -806,13 +807,19 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        """Convert pixel image to image features via the encoder and projector."""
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
         # pixel_values: (batch_size, channels, height, width)
         # image_features: Image feature tensor of shape (num_images, image_length, embed_dim).
-        vision_outputs = self.vision_tower(pixel_values=pixel_values).last_hidden_state
-        image_features = self.multi_modal_projector(vision_outputs)
-        return image_features
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
+        last_hidden_state = vision_outputs.last_hidden_state
+        image_features = self.multi_modal_projector(last_hidden_state)
+        vision_outputs.pooler_output = image_features
+
+        return vision_outputs
 
     def get_image_placeholder_mask(
         self,
@@ -838,10 +845,10 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}",
+        )
         return special_image_mask
 
     def preprocess_image_features(
@@ -851,7 +858,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
     ):
         """Convert pixel images to image features and merge into input embeds."""
-        image_features = self.get_image_features(pixel_values)
+        image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
         image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
 
         image_mask = self.get_image_placeholder_mask(
@@ -1216,8 +1223,11 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def get_image_features(self, pixel_values):
-        return self.get_encoder().get_image_features(pixel_values)
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.get_encoder().get_image_features(pixel_values, **kwargs)
 
     @property
     def vision_tower(self):

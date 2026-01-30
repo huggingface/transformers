@@ -117,10 +117,17 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         assume weights and persistent buffers will be part of checkpoint as we have no way to control timm inits)"""
         if hasattr(module, "init_non_persistent_buffers"):
             module.init_non_persistent_buffers()
-        elif isinstance(module, nn.BatchNorm2d) and getattr(module, "running_mean", None) is not None:
-            init.zeros_(module.running_mean)
-            init.ones_(module.running_var)
-            init.zeros_(module.num_batches_tracked)
+        elif isinstance(module, nn.BatchNorm2d):
+            # Skip initialization if using pretrained backbone - buffers are already loaded from checkpoint
+            if self.config.use_pretrained_backbone:
+                return
+
+            # For non-pretrained models, always initialize buffers (handles both meta device and to_empty() cases)
+            running_mean = getattr(module, "running_mean", None)
+            if running_mean is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
 
     def forward(
         self,

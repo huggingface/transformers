@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch ALIGN model."""
 
 import inspect
+import math
 import tempfile
 import unittest
 
@@ -59,6 +60,7 @@ class AlignVisionModelTester:
         batch_size=12,
         image_size=32,
         num_channels=3,
+        depth_coefficient=3.1,
         kernel_sizes=[3, 3, 5],
         in_channels=[32, 16, 24],
         out_channels=[16, 24, 30],
@@ -73,6 +75,7 @@ class AlignVisionModelTester:
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
+        self.depth_coefficient = depth_coefficient
         self.kernel_sizes = kernel_sizes
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -92,6 +95,7 @@ class AlignVisionModelTester:
     def get_config(self):
         return AlignVisionConfig(
             num_channels=self.num_channels,
+            depth_coefficient=self.depth_coefficient,
             kernel_sizes=self.kernel_sizes,
             in_channels=self.in_channels,
             out_channels=self.out_channels,
@@ -434,6 +438,8 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     test_attention_outputs = False
+    has_attentions = False
+    skip_test_image_features_output_shape = True  # Align uses index -3 for hidden_size instead of -1
 
     def setUp(self):
         self.model_tester = AlignModelTester(self)
@@ -492,6 +498,12 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             text_config = AlignTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
+
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        return sum(
+            math.ceil(self.model_tester.vision_model_tester.depth_coefficient * repeat)
+            for repeat in self.model_tester.vision_model_tester.num_block_repeats
+        )
 
     @slow
     def test_model_from_pretrained(self):

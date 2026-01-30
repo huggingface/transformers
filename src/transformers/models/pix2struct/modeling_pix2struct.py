@@ -492,7 +492,8 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         Example:
 
         ```python
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, Pix2StructVisionModel
 
@@ -500,7 +501,8 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         >>> model = Pix2StructVisionModel.from_pretrained("google/pix2struct-textcaps-base")
 
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> with torch.no_grad():
@@ -1392,14 +1394,16 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 
         >>> processor = AutoProcessor.from_pretrained("google/pix2struct-textcaps-base")
         >>> model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base")
 
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -1423,14 +1427,16 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 
         >>> processor = AutoProcessor.from_pretrained("google/pix2struct-base")
         >>> model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-base")
 
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> text = "A stop sign is on the street corner."
 
         >>> inputs = processor(images=image, return_tensors="pt")
