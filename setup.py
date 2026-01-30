@@ -169,12 +169,7 @@ if PYTHON_MINOR_VERSION < 14:
 
 if PYTHON_MINOR_VERSION < 13:
     _deps += ["kenlm"]
-
-# this is a lookup table with items like:
-#
-# tokenizers: "tokenizers==0.9.4"
-# packaging: "packaging"
-#
+# This is a lookup table with items like: {"tokenizers": "tokenizers==0.9.4", "packaging": "packaging"}, i.e.
 # some of the values are versioned whereas others aren't.
 deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] for x in _deps)}
 
