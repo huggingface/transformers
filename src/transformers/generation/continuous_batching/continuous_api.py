@@ -1389,4 +1389,13 @@ class ContinuousMixin:
 
             except Exception as e:
                 logger.error(f"Error during batch generation: {e}", exc_info=True)
-        return results
+        # Re-order requests to match the order of the inputs
+        reordered_results = {}
+        for i in range(len(inputs)):
+            # We cannot guarantee that the generation succeeded for all requests, so we need to check if the request is in the results
+            result = results.get(f"req_{i}")
+            if result is not None:
+                reordered_results[f"req_{i}"] = result
+            else:
+                logger.error(f"Request req_{i} not found in results.")
+        return reordered_results
