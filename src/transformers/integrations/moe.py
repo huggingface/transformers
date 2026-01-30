@@ -315,7 +315,7 @@ def use_experts_implementation(
         def forward(self, *args, **kwargs):
             experts_forward = original_forward
 
-            if self.config._experts_implementation != "eager":
+            if self.config._experts_implementation not in (None, "eager"):
                 experts_forward = ALL_EXPERTS_FUNCTIONS[self.config._experts_implementation]
 
             return experts_forward(self, *args, **kwargs)
