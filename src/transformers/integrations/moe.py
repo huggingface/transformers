@@ -226,7 +226,9 @@ def grouped_mm_experts_forward(
 
     # Compute offsets for grouped_mm
     # using histc instead of bincount to avoid cuda graph issues
-    num_tokens_per_expert = torch.histc(expert_ids_g.float(), bins=self.num_experts, min=0, max=self.num_experts - 1)
+    # With deterministic algorithms, CPU only supports float input, CUDA only supports int input.
+    histc_input = expert_ids_g.float() if device.type == "cpu" else expert_ids_g.int()
+    num_tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (grouped) ---

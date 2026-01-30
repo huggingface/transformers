@@ -474,8 +474,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         batch_size = input_embeds.shape[0]
         seq_length = input_shape[-1]
 
-        device = input_ids.device if input_ids is not None else input_embeds.device
-
         if self.gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
@@ -487,11 +485,18 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             past_key_values = DynamicCache(config=self.config)
 
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        input_embeds = input_embeds.to(self.position_embeds_layer.weight.device)
 
         if position_ids is None:
-            position_ids = torch.arange(past_length, seq_length + past_length, dtype=torch.long, device=device)
+            position_ids = torch.arange(
+                past_length,
+                seq_length + past_length,
+                dtype=torch.long,
+                device=self.position_embeds_layer.weight.device,
+            )
             position_ids = position_ids.unsqueeze(0)  # shape (1, seq_length)
 
+        position_ids = position_ids.to(self.position_embeds_layer.weight.device)
         position_embeds = self.position_embeds_layer(position_ids)  # position embeddings of shape (1, t, n_embd)
 
         # Attention mask.
@@ -505,6 +510,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
                 # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
                 # from_seq_length is 1 to easily broadcast
                 attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
+                attention_mask = attention_mask.to(input_embeds.device)
 
         hidden_states = self.drop(input_embeds + position_embeds)
         output_shape = input_shape + (hidden_states.size(-1),)
@@ -1084,12 +1090,15 @@ class BarkFineModel(BarkPreTrainedModel):
         batch_size = input_embeds.shape[0]
         seq_length = input_shape[1]
 
-        device = input_ids.device if input_ids is not None else input_embeds.device
+        input_embeds = input_embeds.to(self.position_embeds_layer.weight.device)
 
         if position_ids is None:
-            position_ids = torch.arange(0, seq_length, dtype=torch.long, device=device)
+            position_ids = torch.arange(
+                0, seq_length, dtype=torch.long, device=self.position_embeds_layer.weight.device
+            )
             position_ids = position_ids.unsqueeze(0)  # shape (1, seq_length)
 
+        position_ids = position_ids.to(self.position_embeds_layer.weight.device)
         position_embeds = self.position_embeds_layer(position_ids)  # position embeddings of shape (1, t, n_embd)
 
         # Attention mask.
@@ -1102,6 +1111,7 @@ class BarkFineModel(BarkPreTrainedModel):
                 # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
                 # from_seq_length is 1 to easily broadcast
                 attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
+                attention_mask = attention_mask.to(input_embeds.device)
 
         hidden_states = self.drop(input_embeds + position_embeds)
         output_shape = input_shape + (hidden_states.size(-1),)
