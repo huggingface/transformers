@@ -893,7 +893,7 @@ def set_param_for_module(
             expected_shape = ref.shape
 
         if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
-            loading_info.mismatch_keys.add((target_name, param_value.shape, expected_shape))
+            loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
         else:
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
