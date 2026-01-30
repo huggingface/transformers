@@ -393,7 +393,7 @@ class T5GemmaCrossAttention(Gemma2Attention):
             key_states = curr_past_key_values.layers[self.layer_idx].keys
             value_states = curr_past_key_values.layers[self.layer_idx].values
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get(
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 

@@ -234,7 +234,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
                 past_key_values.is_updated[self.layer_idx] = True
 
         using_eager = self.config._attn_implementation == "eager"
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get(
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 

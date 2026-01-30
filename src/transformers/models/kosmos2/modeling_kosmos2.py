@@ -335,7 +335,7 @@ class Kosmos2VisionAttention(nn.Module):
         else:
             self.is_causal = causal_attention_mask is not None
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get(
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 
@@ -771,7 +771,7 @@ class KosmosTextAttention(nn.Module):
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get(
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 

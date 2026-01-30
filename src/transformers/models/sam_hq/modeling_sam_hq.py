@@ -685,7 +685,7 @@ class SamHQAttention(nn.Module):
         value = self._separate_heads(value, self.num_attention_heads)
 
         # SamHQAttention
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get(
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 

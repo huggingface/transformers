@@ -317,7 +317,7 @@ class VJEPA2RopeAttention(nn.Module):
         key_layer = self.apply_rotary_embeddings(key_layer, pos_ids)
         query_layer = self.apply_rotary_embeddings(query_layer, pos_ids)
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get(
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 
@@ -726,7 +726,7 @@ class VJEPA2PoolerSelfAttention(nn.Module):
         keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get(
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 
@@ -795,7 +795,7 @@ class VJEPA2PoolerCrossAttention(nn.Module):
         keys = keys.view(batch_size, kv_seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, kv_seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get(
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 

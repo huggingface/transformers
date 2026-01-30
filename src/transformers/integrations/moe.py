@@ -268,14 +268,19 @@ class ExpertsInterface(GeneralInterface):
         "grouped_mm": grouped_mm_experts_forward,
     }
 
-    def get(self, key, default):
-        if key is None:
+    def get_interface(self, experts_implementation: str, default: Callable) -> Callable:
+        """Return the requested `experts_implementation`. Also strictly check its validity, and raise if invalid."""
+        if experts_implementation is None:
             logger.warning_once(
-                "You tried to access the `ExpertsInterface` with a `config._experts_implementation` set to `None`. This "
+                "You tried to access the `ExpertsInterface` with a `config.experts_implementation` set to `None`. This "
                 "is expected if you use an Expert Module as a standalone Module. If this is not the case, something went "
-                "wrong with the dispatch of `config._experts_implementation`"
+                "wrong with the dispatch of `config.experts_implementation`"
             )
-        return super().get(key, default)
+        elif experts_implementation != "eager" and experts_implementation not in self:
+            raise KeyError(
+                f"{experts_implementation} is not a valid experts implementation registered in the `ExpertsInterface`"
+            )
+        return super().get(experts_implementation, default)
 
 
 ALL_EXPERTS_FUNCTIONS = ExpertsInterface()
@@ -325,7 +330,7 @@ def use_experts_implementation(
 
         @wraps(original_forward)
         def forward(self, *args, **kwargs):
-            experts_forward = ALL_EXPERTS_FUNCTIONS.get(self.config._experts_implementation, original_forward)
+            experts_forward = ALL_EXPERTS_FUNCTIONS.get_interface(self.config._experts_implementation, original_forward)
             return experts_forward(self, *args, **kwargs)
 
         if not hasattr(experts_class, "_apply_gate"):

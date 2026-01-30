@@ -204,7 +204,7 @@ class MobileBertSelfAttention(nn.Module):
         key_layer = self.key(key_tensor).view(*hidden_shape).transpose(1, 2)
         value_layer = self.value(value_tensor).view(*hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get(
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 
