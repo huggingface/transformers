@@ -86,3 +86,8 @@ filterwarnings = [
     "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
     "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
 ]
+env = [
+    # Avoid any ReadTimeout when making requests to the Hub (default is 10)
+    # Note: 'D:' means default value from laptop or CI won't be overwritten
+    "D:HF_HUB_DOWNLOAD_TIMEOUT=60",
+]
