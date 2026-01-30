@@ -68,6 +68,7 @@ class DeformableDetrModelTester:
         num_feature_levels=4,
         encoder_n_points=2,
         decoder_n_points=6,
+        tie_word_embeddings=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -88,6 +89,7 @@ class DeformableDetrModelTester:
         self.num_feature_levels = num_feature_levels
         self.encoder_n_points = encoder_n_points
         self.decoder_n_points = decoder_n_points
+        self.tie_word_embeddings = tie_word_embeddings
 
         # we also set the expected seq length for both encoder and decoder
         self.encoder_seq_length = (
@@ -149,6 +151,9 @@ class DeformableDetrModelTester:
             backbone=None,
             backbone_config=resnet_config,
             use_pretrained_backbone=False,
+            # FIXME; cls attr `toed_weihgt_keys` must not be modified in __init__
+            # Several models affected so for now just let it be and fix in separate PR
+            tie_word_embeddings=self.tie_word_embeddings,
         )
 
     def prepare_config_and_inputs_for_common(self):

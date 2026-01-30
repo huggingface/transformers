@@ -111,6 +111,7 @@ class GPTBigCodeConfig(PreTrainedConfig):
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
+        pad_token_id=None,
         attention_softmax_in_fp32=True,
         scale_attention_softmax_in_fp32=True,
         multi_query=True,
@@ -141,6 +142,7 @@ class GPTBigCodeConfig(PreTrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
 
         super().__init__(**kwargs)
 
