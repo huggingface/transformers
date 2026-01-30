@@ -1987,15 +1987,15 @@ class PPDocLayoutV3ForObjectDetectionOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
         Classification logits (including no-object) for all queries.
+    order_logits (`tuple` of `torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
+        Order logits of the final layer of the decoder.
+    out_masks (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, height, width)`):
+        Masks of the final layer of the decoder.
     pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
         possible padding). You can use [`~PPDocLayoutV3ImageProcessorFast.post_process_object_detection`] to retrieve the
         unnormalized (absolute) bounding boxes.
-    order_logits (`tuple` of `torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
-        Order logits of the final layer of the decoder.
-    out_masks (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, height, width)`):
-        Masks of the final layer of the decoder.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
