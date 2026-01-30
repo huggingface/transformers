@@ -26,7 +26,7 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
@@ -49,7 +49,7 @@ from ..mixtral.modeling_mixtral import (
 logger = logging.get_logger(__name__)
 
 
-class MiniMaxConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class MiniMaxConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MiniMaxModel`]. It is used to instantiate an
     MiniMax model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -161,10 +161,9 @@ class MiniMaxConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate": "colwise_rep",  # we need to replicate here to correctly route experts
-        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
-        "layers.*.mlp.experts.down_proj": "local_rowwise",
-        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.gate": "colwise_gather_output",  # we need to replicate here to correctly route experts
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

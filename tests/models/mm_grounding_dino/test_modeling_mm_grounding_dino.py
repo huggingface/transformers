@@ -327,6 +327,11 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     def test_load_save_without_tied_weights(self):
         pass
 
+    # Ignore copy
+    def test_tie_weights_is_not_modified(self):
+        # this model doesn't need a test
+        pass
+
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
