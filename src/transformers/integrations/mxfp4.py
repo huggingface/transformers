@@ -619,7 +619,7 @@ def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_co
     from .hub_kernels import get_kernel
 
     global triton_kernels_hub
-    triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+    triton_kernels_hub = get_kernel("kernels-community/gpt-oss-triton-kernels")
 
     has_been_replaced = False
     for module_name, module in model.named_modules():

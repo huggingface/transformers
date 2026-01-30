@@ -631,6 +631,9 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             The size used for merging spatial dimensions.
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
+
 
     Example:
 
@@ -700,6 +703,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         initializer_range=0.02,
         spatial_merge_size=2,
         layer_types=None,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.audio_token_index = audio_token_index
@@ -743,6 +747,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.seconds_per_chunk = seconds_per_chunk  # zf
         self.audio_start_token_id = audio_start_token_id  # zf
         self.audio_end_token_id = audio_end_token_id  # zf
+        self.pad_token_id = pad_token_id
 
         self.initializer_range = initializer_range
         self.spatial_merge_size = spatial_merge_size
@@ -2627,12 +2632,13 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
                     video_second_per_grid,
                 )
 
-                inputs_embeds[:, -1, :] += self.get_input_embeddings()(
-                    torch.tensor([self.codec_bos_token], dtype=torch.long, device=inputs_embeds.device)
-                )
-                inputs_embeds[:, -2, :] += self.get_input_embeddings()(
-                    torch.tensor([self.codec_pad_token], dtype=torch.long, device=inputs_embeds.device)
-                )
+                if inputs_embeds is not None:
+                    inputs_embeds[:, -1, :] += self.get_input_embeddings()(
+                        torch.tensor([self.codec_bos_token], dtype=torch.long, device=inputs_embeds.device)
+                    )
+                    inputs_embeds[:, -2, :] += self.get_input_embeddings()(
+                        torch.tensor([self.codec_pad_token], dtype=torch.long, device=inputs_embeds.device)
+                    )
                 self.rope_deltas = rope_deltas
 
             else:

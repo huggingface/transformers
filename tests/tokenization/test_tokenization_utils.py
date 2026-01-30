@@ -163,11 +163,13 @@ class TokenizerUtilsTest(unittest.TestCase):
             "mask_token",
         ]
         llama_tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b")
-        llama_tokenizer.extra_special_tokens = {
-            "boi_token": "<image_start>",
-            "eoi_token": "<image_end>",
-            "image_token": "<image>",
-        }
+        llama_tokenizer._set_model_specific_special_tokens(
+            {
+                "boi_token": "<image_start>",
+                "eoi_token": "<image_end>",
+                "image_token": "<image>",
+            }
+        )
         multimodal_special_tokens_list = attribute_special_tokens_list + ["boi_token", "eoi_token", "image_token"]
         self.assertListEqual(llama_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, multimodal_special_tokens_list)
         with tempfile.TemporaryDirectory() as tmpdirname:

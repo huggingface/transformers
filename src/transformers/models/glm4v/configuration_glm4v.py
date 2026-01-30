@@ -160,6 +160,9 @@ class Glm4vTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
+
 
     ```python
     >>> from transformers import Glm4vTextModel, Glm4vConfig
@@ -207,6 +210,7 @@ class Glm4vTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         use_cache: bool | None = True,
         attention_dropout: float | None = 0.0,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -227,6 +231,7 @@ class Glm4vTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
+        self.pad_token_id = pad_token_id
 
         super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
