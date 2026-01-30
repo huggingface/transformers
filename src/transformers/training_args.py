@@ -612,6 +612,12 @@ class TrainingArguments:
         ddp_broadcast_buffers (`bool`, *optional*):
             When using distributed training, the value of the flag `broadcast_buffers` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
+        ddp_check_reduction (`bool`, *optional*):
+            When using distributed training, the value of the flag `check_reduction` passed to `DistributedDataParallel`.
+        ddp_gradient_as_bucket_view (`bool`, *optional*):
+            When using distributed training, the value of the flag `gradient_as_bucket_view` passed to `DistributedDataParallel`.
+        ddp_static_graph (`bool`, *optional*):
+            When using distributed training, the value of the flag `static_graph` passed to `DistributedDataParallel`.
         dataloader_pin_memory (`bool`, *optional*, defaults to `True`):
             Whether you want to pin memory in data loaders or not. Will default to `True`.
         dataloader_persistent_workers (`bool`, *optional*, defaults to `False`):
@@ -1231,6 +1237,33 @@ class TrainingArguments:
         metadata={
             "help": (
                 "When using distributed training, the value of the flag `broadcast_buffers` passed to "
+                "`DistributedDataParallel`."
+            )
+        },
+    )
+    ddp_check_reduction: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": (
+                "When using distributed training, the value of the flag `check_reduction` passed to "
+                "`DistributedDataParallel`."
+            )
+        },
+    )
+    ddp_gradient_as_bucket_view: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": (
+                "When using distributed training, the value of the flag `gradient_as_bucket_view` passed to "
+                "`DistributedDataParallel`."
+            )
+        },
+    )
+    ddp_static_graph: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": (
+                "When using distributed training, the value of the flag `static_graph` passed to "
                 "`DistributedDataParallel`."
             )
         },
