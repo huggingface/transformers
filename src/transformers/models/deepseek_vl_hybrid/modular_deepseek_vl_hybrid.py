@@ -101,6 +101,8 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
             The config object or dictionary of the high resolution vision backbone.
         image_token_id (`int`, *optional*, defaults to 100015):
             The index representing image tokens in the model's token vocabulary.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -126,6 +128,7 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
         vision_config: AutoConfig | None = None,
         high_res_vision_config: AutoConfig | None = None,
         image_token_id: int = 100015,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         if high_res_vision_config is None:
@@ -142,6 +145,7 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
             text_config=text_config,
             vision_config=vision_config,
             image_token_id=image_token_id,
+            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
 
