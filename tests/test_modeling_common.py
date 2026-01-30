@@ -4064,7 +4064,9 @@ class ModelTesterMixin:
                 else:
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
                 inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                set_config_for_less_flaky_test(config)
                 model = model_class(config).eval().to(torch_device)
+                set_model_for_less_flaky_test(model)
 
                 # Prepare model and inputs for export
                 model, inputs_dict = _prepare_for_export(model, inputs_dict)
