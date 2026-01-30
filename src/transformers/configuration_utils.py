@@ -252,7 +252,7 @@ class PreTrainedConfig(PushToHubMixin):
         self._commit_hash = kwargs.pop("_commit_hash", None)
 
         # Attention implementation to use, if relevant (it sets it recursively on sub-configs)
-        self._attn_implementation = kwargs.pop("attn_implementation", None)
+        self._attn_implementation: str | None = kwargs.pop("attn_implementation", None)
 
         # Experts implementation to use, if relevant (it sets it recursively on sub-configs)
         self._experts_implementation = kwargs.pop("experts_implementation", None)

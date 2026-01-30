@@ -336,6 +336,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("pixtral", "PixtralVisionModel"),
         ("plbart", "PLBartModel"),
         ("poolformer", "PoolFormerModel"),
+        ("pp_doclayout_v3", "PPDocLayoutV3Model"),
         ("prophetnet", "ProphetNetModel"),
         ("pvt", "PvtModel"),
         ("pvt_v2", "PvtV2Model"),
@@ -457,6 +458,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodModel"),
         ("yolos", "YolosModel"),
         ("yoso", "YosoModel"),
+        ("youtu", "YoutuModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
     ]
@@ -697,6 +699,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetLMHeadModel"),
         ("xlstm", "xLSTMForCausalLM"),
         ("xmod", "XmodForCausalLM"),
+        ("youtu", "YoutuForCausalLM"),
         ("zamba", "ZambaForCausalLM"),
         ("zamba2", "Zamba2ForCausalLM"),
     ]
@@ -1034,6 +1037,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         ("deformable_detr", "DeformableDetrForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
         ("lw_detr", "LwDetrForObjectDetection"),
+        ("pp_doclayout_v3", "PPDocLayoutV3ForObjectDetection"),
         ("rt_detr", "RTDetrForObjectDetection"),
         ("rt_detr_v2", "RTDetrV2ForObjectDetection"),
         ("table-transformer", "TableTransformerForObjectDetection"),

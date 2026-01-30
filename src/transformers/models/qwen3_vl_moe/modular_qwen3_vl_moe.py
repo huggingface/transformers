@@ -112,6 +112,8 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             with longer `max_position_embeddings`.
         head_dim (`int`, *optional*):
             The dimension of the head. If not specified, will default to `hidden_size // num_attention_heads`.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
 
     ```python
     >>> from transformers import Qwen3VLMoeForConditionalGeneration, Qwen3VLMoeConfig
@@ -168,6 +170,7 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         mlp_only_layers: list[int] | None = None,
         rope_parameters: RopeParameters | None = None,
         head_dim: int | None = None,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -197,6 +200,7 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
+        self.pad_token_id = pad_token_id
 
         super().__init__(
             ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},

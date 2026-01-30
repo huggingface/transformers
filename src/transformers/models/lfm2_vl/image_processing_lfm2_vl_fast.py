@@ -23,6 +23,7 @@ from ...image_processing_utils_fast import (
     group_images_by_shape,
     reorder_images,
 )
+from ...image_transforms import split_to_tiles
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -310,14 +311,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         )
 
         # split the image into patches
-        processed_images = (
-            resized_image.unfold(2, size=tile_size, step=tile_size)
-            .unfold(3, size=tile_size, step=tile_size)
-            .contiguous()
-            .view(batch_size, num_channels, -1, tile_size, tile_size)
-            .permute(2, 0, 1, 3, 4)
-            .reshape(batch_size, -1, num_channels, tile_size, tile_size)
-        )
+        processed_images = split_to_tiles(resized_image, num_tiles_height=grid_height, num_tiles_width=grid_width)
 
         # Re-order processed images to a nested image structure, so it can be reordered back correctly
         # Note that the images can't be stacked because the thumbnail image is of bigger size than patches

@@ -506,7 +506,7 @@ class Sam2VideoAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Sam2VideoTwoWayAttentionBlock(nn.Module):
+class Sam2VideoTwoWayAttentionBlock(GradientCheckpointingLayer):
     def __init__(self, config: Sam2VideoMaskDecoderConfig, skip_first_layer_pe: bool = False):
         """
         A transformer block with four layers:

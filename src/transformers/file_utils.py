@@ -63,7 +63,6 @@ from .utils import (
     is_datasets_available,
     is_detectron2_available,
     is_faiss_available,
-    is_ftfy_available,
     is_g2p_en_available,
     is_in_notebook,
     is_ipex_available,
