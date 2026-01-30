@@ -423,7 +423,9 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (Sam3Model,) if is_torch_available() else ()
-    pipeline_model_mapping = {"mask-generation": Sam3Model} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"mask-generation": Sam3Model, "promptable-concept-segmentation": Sam3Model} if is_torch_available() else {}
+    )
 
     test_resize_embeddings = False
     _is_composite = True

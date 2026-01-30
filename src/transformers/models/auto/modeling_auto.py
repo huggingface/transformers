@@ -1629,11 +1629,11 @@ MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+# Model for Promptable Concept Segmentation mapping
+# facebook/sam3 checkpoint uses sam3_video config but can be used for single-image inference
 MODEL_FOR_PROMPTABLE_CONCEPT_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
-        # Model for Promptable Concept Segmentation mapping
         ("sam3", "Sam3Model"),
-        # facebook/sam3 checkpoint uses sam3_video config but can be used for single-image inference
         ("sam3_video", "Sam3Model"),
     ]
 )

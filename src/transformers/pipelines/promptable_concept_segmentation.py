@@ -196,14 +196,14 @@ class PromptableConceptSegmentationPipeline(Pipeline):
             - **mask** (`torch.Tensor`) -- Binary segmentation mask for the instance, shape (height, width).
         """
         # Handle different input formats
-        if isinstance(image, (str, Image.Image)):
+        if isinstance(image, str | Image.Image):
             inputs = {
                 "image": image,
                 "text": text,
                 "input_boxes": input_boxes,
                 "input_boxes_labels": input_boxes_labels,
             }
-        elif isinstance(image, (list, tuple)) and valid_images(image):
+        elif isinstance(image, list | tuple) and valid_images(image):
             # Batch of images - create individual inputs for each image
             batch_inputs = self._prepare_batch_inputs(image, text, input_boxes, input_boxes_labels)
             return list(super().__call__(batch_inputs, **kwargs))
@@ -307,8 +307,7 @@ class PromptableConceptSegmentationPipeline(Pipeline):
             input_boxes=input_boxes,
             input_boxes_labels=input_boxes_labels,
             return_tensors="pt",
-        )
-        model_inputs = model_inputs.to(self.dtype)
+        ).to(self.dtype)
 
         # Store original size for post-processing
         target_size = torch.tensor([[image.height, image.width]], dtype=torch.int32)
@@ -373,18 +372,9 @@ class PromptableConceptSegmentationPipeline(Pipeline):
                 box_tensor = results["boxes"][i]
                 mask_tensor = results["masks"][i]
 
-                # Convert box to dict format
-                xmin, ymin, xmax, ymax = box_tensor.int().tolist()
-                box_dict = {
-                    "xmin": xmin,
-                    "ymin": ymin,
-                    "xmax": xmax,
-                    "ymax": ymax,
-                }
-
                 result = {
                     "score": score,
-                    "box": box_dict,
+                    "box": self._get_bounding_box(box_tensor),
                     "mask": mask_tensor,
                 }
 
@@ -402,3 +392,12 @@ class PromptableConceptSegmentationPipeline(Pipeline):
             final_results = final_results[:top_k]
 
         return final_results
+
+    def _get_bounding_box(self, box: "torch.Tensor") -> dict[str, int]:
+        xmin, ymin, xmax, ymax = box.int().tolist()
+        return {
+            "xmin": xmin,
+            "ymin": ymin,
+            "xmax": xmax,
+            "ymax": ymax,
+        }
