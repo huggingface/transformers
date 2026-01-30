@@ -609,9 +609,9 @@ class Message:
                 new_failures_url = f"https://huggingface.co/datasets/{report_repo_id}/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/{filename}.json"
 
                 nb_new_failed_tests = 0
-                for _, results in new_failures.items():
+                for results in new_failures.values():
                     if "failures" in results:
-                        for device_type, failures_list in results["failures"].items():
+                        for failures_list in results["failures"].values():
                             nb_new_failed_tests += len(failures_list)
 
                 if idx == 0:
@@ -809,8 +809,8 @@ class Message:
         if not include_all and prev_ci_artifacts is not None:
             job = job_to_test_map[job_name]
             if (
-                    f"ci_results_{job_name}" in prev_ci_artifacts
-                    and f"{test_to_result_name[job]}_results.json" in prev_ci_artifacts[f"ci_results_{job_name}"]
+                f"ci_results_{job_name}" in prev_ci_artifacts
+                and f"{test_to_result_name[job]}_results.json" in prev_ci_artifacts[f"ci_results_{job_name}"]
             ):
                 prev_results = json.loads(
                     prev_ci_artifacts[f"ci_results_{job_name}"][f"{test_to_result_name[job]}_results.json"]
@@ -853,8 +853,11 @@ class Message:
                         continue
 
                     # Include if flag is set, or if not in previous results
-                    if include_all or device_type not in prev_failure_lines or failure["line"] not in \
-                            prev_failure_lines[device_type]:
+                    if (
+                        include_all
+                        or device_type not in prev_failure_lines
+                        or failure["line"] not in prev_failure_lines[device_type]
+                    ):
                         new_failures_for_device.append(failure)
 
                 # Only add device type if there are new failures
@@ -864,9 +867,7 @@ class Message:
             # Only add model if there are new failures
             if job_new_failures:
                 job = job.replace("models_", "").replace("quantization_", "")
-                new_failures[job] = {
-                    "failures": job_new_failures
-                }
+                new_failures[job] = {"failures": job_new_failures}
                 # Add job_link if it exists
                 if "job_link" in job_result:
                     new_failures[job]["job_link"] = job_result["job_link"]
