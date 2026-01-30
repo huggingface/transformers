@@ -577,11 +577,11 @@ def window_unpartition(
 
 
 class RfDetrDinov2Backbone(Dinov2Backbone):
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.Tensor,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: TransformersKwargs,
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -607,12 +607,9 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
+        embedding_output = self.embeddings(pixel_values, **kwargs)
 
-        embedding_output = self.embeddings(pixel_values)
-
-        output: BaseModelOutput = self.encoder(embedding_output, output_hidden_states=True)
+        output: BaseModelOutput = self.encoder(embedding_output, output_hidden_states=True, **kwargs)
         hidden_states = output.hidden_states
 
         feature_maps = ()
@@ -642,7 +639,7 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
 
         return BackboneOutput(
             feature_maps=feature_maps,
-            hidden_states=hidden_states if output_hidden_states else None,
+            hidden_states=hidden_states,
         )
 
 
