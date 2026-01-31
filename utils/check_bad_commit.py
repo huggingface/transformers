@@ -205,11 +205,12 @@ def get_commit_info(commit):
         commit_message = commit_info.get("commit", {}).get("message", "")
 
         # Parse message like "Merge 1ac46bed53e868a928e5ab369f60a340f5bc8e2b into 5a67f0a7aca8c18de6235e80e47fd00a9ecf9d58"
-        if commit_message.startswith("Merge "):
-            parts = commit_message.split()
-            if len(parts) >= 4 and parts[2] == "into":
-                # Use the first SHA (the PR commit)
-                commit_to_query = parts[1]
+        # Use regex to match SHA pattern (40 hex characters)
+        import re
+        match = re.match(r'^Merge ([a-f0-9]{40}) into ([a-f0-9]{40})', commit_message)
+        if match:
+            # Use the first SHA (the PR commit)
+            commit_to_query = match.group(1)
 
     # Try to get PR info using the appropriate commit
     url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_to_query}/pulls"
@@ -226,7 +227,7 @@ def get_commit_info(commit):
 
     parent = commit_info["parents"][0]["sha"]
     if author is None:
-        author = commit_info["commit"]["author"]["name"]
+        author = commit_info["author"]["login"]
 
     return {"commit": commit, "pr_number": pr_number, "author": author, "merged_by": merged_author, "parent": parent}
 
