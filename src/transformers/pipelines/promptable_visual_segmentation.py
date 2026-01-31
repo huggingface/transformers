@@ -389,5 +389,4 @@ class PromptableVisualSegmentationPipeline(Pipeline):
 
             final_results.append(image_results)
 
-        # If single image, return as list with one element (for consistency)
-        return final_results if batch_size > 1 or isinstance(pred_masks, (list, tuple)) else final_results
+        return final_results

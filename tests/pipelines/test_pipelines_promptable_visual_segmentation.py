@@ -15,30 +15,77 @@
 import unittest
 
 from transformers import (
+    MODEL_FOR_PROMPTABLE_VISUAL_SEGMENTATION_MAPPING,
+    PromptableVisualSegmentationPipeline,
     Sam2Model,
     Sam2Processor,
     SamModel,
     SamProcessor,
-    is_torch_available,
     is_vision_available,
     pipeline,
 )
-from transformers.testing_utils import require_torch, require_vision, slow
+from transformers.testing_utils import is_pipeline_test, require_torch, require_vision, slow
 
-
-if is_torch_available():
-    pass
 
 if is_vision_available():
     import requests
     from PIL import Image
 
 
+@is_pipeline_test
 @require_torch
 @require_vision
 class PromptableVisualSegmentationPipelineTests(unittest.TestCase):
+    model_mapping = (
+        dict(list(MODEL_FOR_PROMPTABLE_VISUAL_SEGMENTATION_MAPPING.items()))
+        if MODEL_FOR_PROMPTABLE_VISUAL_SEGMENTATION_MAPPING
+        else []
+    )
+
     # Test image URLs
     test_image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
+
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        dtype="float32",
+    ):
+        segmenter = PromptableVisualSegmentationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            dtype=dtype,
+        )
+        examples = [
+            {
+                "image": "./tests/fixtures/tests_samples/COCO/000000039769.png",
+                "input_points": [[[[450, 600]]]],
+                "input_labels": [[[1]]],
+            },
+            {
+                "image": "./tests/fixtures/tests_samples/COCO/000000039769.png",
+                "input_boxes": [[[100, 200, 350, 550]]],
+            },
+        ]
+        return segmenter, examples
+
+    def run_pipeline_test(self, segmenter, examples):
+        for example in examples:
+            result = segmenter(**example)
+            self.assertIsInstance(result, list)
+            self.assertGreater(len(result), 0)
+            # Each result should be a list of objects (for multiple images)
+            for obj_list in result:
+                self.assertIsInstance(obj_list, list)
+                for obj in obj_list:
+                    self.assertIn("mask", obj)
+                    self.assertIn("score", obj)
 
     def get_test_image(self):
         """Helper to load test image."""
