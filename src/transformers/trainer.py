@@ -1941,7 +1941,7 @@ class Trainer:
         Override to return False if you implement custom compute_loss that needs
         the Trainer to handle gradient accumulation scaling.
         """
-        return self.model_accepts_loss_kwargs and self.compute_loss_func is None
+        return self.model_accepts_loss_kwargs or self.compute_loss_func is not None
 
     def compute_loss(
         self,
