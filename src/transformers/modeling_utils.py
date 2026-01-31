@@ -93,6 +93,7 @@ from .quantizers.auto import get_hf_quantizer
 from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
+    ADAPTER_CONFIG_NAME,
     ADAPTER_SAFE_WEIGHTS_NAME,
     DUMMY_INPUTS,
     SAFE_WEIGHTS_INDEX_NAME,
@@ -105,6 +106,7 @@ from .utils import (
     cached_file,
     check_torch_load_is_safe,
     copy_func,
+    find_adapter_config_file,
     has_file,
     is_accelerate_available,
     is_bitsandbytes_available,
@@ -113,6 +115,7 @@ from .utils import (
     is_flash_attn_3_available,
     is_grouped_mm_available,
     is_kernels_available,
+    is_peft_available,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
     is_torch_mlu_available,
@@ -697,6 +700,25 @@ def _get_resolved_checkpoint_files(
 
                 # If no match, raise appropriare errors
                 else:
+                    # Helpful error when the repo is actually a PEFT adapter but `peft` isn't installed.
+                    if not is_peft_available():
+                        adapter_config = find_adapter_config_file(
+                            pretrained_model_name_or_path,
+                            cache_dir=cache_dir,
+                            force_download=force_download,
+                            proxies=proxies,
+                            token=token,
+                            revision=revision,
+                            local_files_only=local_files_only,
+                            subfolder=subfolder,
+                            _commit_hash=commit_hash,
+                        )
+                        if adapter_config is not None:
+                            raise OSError(
+                                f"{pretrained_model_name_or_path} appears to be a PEFT adapter repository (found"
+                                f" {ADAPTER_CONFIG_NAME}). To load it, please install peft with `pip install peft`"
+                                " and load the adapter with PEFT (e.g. `peft.PeftModel.from_pretrained(...)`)."
+                            )
                     # Otherwise, no PyTorch file was found
                     if variant is not None and has_file(
                         pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs
