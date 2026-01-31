@@ -64,8 +64,12 @@ Install Pytorch.
 Then install an up-to-date version of Transformers and some additional libraries from the Hugging Face ecosystem for accessing datasets and vision models, evaluating training, and optimizing training for large models.
 
 ```bash
-!pip install -U transformers datasets evaluate accelerate timm
+!pip install -U transformers datasets evaluate accelerate timm "huggingface-hub>=0.34.0,<1.0"
 ```
+
+> [!WARNING]
+> Colab may preinstall an incompatible version of `huggingface_hub`.
+> Explicitly constraining the version ensures compatibility with `transformers`.
 
 ## Pretrained models
 
