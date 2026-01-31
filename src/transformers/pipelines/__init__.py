@@ -89,6 +89,19 @@ from .zero_shot_classification import ZeroShotClassificationArgumentHandler, Zer
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
 
+# Pipeline composition utilities
+from .compose import (
+    ComposablePipeline,
+    CompositionResult,
+    DeviceMap,
+    ErrorHandling,
+    StageResult,
+    compose,
+    compose_batch,
+    get_default_adapter,
+    register_default_adapter,
+)
+
 
 if is_torch_available():
     import torch
