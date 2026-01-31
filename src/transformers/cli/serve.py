@@ -30,7 +30,7 @@ from contextlib import asynccontextmanager
 from functools import lru_cache
 from io import BytesIO
 from threading import Thread
-from typing import TYPE_CHECKING, Annotated, Optional, TypedDict, Union
+from typing import TYPE_CHECKING, Annotated, TypedDict
 
 import typer
 from huggingface_hub import scan_cache_dir
@@ -315,9 +315,9 @@ class TimedModel:
 
     def __init__(
         self,
-        model: "PreTrainedModel",
+        model: PreTrainedModel,
         timeout_seconds: int,
-        processor: Union["ProcessorMixin", "PreTrainedTokenizerFast"] | None = None,
+        processor: ProcessorMixin | PreTrainedTokenizerFast | None = None,
     ):
         self.model = model
         self._name_or_path = str(model.name_or_path)
@@ -665,7 +665,7 @@ class Serve:
         finish_reason: str | None = None,
         tool_calls: list[ChoiceDeltaToolCall] | None = None,
         decode_stream: DecodeStream | None = None,
-        tokenizer: Optional["PreTrainedTokenizerFast"] = None,
+        tokenizer: PreTrainedTokenizerFast | None = None,
     ) -> ChatCompletionChunk:
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
@@ -931,7 +931,7 @@ class Serve:
             return JSONResponse(json_chunk, media_type="application/json")
 
     @staticmethod
-    def get_model_modality(model: "PreTrainedModel", processor=None) -> Modality:
+    def get_model_modality(model: PreTrainedModel, processor=None) -> Modality:
         if processor is not None:
             if isinstance(processor, PreTrainedTokenizerBase):
                 return Modality.LLM
@@ -1843,9 +1843,7 @@ class Serve:
         logger.info(f"Loaded model {model_id_and_revision}")
         return model, data_processor
 
-    def load_model_and_processor(
-        self, model_id_and_revision: str
-    ) -> tuple["PreTrainedModel", "PreTrainedTokenizerFast"]:
+    def load_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
         """
         Loads the text model and processor from the given model ID and revision into the ServeCommand instance.
 
@@ -1870,7 +1868,7 @@ class Serve:
 
         return model, processor
 
-    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple["PreTrainedModel", "ProcessorMixin"]:
+    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, ProcessorMixin]:
         """
         Loads the audio model and processor from the given model ID and revision into the ServeCommand instance.
 
