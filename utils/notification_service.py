@@ -587,7 +587,7 @@ class Message:
             [self.prev_ci_artifacts] + self.other_ci_artifacts
         ):
             # To save the dict of new failures and upload to hub repositories
-            new_failures = self.get_new_failures(prev_ci_artifacts=prev_ci_artifacts)
+            new_failures = self.get_new_failures(prev_ci_artifacts=prev_ci_artifacts, include_all=os.environ.get("GITHUB_EVENT_NAME") in ["issue_comment", "pull_request"])
             if new_failures:
                 filename = "new_failures"
                 if idx > 0:
