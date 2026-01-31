@@ -1921,9 +1921,7 @@ class Trainer:
             if self.args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
-            # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
-            if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
-                # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
+            if not self._loss_is_scaled_for_ga or num_items_in_batch is None:
                 loss = loss / self.current_gradient_accumulation_steps
 
             # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
@@ -1934,6 +1932,16 @@ class Trainer:
             self.accelerator.backward(loss, **kwargs)
 
             return loss.detach()
+
+    @property
+    def _loss_is_scaled_for_ga(self) -> bool:
+        """
+        Whether compute_loss returns a loss already scaled for gradient accumulation.
+
+        Override to return False if you implement custom compute_loss that needs
+        the Trainer to handle gradient accumulation scaling.
+        """
+        return self.model_accepts_loss_kwargs and self.compute_loss_func is None
 
     def compute_loss(
         self,
@@ -1959,8 +1967,8 @@ class Trainer:
         Returns:
             The loss of the model along with its output if return_outputs was set to True
 
-        Subclass and override for custom behavior. If you are not using `num_items_in_batch` when computing your loss,
-        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculation might be slightly inaccurate when performing gradient accumulation.
+        Subclass and override for custom behavior. If you compute your own loss and need the Trainer to handle
+        gradient accumulation scaling, override `_loss_is_scaled_for_ga` to return `False`.
         """
         pc = getattr(self.accelerator, "parallelism_config", None)
         if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled and self.model.training:
