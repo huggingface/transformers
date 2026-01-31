@@ -335,6 +335,8 @@
         title: Video-text-to-text
       - local: tasks/visual_document_retrieval
         title: Visual Document Retrieval
+      - local: promptable_concept_segmentation
+        title: Promptable Concept Segmentation
       title: Multimodal
     title: Task recipes
   - local: run_scripts
