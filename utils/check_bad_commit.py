@@ -184,14 +184,17 @@ git bisect run python3 target_script.py
     return bad_commit, "git bisect found the bad commit."
 
 
-def get_commit_info(commit):
+def get_commit_info(commit, pr_number=None):
     """Get information for a commit via `api.github.com`."""
     if commit is None:
         return {"commit": None, "pr_number": None, "author": None, "merged_by": None}
 
-    pr_number = None
     author = None
     merged_author = None
+
+    # Use PR number from environment if not provided
+    if pr_number is None:
+        pr_number = os.environ.get('pr_number')
 
     # First, get commit info to check if it's a merge commit
     url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}"
@@ -201,24 +204,23 @@ def get_commit_info(commit):
 
     # Check if this is a merge commit created by GitHub
     if commit_info.get("parents") and len(commit_info["parents"]) > 1:
-        # This is a merge commit
         commit_message = commit_info.get("commit", {}).get("message", "")
-
-        # Parse message like "Merge 1ac46bed53e868a928e5ab369f60a340f5bc8e2b into 5a67f0a7aca8c18de6235e80e47fd00a9ecf9d58"
-        # Use regex to match SHA pattern (40 hex characters)
+        # Parse message like "Merge 1ac46bed... into 5a67f0a7..."
         import re
         match = re.match(r'^Merge ([a-f0-9]{40}) into ([a-f0-9]{40})', commit_message)
         if match:
             # Use the first SHA (the PR commit)
             commit_to_query = match.group(1)
 
-    # Try to get PR info using the appropriate commit
-    url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_to_query}/pulls"
-    pr_info_for_commit = requests.get(url).json()
+    # If no PR number yet, try to discover it from the commit
+    if not pr_number:
+        url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_to_query}/pulls"
+        pr_info_for_commit = requests.get(url).json()
+        if len(pr_info_for_commit) > 0:
+            pr_number = pr_info_for_commit[0]["number"]
 
-    if len(pr_info_for_commit) > 0:
-        pr_number = pr_info_for_commit[0]["number"]
-
+    # If we have a PR number, get author and merged_by info
+    if pr_number:
         url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
         pr_for_commit = requests.get(url).json()
         author = pr_for_commit["user"]["login"]
