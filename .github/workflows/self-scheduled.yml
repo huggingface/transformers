@@ -44,10 +44,6 @@ on:
       pr_number:
         required: false
         type: string
-    outputs:
-      report:
-        description: "Content of the report of new failures"
-        value: ${{ jobs.check_new_failures.outputs.report }}
 
 env:
   HF_HOME: /mnt/cache

@@ -22,7 +22,6 @@ from torch import nn
 
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -99,7 +98,7 @@ class LasrProcessor(ParakeetProcessor):
     pass
 
 
-class LasrEncoderConfig(ParakeetEncoderConfig, RotaryEmbeddingConfigMixin):
+class LasrEncoderConfig(ParakeetEncoderConfig):
     r"""
     This is the configuration class to store the configuration of a [`LasrEncoder`]. It is used to instantiate a
     `LasrEncoder` model according to the specified arguments, defining the model architecture.
@@ -348,9 +347,9 @@ class LasrEncoderAttention(LlamaAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,

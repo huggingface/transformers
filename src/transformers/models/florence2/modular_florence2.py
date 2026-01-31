@@ -175,6 +175,8 @@ class Florence2Config(PreTrainedConfig):
             The image token index to encode the image prompt.
         is_encoder_decoder (bool, optional, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -209,6 +211,7 @@ class Florence2Config(PreTrainedConfig):
         vision_config=None,
         image_token_id=51289,
         is_encoder_decoder=True,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if isinstance(text_config, dict):
@@ -226,6 +229,7 @@ class Florence2Config(PreTrainedConfig):
         self.text_config = text_config
         self.vision_config = vision_config
         self.image_token_id = image_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
@@ -1091,9 +1095,9 @@ class Florence2VisionChannelAttention(nn.Module):
 
         scale = num_tokens**-0.5
         # Channel-to-channel attention within groups:
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
         hidden_states, _ = attention_interface(
             self,
             query,
@@ -1216,9 +1220,9 @@ class Florence2VisionWindowAttention(nn.Module):
         qkv = qkv.permute(2, 0, 3, 1, 4)
         query, key, value = qkv.unbind(0)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         windowed_hidden_states, _ = attention_interface(
             self,
