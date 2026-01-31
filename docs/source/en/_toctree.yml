@@ -309,6 +309,8 @@
         title: Image Feature Extraction
       - local: tasks/mask_generation
         title: Mask Generation
+      - local: tasks/promptable_visual_segmentation
+        title: Promptable Visual Segmentation
       - local: tasks/keypoint_detection
         title: Keypoint detection
       - local: tasks/knowledge_distillation_for_image_classification
