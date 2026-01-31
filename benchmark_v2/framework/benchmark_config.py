@@ -29,7 +29,7 @@ def is_fa2_or_kernel_available() -> bool:
     # Early return if flash_attn_2 is available
     if is_flash_attn_2_available():
         return True
-    # Early return if kernels is not available
+   
     if not is_kernels_available():
         logger.warning(
             "flash_attention_2 is not available. kernels is not installed. Benchmarking flash_attention_2 will not "
