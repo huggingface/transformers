@@ -194,7 +194,7 @@ def get_commit_info(commit, pr_number=None):
 
     # Use PR number from environment if not provided
     if pr_number is None:
-        pr_number = os.environ.get('pr_number')
+        pr_number = os.environ.get("pr_number")
 
     # First, get commit info to check if it's a merge commit
     url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}"
@@ -207,7 +207,8 @@ def get_commit_info(commit, pr_number=None):
         commit_message = commit_info.get("commit", {}).get("message", "")
         # Parse message like "Merge 1ac46bed... into 5a67f0a7..."
         import re
-        match = re.match(r'^Merge ([a-f0-9]{40}) into ([a-f0-9]{40})', commit_message)
+
+        match = re.match(r"^Merge ([a-f0-9]{40}) into ([a-f0-9]{40})", commit_message)
         if match:
             # Use the first SHA (the PR commit)
             commit_to_query = match.group(1)
