@@ -215,7 +215,12 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
         self.model_tester = CLIPVisionModelTester(self)
         self.config_tester = ConfigTester(self, config_class=CLIPVisionConfig, has_text_modality=False, hidden_size=37)
 
+    def test_foo(self):
+        assert 1 == 3
+        self.config_tester.run_common_tests()
+
     def test_config(self):
+        assert 1 == 2
         self.config_tester.run_common_tests()
 
     @unittest.skip(reason="CLIP does not use inputs_embeds")
