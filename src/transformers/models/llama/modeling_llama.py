@@ -19,8 +19,13 @@
 from collections.abc import Callable
 from typing import Optional
 
+
 import torch
 from torch import nn
+from mx import Linear
+from mx import get_mx_specs
+from mx import mxfp6_e2m3, mxfp4_e2m1
+
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
@@ -43,6 +48,12 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_llama import LlamaConfig
+
+# MX specs for Exercise 1
+_MX_SPECS = get_mx_specs(
+    act_dtype=mxfp6_e2m3,
+    weight_dtype=mxfp4_e2m1,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -235,18 +246,36 @@ class LlamaAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+                # --- MX Quantized Linear layers (Exercise 1) ---
+        self.q_proj = Linear(
+            config.hidden_size,
+            config.num_attention_heads * self.head_dim,
+            bias=config.attention_bias,
+            mx_specs=_MX_SPECS,
         )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        self.k_proj = Linear(
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+            mx_specs=_MX_SPECS,
         )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        self.v_proj = Linear(
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+            mx_specs=_MX_SPECS,
         )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        self.o_proj = Linear(
+            config.num_attention_heads * self.head_dim,
+            config.hidden_size,
+            bias=config.attention_bias,
+            mx_specs=_MX_SPECS,
         )
+
+        # One-time proof that MX is active (prints once on layer 0 init)
+        if layer_idx == 0:
+            print("[MX] LlamaAttention projections:", type(self.q_proj), type(self.k_proj), type(self.v_proj), type(self.o_proj))
+
 
     def forward(
         self,
