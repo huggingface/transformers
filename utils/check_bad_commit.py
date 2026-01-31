@@ -279,7 +279,7 @@ if __name__ == "__main__":
 
             # TODO: make this script able to deal with both `single-gpu` and `multi-gpu` via a new argument.
             reports[model].pop("multi-gpu", None)
-            failed_tests = reports[model]["single-gpu"]
+            failed_tests = reports[model].get("single-gpu", [])
 
             failed_tests_with_bad_commits = []
             for failure in failed_tests:
