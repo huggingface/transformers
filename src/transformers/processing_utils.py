@@ -1743,7 +1743,7 @@ class ProcessorMixin(PushToHubMixin):
 
         # Use the processor's feature_extractor sampling rate as default if available
         # and if sampling_rate wasn't explicitly provided by the user
-        if "sampling_rate" not in kwargs:
+        if "sampling_rate" not in mm_load_kwargs:
             processor_sampling_rate = getattr(getattr(self, "feature_extractor", None), "sampling_rate", None)
             if processor_sampling_rate is not None:
                 mm_load_kwargs["sampling_rate"] = processor_sampling_rate
