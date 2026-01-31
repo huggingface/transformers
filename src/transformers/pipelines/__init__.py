@@ -59,6 +59,19 @@ from .base import (
     get_default_model_and_revision,
     load_model,
 )
+
+# Pipeline composition utilities
+from .compose import (
+    ComposablePipeline,
+    CompositionResult,
+    DeviceMap,
+    ErrorHandling,
+    StageResult,
+    compose,
+    compose_batch,
+    get_default_adapter,
+    register_default_adapter,
+)
 from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
@@ -88,19 +101,6 @@ from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
-
-# Pipeline composition utilities
-from .compose import (
-    ComposablePipeline,
-    CompositionResult,
-    DeviceMap,
-    ErrorHandling,
-    StageResult,
-    compose,
-    compose_batch,
-    get_default_adapter,
-    register_default_adapter,
-)
 
 
 if is_torch_available():

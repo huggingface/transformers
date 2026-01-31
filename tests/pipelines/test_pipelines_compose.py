@@ -24,8 +24,9 @@ Tests cover:
 - Edge cases
 """
 
-import pytest
 from typing import Any
+
+import pytest
 
 from transformers.pipelines.compose import (
     ComposablePipeline,
@@ -139,9 +140,7 @@ class TestBasicComposition:
         p1 = make_image_to_text_pipeline("Hello world")
         p2 = make_translation_pipeline("Hallo Welt")
 
-        workflow = compose(
-            [p1, p2], adapters={(0, 1): lambda x: x[0]["generated_text"]}
-        )
+        workflow = compose([p1, p2], adapters={(0, 1): lambda x: x[0]["generated_text"]})
 
         result = workflow("image.jpg")
 
@@ -397,9 +396,7 @@ class TestStreaming:
         p1 = make_image_to_text_pipeline("Caption")
         p2 = make_translation_pipeline("Übersetzung")
 
-        workflow = compose(
-            [p1, p2], adapters={(0, 1): lambda x: x[0]["generated_text"]}
-        )
+        workflow = compose([p1, p2], adapters={(0, 1): lambda x: x[0]["generated_text"]})
 
         results = list(workflow.stream("image.jpg"))
 
@@ -490,9 +487,7 @@ class TestBatchProcessing:
 
         workflow = compose([FlakyPipeline()], error_handling="raise")
 
-        results = compose_batch(
-            workflow, ["good1", "bad", "good2"], error_handling="skip_failed"
-        )
+        results = compose_batch(workflow, ["good1", "bad", "good2"], error_handling="skip_failed")
 
         assert len(results) == 3
         assert results[0].output == "processed_good1"
