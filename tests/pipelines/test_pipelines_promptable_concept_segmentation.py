@@ -15,9 +15,9 @@
 import unittest
 
 from transformers import (
+    MODEL_FOR_PROMPTABLE_CONCEPT_SEGMENTATION_MAPPING,
     PromptableConceptSegmentationPipeline,
     is_torch_available,
-    is_vision_available,
     pipeline,
 )
 from transformers.testing_utils import (
@@ -28,16 +28,6 @@ from transformers.testing_utils import (
 )
 
 
-if is_vision_available():
-    from PIL import Image
-else:
-
-    class Image:
-        @staticmethod
-        def open(*args, **kwargs):
-            pass
-
-
 if is_torch_available():
     import torch
 
@@ -46,6 +36,12 @@ if is_torch_available():
 @require_vision
 @require_torch
 class PromptableConceptSegmentationPipelineTests(unittest.TestCase):
+    model_mapping = (
+        dict(list(MODEL_FOR_PROMPTABLE_CONCEPT_SEGMENTATION_MAPPING.items()))
+        if MODEL_FOR_PROMPTABLE_CONCEPT_SEGMENTATION_MAPPING
+        else []
+    )
+
     def get_test_pipeline(
         self,
         model,
