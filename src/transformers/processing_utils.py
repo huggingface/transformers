@@ -1741,6 +1741,13 @@ class ProcessorMixin(PushToHubMixin):
         return_dict = processed_kwargs["template_kwargs"].pop("return_dict", True)
         mm_load_kwargs = processed_kwargs["mm_load_kwargs"]
 
+        # Use the processor's feature_extractor sampling rate as default if available
+        # and if sampling_rate wasn't explicitly provided by the user
+        if "sampling_rate" not in kwargs:
+            processor_sampling_rate = getattr(getattr(self, "feature_extractor", None), "sampling_rate", None)
+            if processor_sampling_rate is not None:
+                mm_load_kwargs["sampling_rate"] = processor_sampling_rate
+
         if tokenize:
             batch_images, batch_videos = [], []
             batch_audios = []
