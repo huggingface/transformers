@@ -138,7 +138,6 @@ RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/gpt_oss/integrati
 # ------------------------
 def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     """This is the function that will be executed by torchrun workers."""
-    import difflib
     import os
 
     from transformers import AutoModelForCausalLM, AutoTokenizer
