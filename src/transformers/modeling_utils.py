@@ -1965,7 +1965,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """Detect whether the class supports setting its experts implementation dynamically. It is an ugly check based on
         opening the file, but avoids maintaining yet another property flag.
         """
-        class_file = sys.modules[cls.__module__].__file__
+        class_file = getattr(sys.modules[cls.__module__], "__file__", None)
+        if class_file is None:
+            # Interactive environment (Jupyter, REPL) - no file to check, assume no experts support
+            return False
         with open(class_file, "r", encoding="utf-8") as f:
             code = f.read()
         # heuristic -> if we the use_experts_implementation decorator is used, then we can set it
