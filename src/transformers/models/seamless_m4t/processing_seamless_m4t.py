@@ -15,6 +15,8 @@
 Audio/Text processor class for SeamlessM4T
 """
 
+import os
+
 from ...audio_utils import AudioInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -47,6 +49,21 @@ class SeamlessM4TProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class SeamlessM4TProcessor(ProcessorMixin):
     valid_processor_kwargs = SeamlessM4TProcessorKwargs
+
+    @classmethod
+    def _load_tokenizer_from_pretrained(
+        cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs
+    ):
+        from .tokenization_seamless_m4t import SeamlessM4TTokenizer
+
+        is_primary = sub_processor_type == "tokenizer"
+        if is_primary:
+            return SeamlessM4TTokenizer.from_pretrained(pretrained_model_name_or_path, subfolder=subfolder, **kwargs)
+
+        tokenizer_subfolder = os.path.join(subfolder, sub_processor_type) if subfolder else sub_processor_type
+        return SeamlessM4TTokenizer.from_pretrained(
+            pretrained_model_name_or_path, subfolder=tokenizer_subfolder, **kwargs
+        )
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
