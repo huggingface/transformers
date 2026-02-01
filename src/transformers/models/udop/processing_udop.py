@@ -122,11 +122,25 @@ class UdopProcessor(ProcessorMixin):
             output_kwargs["text_kwargs"]["boxes"] = boxes if boxes is not None else features_boxes
             output_kwargs["text_kwargs"]["word_labels"] = word_labels
 
+            if (
+                text is None
+                and self.image_processor.apply_ocr
+                and "is_split_into_words" not in output_kwargs["text_kwargs"]
+            ):
+                output_kwargs["text_kwargs"]["is_split_into_words"] = True
+
             # second, apply the tokenizer
-            if text is not None and self.image_processor.apply_ocr and text_pair is None:
-                if isinstance(text, str):
-                    text = [text]  # add batch dimension (as the image processor always adds a batch dimension)
-                output_kwargs["text_kwargs"]["text_pair"] = features_words
+        if text is not None and self.image_processor.apply_ocr and text_pair is None:
+            if isinstance(text, str):
+                text = [text]  # add batch dimension (as the image processor always adds a batch dimension)
+            output_kwargs["text_kwargs"]["text_pair"] = features_words
+            if "is_split_into_words" not in output_kwargs["text_kwargs"]:
+                output_kwargs["text_kwargs"]["is_split_into_words"] = True
+            if output_kwargs["text_kwargs"]["is_split_into_words"] and isinstance(text, (list, tuple)):
+                if len(text) == 0:
+                    pass
+                elif isinstance(text[0], str):
+                    text = [item.split() for item in text]
 
             encoded_inputs = self.tokenizer(
                 text=text if text is not None else features_words,
