@@ -5128,7 +5128,9 @@ def has_similar_generate_outputs(output_1, output_2, atol=1e-5, rtol=1e-5) -> bo
     """
     # scores doesn't include data regarding decoder input tokens
     decoder_input_length = output_1.sequences.shape[1] - len(output_1.scores)
-    output_matches = output_1.sequences == output_2.sequences
+    output_1_generated = output_1.sequences[:, decoder_input_length:]
+    output_2_generated = output_2.sequences[:, decoder_input_length:]
+    output_matches = output_1_generated == output_2_generated
     has_matching_outputs = output_matches.all()
     has_matching_scores = None
     if not has_matching_outputs:
@@ -5137,7 +5139,6 @@ def has_similar_generate_outputs(output_1, output_2, atol=1e-5, rtol=1e-5) -> bo
             if batch_matches.all():
                 continue
             first_mismatch_idx = batch_matches.int().argmin()  # gets the index of the first False
-            first_mismatch_idx -= decoder_input_length
             output_1_first_mismatch_scores = output_1.scores[first_mismatch_idx][batch_idx]
             output_2_first_mismatch_scores = output_2.scores[first_mismatch_idx][batch_idx]
             has_matching_scores = torch.allclose(
