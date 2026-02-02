@@ -2135,8 +2135,8 @@ class _LazyModule(ModuleType):
                                             try:
                                                 module = importlib.import_module(module_path)
                                                 base_tokenizer_class = getattr(module, candidate_name)
-                                            except Exception:
-                                                pass
+                                            except Exception as e:
+                                                logger.debug(f"Could not import {module_path}: {e}")
 
                                         # Fallback: try via _class_to_module
                                         if base_tokenizer_class is None and candidate_name in self._class_to_module:
@@ -2158,8 +2158,8 @@ class _LazyModule(ModuleType):
                                             setattr(self, lookup_name, value)
                                         setattr(self, name, value)
                                         break
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.debug(f"Could not create tokenizer alias: {e}")
 
                         if value is None:
                             raise ModuleNotFoundError(
@@ -2189,8 +2189,8 @@ class _LazyModule(ModuleType):
                         setattr(self, fallback_name, value)
                         setattr(self, name, value)
                         return value
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Could not load fallback {fallback_name}: {e}")
             # V5: If a tokenizer class doesn't exist, check if it should alias to another tokenizer
             # via the converter mapping (e.g., FNetTokenizer -> AlbertTokenizer via AlbertConverter)
             value = None

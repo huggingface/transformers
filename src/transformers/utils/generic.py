@@ -248,8 +248,8 @@ def to_py_obj(obj):
             arr = np.array(obj)
             if np.issubdtype(arr.dtype, np.integer) or np.issubdtype(arr.dtype, np.floating):
                 return arr.tolist()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not convert to numpy array: {e}")
         return [to_py_obj(o) for o in obj]
 
     framework_to_py_obj = {

@@ -238,8 +238,9 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             config.tie_word_embeddings = False
             try:
                 config.get_text_config().tie_word_embeddings = False
-            except Exception as _:
-                pass
+            except Exception as e:
+                # Config may not have a text config
+                print(f"Could not set text config tie_word_embeddings: {e}")
 
             model = model_class(config)  # we init the model without tie
             # if this test fails later on, it means init tied the weights

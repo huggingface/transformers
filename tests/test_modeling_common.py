@@ -2234,8 +2234,9 @@ class ModelTesterMixin:
         original_config.tie_word_embeddings = False
         try:
             original_config.get_text_config().tie_word_embeddings = False
-        except Exception as _:
-            pass
+        except Exception as e:
+            # Config may not have a text config
+            print(f"Could not set text config tie_word_embeddings: {e}")
         inputs_dict.pop("labels", None)
 
         # if model cannot untied embeddings -> leave test

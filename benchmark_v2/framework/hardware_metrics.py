@@ -180,6 +180,7 @@ class GPUMonitor:
     @staticmethod
     def _monitor_worker(gpu_type: str, sample_interval_sec: float, connection: Connection):
         """Worker process for GPU monitoring."""
+        logger = logging.getLogger(__name__)
         gpu_utilization = []
         gpu_memory_used = []
         timestamps = []
@@ -215,8 +216,8 @@ class GPUMonitor:
                 gpu_utilization.append(utilization)
                 gpu_memory_used.append(memory_used)
                 timestamps.append(time.time())
-            except Exception:
-                pass  # Skip failed measurements
+            except Exception as e:
+                logger.debug(f"Failed to collect GPU metrics sample: {e}")
 
             stop = connection.poll(sample_interval_sec)
 
@@ -224,19 +225,19 @@ class GPUMonitor:
         if gpu_type == "amd":
             try:
                 amdsmi.amdsmi_shut_down()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to shutdown AMD GPU monitoring: {e}")
         elif gpu_type == "nvidia":
             try:
                 pynvml.nvmlShutdown()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to shutdown NVIDIA GPU monitoring: {e}")
 
         # Send results back
         try:
             connection.send((gpu_utilization, gpu_memory_used, timestamps))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to send GPU monitoring results: {e}")
 
         connection.close()
 

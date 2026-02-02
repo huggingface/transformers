@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import re
 import subprocess
@@ -7,6 +8,9 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from huggingface_hub import paper_info
+
+
+logger = logging.getLogger(__name__)
 
 
 ROOT = os.getcwd().split("utils")[0]
@@ -157,9 +161,9 @@ def get_release_date(link: str) -> str:
         try:
             info = paper_info(link)
             return info.published_at.date().isoformat()
-        except Exception:
+        except Exception as e:
             # Error fetching release date, function returns None (will use placeholder)
-            pass
+            logger.debug(f"Could not fetch paper info for {link}: {e}")
 
     elif link.startswith("https://arxiv.org/abs/") or link.startswith("https://arxiv.org/pdf/"):
         return r"{release_date}"

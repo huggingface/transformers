@@ -21,6 +21,7 @@ version of `tests/utils/tiny_model_summary.json`. That updated file should be me
 
 import argparse
 import json
+import logging
 import multiprocessing
 import os
 import time
@@ -31,6 +32,10 @@ from huggingface_hub import HfApi
 import transformers
 from transformers import AutoFeatureExtractor, AutoImageProcessor, AutoTokenizer
 from transformers.image_processing_utils import BaseImageProcessor
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def get_all_model_names():
@@ -103,34 +108,34 @@ def get_tiny_model_summary_from_hub(output_path):
             time.sleep(1)
             tokenizer_fast = AutoTokenizer.from_pretrained(repo_id)
             content["tokenizer_classes"].add(tokenizer_fast.__class__.__name__)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not load fast tokenizer for {repo_id}: {e}")
         try:
             time.sleep(1)
             tokenizer_slow = AutoTokenizer.from_pretrained(repo_id, use_fast=False)
             content["tokenizer_classes"].add(tokenizer_slow.__class__.__name__)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not load slow tokenizer for {repo_id}: {e}")
         try:
             time.sleep(1)
             img_p = AutoImageProcessor.from_pretrained(repo_id)
             content["processor_classes"].add(img_p.__class__.__name__)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not load image processor for {repo_id}: {e}")
         try:
             time.sleep(1)
             feat_p = AutoFeatureExtractor.from_pretrained(repo_id)
             if not isinstance(feat_p, BaseImageProcessor):
                 content["processor_classes"].add(feat_p.__class__.__name__)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not load feature extractor for {repo_id}: {e}")
         try:
             time.sleep(1)
             model_class = getattr(transformers, model)
             m = model_class.from_pretrained(repo_id)
             content["model_classes"].add(m.__class__.__name__)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not load model for {repo_id}: {e}")
 
         content["tokenizer_classes"] = sorted(content["tokenizer_classes"])
         content["processor_classes"] = sorted(content["processor_classes"])

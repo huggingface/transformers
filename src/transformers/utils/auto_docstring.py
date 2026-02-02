@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import inspect
+import logging
 import os
 import textwrap
 from pathlib import Path
@@ -28,6 +29,9 @@ from .doc import (
     _prepare_output_docstrings,
 )
 from .generic import ModelOutput
+
+
+logger = logging.getLogger(__name__)
 
 
 PATH_TO_TRANSFORMERS = Path("src").resolve() / "transformers"
@@ -1504,8 +1508,8 @@ def format_args_docstring(docstring, model_name):
         if placeholder is not None:
             try:
                 docstring = docstring.replace(f"{{{placeholder}}}", value)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Could not replace placeholder {placeholder}: {e}")
     return docstring
 
 
@@ -1832,8 +1836,8 @@ def _is_processor_class(func, parent_class):
             if filename.startswith("processing_") and filename.endswith(".py"):
                 # This is a multimodal processor file
                 return True
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Could not determine if processor is multimodal: {e}")
 
     # Default to False (conservative approach)
     return False
