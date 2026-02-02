@@ -270,39 +270,27 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("embeddings.word_embeddings.weight", "embeddings.word_embeddings.weight"),
             # Encoder Layers Renaming
             WeightRenaming(
-                r"encoder\.layers\.(\d+)\.attn\.out_proj\.weight",
-                r"encoder.layer.\1.attention.self.out_proj.weight",
+                r"encoder.layers.(\d+).attn.out_proj.weight",
+                r"encoder.layer.\1.attention.output.dense.weight",
             ),
             WeightRenaming(
-                r"encoder\.layers\.(\d+)\.mlp\.fc11\.weight",
+                r"encoder.layers.(\d+).mlp.fc11.weight",
                 r"encoder.layer.\1.intermediate.gate_proj.weight",
             ),
             WeightRenaming(
-                r"encoder\.layers\.(\d+)\.mlp\.fc12\.weight",
+                r"encoder.layers.(\d+).mlp.fc12.weight",
                 r"encoder.layer.\1.intermediate.up_proj.weight",
             ),
-            WeightRenaming(r"encoder\.layers\.(\d+)\.mlp\.fc2\.weight", r"encoder.layer.\1.output.dense.weight"),
+            WeightRenaming(r"encoder.layers.(\d+).mlp.fc2.weight", r"encoder.layer.\1.output.dense.weight"),
             WeightRenaming(
-                r"encoder\.layers\.(\d+)\.norm1",
-                r"encoder.layer.\1.attention.attention_output.LayerNorm",
+                r"encoder.layers.(\d+).norm1",
+                r"encoder.layer.\1.attention.output.LayerNorm",
             ),
             WeightRenaming(
-                r"encoder\.layers\.(\d+)\.norm2",
+                r"encoder.layers.(\d+).norm2",
                 r"encoder.layer.\1.output.LayerNorm",
             ),
-            # QKV Splits
-            *[
-                WeightConverter(
-                    source_patterns=f"encoder.layers.{i}.attn.Wqkv.weight",
-                    target_patterns=[
-                        f"encoder.layer.{i}.attention.self.query.weight",
-                        f"encoder.layer.{i}.attention.self.key.weight",
-                        f"encoder.layer.{i}.attention.self.value.weight",
-                    ],
-                    operations=[Chunk(dim=0)],
-                )
-                for i in range(12)
-            ],
+            # QKV Splits (currently not passed)
         ],
     }
     if hasattr(torch.nn.utils.parametrizations, "weight_norm"):

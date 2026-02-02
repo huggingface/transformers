@@ -30,6 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -123,6 +124,8 @@ class NomicBertRotaryEmbedding(nn.Module):
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.register_buffer("inv_freq", inv_freq, persistent=True)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=True)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -196,6 +199,13 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -232,13 +242,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
@@ -289,8 +292,6 @@ class NomicBertSelfAttention(nn.Module):
         self.layer_idx = layer_idx
         self.num_key_value_groups = self.num_attention_heads // self.num_kv_heads
 
-        self.out_proj = nn.Linear(self.num_attention_heads * self.attention_head_size, config.hidden_size, bias=False)
-
     def forward(
         self,
         hidden_states,
@@ -328,17 +329,18 @@ class NomicBertSelfAttention(nn.Module):
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous().view(*input_shape, -1)
-        attn_output = self.out_proj(attn_output)
         return attn_output, attn_weights
 
 
 class NomicBertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
@@ -349,7 +351,7 @@ class NomicBertAttention(nn.Module):
         super().__init__()
         self.self = NomicBertSelfAttention(config, layer_idx=layer_idx)
 
-        self.attention_output = NomicBertSelfOutput(config)
+        self.output = NomicBertSelfOutput(config)
 
     def forward(
         self,
@@ -365,9 +367,9 @@ class NomicBertAttention(nn.Module):
             **kwargs,
         )
         # Process context layer (always index 0)
-        attention_output = self.attention_output(self_outputs[0], hidden_states)
+        output = self.output(self_outputs[0], hidden_states)
 
-        return attention_output
+        return output
 
 
 class NomicBertIntermediate(nn.Module):
@@ -458,11 +460,7 @@ class NomicBertEncoder(nn.Module):
     def __init__(self, config, **kwargs):
         super().__init__()
         self.config = config
-
-        # Re-initialize self.layer with the correct index passed to each layer
         self.layer = nn.ModuleList([NomicBertLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
-
-        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -499,23 +497,6 @@ class NomicBertPooler(nn.Module):
         return pooled_output
 
 
-class NomicBertPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
-        return hidden_states
-
-
 class NomicBertLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -530,38 +511,6 @@ class NomicBertLMPredictionHead(nn.Module):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
         return hidden_states
-
-
-class NomicBertOnlyMLMHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.predictions = NomicBertLMPredictionHead(config)
-
-    def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
-        prediction_scores = self.predictions(sequence_output)
-        return prediction_scores
-
-
-class NomicBertOnlyNSPHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.seq_relationship = nn.Linear(config.hidden_size, 2)
-
-    def forward(self, pooled_output):
-        seq_relationship_score = self.seq_relationship(pooled_output)
-        return seq_relationship_score
-
-
-class NomicBertPreTrainingHeads(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.predictions = NomicBertLMPredictionHead(config)
-        self.seq_relationship = nn.Linear(config.hidden_size, 2)
-
-    def forward(self, sequence_output, pooled_output):
-        prediction_scores = self.predictions(sequence_output)
-        seq_relationship_score = self.seq_relationship(pooled_output)
-        return prediction_scores, seq_relationship_score
 
 
 @auto_docstring
@@ -581,39 +530,12 @@ class NomicBertPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-
-        elif isinstance(module, nn.LayerNorm):
+        super()._init_weights(module)
+        if isinstance(module, NomicBertLMPredictionHead):
             init.zeros_(module.bias)
-            init.ones_(module.weight)
-
-        elif isinstance(module, NomicBertLMPredictionHead):
-            init.zeros_(module.bias)
-
         elif isinstance(module, NomicBertEmbeddings):
-            if hasattr(module, "position_ids") and module.position_ids is not None:
-                init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-            if hasattr(module, "token_type_ids") and module.token_type_ids is not None:
-                init.zeros_(module.token_type_ids)
-
-        elif isinstance(module, NomicBertRotaryEmbedding):
-            if hasattr(module, "inv_freq") and module.inv_freq is not None:
-                dim = module.config.hidden_size // module.config.num_attention_heads
-                base = module.config.rope_parameters["rope_theta"]
-                inv_freq = 1.0 / (
-                    base ** (torch.arange(0, dim, 2, dtype=torch.int64).float().to(module.inv_freq.device) / dim)
-                )
-                module.inv_freq = inv_freq
-                if hasattr(module, "original_inv_freq"):
-                    init.copy_(module.original_inv_freq, inv_freq)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
     def get_input_embeddings(self):
         if hasattr(self, "nomic_bert"):
@@ -652,24 +574,46 @@ class NomicBertForPreTrainingOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
+class NomicBertPredictionHeadTransform(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        if isinstance(config.hidden_act, str):
+            self.transform_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.transform_act_fn = config.hidden_act
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
+
+
 @auto_docstring
 class NomicBertModel(NomicBertPreTrainedModel):
+    _no_split_modules = ["NomicBertEmbeddings", "NomicBertLayer"]
+
     def __init__(self, config, add_pooling_layer=True):
         """
         Args:
             add_pooling_layer (`bool`, *optional*, defaults to `True`):
                 Whether to add a pooling layer.
         """
-        super().__init__(config, add_pooling_layer=add_pooling_layer)
-
-        self.encoder = NomicBertEncoder(config, layer_class=NomicBertLayer)
+        super().__init__(config)
+        self.config = config
+        self.gradient_checkpointing = False
 
         self.embeddings = NomicBertEmbeddings(config)
 
-        self.rotary_emb = NomicBertRotaryEmbedding(config)
+        self.encoder = NomicBertEncoder(config)
 
         self.pooler = NomicBertPooler(config) if add_pooling_layer else None
 
+        self.rotary_emb = NomicBertRotaryEmbedding(config)
+
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -687,7 +631,7 @@ class NomicBertModel(NomicBertPreTrainedModel):
         position_ids=None,
         inputs_embeds=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithPooling:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -739,10 +683,53 @@ class NomicBertModel(NomicBertPreTrainedModel):
             pooler_output=pooled_output,
         )
 
-        output.past_key_values = None
-        output.cross_attentions = None
-
         return output
+
+    def _create_attention_masks(
+        self,
+        attention_mask,
+        encoder_attention_mask,
+        embedding_output,
+        encoder_hidden_states,
+        cache_position,
+        past_key_values,
+    ):
+        if self.config.is_decoder:
+            attention_mask = create_causal_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
+                past_key_values=past_key_values,
+            )
+        else:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=attention_mask,
+            )
+
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
+
+        return attention_mask, encoder_attention_mask
+
+
+class NomicBertPreTrainingHeads(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.predictions = NomicBertLMPredictionHead(config)
+        self.seq_relationship = nn.Linear(config.hidden_size, 2)
+
+    def forward(self, sequence_output, pooled_output):
+        prediction_scores = self.predictions(sequence_output)
+        seq_relationship_score = self.seq_relationship(pooled_output)
+        return prediction_scores, seq_relationship_score
 
 
 @auto_docstring(
@@ -845,6 +832,16 @@ class NomicBertForPreTraining(NomicBertPreTrainedModel):
         )
 
 
+class NomicBertOnlyMLMHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.predictions = NomicBertLMPredictionHead(config)
+
+    def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
+        prediction_scores = self.predictions(sequence_output)
+        return prediction_scores
+
+
 @auto_docstring(
     custom_intro="""
     NomicBert Model with a `language modeling` head on top for CLM fine-tuning.
@@ -856,7 +853,7 @@ class NomicBertLMHeadModel(NomicBertPreTrainedModel, GenerationMixin):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
     config_class = NomicBertConfig
-    base_model_prefix = "model"
+    base_model_prefix = "nomic_bert"
 
     def __init__(self, config):
         super().__init__(config)
@@ -866,7 +863,6 @@ class NomicBertLMHeadModel(NomicBertPreTrainedModel, GenerationMixin):
 
         self.nomic_bert = NomicBertModel(config, add_pooling_layer=False)
         self.cls = NomicBertOnlyMLMHead(config)
-        self.model = NomicBertModel(config, add_pooling_layer=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -898,7 +894,7 @@ class NomicBertLMHeadModel(NomicBertPreTrainedModel, GenerationMixin):
             ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
         """
 
-        outputs: BaseModelOutputWithPooling = self.model(
+        outputs: BaseModelOutputWithPooling = self.nomic_bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1002,6 +998,16 @@ class NomicBertForMaskedLM(NomicBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+class NomicBertOnlyNSPHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.seq_relationship = nn.Linear(config.hidden_size, 2)
+
+    def forward(self, pooled_output):
+        seq_relationship_score = self.seq_relationship(pooled_output)
+        return seq_relationship_score
 
 
 @auto_docstring(

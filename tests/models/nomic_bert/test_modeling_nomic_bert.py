@@ -471,7 +471,7 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "nomic-ai/nomic-bert-2048"
+        model_name = "nomic-ai/nomic-embed-text-v1.5"
         model = NomicBertModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -594,7 +594,7 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 class NomicBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = NomicBertModel.from_pretrained("nomic-ai/nomic-bert-2048")
+        model = NomicBertModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
@@ -612,7 +612,7 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
         bert_tokenizer = "google-bert/bert-base-uncased"
-        bert_model = "nomic-ai/nomic-bert-2048"
+        bert_model = "nomic-ai/nomic-embed-text-v1.5"
         device = "cpu"
         attn_implementation = "sdpa"
         max_length = 512

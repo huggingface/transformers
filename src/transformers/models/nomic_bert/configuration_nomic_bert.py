@@ -129,7 +129,7 @@ class NomicBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         if rope_parameters is None:
             rope_parameters = {
                 "rope_type": "default",
-                "rope_theta": 10000.0,
+                "rope_theta": 500_000,
             }
 
         kwargs["is_decoder"] = kwargs.get("is_decoder", False)
