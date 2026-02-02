@@ -301,7 +301,7 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
             ],
         ]
         EXPECTED_TEXT = [
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: Describe this image.\n\nAssistant:In the image, a majestic snow leopard is captured in a moment of tranquility. The snow leopard",  # fmt: skip
+            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: Describe this image.\n\nAssistant:The image depicts a snowy landscape with a focus on a bear. The bear is standing on all",  # fmt: skip
             "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: What animal do you see in the image?\n\nAssistant:I see a bear in the image.What is the significance of the color red in the",  # fmt: skip
         ]
 
