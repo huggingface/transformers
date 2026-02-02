@@ -68,7 +68,6 @@ class DeformableDetrModelTester:
         num_feature_levels=4,
         encoder_n_points=2,
         decoder_n_points=6,
-        tie_word_embeddings=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -89,7 +88,6 @@ class DeformableDetrModelTester:
         self.num_feature_levels = num_feature_levels
         self.encoder_n_points = encoder_n_points
         self.decoder_n_points = decoder_n_points
-        self.tie_word_embeddings = tie_word_embeddings
 
         # we also set the expected seq length for both encoder and decoder
         self.encoder_seq_length = (
@@ -151,9 +149,6 @@ class DeformableDetrModelTester:
             backbone=None,
             backbone_config=resnet_config,
             use_pretrained_backbone=False,
-            # FIXME; cls attr `toed_weihgt_keys` must not be modified in __init__
-            # Several models affected so for now just let it be and fix in separate PR
-            tie_word_embeddings=self.tie_word_embeddings,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -247,6 +242,25 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_deformable_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deformable_detr_object_detection_head_model(*config_and_inputs)
+
+    def test_tie_weights_is_not_modified(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.tie_word_embeddings = True
+
+        config.with_box_refine = True
+        config.two_stage = True
+
+        model = DeformableDetrForObjectDetection(config)
+        self.assertTrue("model.decoder.bbox_embed" in model._tied_weights_keys)
+        self.assertTrue("model.decoder.class_embed" in model._tied_weights_keys)
+
+        # if we update config attr, model's tied weights keys also change
+        config.with_box_refine = False
+        config.two_stage = False
+
+        model = DeformableDetrForObjectDetection(config)
+        self.assertFalse("model.decoder.bbox_embed" in model._tied_weights_keys)
+        self.assertFalse("model.decoder.class_embed" in model._tied_weights_keys)
 
     @unittest.skip(reason="Deformable DETR does not use inputs_embeds")
     def test_inputs_embeds(self):

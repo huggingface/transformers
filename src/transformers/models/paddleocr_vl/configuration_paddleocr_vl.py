@@ -27,7 +27,7 @@
 import inspect
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
 class PaddleOCRVisionConfig(PreTrainedConfig):
@@ -114,7 +114,7 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
         self.spatial_merge_size = spatial_merge_size
 
 
-class PaddleOCRTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class PaddleOCRTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PaddleOCRTextModel`]. It is used to instantiate an Ernie 4.5
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

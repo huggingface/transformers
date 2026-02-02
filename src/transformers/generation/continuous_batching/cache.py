@@ -118,7 +118,7 @@ class PagedAttentionCache:
         self,
         config: PreTrainedConfig,
         generation_config: GenerationConfig,
-        device: torch.device,
+        device: torch.device | str,
         dtype: torch.dtype = torch.float16,
         tp_size: int | None = None,
         allow_block_sharing: bool = True,
@@ -201,6 +201,7 @@ class PagedAttentionCache:
         # Add the inferred attributes to the class
         self.num_blocks = num_blocks
         self.max_batch_tokens = max_batch_tokens
+        self.num_pages = self.num_blocks * self.block_size
         logger.info(
             f"PagedAttentionCache initialized with {self.num_blocks = }, {self.block_size = }, {page_size = }, "
             f"{self.max_batch_tokens = } {num_attention_masks = }"

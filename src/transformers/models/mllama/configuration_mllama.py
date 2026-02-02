@@ -13,7 +13,6 @@
 """Mllama model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
@@ -135,7 +134,7 @@ class MllamaVisionConfig(PreTrainedConfig):
         return len(self.supported_aspect_ratios)
 
 
-class MllamaTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class MllamaTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MllamaTextModel`]. It is used to instantiate an
     Mllama text model according to the specified arguments, defining the model architecture. Instantiating a configuration
