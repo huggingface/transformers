@@ -105,7 +105,7 @@ class T5ModelTester:
         self.scope = None
         self.decoder_layers = decoder_layers
 
-    def prepare_config_and_inputs(self):
+    def prepare_config_and_inputs(self, config_fn=None):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
         decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
@@ -120,7 +120,10 @@ class T5ModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
-        config = self.get_config()
+        if not config_fn:
+            config = self.get_config()
+        else:
+            config = config_fn()
 
         return (
             config,
@@ -130,6 +133,9 @@ class T5ModelTester:
             decoder_attention_mask,
             lm_labels,
         )
+
+    def prepare_config_and_inputs_v1_1(self):
+        return self.prepare_config_and_inputs(config_fn=self.get_config_v1_1)
 
     def get_pipeline_config(self):
         return T5Config(
@@ -165,6 +171,28 @@ class T5ModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
+        )
+
+    def get_config_v1_1(self):
+        return T5Config(
+            vocab_size=self.vocab_size,
+            d_model=self.hidden_size,
+            d_ff=self.d_ff,
+            d_kv=self.hidden_size // self.num_attention_heads,
+            num_layers=self.num_hidden_layers,
+            num_decoder_layers=self.decoder_layers,
+            num_heads=self.num_attention_heads,
+            relative_attention_num_buckets=self.relative_attention_num_buckets,
+            dropout_rate=self.dropout_rate,
+            initializer_factor=self.initializer_factor,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.pad_token_id,
+            pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.decoder_start_token_id,
+            # V1.1 related params: uses gated-gelu and `tie_word_embeddings=False` as an
+            # indicator to not scale decoder outputs
+            feed_forward_proj="gated-gelu",
+            tie_word_embeddings=False,
         )
 
     def check_prepare_lm_labels_via_shift_left(
@@ -558,15 +586,13 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.assertTrue(config_and_inputs[0].scale_decoder_outputs)
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_v1_1(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        # check that gated gelu feed forward and different word embeddings work
-        config = config_and_inputs[0]
-        config.tie_word_embeddings = False
-        config.feed_forward_proj = "gated-gelu"
-        self.model_tester.create_and_check_model(config, *config_and_inputs[1:])
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_v1_1()
+        self.assertFalse(config_and_inputs[0].scale_decoder_outputs)
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
     # T5ForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
