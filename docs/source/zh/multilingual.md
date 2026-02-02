@@ -164,7 +164,7 @@ M2M100 强制将目标语言 id 作为第一个生成的标记，以进行到目
 对文本进行分词：
 
 ```py
->>> encoded_en = tokenizer(en_text, return_tensors="pt")
+>>> encoded_en = tokenizer(fi_text, return_tensors="pt")
 ```
 
 MBart 强制将目标语言 id 作为第一个生成的标记，以进行到目标语言的翻译。在 `generate` 方法中将 `forced_bos_token_id` 设置为 `en` 以翻译成英语：
