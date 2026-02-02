@@ -844,7 +844,7 @@ class ZambaModel(ZambaPreTrainedModel):
                 layers.append(ZambaHybridLayer(ZambaAttentionDecoderLayer(config), linear, mamba))
                 if self._tied_weights_keys is None:
                     self._tied_weights_keys = {
-                        rf"layers.(?![{layer_id}])\d+.shared_transf": f"layers.{layer_id}.shared_transf"
+                        rf"layers.(?!{layer_id}\.)\d+.shared_transf": f"layers.{layer_id}.shared_transf"
                     }
             else:
                 layers.append(mamba)
