@@ -16,7 +16,7 @@ import math
 from collections.abc import Iterable
 from copy import deepcopy
 from functools import lru_cache, partial
-from typing import Any
+from typing import Any, Optional, Union
 
 import numpy as np
 from huggingface_hub.dataclasses import validate_typed_dict
@@ -101,7 +101,7 @@ def validate_fast_preprocess_arguments(
     crop_size: SizeDict | None = None,
     do_resize: bool | None = None,
     size: SizeDict | None = None,
-    resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None = None,
+    resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]] = None,
     return_tensors: str | TensorType | None = None,
     data_format: ChannelDimension = ChannelDimension.FIRST,
 ):
@@ -131,7 +131,7 @@ def validate_fast_preprocess_arguments(
         pass
 
 
-def safe_squeeze(tensor: "torch.Tensor", axis: int | None = None) -> "torch.Tensor":
+def safe_squeeze(tensor: "torch.Tensor", axis: Optional[int] = None) -> "torch.Tensor":
     """
     Squeezes a tensor, but only if the axis specified has dim 1.
     """
@@ -151,7 +151,7 @@ def max_across_indices(values: Iterable[Any]) -> list[Any]:
     return [max(values_i) for values_i in zip(*values)]
 
 
-def get_max_height_width(images: list["torch.Tensor" | np.ndarray]) -> tuple[int, ...]:
+def get_max_height_width(images: list[Union["torch.Tensor", np.ndarray]]) -> tuple[int, ...]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -169,7 +169,9 @@ def get_max_height_width(images: list["torch.Tensor" | np.ndarray]) -> tuple[int
         return (max_height, max_width)
 
 
-def divide_to_patches(image: np.ndarray | "torch.Tensor", patch_size: int) -> list[np.ndarray | "torch.Tensor"]:
+def divide_to_patches(
+    image: Union[np.ndarray, "torch.Tensor"], patch_size: int
+) -> list[Union[np.ndarray, "torch.Tensor"]]:
     """
     Divides an image into patches of a specified size.
 
@@ -245,7 +247,7 @@ class TorchVisionBackend(ImageProcessingBackend):
         image: ImageInput,
         do_convert_rgb: bool | None = None,
         input_data_format: str | ChannelDimension | None = None,
-        device: "torch.device" | None = None,
+        device: Optional["torch.device"] = None,
     ) -> "torch.Tensor":
         """Process a single image for torchvision backend."""
         image_type = get_image_type(image)
@@ -284,7 +286,7 @@ class TorchVisionBackend(ImageProcessingBackend):
         disable_grouping: bool | None = False,
         is_nested: bool | None = False,
         **kwargs,
-    ) -> tuple["torch.Tensor", "torch.Tensor"] | "torch.Tensor":
+    ) -> Union[tuple["torch.Tensor", "torch.Tensor"], "torch.Tensor"]:
         """Pad images using TorchVision with batched operations."""
         if pad_size is not None:
             if not (pad_size.height and pad_size.width):
@@ -328,7 +330,7 @@ class TorchVisionBackend(ImageProcessingBackend):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None = None,
+        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -373,7 +375,7 @@ class TorchVisionBackend(ImageProcessingBackend):
     def _compile_friendly_resize(
         image: "torch.Tensor",
         new_size: tuple[int, int],
-        interpolation: "tvF.InterpolationMode" | None = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
     ) -> "torch.Tensor":
         """A wrapper around tvF.resize for torch.compile compatibility with uint8 tensors."""
@@ -415,7 +417,7 @@ class TorchVisionBackend(ImageProcessingBackend):
         image_std: float | list[float] | None = None,
         do_rescale: bool | None = None,
         rescale_factor: float | None = None,
-        device: "torch.device" | None = None,
+        device: Optional["torch.device"] = None,
     ) -> tuple:
         if do_rescale and do_normalize:
             # Fused rescale and normalize
@@ -482,7 +484,7 @@ class TorchVisionBackend(ImageProcessingBackend):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None,
+        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -525,17 +527,17 @@ class TorchVisionBackend(ImageProcessingBackend):
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
-class PythonBackend(ImageProcessingBackend):
-    """Python/NumPy backend for portable CPU-only image processing."""
+class PilBackend(ImageProcessingBackend):
+    """PIL/NumPy backend for portable CPU-only image processing."""
 
     def process_image(
         self,
         image: ImageInput,
         do_convert_rgb: bool | None = None,
         input_data_format: str | ChannelDimension | None = None,
-        device: "torch.device" | None = None,
+        device: Optional["torch.device"] = None,
     ) -> np.ndarray:
-        """Process a single image for python backend."""
+        """Process a single image for PIL backend."""
         image_type = get_image_type(image)
         if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
             raise ValueError(f"Unsupported input image type {image_type}")
@@ -571,7 +573,7 @@ class PythonBackend(ImageProcessingBackend):
         disable_grouping: bool | None = False,
         is_nested: bool | None = False,
         **kwargs,
-    ) -> tuple[list[np.ndarray], list[np.ndarray]] | list[np.ndarray]:
+    ) -> Union[tuple[list[np.ndarray], list[np.ndarray]], list[np.ndarray]]:
         """Pad images to specified size using NumPy."""
         if pad_size is not None:
             if not (pad_size.height and pad_size.width):
@@ -618,12 +620,12 @@ class PythonBackend(ImageProcessingBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None = None,
+        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]] = None,
         antialias: bool = True,
         **kwargs,
     ) -> np.ndarray:
         """Resize an image using PIL/NumPy."""
-        # Python backend only supports PILImageResampling
+        # PIL backend only supports PILImageResampling
         if resample is not None and not isinstance(resample, (PILImageResampling, int)):
             if torch_pil_interpolation_mapping is not None and resample in torch_pil_interpolation_mapping:
                 resample = torch_pil_interpolation_mapping[resample]
@@ -716,7 +718,7 @@ class PythonBackend(ImageProcessingBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None,
+        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -730,7 +732,7 @@ class PythonBackend(ImageProcessingBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        """Preprocess using Python backend (portable, CPU-only)."""
+        """Preprocess using PIL backend (portable, CPU-only)."""
         processed_images = []
         for image in images:
             if do_resize:
@@ -752,10 +754,10 @@ class PythonBackend(ImageProcessingBackend):
 @auto_docstring
 class BaseImageProcessor(ImageProcessingMixin):
     r"""
-    Base class for image processors supporting both Python and TorchVision backends.
+    Base class for image processors supporting both PIL and TorchVision backends.
 
     This class provides a complete implementation for standard image preprocessing operations (resize, crop, rescale,
-    normalize) with support for both Python/NumPy (for portability) and TorchVision (for GPU acceleration and speed).
+    normalize) with support for both PIL/NumPy (for portability) and TorchVision (for GPU acceleration and speed).
     Most image processors can be implemented by simply setting class attributes; only processors requiring custom
     logic need to override methods.
 
@@ -763,12 +765,12 @@ class BaseImageProcessor(ImageProcessingMixin):
     -----------------
 
     The processor automatically selects the best backend:
-    - `backend="auto"` (default): Uses torchvision if available, otherwise python
+    - `backend="auto"` (default): Uses torchvision if available, otherwise pil
     - `backend="torchvision"`: Forces torchvision backend (GPU-accelerated, faster)
-    - `backend="python"`: Forces python backend (NumPy/PIL, more portable)
+    - `backend="pil"`: Forces PIL backend (NumPy/PIL, more portable)
 
         processor = MyImageProcessor(backend="torchvision")  # Fast, GPU support
-        processor = MyImageProcessor(backend="python")       # Portable, CPU-only
+        processor = MyImageProcessor(backend="pil")         # Portable, CPU-only
 
     Basic Implementation
     --------------------
@@ -790,7 +792,7 @@ class BaseImageProcessor(ImageProcessingMixin):
 
     Override `_preprocess` (most common):
         For custom image processing logic, override `_preprocess`. This method receives images as either torch
-        tensors (torchvision backend) or NumPy arrays (python backend), both with channel dimension first.
+        tensors (torchvision backend) or NumPy arrays (PIL backend), both with channel dimension first.
 
             def _preprocess(
                 self,
@@ -811,7 +813,7 @@ class BaseImageProcessor(ImageProcessingMixin):
                     processed_images = reorder_images(processed_groups, indices)
                     return BatchFeature(data={"pixel_values": torch.stack(processed_images)})
                 else:
-                    # Process images one by one for python backend
+                    # Process images one by one for PIL backend
                     processed_images = []
                     for image in images:
                         if do_resize:
@@ -850,15 +852,15 @@ class BaseImageProcessor(ImageProcessingMixin):
                 # Custom resize logic for torchvision
                 return super().resize(image, size, **kwargs)
 
-        class MyPythonBackend(PythonBackend):
+        class MyPilBackend(PilBackend):
             def resize(self, image, size, **kwargs):
-                # Custom resize logic for python
+                # Custom resize logic for PIL
                 return super().resize(image, size, **kwargs)
 
         class MyImageProcessor(BaseImageProcessor):
             _backend_classes = {
                 "torchvision": MyTorchVisionBackend,
-                "python": MyPythonBackend,
+                "pil": MyPilBackend,
             }
 
     To add a new backend, extend both `_backend_classes` and `_backend_availability_checks`:
@@ -892,11 +894,11 @@ class BaseImageProcessor(ImageProcessingMixin):
     Key Notes
     ---------
 
-    - Images in `_preprocess` are torch.Tensor (torchvision backend) or np.ndarray (python backend)
+    - Images in `_preprocess` are torch.Tensor (torchvision backend) or np.ndarray (PIL backend)
     - All images have channel dimension first, regardless of backend
     - Arguments not provided by users default to class attribute values
     - TorchVision backend supports GPU acceleration and is faster
-    - Python backend is more portable and doesn't require PyTorch/TorchVision
+    - PIL backend is more portable and doesn't require PyTorch/TorchVision
     - Backend classes encapsulate backend-specific logic and can be overridden for customization
     """
 
@@ -923,17 +925,70 @@ class BaseImageProcessor(ImageProcessingMixin):
     valid_kwargs = ImagesKwargs
     unused_kwargs = None
 
-    # Backend registry: maps backend names to their backend classes
     _backend_classes = {
         "torchvision": TorchVisionBackend,
-        "python": PythonBackend,
+        "pil": PilBackend,
     }
 
-    # Backend availability checkers: maps backend names to functions that check availability
     _backend_availability_checks = {
         "torchvision": is_torchvision_available,
-        "python": lambda: True,  # Python backend is always available
+        "pil": lambda: True,  # PIL backend is always available
     }
+
+    @classmethod
+    def register_backend(
+        cls,
+        name: str,
+        backend_class: ImageProcessingBackend,
+        availability_check: Optional[callable] = None,
+    ):
+        """
+        Register a new backend for this image processor.
+
+        This allows users to add custom backends (e.g., MLX, JAX) without modifying the source code.
+        The backend will be available for this processor class and can be selected via the `backend` parameter.
+
+        Args:
+            name (`str`):
+                The name of the backend (e.g., "mlx", "jax").
+            backend_class (`type[ImageProcessingBackend]`):
+                The backend class that implements the backend interface. Must inherit from `ImageProcessingBackend`.
+            availability_check (`callable`, *optional*):
+                A function that returns `True` if the backend is available, `False` otherwise.
+                This is typically a check for whether required dependencies are installed.
+                If not provided, defaults to always available (returns `True`).
+
+        Example:
+            ```python
+            from transformers import ImageProcessingBackend, LlavaNextImageProcessor
+
+            class LlavaNextMlxBackend(ImageProcessingBackend):
+                def resize(self, image, size, **kwargs):
+                    # MLX implementation
+                    pass
+                # ... implement other methods
+
+            # Register with availability check
+            LlavaNextImageProcessor.register_backend(
+                name="mlx",
+                backend_class=LlavaNextMlxBackend,
+                availability_check=lambda: is_mlx_available()
+            )
+
+            # Or register without availability check (always available)
+            LlavaNextImageProcessor.register_backend(
+                name="mlx",
+                backend_class=LlavaNextMlxBackend,
+            )
+
+            processor = LlavaNextImageProcessor(backend="mlx")
+            ```
+        """
+        if not issubclass(backend_class, ImageProcessingBackend):
+            raise TypeError(f"Backend class must inherit from ImageProcessingBackend, got {backend_class.__name__}")
+
+        cls._backend_classes[name] = backend_class
+        cls._backend_availability_checks[name] = availability_check if availability_check is not None else lambda: True
 
     @classmethod
     def _get_available_backends(cls):
@@ -959,8 +1014,8 @@ class BaseImageProcessor(ImageProcessingMixin):
         """
         available = cls._get_available_backends()
         if not available:
-            raise RuntimeError("No backends are available. At least 'python' backend should be available.")
-        # Priority: torchvision > python
+            raise RuntimeError("No backends are available. At least 'pil' backend should be available.")
+        # Priority: torchvision > pil
         if "torchvision" in available:
             return "torchvision"
         return available[0]
@@ -1012,159 +1067,18 @@ class BaseImageProcessor(ImageProcessingMixin):
     def is_fast(self) -> bool:
         """
         `bool`: Whether or not this image processor is using the fast (TorchVision) backend.
+        The `is_fast` property is deprecated and will be removed in v5.3 of Transformers.
+        Use the `backend` attribute instead (e.g., `processor.backend == "torchvision"`).
         """
+        logger.warning_once(
+            "The `is_fast` property is deprecated and will be removed in v5.3 of Transformers. "
+            "Use the `backend` attribute instead (e.g., `processor.backend == 'torchvision'`)."
+        )
         return self.backend == "torchvision"
 
     def __call__(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
         """Preprocess an image or a batch of images."""
         return self.preprocess(images, *args, **kwargs)
-
-    # Backend-specific methods are now handled by backend classes
-    # These methods are kept for backward compatibility but delegate to backends
-
-    # ============ Public Interface Methods (Backend-Agnostic) ============
-
-    def pad(
-        self,
-        images: list["torch.Tensor"] | list[np.ndarray],
-        pad_size: SizeDict | None = None,
-        fill_value: int | None = 0,
-        padding_mode: str | None = "constant",
-        return_mask: bool = False,
-        disable_grouping: bool | None = False,
-        is_nested: bool | None = False,
-        **kwargs,
-    ) -> tuple | list:
-        """
-        Pads images to `(pad_size["height"], pad_size["width"])` or to the largest size in the batch.
-
-        Args:
-            images (`list[torch.Tensor]` or `list[np.ndarray]`):
-                Images to pad.
-            pad_size (`SizeDict`, *optional*):
-                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            fill_value (`int`, *optional*, defaults to `0`):
-                The constant value used to fill the padded area.
-            padding_mode (`str`, *optional*, defaults to "constant"):
-                The padding mode to use.
-            return_mask (`bool`, *optional*, defaults to `False`):
-                Whether to return a pixel mask to denote padded regions.
-            disable_grouping (`bool`, *optional*, defaults to `False`):
-                Whether to disable grouping of images by size (torchvision backend only).
-
-        Returns:
-            `tuple | list`: The padded images and pixel masks if `return_mask` is `True`.
-        """
-        return self._backend_instance.pad(
-            images, pad_size, fill_value, padding_mode, return_mask, disable_grouping, is_nested, **kwargs
-        )
-
-    def resize(
-        self,
-        image: "torch.Tensor" | np.ndarray,
-        size: SizeDict,
-        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None = None,
-        antialias: bool = True,
-        **kwargs,
-    ) -> "torch.Tensor" | np.ndarray:
-        """
-        Resize an image to `(size["height"], size["width"])`.
-
-        Args:
-            image (`torch.Tensor` or `np.ndarray`):
-                Image to resize.
-            size (`SizeDict`):
-                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`PILImageResampling` or `tvF.InterpolationMode`, *optional*):
-                Resampling/interpolation filter to use. Can be a PIL `PILImageResampling` enum or a torchvision
-                `tvF.InterpolationMode`. Defaults to `PILImageResampling.BILINEAR` (or equivalent).
-            antialias (`bool`, *optional*, defaults to `True`):
-                Whether to use antialiasing (torchvision backend only).
-
-        Returns:
-            `torch.Tensor` or `np.ndarray`: The resized image.
-        """
-        return self._backend_instance.resize(image, size, resample, antialias, **kwargs)
-
-    def rescale(
-        self,
-        image: "torch.Tensor" | np.ndarray,
-        scale: float,
-        **kwargs,
-    ) -> "torch.Tensor" | np.ndarray:
-        """
-        Rescale an image by a scale factor. image = image * scale.
-
-        Args:
-            image (`torch.Tensor` or `np.ndarray`):
-                Image to rescale.
-            scale (`float`):
-                The scaling factor to rescale pixel values by.
-
-        Returns:
-            `torch.Tensor` or `np.ndarray`: The rescaled image.
-        """
-        return self._backend_instance.rescale(image, scale, **kwargs)
-
-    def normalize(
-        self,
-        image: "torch.Tensor" | np.ndarray,
-        mean: float | Iterable[float],
-        std: float | Iterable[float],
-        **kwargs,
-    ) -> "torch.Tensor" | np.ndarray:
-        """
-        Normalize an image. image = (image - image_mean) / image_std.
-
-        Args:
-            image (`torch.Tensor` or `np.ndarray`):
-                Image to normalize.
-            mean (`float` or `Iterable[float]`):
-                Image mean to use for normalization.
-            std (`float` or `Iterable[float]`):
-                Image standard deviation to use for normalization.
-
-        Returns:
-            `torch.Tensor` or `np.ndarray`: The normalized image.
-        """
-        return self._backend_instance.normalize(image, mean, std, **kwargs)
-
-    def center_crop(
-        self,
-        image: "torch.Tensor" | np.ndarray,
-        size: SizeDict,
-        **kwargs,
-    ) -> "torch.Tensor" | np.ndarray:
-        """
-        Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
-        any edge, the image is padded with 0's and then center cropped.
-
-        Args:
-            image (`torch.Tensor` or `np.ndarray`):
-                Image to center crop.
-            size (`SizeDict`):
-                Size of the output image.
-
-        Returns:
-            `torch.Tensor` or `np.ndarray`: The center cropped image.
-        """
-        return self._backend_instance.center_crop(image, size, **kwargs)
-
-    def convert_to_rgb(
-        self,
-        image: ImageInput,
-    ) -> ImageInput:
-        """
-        Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
-        as is.
-        Args:
-            image (ImageInput):
-                The image to convert.
-
-        Returns:
-            ImageInput: The converted image.
-        """
-        return convert_to_rgb(image)
 
     def filter_out_unused_kwargs(self, kwargs: dict):
         """
@@ -1202,9 +1116,9 @@ class BaseImageProcessor(ImageProcessingMixin):
         images: ImageInput,
         do_convert_rgb: bool | None = None,
         input_data_format: str | ChannelDimension | None = None,
-        device: "torch.device" | None = None,
+        device: Optional["torch.device"] = None,
         expected_ndims: int = 3,
-    ) -> list["torch.Tensor"] | list[np.ndarray]:
+    ) -> Union[list["torch.Tensor"], list[np.ndarray]]:
         """
         Prepare image-like inputs for processing.
 
@@ -1250,7 +1164,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         image_mean: float | list[float] | None = None,
         image_std: float | list[float] | None = None,
         data_format: ChannelDimension | None = None,
-        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None = None,
+        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]] = None,
         **kwargs,
     ) -> dict:
         """
@@ -1293,7 +1207,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         size: SizeDict | None = None,
         do_center_crop: bool | None = None,
         crop_size: SizeDict | None = None,
-        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None = None,
+        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]] = None,
         return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension | None = None,
         **kwargs,
@@ -1325,6 +1239,9 @@ class BaseImageProcessor(ImageProcessingMixin):
 
     @auto_docstring
     def preprocess(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
+        """
+        Preprocess an image or a batch of images.
+        """
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_kwargs_names)
 
         # Perform type validation on received kwargs
@@ -1358,7 +1275,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         *args,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: str | "torch.device" | None = None,
+        device: Optional[Union[str, "torch.device"]] = None,
         **kwargs: Unpack[ImagesKwargs],
     ) -> BatchFeature:
         """

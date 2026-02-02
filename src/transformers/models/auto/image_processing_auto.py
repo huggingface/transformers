@@ -47,8 +47,8 @@ from .configuration_auto import (
 logger = logging.get_logger(__name__)
 
 # These image processors use Lanczos interpolation, which is not supported by fast image processors.
-# To avoid important differences in outputs, we default to using the python backend for these processors.
-DEFAULT_TO_PYTHON_BACKEND_IMAGE_PROCESSORS = [
+# To avoid important differences in outputs, we default to using the PIL backend for these processors.
+DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS = [
     "ChameleonImageProcessor",
     "FlavaImageProcessor",
     "Idefics3ImageProcessor",
@@ -451,10 +451,10 @@ class AutoImageProcessor:
                 If a fast image processor is not available for a given model, a normal numpy-based image processor
                 is returned instead.
             backend (`str`, *optional*, defaults to `"auto"`):
-                Backend to use for image processing. Can be `"auto"`, `"python"`, or `"torchvision"`.
-                - `"auto"`: Uses torchvision if available, otherwise python
+                Backend to use for image processing. Can be `"auto"`, `"pil"`, or `"torchvision"`.
+                - `"auto"`: Uses torchvision if available, otherwise pil
                 - `"torchvision"`: Uses GPU-accelerated TorchVision operations (faster, requires torchvision)
-                - `"python"`: Uses NumPy/PIL operations (more portable, CPU-only)
+                - `"pil"`: Uses NumPy/PIL operations (more portable, CPU-only)
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
                 If `False`, then this function returns just the final image processor object. If `True`, then this
                 functions returns a `Tuple(image_processor, unused_kwargs)` where *unused_kwargs* is a dictionary
@@ -495,11 +495,11 @@ class AutoImageProcessor:
         if use_fast is not None:
             warnings.warn(
                 "The `use_fast` argument is deprecated and will be removed in v5 of Transformers. "
-                "Use `backend='torchvision'` for fast processing or `backend='python'` for standard processing.",
+                "Use `backend='torchvision'` for fast processing or `backend='pil'` for standard processing.",
                 FutureWarning,
                 stacklevel=2,
             )
-            backend = "torchvision" if use_fast else "python"
+            backend = "torchvision" if use_fast else "pil"
         kwargs["backend"] = backend
 
         trust_remote_code = kwargs.pop("trust_remote_code", None)

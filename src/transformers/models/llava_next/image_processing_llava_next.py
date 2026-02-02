@@ -13,12 +13,14 @@
 # limitations under the License.
 """Image processor class for LLaVa-NeXT."""
 
+from typing import Optional, Union
+
 import numpy as np
 
 from ...image_processing_utils import (
     BaseImageProcessor,
     BatchFeature,
-    PythonBackend,
+    PilBackend,
     TorchVisionBackend,
     divide_to_patches,
     get_patch_output_size,
@@ -33,11 +35,12 @@ from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import ImagesKwargs
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
 
 
@@ -74,7 +77,7 @@ class LlavaNextTorchVisionBackend(TorchVisionBackend):
         self,
         image: "torch.Tensor",
         target_resolution: tuple,
-        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None,
+        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]],
         input_data_format: ChannelDimension,
     ) -> "torch.Tensor":
         """Resizes an image to a target resolution while maintaining aspect ratio."""
@@ -104,7 +107,7 @@ class LlavaNextTorchVisionBackend(TorchVisionBackend):
         grid_pinpoints: list[list[int]],
         size: tuple,
         patch_size: int,
-        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None,
+        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]],
     ) -> list["torch.Tensor"]:
         """Process an image with variable resolutions by dividing it into patches."""
         if not isinstance(grid_pinpoints, list):
@@ -151,7 +154,7 @@ class LlavaNextTorchVisionBackend(TorchVisionBackend):
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
-        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None,
+        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -228,8 +231,8 @@ class LlavaNextTorchVisionBackend(TorchVisionBackend):
         )
 
 
-class LlavaNextPythonBackend(PythonBackend):
-    """Python backend for LLaVA-NeXT with patch processing support."""
+class LlavaNextPilBackend(PilBackend):
+    """PIL backend for LLaVA-NeXT with patch processing support."""
 
     def _get_padding_size(self, original_resolution: tuple, target_resolution: tuple):
         """Get padding size for patching (returns tuple format for np.pad)."""
@@ -335,7 +338,7 @@ class LlavaNextPythonBackend(PythonBackend):
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
-        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None,
+        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -420,7 +423,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
 
     _backend_classes = {
         "torchvision": LlavaNextTorchVisionBackend,
-        "python": LlavaNextPythonBackend,
+        "pil": LlavaNextPilBackend,
     }
 
     resample = PILImageResampling.BICUBIC
@@ -436,6 +439,12 @@ class LlavaNextImageProcessor(BaseImageProcessor):
     do_convert_rgb = True
     do_pad = True
     image_grid_pinpoints = [[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]
+
+    @auto_docstring
+    def preprocess(
+        self, images: ImageInput | list[ImageInput], *args, **kwargs: Unpack[LlavaNextImageProcessorKwargs]
+    ) -> BatchFeature:
+        return super().preprocess(images, *args, **kwargs)
 
 
 __all__ = ["LlavaNextImageProcessor"]

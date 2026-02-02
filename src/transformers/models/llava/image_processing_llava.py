@@ -18,7 +18,7 @@ import numpy as np
 from ...image_processing_utils import (
     BaseImageProcessor,
     BatchFeature,
-    PythonBackend,
+    PilBackend,
     TorchVisionBackend,
 )
 from ...image_transforms import (
@@ -142,7 +142,7 @@ class LlavaTorchVisionBackend(TorchVisionBackend):
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
-class LlavaPythonBackend(PythonBackend):
+class LlavaPilBackend(PilBackend):
     def pad_to_square(
         self,
         image: np.ndarray,
@@ -237,7 +237,7 @@ class LlavaImageProcessor(BaseImageProcessor):
 
     _backend_classes = {
         "torchvision": LlavaTorchVisionBackend,
-        "python": LlavaPythonBackend,
+        "pil": LlavaPilBackend,
     }
 
     resample = PILImageResampling.BICUBIC

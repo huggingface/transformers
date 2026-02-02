@@ -58,7 +58,7 @@ UNROLL_KWARGS_METHODS = {
 }
 
 UNROLL_KWARGS_CLASSES = {
-    "ImageProcessorFast",
+    "BaseImageProcessor",
     "ProcessorMixin",
 }
 
@@ -1176,8 +1176,8 @@ class ClassDocstring:
     The {model_name} Model for causal language modeling.
     """
 
-    ImageProcessorFast = r"""
-    Constructs a fast {model_name} image processor.
+    ImageProcessor = r"""
+    Constructs a {model_name} image processor.
     """
 
     Backbone = r"""
