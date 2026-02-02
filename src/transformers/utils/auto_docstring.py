@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import inspect
-import logging
 import os
 import textwrap
 from pathlib import Path
@@ -29,9 +28,9 @@ from .doc import (
     _prepare_output_docstrings,
 )
 from .generic import ModelOutput
+from . import logging
 
-
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 PATH_TO_TRANSFORMERS = Path("src").resolve() / "transformers"

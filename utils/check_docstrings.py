@@ -37,7 +37,6 @@ import ast
 import enum
 import glob
 import inspect
-import logging
 import operator as op
 import os
 import re
@@ -49,6 +48,7 @@ from typing import Any
 from check_repo import ignore_undocumented
 from git import Repo
 
+from transformers import logging
 from transformers.utils import direct_transformers_import
 from transformers.utils.auto_docstring import (
     ImageProcessorArgs,
@@ -61,7 +61,7 @@ from transformers.utils.auto_docstring import (
 )
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @dataclass

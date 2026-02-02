@@ -402,25 +402,17 @@ class AutoProcessor:
 
         # At this stage, there doesn't seem to be a `Processor` class available for this model, so let's try a
         # tokenizer.
-        try:
-            return AutoTokenizer.from_pretrained(
-                pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-            )
-        except Exception as e:
-            logger.debug(f"Could not load as tokenizer: {e}")
+        for klass, klass_type in (
+            (AutoTokenizer, "tokenizer"),
+            (AutoImageProcessor, "image processor"),
+            (AutoFeatureExtractor, "feature extractor"),
+        ):
             try:
-                return AutoImageProcessor.from_pretrained(
+                return getattr(klass, "from_pretrained")(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
             except Exception as e:
-                logger.debug(f"Could not load as image processor: {e}")
-
-            try:
-                return AutoFeatureExtractor.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                )
-            except Exception as e:
-                logger.debug(f"Could not load as feature extractor: {e}")
+                logger.debug(f"Could not load as {klass_type}: {e}")
 
         raise ValueError(
             f"Unrecognized processing class in {pretrained_model_name_or_path}. Can't instantiate a processor, a "

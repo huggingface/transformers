@@ -1,5 +1,4 @@
 import argparse
-import logging
 import os
 import re
 import subprocess
@@ -9,8 +8,9 @@ from urllib.request import Request, urlopen
 
 from huggingface_hub import paper_info
 
+from transformers import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 ROOT = os.getcwd().split("utils")[0]

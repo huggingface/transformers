@@ -21,7 +21,6 @@ version of `tests/utils/tiny_model_summary.json`. That updated file should be me
 
 import argparse
 import json
-import logging
 import multiprocessing
 import os
 import time
@@ -30,12 +29,12 @@ from create_dummy_models import COMPOSITE_MODELS, create_tiny_models
 from huggingface_hub import HfApi
 
 import transformers
+from transformers import logging
 from transformers import AutoFeatureExtractor, AutoImageProcessor, AutoTokenizer
 from transformers.image_processing_utils import BaseImageProcessor
 
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def get_all_model_names():

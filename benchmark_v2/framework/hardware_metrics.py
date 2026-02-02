@@ -217,6 +217,7 @@ class GPUMonitor:
                 gpu_memory_used.append(memory_used)
                 timestamps.append(time.time())
             except Exception as e:
+                # Skips failed measurements
                 logger.debug(f"Failed to collect GPU metrics sample: {e}")
 
             stop = connection.poll(sample_interval_sec)
