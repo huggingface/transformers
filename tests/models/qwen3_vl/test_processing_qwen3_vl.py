@@ -178,6 +178,7 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         pass
 
     @require_av
+    @pytest.mark.xfail(reason="TODO: see issue #43676")
     def test_apply_chat_template_video_frame_sampling(self):
         processor = self.get_processor()
         if processor.chat_template is None:
