@@ -40,7 +40,7 @@ _torch_distributed_available = torch.distributed.is_available()
 
 if TYPE_CHECKING:
     from .integrations.tensor_parallel import TensorParallelLayer
-    from .modeling_utils import PreTrainedModel
+    from .modeling_utils import LoadStateDictConfig, PreTrainedModel
     from .quantizers import HfQuantizer
 
 
@@ -967,9 +967,8 @@ def rename_source_key(
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
-    load_config: Any,
+    load_config: LoadStateDictConfig,
     tp_plan: dict[str, str] | None,
-    dtype_plan: dict | None = None,
     disk_offload_index: dict | None = None,
 ):
     r"""
