@@ -1568,7 +1568,9 @@ class ModelUtilsTest(TestCasePlus):
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
                     _, loading_info = ModelWithHead.from_pretrained(tmp_dir, output_loading_info=True)
-            self.assertIn("added_key | UNEXPECTED", cl.out)
+            # Will be colored if terminal is interactive
+            expected_output = "added_key | [38;5;208mUNEXPECTED" if sys.stdout.isatty() else "added_key | UNEXPECTED"
+            self.assertIn(expected_output, cl.out)
             self.assertEqual(loading_info["unexpected_keys"], {"added_key"})
 
     def test_warn_if_padding_and_no_attention_mask(self):

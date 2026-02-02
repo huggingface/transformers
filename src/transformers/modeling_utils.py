@@ -26,7 +26,7 @@ from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from enum import Enum
 from functools import partial, wraps
 from itertools import cycle
@@ -126,7 +126,7 @@ from .utils.import_utils import (
     is_sagemaker_mp_enabled,
     is_tracing,
 )
-from .utils.loading_report import log_state_dict_report
+from .utils.loading_report import LoadStateDictInfo, log_state_dict_report
 from .utils.quantization_config import QuantizationMethod
 
 
@@ -170,13 +170,14 @@ class LoadStateDictConfig:
 
     pretrained_model_name_or_path: str | None = None
     download_kwargs: DownloadKwargs | None = field(default_factory=DownloadKwargs)
-    use_safetensors: bool = True
+    use_safetensors: bool | None = None
     ignore_mismatched_sizes: bool = False
     sharded_metadata: dict | None = None
     device_map: dict | None = None
     disk_offload_folder: str | None = None
     offload_buffers: bool = False
     dtype: torch.dtype | None = None
+    dtype_plan: dict = field(default_factory=dict)
     hf_quantizer: HfQuantizer | None = None
     device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None
     weights_only: bool = True
@@ -185,21 +186,6 @@ class LoadStateDictConfig:
     @property
     def is_quantized(self) -> bool:
         return self.hf_quantizer is not None
-
-
-@dataclass
-class LoadStateDictInfo:
-    """
-    Return container for state-dict loading results and diagnostics.
-    This simplifies the code a bit.
-    """
-
-    missing_keys: set[str]
-    unexpected_keys: set[str]
-    mismatched_keys: set[tuple[str, torch.Size]]
-    disk_offload_index: dict[str, str] | None
-    error_msgs: list[str]
-    conversion_errors: set[str]
 
 
 def is_local_dist_rank_0():
@@ -1140,8 +1126,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # to also prevent bfloat16 casting, use the _keep_in_fp32_modules_strict flag
     _keep_in_fp32_modules_strict = None
 
-    dtype_plan: dict[str, torch.dtype] | None = None
-
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
     _keys_to_ignore_on_load_missing = None
@@ -1319,12 +1303,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
         self._keep_in_fp32_modules_strict = copy.copy(self.__class__._keep_in_fp32_modules_strict)
         self._tied_weights_keys = copy.copy(self.__class__._tied_weights_keys)
-        self.dtype_plan = {}
-
-        if isinstance(self._keep_in_fp32_modules, list):
-            self.dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules, torch.float32))
-        if isinstance(self._keep_in_fp32_modules_strict, list):
-            self.dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules_strict, torch.float32))
 
         self._no_split_modules = self._no_split_modules or []
         _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
@@ -3617,6 +3595,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return init_contexts
 
+    def _get_dtype_plan(self, dtype: torch.dtype) -> dict:
+        """Create the dtype_plan describing modules/parameters that should use the `keep_in_fp32` flag."""
+        dtype_plan = {}
+
+        # The _keep_in_fp32_modules flag is only used to avoid bf16 -> fp16 casting precision issues. It was introduced
+        # in case of force loading a model that should stay in bf16 in fp16
+        # See https://github.com/huggingface/transformers/issues/20287 for details.
+        if self._keep_in_fp32_modules is not None and dtype == torch.float16:
+            dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules, torch.float32))
+
+        # The _keep_in_fp32_modules_strict was introduced to always force upcast to fp32, for both fp16 and bf16
+        if self._keep_in_fp32_modules_strict is not None and dtype in (torch.float16, torch.bfloat16):
+            dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules_strict, torch.float32))
+
+        return dtype_plan
+
     def set_use_kernels(self, use_kernels, kernel_config: KernelConfig | None = None):
         """
         Set whether or not to use the `kernels` library to kernelize some layers of the model.
@@ -4067,6 +4061,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     use_kernels=use_kernels,
                 )
 
+        # Create the dtype_plan to potentially use the `keep_in_fp32` flags (this needs to be called on the already
+        # instantiated model, as the flags can be modified by instances sometimes)
+        dtype_plan = model._get_dtype_plan(dtype)
+
         # Obtain the weight conversion mapping for this model if any are registered
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
@@ -4086,6 +4084,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             disk_offload_folder=offload_folder,
             offload_buffers=offload_buffers,
             dtype=dtype,
+            dtype_plan=dtype_plan,
             hf_quantizer=hf_quantizer,
             device_mesh=device_mesh,
             weights_only=weights_only,
@@ -4093,8 +4092,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             use_safetensors=use_safetensors,
             download_kwargs=download_kwargs,
         )
-        load_info = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)
-        load_info = cls._finalize_load_state_dict(model, load_config, load_info)
+        loading_info, disk_offload_index = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)
+        loading_info = cls._finalize_model_loading(model, load_config, loading_info)
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)
 
@@ -4113,9 +4112,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If the device_map has more than 1 device: dispatch model with hooks on all devices
         if device_map is not None and len(set(device_map.values())) > 1:
-            accelerate_dispatch(
-                model, hf_quantizer, device_map, offload_folder, load_info.disk_offload_index, offload_buffers
-            )
+            accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, disk_offload_index, offload_buffers)
 
         if hf_quantizer is not None:
             model.hf_quantizer = hf_quantizer
@@ -4126,7 +4123,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if _adapter_model_path is not None:
             if token is not None:
                 adapter_kwargs["token"] = token
-            load_info = model.load_adapter(
+            loading_info = model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,
                 load_config=load_config,
@@ -4134,23 +4131,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         if output_loading_info:
-            loading_info = {
-                "missing_keys": load_info.missing_keys,
-                "unexpected_keys": load_info.unexpected_keys,
-                "mismatched_keys": load_info.mismatched_keys,
-                "error_msgs": load_info.error_msgs,
-            }
-            return model, loading_info
+            return model, loading_info.to_dict()
         return model
 
-    @classmethod
+    @staticmethod
     def _load_pretrained_model(
-        cls,
         model: "PreTrainedModel",
         state_dict: dict | None,
         checkpoint_files: list[str] | None,
         load_config: LoadStateDictConfig,
-    ) -> LoadStateDictInfo:
+    ) -> tuple[LoadStateDictInfo, dict]:
+        """Perform the actual loading of some checkpoints into a `model`, by reading them from disk and dispatching them accordingly."""
         is_quantized = load_config.is_quantized
         is_hqq_or_quark = is_quantized and load_config.hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
@@ -4194,7 +4185,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 state_dict = merged_state_dict
             error_msgs, missing_keys = _load_state_dict_into_zero3_model(model, state_dict, load_config)
             # This is not true but for now we assume only best-case scenario with deepspeed, i.e. perfectly matching checkpoints
-            unexpected_keys, mismatched_keys, conversion_errors = set(), set(), set()
+            loading_info = LoadStateDictInfo(
+                missing_keys=missing_keys,
+                error_msgs=error_msgs,
+                unexpected_keys=set(),
+                mismatched_keys=set(),
+                conversion_errors={},
+            )
         else:
             all_pointer = set()
             if state_dict is not None:
@@ -4214,73 +4211,58 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else:
                 raise ValueError("Neither a state dict nor checkpoint files were found.")
 
-            missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, conversion_errors = (
-                convert_and_load_state_dict_in_model(
-                    model=model,
-                    state_dict=merged_state_dict,
-                    load_config=load_config,
-                    tp_plan=model._tp_plan,
-                    dtype_plan=model.dtype_plan,
-                    disk_offload_index=disk_offload_index,
-                )
+            loading_info, disk_offload_index = convert_and_load_state_dict_in_model(
+                model=model,
+                state_dict=merged_state_dict,
+                load_config=load_config,
+                tp_plan=model._tp_plan,
+                disk_offload_index=disk_offload_index,
             )
 
             # finally close all opened file pointers
             for k in all_pointer:
                 k.__exit__(None, None, None)
 
-        return LoadStateDictInfo(
-            missing_keys=missing_keys,
-            unexpected_keys=unexpected_keys,
-            mismatched_keys=mismatched_keys,
-            disk_offload_index=disk_offload_index,
-            error_msgs=error_msgs,
-            conversion_errors=conversion_errors,
-        )
+        return loading_info, disk_offload_index
 
     @staticmethod
-    def _finalize_load_state_dict(
-        model,
-        load_config: LoadStateDictConfig,
-        load_info: LoadStateDictInfo,
+    def _finalize_model_loading(
+        model, load_config: LoadStateDictConfig, loading_info: LoadStateDictInfo
     ) -> LoadStateDictInfo:
-        # TODO @ArthurZucker this will be in a separate function to allows people not to run this
-        # for more granularity
+        """Perform all post processing operations after having loaded some checkpoints into a model, such as moving
+        missing keys from meta device to their expected device, reinitializing missing weights according to proper
+        distributions, tying the weights and logging the loading report."""
 
         # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
         model.mark_tied_weights_as_initialized()
 
         # Move missing (and potentially mismatched) keys and non-persistent buffers back to their expected device from
         # meta device (because they were not moved when loading the weights as they were not in the loaded state dict)
-        missing_and_mismatched = load_info.missing_keys | {k[0] for k in load_info.mismatched_keys}
         model._move_missing_keys_from_meta_to_device(
-            missing_and_mismatched, load_config.device_map, load_config.device_mesh, load_config.hf_quantizer
+            loading_info.missing_and_mismatched(),
+            load_config.device_map,
+            load_config.device_mesh,
+            load_config.hf_quantizer,
         )
 
         # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialized` flag)
         model._initialize_missing_keys(load_config.is_quantized)
 
         # Tie the weights
-        model.tie_weights(missing_keys=load_info.missing_keys, recompute_mapping=False)
+        model.tie_weights(missing_keys=loading_info.missing_keys, recompute_mapping=False)
 
         # Adjust missing and unexpected keys
-        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
-            load_info.missing_keys, load_info.unexpected_keys
-        )
+        model._adjust_missing_and_unexpected_keys(loading_info)
 
         log_state_dict_report(
             model=model,
-            load_config=load_config,
+            pretrained_model_name_or_path=load_config.pretrained_model_name_or_path,
+            ignore_mismatched_sizes=load_config.ignore_mismatched_sizes,
+            loading_info=loading_info,
             logger=logger,
-            error_msgs=load_info.error_msgs,
-            unexpected_keys=unexpected_keys,
-            missing_keys=missing_keys,
-            mismatched_keys=load_info.mismatched_keys,
-            mismatched_shapes=load_info.mismatched_keys,
-            conversion_errors=load_info.conversion_errors,
         )
 
-        return replace(load_info, missing_keys=missing_keys, unexpected_keys=unexpected_keys)
+        return loading_info
 
     def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
         module_keys = {".".join(key.split(".")[:-1]) for key in names}
@@ -4536,11 +4518,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             self.initialize_weights()
 
-    def _adjust_missing_and_unexpected_keys(
-        self, missing_keys: set[str], unexpected_keys: set[str]
-    ) -> tuple[set[str], set[str]]:
+    def _adjust_missing_and_unexpected_keys(self, loading_info: LoadStateDictInfo) -> None:
         """Adjust the `missing_keys` and `unexpected_keys` based on current model's exception rules, to avoid
-        raising unneeded warnings/errors.
+        raising unneeded warnings/errors. This is performed in-place.
         """
         # Old checkpoints may have keys for rotary_emb.inv_freq forach layer, however we moved this buffer to the main model
         # (so the buffer name has changed). Remove them in such a case. This is another exception that was not added to
@@ -4558,13 +4538,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Clean-up missing keys
         if ignore_missing_regex is not None:
-            missing_keys = {key for key in missing_keys if ignore_missing_regex.search(key) is None}
+            loading_info.missing_keys = {
+                key for key in loading_info.missing_keys if ignore_missing_regex.search(key) is None
+            }
 
         # Clean-up unexpected keys
         if ignore_unexpected_regex is not None:
-            unexpected_keys = {key for key in unexpected_keys if ignore_unexpected_regex.search(key) is None}
-
-        return missing_keys, unexpected_keys
+            loading_info.unexpected_keys = {
+                key for key in loading_info.unexpected_keys if ignore_unexpected_regex.search(key) is None
+            }
 
     def mark_tied_weights_as_initialized(self):
         """Adds the `_is_hf_initialized` flag on parameters that will be tied, in order to avoid initializing them
