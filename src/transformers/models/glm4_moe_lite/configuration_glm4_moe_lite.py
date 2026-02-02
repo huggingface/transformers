@@ -20,10 +20,10 @@
 
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class Glm4MoeLiteConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Glm4MoeLiteConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4MoeLiteModel`]. It is used to instantiate an DeepSeek
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

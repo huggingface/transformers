@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib
 import json
 import os
 import shutil
@@ -212,31 +211,18 @@ class AutoTokenizerTest(unittest.TestCase):
 
     @require_tokenizers
     def test_voxtral_tokenizer_converts_from_tekken(self):
+        # Test that voxtral tokenizer loads correctly when falling back to TokenizersBackend
+        # (i.e., when MistralCommonBackend is not available)
         repo_id = "mistralai/Voxtral-Mini-3B-2507"
-        tokenization_auto = transformers.models.auto.tokenization_auto
-        # Save original module-level objects so we can restore them after reload
-        original_tokenizer_mapping = tokenization_auto.TOKENIZER_MAPPING
-        original_registered_classes = tokenization_auto.REGISTERED_TOKENIZER_CLASSES
-        original_fast_aliases = tokenization_auto.REGISTERED_FAST_ALIASES
-        try:
-            with (
-                mock.patch("transformers.utils.import_utils.is_mistral_common_available", return_value=False),
-                mock.patch(
-                    "transformers.models.auto.tokenization_auto.is_mistral_common_available", return_value=False
-                ),
-            ):
-                tokenization_auto = importlib.reload(tokenization_auto)
-                tokenizer = tokenization_auto.AutoTokenizer.from_pretrained(repo_id)  # should not raise
 
-            self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
-            self.assertTrue(tokenizer.is_fast)
-            self.assertGreater(len(tokenizer("Voxtral")["input_ids"]), 0)
-        finally:
-            # Restore original module objects so other tests aren't affected by the reload
-            tokenization_auto = importlib.reload(transformers.models.auto.tokenization_auto)
-            tokenization_auto.TOKENIZER_MAPPING = original_tokenizer_mapping
-            tokenization_auto.REGISTERED_TOKENIZER_CLASSES = original_registered_classes
-            tokenization_auto.REGISTERED_FAST_ALIASES = original_fast_aliases
+        # Simulate the fallback path by temporarily changing the mapping for voxtral
+        # from MistralCommonBackend to TokenizersBackend
+        with mock.patch.dict(TOKENIZER_MAPPING_NAMES, {"voxtral": "TokenizersBackend"}):
+            tokenizer = AutoTokenizer.from_pretrained(repo_id)
+
+        self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
+        self.assertTrue(tokenizer.is_fast)
+        self.assertGreater(len(tokenizer("Voxtral")["input_ids"]), 0)
 
     @require_tokenizers
     def test_do_lower_case(self):

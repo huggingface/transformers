@@ -21,10 +21,10 @@
 from typing import Any
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class T5GemmaModuleConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class T5GemmaModuleConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`T5GemmaModuleModel`]. It is used to instantiate an T5GemmaModule
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

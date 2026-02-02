@@ -1095,9 +1095,9 @@ class Florence2VisionChannelAttention(nn.Module):
 
         scale = num_tokens**-0.5
         # Channel-to-channel attention within groups:
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
         hidden_states, _ = attention_interface(
             self,
             query,
@@ -1220,9 +1220,9 @@ class Florence2VisionWindowAttention(nn.Module):
         qkv = qkv.permute(2, 0, 3, 1, 4)
         query, key, value = qkv.unbind(0)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         windowed_hidden_states, _ = attention_interface(
             self,

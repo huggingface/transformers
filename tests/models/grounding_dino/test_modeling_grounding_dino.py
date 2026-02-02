@@ -322,6 +322,19 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_load_save_without_tied_weights(self):
         pass
 
+    def test_tie_weights_is_not_modified(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.tie_word_embeddings = True
+
+        config.decoder_bbox_embed_share = False
+        model = GroundingDinoForObjectDetection(config)
+        self.assertFalse(r"bbox_embed.(?![0])\d+" in model._tied_weights_keys)
+
+        # if we update config attr, model's tied weights keys also change
+        config.decoder_bbox_embed_share = True
+        model = GroundingDinoForObjectDetection(config)
+        self.assertTrue(r"bbox_embed.(?![0])\d+" in model._tied_weights_keys)
+
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
