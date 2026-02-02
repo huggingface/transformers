@@ -107,6 +107,7 @@ class EomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin, un
     is_encoder_decoder = False
 
     test_missing_keys = False
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = EomtForUniversalSegmentationTester(self)

@@ -42,7 +42,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPa
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
 
@@ -844,7 +844,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         seq_idx: torch.IntTensor | None = None,
         **kwargs,
     ):
-        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
+        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask, seq_idx)
         if seq_idx is not None:
             raise NotImplementedError(
