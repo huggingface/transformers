@@ -115,10 +115,14 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         # Also, reinit all non-persistemt buffers if any!
         if hasattr(module, "init_non_persistent_buffers"):
             module.init_non_persistent_buffers()
-        elif isinstance(module, nn.BatchNorm2d) and getattr(module, "running_mean", None) is not None:
-            init.zeros_(module.running_mean)
-            init.ones_(module.running_var)
-            init.zeros_(module.num_batches_tracked)
+        elif isinstance(module, nn.BatchNorm2d):
+            # TimmWrapper always creates models with pretrained=False, so buffers are never pre-loaded
+            # Always initialize buffers (handles both meta device and to_empty() cases)
+            running_mean = getattr(module, "running_mean", None)
+            if running_mean is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
 
     def _timm_model_supports_gradient_checkpointing(self):
         """

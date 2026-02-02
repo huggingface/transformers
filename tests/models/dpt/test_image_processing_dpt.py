@@ -306,6 +306,11 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Compare with non-reduced label to see if it's reduced by 1
             self.assertEqual(encoding["labels"][first_non_zero_coords].item(), first_non_zero_value - 1)
 
+            # Ensure reduce label returns the same number of masks
+            image, map = prepare_semantic_batch_inputs()
+            encoding = image_processor(image, map, return_tensors="pt")
+            self.assertTrue(len(encoding["labels"]) == len(map))
+
     def test_slow_fast_equivalence(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")

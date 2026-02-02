@@ -1,7 +1,7 @@
 import os
 import zipfile
 
-import httpx
+import requests
 from get_ci_error_statistics import download_artifact, get_artifacts_links
 
 
@@ -21,7 +21,7 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
 
     if not workflow_id:
         workflow_run_id = os.environ["GITHUB_RUN_ID"]
-        workflow_run = httpx.get(
+        workflow_run = requests.get(
             f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}", headers=headers
         ).json()
         workflow_id = workflow_run["workflow_id"]
@@ -30,10 +30,10 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
     # On `main` branch + event being `schedule` + not returning PRs + only `num_runs` results
     url += f"?branch=main&exclude_pull_requests=true&per_page={num_runs}"
 
-    result = httpx.get(f"{url}&event=schedule", headers=headers).json()
+    result = requests.get(f"{url}&event=schedule", headers=headers).json()
     workflow_runs = result["workflow_runs"]
     if len(workflow_runs) == 0:
-        result = httpx.get(f"{url}&event=workflow_run", headers=headers).json()
+        result = requests.get(f"{url}&event=workflow_run", headers=headers).json()
         workflow_runs = result["workflow_runs"]
 
     return workflow_runs
@@ -47,7 +47,7 @@ def get_last_daily_ci_run(token, workflow_run_id=None, workflow_id=None, commit_
 
     workflow_run = None
     if workflow_run_id is not None and workflow_run_id != "":
-        workflow_run = httpx.get(
+        workflow_run = requests.get(
             f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}", headers=headers
         ).json()
         return workflow_run

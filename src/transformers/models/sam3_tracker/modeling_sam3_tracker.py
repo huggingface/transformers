@@ -31,6 +31,7 @@ from transformers.utils.generic import OutputRecorder
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -339,9 +340,9 @@ class Sam3TrackerAttention(nn.Module):
         key = self.k_proj(key).view(*new_shape).transpose(1, 2)
         value = self.v_proj(value).view(*new_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         if is_flash_attention_requested(self.config) and attention_similarity is not None:
             # Target guided masks are represented as float masks and are incompatible with Flash Attention
@@ -372,7 +373,7 @@ class Sam3TrackerAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Sam3TrackerTwoWayAttentionBlock(nn.Module):
+class Sam3TrackerTwoWayAttentionBlock(GradientCheckpointingLayer):
     def __init__(self, config: Sam3TrackerMaskDecoderConfig, skip_first_layer_pe: bool = False):
         """
         A transformer block with four layers:

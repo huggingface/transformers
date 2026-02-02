@@ -393,9 +393,9 @@ class T5GemmaCrossAttention(Gemma2Attention):
             key_states = curr_past_key_values.layers[self.layer_idx].keys
             value_states = curr_past_key_values.layers[self.layer_idx].values
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1002,7 +1002,7 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
 
 class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.out_proj.weight": "model.decoder.embed_tokens.weight"}
-    _tp_plan = {"lm_head.out_proj": "colwise_rep"}
+    _tp_plan = {"lm_head.out_proj": "colwise_gather_output"}
     _pp_plan = {"lm_head.out_proj": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: T5GemmaConfig):

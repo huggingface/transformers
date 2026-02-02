@@ -186,9 +186,9 @@ class Glm4vMoeTextAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -685,9 +685,9 @@ class Glm4vMoeVisionAttention(nn.Module):
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
@@ -1686,14 +1686,14 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Glm4vMoeForConditionalGeneration
 
-        >>> model = Glm4vMoeForConditionalGeneration.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
-        >>> processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
+        >>> model = Glm4vMoeForConditionalGeneration.from_pretrained("zai-org/GLM-4.1V-9B-Thinking")
+        >>> processor = AutoProcessor.from_pretrained("zai-org/GLM-4.1V-9B-Thinking")
 
         >>> messages = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "image"},
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
                     {"type": "text", "text": "What is shown in this image?"},
                 ],
             },
@@ -1790,7 +1790,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
             **kwargs,
         )
 
-        # GLM-4.1V position_ids are prepareed with rope_deltas in forward
+        # GLM-V position_ids are prepared with rope_deltas in forward
         model_inputs["position_ids"] = None
 
         if not is_first_iteration and use_cache:
