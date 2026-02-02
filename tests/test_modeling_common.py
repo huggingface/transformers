@@ -882,42 +882,43 @@ class ModelTesterMixin:
         """Test that both the `_keep_in_fp32` and `_keep_in_fp32_strict` targets match some layers, to avoid any typo"""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            model = model_class(copy.deepcopy(config))
-            # Make sure the modules correctly exist if the flag is active
-            if model._keep_in_fp32_modules is None and model._keep_in_fp32_modules_strict is None:
-                self.skipTest(
-                    reason=f"{model_class.__name__} has no _keep_in_fp32_modules nor _keep_in_fp32_modules_strict attribute defined"
-                )
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config))
+                # Make sure the modules correctly exist if the flag is active
+                if model._keep_in_fp32_modules is None and model._keep_in_fp32_modules_strict is None:
+                    self.skipTest(
+                        reason=f"{model_class.__name__} has no _keep_in_fp32_modules nor _keep_in_fp32_modules_strict attribute defined"
+                    )
 
-            all_parameters = {name for name, _ in self.named_parameters() if len(name) > 0}
-            unique_module_names = set()
-            # Get all unique module names in the module graph, without the prefixes
-            for param in all_parameters:
-                unique_module_names.update(
-                    [name for name in param.split(".") if not name.isnumeric() and name not in ["weight", "bias"]]
-                )
-            # Check that every module in the keep_in_fp32 list is part of the module graph
-            if model._keep_in_fp32_modules is not None:
-                non_existent = []
-                for module in model._keep_in_fp32_modules:
-                    if module not in unique_module_names:
-                        non_existent.append(module)
-                self.assertEmpty(
-                    non_existent,
-                    f"{non_existent} were specified in the `_keep_in_fp32_modules` list, but are not part of the modules in"
-                    f" {model_class.__name__}",
-                )
+                all_parameters = {name for name, _ in model.named_parameters() if len(name) > 0}
+                unique_module_names = set()
+                # Get all unique module names in the module graph, without the prefixes
+                for param in all_parameters:
+                    unique_module_names.update(
+                        [name for name in param.split(".") if not name.isnumeric() and name not in ["weight", "bias"]]
+                    )
+                # Check that every module in the keep_in_fp32 list is part of the module graph
+                if model._keep_in_fp32_modules is not None:
+                    non_existent = []
+                    for module in model._keep_in_fp32_modules:
+                        if module not in unique_module_names:
+                            non_existent.append(module)
+                    self.assertTrue(
+                        len(non_existent) == 0,
+                        f"{non_existent} were specified in the `_keep_in_fp32_modules` list, but are not part of the modules in"
+                        f" {model_class.__name__}",
+                    )
 
-            if model._keep_in_fp32_modules_strict is not None:
-                non_existent = []
-                for module in model._keep_in_fp32_modules_strict:
-                    if module not in unique_module_names:
-                        non_existent.append(module)
-                self.assertEmpty(
-                    non_existent,
-                    f"{non_existent} were specified in the `_keep_in_fp32_modules_strict` list, but are not part of the modules in"
-                    f" {model_class.__name__}",
-                )
+                if model._keep_in_fp32_modules_strict is not None:
+                    non_existent = []
+                    for module in model._keep_in_fp32_modules_strict:
+                        if module not in unique_module_names:
+                            non_existent.append(module)
+                    self.assertTrue(
+                        len(non_existent) == 0,
+                        f"{non_existent} were specified in the `_keep_in_fp32_modules_strict` list, but are not part of the modules in"
+                        f" {model_class.__name__}",
+                    )
 
     def test_keep_in_fp32_modules(self):
         """Test that the flag `_keep_in_fp32_modules` is correctly respected."""

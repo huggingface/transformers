@@ -177,7 +177,7 @@ class LoadStateDictConfig:
     disk_offload_folder: str | None = None
     offload_buffers: bool = False
     dtype: torch.dtype | None = None
-    dtype_plan: dict | None = None
+    dtype_plan: dict = field(default_factory=dict)
     hf_quantizer: HfQuantizer | None = None
     device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None
     weights_only: bool = True
