@@ -30,7 +30,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -248,7 +248,7 @@ class Qwen2_5OmniAudioEncoderConfig(Qwen2AudioEncoderConfig):
         del self.encoder_layerdrop
 
 
-class Qwen2_5OmniTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Qwen2_5OmniTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2_5OmniThinkerForConditionalGeneration`]. It is used to instantiate an
     Qwen2.5-Omni-Thinker model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -535,7 +535,7 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-class Qwen2_5OmniTalkerConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2_5OmniTalkerForConditionalGeneration`]. It is used to instantiate an
     Qwen2.5-Omni-Talker model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -767,7 +767,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
 
-class Qwen2_5OmniDiTConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Qwen2_5OmniDiTConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of the Qwen2_5OmniToken2WavDiT used in the Qwen2.5-Omni-Token2Wav model.
     It defines the architecture of the DiT model, which is used for generating mel-spectrograms from tokens.
@@ -1576,9 +1576,9 @@ class Qwen2_5OmniAudioAttention(nn.Module):
         value_states = value_states.transpose(0, 1).unsqueeze(0)
         max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, _ = attention_interface(
             self,
@@ -1876,9 +1876,9 @@ class Qwen2_5OmniVisionAttention(nn.Module):
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         if is_flash_attention_requested(self.config):
             # Flash Attention 2: Use cu_seqlens for variable length attention

@@ -55,6 +55,8 @@ class DeepseekVLConfig(PreTrainedConfig):
             The config object or dictionary of the vision backbone.
         image_token_id (`int`, *optional*, defaults to 100015):
             The index representing image tokens in the model's token vocabulary.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -79,6 +81,7 @@ class DeepseekVLConfig(PreTrainedConfig):
         text_config: AutoConfig | None = None,
         vision_config: AutoConfig | None = None,
         image_token_id: int = 100015,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         if text_config is None:
@@ -100,6 +103,7 @@ class DeepseekVLConfig(PreTrainedConfig):
         self.text_config = text_config
         self.vision_config = vision_config
         self.image_token_id = image_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 
