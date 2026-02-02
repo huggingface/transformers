@@ -1315,8 +1315,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Current submodel should register its tied weights
         self.all_tied_weights_keys = self.get_expanded_tied_weights_keys(all_submodels=False)
         # Current submodel should register its `_keep_in_fp32_modules`
-        self._keep_in_fp32_modules = set(self.__class__._keep_in_fp32_modules)
-        self._keep_in_fp32_modules_strict = set(self.__class__._keep_in_fp32_modules_strict)
+        self._keep_in_fp32_modules = set(self._keep_in_fp32_modules or [])
+        self._keep_in_fp32_modules_strict = set(self._keep_in_fp32_modules_strict or [])
         # Current submodel must register its `_no_split_modules` as well
         self._no_split_modules = set(self._no_split_modules or [])
 
