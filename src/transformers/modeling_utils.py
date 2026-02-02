@@ -3594,17 +3594,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             init_contexts.append(torch.device("meta"))
 
         return init_contexts
-    
+
     def _get_dtype_plan(self, dtype: torch.dtype) -> dict | None:
         """Create the dtype_plan describing modules/parameters that should use the `keep_in_fp32` flag."""
         dtype_plan = {}
 
-        # Add _keep_in_fp32_modules only for FP16 loading
-        if isinstance(self._keep_in_fp32_modules, list) and dtype == torch.float16:
+        # The _keep_in_fp32_modules flag is only used to avoid bf16 -> fp16 casting precision issues. It was introduced
+        # in case of force loading a model that should stay in bf16 in fp16
+        # See https://github.com/huggingface/transformers/issues/20287 for details.
+        if self._keep_in_fp32_modules is not None and dtype == torch.float16:
             dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules, torch.float32))
 
-        # Add _keep_in_fp32_modules_strict for both FP16 and BF16
-        if isinstance(self._keep_in_fp32_modules_strict, list) and dtype in (torch.float16, torch.bfloat16):
+        # The _keep_in_fp32_modules_strict was introduced to always force upcast to fp32, for both fp16 and bf16
+        if self._keep_in_fp32_modules_strict is not None and dtype in (torch.float16, torch.bfloat16):
             dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules_strict, torch.float32))
 
         return dtype_plan
