@@ -148,7 +148,7 @@ class EdgeTamModelTester:
         fpn_hidden_size=32,
         memory_encoder_hidden_size=32,
         batch_size=2,
-        is_training=False,
+        is_training=True,
     ):
         self.parent = parent
         self.image_size = image_size
