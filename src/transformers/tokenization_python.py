@@ -414,7 +414,7 @@ class PythonBackend(PreTrainedTokenizerBase):
         # 1. Init the parent class
 
         self.tokens_trie = Trie()
-        
+
         # Initialize total_vocab_size early to avoid issues if get_vocab() is called early (custom tokenizers)
         self.total_vocab_size = 0
 
