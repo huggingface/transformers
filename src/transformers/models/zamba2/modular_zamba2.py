@@ -255,9 +255,9 @@ class Zamba2Attention(ZambaAttention):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -504,7 +504,7 @@ class Zamba2MambaMixer(nn.Module):
         if cache_params is not None and cache_params.has_previous_state:
             projected_states = self.in_proj(input_states.squeeze(1))
         else:
-            if attention_mask is not None and not torch.all(attention_mask==1):
+            if attention_mask is not None:
                 # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                 input_states = (input_states * attention_mask[:, :, None]).to(dtype)
             projected_states = self.in_proj(input_states)
@@ -536,7 +536,7 @@ class Zamba2MambaMixer(nn.Module):
                 )
                 cache_params.conv_states[self.layer_idx].copy_(conv_state)
                 hidden_states = self.act(self.conv1d(hidden_states).transpose(1,2))[:, :seq_len, :]     # [batch, intermediate_size, seq_len]
-                if attention_mask is not None and not torch.all(attention_mask==1):
+                if attention_mask is not None:
                     dtype = hidden_states.dtype
                     # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                     hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)

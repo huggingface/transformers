@@ -875,34 +875,46 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
     def wrapped_fn(func):
         @wraps(func)
         def wrapper(self, *args, **kwargs):
-            use_cache_arg_index = None
-            if "use_cache" in func.__code__.co_varnames:
-                use_cache_arg_index = func.__code__.co_varnames.index("use_cache") - 1  # -1 for self
+            args_with_config_defaults = [
+                "use_cache",
+                "vision_feature_layer",
+                "vision_feature_select_strategy",
+                "vision_aspect_ratio",
+            ]
+            for arg_name in args_with_config_defaults:
+                arg_index = None
+                if arg_name in func.__code__.co_varnames:
+                    arg_index = func.__code__.co_varnames.index(arg_name) - 1  # -1 for self
 
-            if (
-                use_cache_arg_index is not None
-                and len(args) > use_cache_arg_index
-                and args[use_cache_arg_index] is not None
-            ):
-                use_cache = args[use_cache_arg_index]
-            elif kwargs.get("use_cache") is not None:
-                use_cache = kwargs["use_cache"]
-            else:
-                use_cache = getattr(self.config, "use_cache", None)
-
-            if use_cache is not None:
-                if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
-                    logger.warning_once(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-                    )
-                    use_cache = False
-
-                if use_cache_arg_index is not None and len(args) > use_cache_arg_index:
-                    args = list(args)
-                    args[use_cache_arg_index] = use_cache
-                    args = tuple(args)
+                if arg_index is not None and len(args) > arg_index and args[arg_index] is not None:
+                    arg_value = args[arg_index]
+                elif kwargs.get(arg_name) is not None:
+                    arg_value = kwargs[arg_name]
                 else:
-                    kwargs["use_cache"] = use_cache
+                    arg_value = getattr(self.config, arg_name, None)
+
+                if arg_value is not None:
+                    # Arg-specific handling
+                    if arg_name == "use_cache":
+                        if getattr(self, "gradient_checkpointing", False) and self.training and arg_value:
+                            logger.warning_once(
+                                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+                            )
+                            arg_value = False
+                    elif arg_name == "vision_feature_select_strategy":
+                        valid_strategies = ["default", "full"]
+                        if arg_value not in valid_strategies:
+                            raise ValueError(
+                                f"`Unexpected select feature strategy: {arg_value}. "
+                                f"Please select from {valid_strategies}."
+                            )
+
+                    if arg_index is not None and len(args) > arg_index:
+                        args = list(args)
+                        args[arg_index] = arg_value
+                        args = tuple(args)
+                    else:
+                        kwargs[arg_name] = arg_value
 
             return_dict = kwargs.pop("return_dict", None)
             if return_dict is None:

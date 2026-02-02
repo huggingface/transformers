@@ -222,8 +222,12 @@ print(output_text)
 
 [[autodoc]] Ernie4_5_VL_MoeModel
     - forward
+    - get_video_features
+    - get_image_features
 
 ## Ernie4_5_VL_MoeForConditionalGeneration
 
 [[autodoc]] Ernie4_5_VL_MoeForConditionalGeneration
     - forward
+    - get_video_features
+    - get_image_features

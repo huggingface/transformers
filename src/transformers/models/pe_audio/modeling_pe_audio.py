@@ -412,9 +412,9 @@ class PeAudioEncoderAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -642,7 +642,7 @@ class PeAudioEncoder(PeAudioPreTrainedModel):
         input_values: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPooling:
         inputs_embeds, padding_mask = self.embedder(input_values, padding_mask=padding_mask)
         inputs_embeds, attention_mask = self.patch_embedder(inputs_embeds, padding_mask=padding_mask)
 

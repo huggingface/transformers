@@ -16,7 +16,7 @@
 from typing import Union
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -81,7 +81,7 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
 
         if pad_width + pad_height > 0:
             padding = (0, 0, pad_width, pad_height)
-            images = F.pad(images, padding)
+            images = tvF.pad(images, padding)
 
         return images
 

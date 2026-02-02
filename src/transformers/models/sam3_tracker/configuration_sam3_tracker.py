@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -179,7 +178,7 @@ class Sam3TrackerConfig(PreTrainedConfig):
     ... )
 
     >>> # Initializing a Sam3TrackerConfig with `"facebook/sam3_tracker.1_hiera_tiny"` style configuration
-    >>> configuration = Sam3Trackerconfig()
+    >>> configuration = Sam3TrackerConfig()
 
     >>> # Initializing a Sam3TrackerModel (with random weights) from the `"facebook/sam3_tracker.1_hiera_tiny"` style configuration
     >>> model = Sam3TrackerModel(configuration)

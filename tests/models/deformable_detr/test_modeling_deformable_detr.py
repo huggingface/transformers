@@ -195,7 +195,6 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     is_encoder_decoder = True
 
     test_missing_keys = False
-    test_torch_exportable = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -243,6 +242,25 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_deformable_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deformable_detr_object_detection_head_model(*config_and_inputs)
+
+    def test_tie_weights_is_not_modified(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.tie_word_embeddings = True
+
+        config.with_box_refine = True
+        config.two_stage = True
+
+        model = DeformableDetrForObjectDetection(config)
+        self.assertTrue("model.decoder.bbox_embed" in model._tied_weights_keys)
+        self.assertTrue("model.decoder.class_embed" in model._tied_weights_keys)
+
+        # if we update config attr, model's tied weights keys also change
+        config.with_box_refine = False
+        config.two_stage = False
+
+        model = DeformableDetrForObjectDetection(config)
+        self.assertFalse("model.decoder.bbox_embed" in model._tied_weights_keys)
+        self.assertFalse("model.decoder.class_embed" in model._tied_weights_keys)
 
     @unittest.skip(reason="Deformable DETR does not use inputs_embeds")
     def test_inputs_embeds(self):

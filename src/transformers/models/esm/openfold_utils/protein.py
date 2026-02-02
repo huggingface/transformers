@@ -81,9 +81,8 @@ def from_proteinnet_string(proteinnet_str: str) -> Protein:
     for g in groups:
         if g[0] == "[PRIMARY]":
             seq = g[1][0].strip()
-            for i in range(len(seq)):
-                if seq[i] not in residue_constants.restypes:
-                    seq[i] = "X"  # FIXME: strings are immutable
+            # Replace unknown residues with "X" (strings are immutable, so convert to list first)
+            seq = [char if char in residue_constants.restypes else "X" for char in seq]
             aatype = np.array(
                 [residue_constants.restype_order.get(res_symbol, residue_constants.restype_num) for res_symbol in seq]
             )

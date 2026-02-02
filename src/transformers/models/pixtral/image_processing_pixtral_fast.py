@@ -16,7 +16,7 @@
 from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
@@ -65,7 +65,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         image: torch.Tensor,
         size: SizeDict,
         patch_size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -82,7 +82,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
             interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 Resampling filter to use when resiizing the image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
         if size.longest_edge:
             size = (size.longest_edge, size.longest_edge)
         elif size.height and size.width:
@@ -96,7 +96,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
             raise ValueError("patch_size must contain either 'shortest_edge' or 'height' and 'width'.")
 
         output_size = get_resize_output_image_size(image, size=size, patch_size=patch_size)
-        return F.resize(image, size=output_size, interpolation=interpolation, **kwargs)
+        return tvF.resize(image, size=output_size, interpolation=interpolation, **kwargs)
 
     # Adapted from transformers.models.pixtral.image_processing_pixtral.PixtralImageProcessor._pad_for_batching
     def _pad_for_batching(
@@ -128,7 +128,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         size: SizeDict,
         patch_size: dict[str, int],
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: dict[str, int],
         do_rescale: bool,

@@ -142,7 +142,6 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Sam2VisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = Sam2VisionModelTester(self)
@@ -715,6 +714,16 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="SAM2 model can't be compiled dynamic yet")
+
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        return sum(model_tester.blocks_per_stage)
+
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        return sum(model_tester.blocks_per_stage) + 1
 
 
 def prepare_image():

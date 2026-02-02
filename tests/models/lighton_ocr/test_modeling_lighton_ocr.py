@@ -225,6 +225,8 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         else ()
     )
     pipeline_model_mapping = {"image-text-to-text": LightOnOcrForConditionalGeneration} if is_torch_available() else {}
+    # LightOnOcr uses a PixtralVisionModel, which merges batch_size and num_patches in index 1, with index 0 hardcoded to 1
+    skip_test_image_features_output_shape = True
 
     _is_composite = True
 
@@ -241,11 +243,14 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         """
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
-        # Ensure image_sizes matches the batch size of pixel_values or input_ids
-        if "pixel_values" in inputs_dict and "image_sizes" in inputs_dict:
+        # Ensure image_sizes is properly set when pixel_values is present
+        if "pixel_values" in inputs_dict:
             batch_size = inputs_dict["pixel_values"].shape[0]
-            # If image_sizes doesn't match batch size, adjust it
-            if len(inputs_dict["image_sizes"]) != batch_size:
+            # If image_sizes is missing or None, infer from pixel_values
+            if "image_sizes" not in inputs_dict or inputs_dict["image_sizes"] is None:
+                _, _, height, width = inputs_dict["pixel_values"].shape
+                inputs_dict["image_sizes"] = [(height, width)] * batch_size
+            elif len(inputs_dict["image_sizes"]) != batch_size:
                 # Take only the first batch_size entries
                 inputs_dict["image_sizes"] = inputs_dict["image_sizes"][:batch_size]
 
@@ -274,7 +279,7 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             # remove one image but leave the image token in text
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
             curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:]
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
@@ -284,7 +289,7 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
 
             # two images and two image tokens don't raise an error
@@ -421,7 +426,7 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             image_features_list = model.get_image_features(
                 pixel_values=input_dict["pixel_values"].to(torch_device),
                 image_sizes=input_dict["image_sizes"],
-            )
+            ).pooler_output
 
             # Check that features are returned as a list
             self.assertIsNotNone(image_features_list)

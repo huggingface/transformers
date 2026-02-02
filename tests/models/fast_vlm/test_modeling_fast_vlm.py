@@ -176,6 +176,7 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
         if is_torch_available()
         else {}
     )
+    skip_test_image_features_output_shape = True  # FastVLM uses index -3 for hidden_size instead of -1
 
     _is_composite = True
 
@@ -207,7 +208,7 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
 
             # remove one image but leave all the image tokens in text
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-2:, ...]
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
             # simulate the multi-image/single set of placeholders case by concatenating
@@ -216,7 +217,7 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
 
             # two images and one set of image tokens raise an error
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
             # two images and two sets of image tokens don't raise an error
@@ -226,6 +227,15 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
     @unittest.skip("Timm can't be initialized on meta")
     def test_can_be_initialized_on_meta(self):
         pass
+
+    @unittest.skip("Cannot set output_attentions on timm models.")
+    def test_get_image_features_attentions(self):
+        pass
+
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
+        # For models that rely on timm for their vision backend, it's hard to infer how many layers the model has
+        # from the timm config alone. So, we're just hardcoding the expected number of hidden states here.
+        return 2
 
 
 @require_torch

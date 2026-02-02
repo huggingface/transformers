@@ -42,7 +42,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging
+from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging, torch_compilable_check
 from .configuration_plbart import PLBartConfig
 
 
@@ -237,9 +237,9 @@ class PLBartAttention(nn.Module):
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1221,8 +1221,10 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
-        if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
-            raise ValueError("All examples must have the same number of <eos> tokens.")
+        torch_compilable_check(
+            torch.unique_consecutive(eos_mask.sum(1)).numel() == 1,
+            "All examples must have the same number of <eos> tokens.",
+        )
         sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
             :, -1, :
         ]

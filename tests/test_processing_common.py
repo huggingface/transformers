@@ -1759,7 +1759,7 @@ class ProcessorTesterMixin:
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            return_tensors="np",
+            return_tensors="pt",
             load_audio_from_video=True,
         )
         self.assertTrue(self.audio_input_name in out_dict)

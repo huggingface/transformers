@@ -463,7 +463,7 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model.eval()
         image_features = model.get_image_features(**inputs_dict)
         self.assertEqual(
-            image_features.shape,
+            image_features.pooler_output.shape,
             (
                 self.model_tester.batch_size,
                 model.projection_dim,
@@ -482,7 +482,7 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model.eval()
         text_features = model.get_text_features(**inputs_dict)
         self.assertEqual(
-            text_features.shape,
+            text_features.pooler_output.shape,
             (
                 self.model_tester.batch_size,
                 model.projection_dim,

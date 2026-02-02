@@ -245,9 +245,9 @@ class TimesFmAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = simple_eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, simple_eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -620,7 +620,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         - the number of padded examples for SPMD so that each core has the same
             number (a multiple of `batch_size`) of examples.
         """
-        input_ts, input_padding, inp_freq = [], [], []
+        input_ts, input_padding = [], []
 
         for i, ts in enumerate(inputs):
             input_len = ts.shape[0]
@@ -635,12 +635,11 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 
             input_ts.append(ts)
             input_padding.append(padding)
-            inp_freq.append(freq[i])
 
         return (
             torch.stack(input_ts, dim=0),
             torch.stack(input_padding, dim=0),
-            torch.tensor(inp_freq, dtype=torch.int32).reshape(-1, 1),
+            torch.tensor(freq[: len(inputs)], dtype=torch.int32).reshape(-1, 1),
         )
 
     def _postprocess_output(

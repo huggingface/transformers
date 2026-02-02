@@ -30,6 +30,7 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     logging,
+    torch_compilable_check,
 )
 from .configuration_splinter import SplinterConfig
 
@@ -148,9 +149,9 @@ class SplinterSelfAttention(nn.Module):
         key_states = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -782,6 +783,10 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
             self.config.pad_token_id,
             dtype=torch.long,
             device=input_ids.device,
+        )
+        torch_compilable_check(
+            num_questions.size(0) == input_ids.size(0),
+            "All samples in the batch must have at least one question token.",
         )
         cols = torch.cat([torch.arange(n) for n in num_questions])
         positions[rows, cols] = flat_positions

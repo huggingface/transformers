@@ -35,10 +35,13 @@ from ...modeling_outputs import (
     CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import Conv1D, isin_mps_friendly
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
+    can_return_tuple,
     logging,
 )
 from .configuration_clvp import (
@@ -1489,36 +1492,23 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
 
         return speech_ids
 
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="""
+        This method can be used to extract text_embeds from a text. The text embeddings obtained by applying the
+        projection layer to the pooled output of the CLVP text encoder model.
+        """
+    )
     def get_text_features(
         self,
         input_ids: torch.LongTensor | None = None,
         text_encoder_inputs_embeds: torch.FloatTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | ClvpEncoderOutput:
         r"""
-        This method can be used to extract text_embeds from a text. The text embeddings obtained by applying the
-        projection layer to the pooled output of the CLVP text encoder model.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                [What are input IDs?](../glossary#input-ids)
-            text_encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
-                inputs_embeds for the text encoder model passed in place of `input_ids`.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-
-        Returns:
-            `torch.FloatTensor` of shape `(batch_size, output_dim)`:
-                The text embeddings obtained by applying the projection layer to the pooled output of the CLVP Text
-                Model.
+        text_encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
+            inputs_embeds for the text encoder model passed in place of `input_ids`.
 
         Examples:
 
@@ -1537,14 +1527,13 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         >>> text_embeds = model.get_text_features(input_ids=processor_output["input_ids"])
         ```
         """
-
-        outputs = self.text_encoder_model(
+        return self.text_encoder_model(
             input_ids=input_ids,
             inputs_embeds=text_encoder_inputs_embeds,
             attention_mask=attention_mask,
+            return_dict=True,
+            **kwargs,
         )
-
-        return outputs[0]
 
     def get_speech_features(
         self,

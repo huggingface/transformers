@@ -614,7 +614,7 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
     # test generation of: SeamlessM4TModel, SeamlessM4TForSpeechToSpeech, SeamlessM4TForSpeechToText, SeamlessM4TForTextToSpeech
 
     def setUp(self):
-        self.speech_model_tester = SeamlessM4TModelTester(self, input_modality="speech")
+        self.audio_model_tester = SeamlessM4TModelTester(self, input_modality="speech")
         self.text_model_tester = SeamlessM4TModelTester(self, input_modality="text")
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -648,7 +648,7 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
         return config, input_dict
 
     def prepare_speech_input(self):
-        config, inputs, decoder_input_ids, input_mask, lm_labels = self.speech_model_tester.prepare_config_and_inputs()
+        config, inputs, decoder_input_ids, input_mask, lm_labels = self.audio_model_tester.prepare_config_and_inputs()
 
         input_dict = {
             "input_features": inputs,
@@ -661,7 +661,7 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
         return config, input_dict
 
     def prepare_speech_and_text_input(self):
-        config, inputs, decoder_input_ids, input_mask, lm_labels = self.speech_model_tester.prepare_config_and_inputs()
+        config, inputs, decoder_input_ids, input_mask, lm_labels = self.audio_model_tester.prepare_config_and_inputs()
 
         input_speech = {
             "input_features": inputs,
