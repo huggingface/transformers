@@ -129,6 +129,8 @@ class Ovis2Config(PreTrainedConfig):
             Vocabulary size of the text model.
         hidden_size (`int`, *optional*, defaults to 1536):
             Dimensionality of the encoder layers and the pooler layer.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     ```python
     >>> from transformers import Ovis2ForConditionalGeneration, Ovis2Config
@@ -155,6 +157,7 @@ class Ovis2Config(PreTrainedConfig):
         visual_indicator_token_ids=[151666, 151667, 151668, 151669, 151670],
         vocab_size=151643,
         hidden_size=1536,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -175,6 +178,7 @@ class Ovis2Config(PreTrainedConfig):
         self.hidden_size = hidden_size
         self.image_token_id = image_token_id
         self.visual_indicator_token_ids = visual_indicator_token_ids
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

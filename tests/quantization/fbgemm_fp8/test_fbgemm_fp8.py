@@ -28,8 +28,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
-    is_accelerate_available,
     is_fbgemm_gpu_available,
+    is_kernels_available,
     is_torch_available,
     is_torch_xpu_available,
 )
@@ -37,9 +37,6 @@ from transformers.utils import (
 
 if is_torch_available():
     import torch
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 
 @require_torch_accelerator
@@ -67,7 +64,10 @@ class FbgemmFp8ConfigTest(unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-@unittest.skipIf(not is_torch_xpu_available() and not is_fbgemm_gpu_available(), "test requires fbgemm-gpu or xpu")
+@unittest.skipIf(
+    not (is_torch_xpu_available() and is_kernels_available()) and not is_fbgemm_gpu_available(),
+    "test requires fbgemm-gpu or (xpu and kernels)",
+)
 @require_accelerate
 class FbgemmFp8Test(unittest.TestCase):
     model_name = "meta-llama/Meta-Llama-3-8B"
@@ -285,34 +285,3 @@ class FbgemmFp8Test(unittest.TestCase):
 
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
             self.assertTrue(self.tokenizer.decode(output[0], skip_special_tokens=True) in self.EXPECTED_OUTPUT)
-
-
-@require_torch_accelerator
-@require_accelerate
-@unittest.skipIf(not is_torch_xpu_available() and not is_fbgemm_gpu_available(), "test requires fbgemm-gpu or xpu")
-class FbgemmFp8LinearTest(unittest.TestCase):
-    def test_linear_preserves_shape(self):
-        """
-        Test that FbgemmFp8Linear preserves shape when in_features == out_features.
-        """
-        from transformers.integrations import FbgemmFp8Linear
-
-        with init_empty_weights(include_buffers=True):
-            linear = FbgemmFp8Linear(1024, 1024, True)
-            x = torch.rand((17, 23, 1024))
-
-        x_ = linear(x)
-        self.assertEqual(x_.shape, x.shape)
-
-    def test_linear_with_diff_feature_size_preserves_shape(self):
-        """
-        Test that FbgemmFp8Linear generates the correct shape when in_features != out_features.
-        """
-        from transformers.integrations import FbgemmFp8Linear
-
-        with init_empty_weights(include_buffers=True):
-            linear = FbgemmFp8Linear(1024, 2048, True)
-            x = torch.rand((17, 23, 1024))
-
-        x_ = linear(x)
-        self.assertEqual(x_.shape, (17, 23, 2048))

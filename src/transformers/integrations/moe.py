@@ -12,14 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from functools import wraps
 
+from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available
 
 
 if is_torch_available():
     import torch
+
+logger = logging.get_logger(__name__)
 
 # Examples of experts class with its eager mm implementation
 # class Experts(nn.Module):
@@ -105,27 +109,12 @@ def batched_mm_experts_forward(
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
-    num_experts = self.gate_up_proj.size(0)
 
-    # Flatten top_k_index to get expert_ids per selected sample
-    expert_ids = top_k_index.reshape(-1)
-    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)
-
-    # Resolve routing weights per selected sample, allowing top_k_weights to be either:
-    # - (num_tokens, num_top_k) Qwen2MoE style
-    # - (num_tokens, num_experts) DeepseekV2 style
-    if top_k_weights.shape == (num_tokens, num_top_k):
-        sample_weights = top_k_weights
-    elif top_k_weights.shape == (num_tokens, num_experts):
-        # TODO: routers that output full expert distribution
-        # should probably be corrected to output only top_k weights
-        sample_weights = top_k_weights[token_idx, expert_ids]
-    else:
-        raise ValueError(
-            f"top_k_weights has an invalid/unsupported shape. It should be either (num_tokens, num_top_k)({num_tokens}, {num_top_k}) "
-            f"or (num_tokens, num_experts)({num_tokens}, {num_experts}), but got {top_k_weights.shape}."
-        )
-    sample_weights = sample_weights.reshape(-1, 1)  # (S, 1)
+    # Reshape for easier indexing
+    # S is the number of selected tokens-experts pairs (S = num_tokens * num_top_k)
+    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
+    sample_weights = top_k_weights.reshape(-1)  # (S,)
+    expert_ids = top_k_index.reshape(-1)  # (S,)
 
     # Get current hidden states for selected samples
     selected_hidden_states = hidden_states[token_idx]
@@ -150,7 +139,7 @@ def batched_mm_experts_forward(
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    out_per_sample = out_per_sample * sample_weights  # (S, hidden_dim)
+    out_per_sample = out_per_sample * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
     # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
@@ -212,27 +201,12 @@ def grouped_mm_experts_forward(
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
-    num_experts = self.gate_up_proj.size(0)
 
-    # Flatten top_k_index to get expert_ids per selected sample
-    expert_ids = top_k_index.reshape(-1)
-    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)
-
-    # Resolve routing weights per selected sample, allowing top_k_weights to be either:
-    # - (num_tokens, num_top_k) Qwen2MoE style
-    # - (num_tokens, num_experts) DeepseekV2 style
-    if top_k_weights.shape == (num_tokens, num_top_k):
-        sample_weights = top_k_weights
-    elif top_k_weights.shape == (num_tokens, num_experts):
-        # TODO: routers that output full expert distribution
-        # should probably be corrected to output only top_k weights
-        sample_weights = top_k_weights[token_idx, expert_ids]
-    else:
-        raise ValueError(
-            f"top_k_weights has an invalid/unsupported shape. It should be either (num_tokens, num_top_k)({num_tokens}, {num_top_k}) "
-            f"or (num_tokens, num_experts)({num_tokens}, {num_experts}), but got {top_k_weights.shape}."
-        )
-    sample_weights = sample_weights.reshape(-1, 1)  # (S, 1)
+    # Reshape for easier indexing
+    # S is the number of selected tokens-experts pairs (S = num_tokens * num_top_k)
+    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
+    sample_weights = top_k_weights.reshape(-1)  # (S,)
+    expert_ids = top_k_index.reshape(-1)  # (S,)
 
     # Get current hidden states for selected samples
     selected_hidden_states = hidden_states[token_idx]
@@ -256,7 +230,9 @@ def grouped_mm_experts_forward(
 
     # Compute offsets for grouped_mm
     # using histc instead of bincount to avoid cuda graph issues
-    num_tokens_per_expert = torch.histc(expert_ids_g.float(), bins=num_experts, min=0, max=num_experts - 1)
+    # With deterministic algorithms, CPU only supports float input, CUDA only supports int input.
+    histc_input = expert_ids_g.float() if device.type == "cpu" else expert_ids_g.int()
+    num_tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (grouped) ---
@@ -273,7 +249,7 @@ def grouped_mm_experts_forward(
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    out_per_sample_g = out_per_sample_g * sample_weights_g
+    out_per_sample_g = out_per_sample_g * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
 
     # Restore original order
     out_per_sample = out_per_sample_g[inv_perm]
@@ -292,6 +268,20 @@ class ExpertsInterface(GeneralInterface):
         "batched_mm": batched_mm_experts_forward,
         "grouped_mm": grouped_mm_experts_forward,
     }
+
+    def get_interface(self, experts_implementation: str, default: Callable) -> Callable:
+        """Return the requested `experts_implementation`. Also strictly check its validity, and raise if invalid."""
+        if experts_implementation is None:
+            logger.warning_once(
+                "You tried to access the `ExpertsInterface` with a `config._experts_implementation` set to `None`. This "
+                "is expected if you use an Expert Module as a standalone Module. If this is not the case, something went "
+                "wrong with the dispatch of `config._experts_implementation`"
+            )
+        elif experts_implementation != "eager" and experts_implementation not in self:
+            raise KeyError(
+                f"`{experts_implementation}` is not a valid experts implementation registered in the `ExpertsInterface`"
+            )
+        return super().get(experts_implementation, default)
 
 
 ALL_EXPERTS_FUNCTIONS = ExpertsInterface()
@@ -341,11 +331,9 @@ def use_experts_implementation(
 
         @wraps(original_forward)
         def forward(self, *args, **kwargs):
-            experts_forward = original_forward
-
-            if self.config._experts_implementation != "eager":
-                experts_forward = ALL_EXPERTS_FUNCTIONS[self.config._experts_implementation]
-
+            experts_forward = ALL_EXPERTS_FUNCTIONS.get_interface(
+                self.config._experts_implementation, original_forward
+            )
             return experts_forward(self, *args, **kwargs)
 
         if not hasattr(experts_class, "_apply_gate"):

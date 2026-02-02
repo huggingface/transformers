@@ -155,6 +155,9 @@ class GotOcr2Config(PreTrainedConfig):
             The image token index to encode the image prompt.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
+
 
     ```python
     >>> from transformers import GotOcr2ForConditionalGeneration, GotOcr2Config
@@ -181,6 +184,7 @@ class GotOcr2Config(PreTrainedConfig):
         text_config: dict | None = None,
         image_token_index: int | None = 151859,
         image_seq_length: int | None = 576,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -209,7 +213,7 @@ class GotOcr2Config(PreTrainedConfig):
                 initializer_range=0.02,
                 rms_norm_eps=1e-6,
                 use_cache=True,
-                tie_word_embeddings=True,
+                tie_word_embeddings=tie_word_embeddings,
                 rope_theta=1000000.0,
                 rope_parameters=None,
                 use_sliding_window=False,
@@ -219,6 +223,7 @@ class GotOcr2Config(PreTrainedConfig):
             )
 
         self.text_config = text_config
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 
