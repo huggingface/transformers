@@ -14,6 +14,7 @@
 import logging
 import re
 import shutil
+import sys
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from typing import Any
@@ -118,7 +119,11 @@ PALETTE = {
 
 
 def _color(s, color):
-    return f"{PALETTE[color]}{s}{PALETTE['reset']}"
+    """Return color-formatted input `s` if `sys.stdout` is interactive, e.g. connected to a terminal."""
+    if sys.stdout.isatty():
+        return f"{PALETTE[color]}{s}{PALETTE['reset']}"
+    else:
+        return s
 
 
 def _get_terminal_width(default=80):
