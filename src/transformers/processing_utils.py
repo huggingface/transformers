@@ -1815,10 +1815,17 @@ class ProcessorMixin(PushToHubMixin):
                 kwargs["add_special_tokens"] = False
 
             # Pass num_frames and fps from mm_load_kwargs to kwargs so they reach the video processor
+            # These parameters are mutually exclusive, so ensure only one is set
             if mm_load_kwargs.get("num_frames") is not None:
                 kwargs["num_frames"] = mm_load_kwargs["num_frames"]
+                # Explicitly set fps to None to prevent video processor from using its default
+                if "fps" not in kwargs:
+                    kwargs["fps"] = None
             if mm_load_kwargs.get("fps") is not None:
                 kwargs["fps"] = mm_load_kwargs["fps"]
+                # Explicitly set num_frames to None to prevent video processor from using its default
+                if "num_frames" not in kwargs:
+                    kwargs["num_frames"] = None
 
             # Always sample frames by default unless explicitly set to `False` by users. If users do not pass `num_frames`/`fps`
             # sampling should not done for BC.
