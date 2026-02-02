@@ -75,6 +75,7 @@ class SamHQVisionModelTester:
         num_pos_feats=16,
         mlp_dim=None,
         batch_size=2,
+        is_training=True,
     ):
         self.parent = parent
         self.hidden_size = hidden_size
@@ -102,6 +103,7 @@ class SamHQVisionModelTester:
         self.num_pos_feats = num_pos_feats
         self.mlp_dim = mlp_dim
         self.batch_size = batch_size
+        self.is_training = is_training
 
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -232,26 +234,6 @@ class SamHQVisionModelTest(ModelTesterMixin, unittest.TestCase):
                 list(expected_attention_shape),
             )
 
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
-    @unittest.skip(reason="SamVisionModel does not support training")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
     @unittest.skip(reason="Hidden_states is tested in create_and_check_model tests")
     def test_hidden_states_output(self):
         pass
@@ -270,6 +252,7 @@ class SamHQPromptEncoderTester:
         mask_input_channels=4,
         num_point_embeddings=4,
         hidden_act="gelu",
+        is_training=True,
     ):
         self.hidden_size = hidden_size
         self.input_image_size = input_image_size
@@ -277,6 +260,7 @@ class SamHQPromptEncoderTester:
         self.mask_input_channels = mask_input_channels
         self.num_point_embeddings = num_point_embeddings
         self.hidden_act = hidden_act
+        self.is_training = is_training
 
     def get_config(self):
         return SamHQPromptEncoderConfig(
@@ -309,6 +293,7 @@ class SamHQMaskDecoderTester:
         iou_head_hidden_dim=32,
         layer_norm_eps=1e-6,
         vit_dim=36,
+        is_training=True,
     ):
         self.hidden_size = hidden_size
         self.hidden_act = hidden_act
@@ -321,6 +306,7 @@ class SamHQMaskDecoderTester:
         self.iou_head_hidden_dim = iou_head_hidden_dim
         self.layer_norm_eps = layer_norm_eps
         self.vit_dim = vit_dim
+        self.is_training = is_training
 
     def get_config(self):
         return SamHQMaskDecoderConfig(
@@ -375,6 +361,7 @@ class SamHQModelTester:
         num_pos_feats=16,
         mlp_dim=None,
         batch_size=2,
+        is_training=True,
     ):
         self.parent = parent
         self.image_size = image_size
@@ -402,6 +389,7 @@ class SamHQModelTester:
         self.num_pos_feats = num_pos_feats
         self.mlp_dim = mlp_dim
         self.batch_size = batch_size
+        self.is_training = is_training
 
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -656,29 +644,56 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 list(expected_mask_decoder_attention_shape),
             )
 
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
-    @unittest.skip(reason="SamHQModel does not support training")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
     @unittest.skip(reason="Hidden_states is tested in create_and_check_model tests")
     def test_hidden_states_output(self):
         pass
+
+    def test_retain_grad_hidden_states_attentions(self):
+        """Overwritten to account for the vision suffix before, e.g. `vision_hidden_states`"""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for k in config.sub_configs:
+            if getattr(config, k) is not None:
+                getattr(config, k).output_hidden_states = True
+
+        config.output_hidden_states = True
+        config.output_attentions = self.has_attentions
+
+        for k in config.sub_configs:
+            if (
+                self._is_composite and k == "vision_config"
+            ):  # skip because it's not needed and causes errors e.g with Timm
+                continue
+            if getattr(config, k) is not None:
+                getattr(config, k).output_attentions = self.has_attentions
+
+        # force eager attention to support output attentions
+        if self.has_attentions:
+            config._attn_implementation = "eager"
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class._from_config(config, attn_implementation="eager")
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+
+        output = outputs[0]
+
+        hidden_states = outputs.vision_hidden_states[0]
+        hidden_states.retain_grad()
+
+        if self.has_attentions:
+            attentions = outputs.vision_attentions[0]
+            attentions.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(hidden_states.grad)
+
+        if self.has_attentions:
+            self.assertIsNotNone(attentions.grad)
 
     def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=5e-5, name="outputs", attributes=None):
         # Use a slightly higher default tol to make the tests non-flaky

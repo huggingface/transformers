@@ -627,7 +627,9 @@ class FP8Expert(nn.Module):
         self.block_size = block_size
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.intermediate_dim = config.intermediate_size
+        self.intermediate_dim = (
+            config.moe_intermediate_size if hasattr(config, "moe_intermediate_size") else config.intermediate_size
+        )
 
         Wg_out, Wg_in = 2 * self.intermediate_dim, self.hidden_dim
         Wd_out, Wd_in = self.hidden_dim, self.intermediate_dim
