@@ -13,8 +13,8 @@
 # limitations under the License.
 """SeedOss model configuration"""
 
-from transformers.configuration_utils import PreTrainedConfig
-from transformers.modeling_rope_utils import RopeParameters
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 
 
 class SeedOssConfig(PreTrainedConfig):

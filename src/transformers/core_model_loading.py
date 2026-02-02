@@ -32,13 +32,10 @@ import torch
 
 from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
-from .utils import is_env_variable_true, is_torch_greater_or_equal, logging
+from .utils import is_env_variable_true, logging
 
 
 _torch_distributed_available = torch.distributed.is_available()
-_is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
-if _is_dtensor_available:
-    from torch.distributed.tensor import DTensor, Replicate
 
 if TYPE_CHECKING:
     from .integrations.tensor_parallel import TensorParallelLayer
@@ -47,38 +44,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
-
-
-def process_target_pattern(pattern: str) -> tuple[str, str | None]:
-    """
-    Process a target pattern for reverse mapping (when targets become sources).
-
-    This handles several edge cases in checkpoint conversion mappings:
-    - Removes `^` prefix and `$` suffix (start/end of string anchors)
-    - Removes negative lookahead/lookbehind assertions
-    - Detects capturing groups and replaces them with `\\1` backreference
-
-    Args:
-        pattern: The target pattern to process for reverse mapping.
-
-    Returns:
-        A tuple of (processed_pattern, captured_group) where captured_group is
-        the original capturing group found (e.g., "(encoder|decoder)") or None.
-    """
-    # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
-    pattern = pattern.removeprefix("^")
-    # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
-    pattern = pattern.removesuffix("$")
-    # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
-    # Qwen2.5, Sam3, Ernie4.5 VL MoE!
-    pattern = re.sub(r"\(\?.+\)", "", pattern)
-    # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
-    capturing_group_match = re.search(r"\(.+?\)", pattern)
-    captured_group = None
-    if capturing_group_match:
-        captured_group = capturing_group_match.group(0)
-        pattern = pattern.replace(captured_group, r"\1", 1)
-    return pattern, captured_group
 
 
 def build_glob_alternation(
@@ -508,6 +473,38 @@ class Force16BytesAlignment(ConversionOps):
         return Force16BytesAlignment()
 
 
+def process_target_pattern(pattern: str) -> tuple[str, str | None]:
+    """
+    Process a target pattern for reverse mapping (when targets become sources).
+
+    This handles several edge cases in checkpoint conversion mappings:
+    - Removes `^` prefix and `$` suffix (start/end of string anchors)
+    - Removes negative lookahead/lookbehind assertions
+    - Detects capturing groups and replaces them with `\\1` backreference
+
+    Args:
+        pattern: The target pattern to process for reverse mapping.
+
+    Returns:
+        A tuple of (processed_pattern, captured_group) where captured_group is
+        the original capturing group found (e.g., "(encoder|decoder)") or None.
+    """
+    # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
+    pattern = pattern.removeprefix("^")
+    # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
+    pattern = pattern.removesuffix("$")
+    # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
+    # Qwen2.5, Sam3, Ernie4.5 VL MoE!
+    pattern = re.sub(r"\(\?.+\)", "", pattern)
+    # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
+    capturing_group_match = re.search(r"\(.+?\)", pattern)
+    captured_group = None
+    if capturing_group_match:
+        captured_group = capturing_group_match.group(0)
+        pattern = pattern.replace(captured_group, r"\1", 1)
+    return pattern, captured_group
+
+
 @dataclass(slots=True)
 class WeightTransform:
     source_patterns: str | list[str] = field(init=True)
@@ -520,52 +517,18 @@ class WeightTransform:
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
 
-    def __setattr__(self, name: str, value: Any):
-        if name == "source_patterns":
-            if isinstance(value, str):
+    def __setattr__(self, name, value):
+        if name in ("source_patterns", "target_patterns"):
+            # We do not allow to re-set the patterns, as they are linked between each other and changing one
+            # without the other can mess-up with the capturing groups/compiled sources
+            if hasattr(self, name):
+                raise ValueError(f"Cannot assign to field {name}, you should create a new instance")
+            # Switch str to list
+            elif isinstance(value, str):
                 value = [value]
-            normalized = []
-            for pattern in value:
-                if r"\1" in pattern:
-                    pattern = pattern.replace(r"\1", r"(.+)")
-                normalized.append(pattern)
-            object.__setattr__(self, name, normalized)
-            self._rebuild_compiled_sources()
-            return
-        if name == "target_patterns":
-            if isinstance(value, str):
-                value = [value]
-            normalized = []
-            for pattern in value:
-                # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
-                pattern = pattern.removeprefix("^")
-                # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
-                pattern = pattern.removesuffix("$")
-                # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
-                # Qwen2.5, Sam3, Ernie4.5 VL MoE!
-                pattern = re.sub(r"\(\?.+\)", "", pattern)
-                # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
-                if r"(.+)" in pattern:
-                    pattern = pattern.replace(r"(.+)", r"\1")
-                normalized.append(pattern)
-            object.__setattr__(self, name, normalized)
-            return
         object.__setattr__(self, name, value)
 
-    def _rebuild_compiled_sources(self):
-        branches = []
-        for i, source_pattern in enumerate(self.source_patterns):
-            group_name = f"g{i}"
-            pattern = source_pattern.replace(".*.", r"\..*\.")
-            branches.append(f"(?P<{group_name}>{pattern})")
-        object.__setattr__(self, "compiled_sources", re.compile("|".join(branches)))
-
     def __post_init__(self):
-        if isinstance(self.source_patterns, str):
-            self.source_patterns = [self.source_patterns]
-        if isinstance(self.target_patterns, str):
-            self.target_patterns = [self.target_patterns]
-
         # Due to how our `_checkpoint_conversion_mapping` mappings are written, we need a few exceptions here
         # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
         # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
@@ -601,13 +564,18 @@ class WeightTransform:
             self.source_patterns[i] = pattern
 
         # Construct the regex we will use to rename keys from the sources to the targets
-        self._rebuild_compiled_sources()
+        branches = []
+        for i, source_pattern in enumerate(self.source_patterns):
+            group_name = f"g{i}"
+            pattern = source_pattern.replace(".*.", r"\..*\.")
+            branches.append(f"(?P<{group_name}>{pattern})")
+        self.compiled_sources = re.compile("|".join(branches))
 
     def add_tensor(self, target_key: str, source_key: str, source_pattern: str, future: Future):
         self.collected_tensors[source_pattern].append(future)
         self.layer_targets[target_key].add(source_key)
 
-    def rename_source_key(self, source_key: str) -> tuple[str, str | re.Pattern]:
+    def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
         """
         Return a tuple (renamed_key, source_pattern_producing_the_match).
         Try renaming `source_key` according to the source and target patterns of the current WeightTransform.
@@ -729,6 +697,7 @@ class WeightConverter(WeightTransform):
     operations: list[ConversionOps] = field(default_factory=list, repr=False)
 
     def __post_init__(self):
+        WeightTransform.__post_init__(self)
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             # We allow many-to-many only if we use an internal operation that can handle it
             if not any(isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS) for op in self.operations):
@@ -914,23 +883,20 @@ def set_param_for_module(
         unexpected_keys.add(target_name)
     else:
         if not isinstance(param_value, torch.nn.Parameter):
-            if distributed_operation is not None:
-                if getattr(distributed_operation, "use_dtensor", False):
-                    param_value = DTensor.from_local(
-                        param_value,
-                        distributed_operation.device_mesh,
-                        getattr(distributed_operation, "shard", Replicate()),
-                        run_check=False,
-                        shape=ref.size(),
-                        stride=ref.stride(),
-                    )
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
         # Remove from missing keys (it's either mismatched, or all good)
         missing_keys.discard(target_name)
-        if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
-            mismatch_keys.add((target_name, param_value.shape, ref.shape))
+
+        # Determine expected shape: for TP, use sharded shape; otherwise, use full shape
+        if distributed_operation is not None:
+            expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
+        else:
+            expected_shape = ref.shape
+
+        if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
+            mismatch_keys.add((target_name, param_value.shape, expected_shape))
         else:
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True

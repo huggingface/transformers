@@ -14,7 +14,7 @@
 
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
-from ..utils import is_torch_accelerator_available, is_torch_available, logging
+from ..utils import is_kernels_available, is_torch_accelerator_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -26,6 +26,64 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
+
+# Global for the CUTLASS quantization kernel (lazily loaded)
+_quantization_kernel = None
+
+
+def _get_quantization_kernel():
+    """Lazily load the CUTLASS quantization kernel from HuggingFace Hub."""
+    global _quantization_kernel
+    if _quantization_kernel is None:
+        try:
+            from .hub_kernels import get_kernel
+
+            _quantization_kernel = get_kernel("RedHatAI/quantization")
+        except Exception as e:
+            logger.warning_once(f"Failed to load CUTLASS quantization kernel: {e}. Falling back to Triton.")
+            _quantization_kernel = False  # Mark as unavailable
+    return _quantization_kernel if _quantization_kernel else None
+
+
+def _supports_cutlass(block_size: list[int] | None, output_dtype: torch.dtype) -> bool:
+    """
+    Check if CUTLASS blockwise FP8 matmul is supported for the given block size and output dtype.
+
+    CUTLASS blockwise kernels require:
+    - SM90+ (Hopper or newer)
+    - Block size [128, 128] for weights
+    - Block size [1, 128] for activations (handled implicitly)
+    - Output dtype bfloat16 or float16
+    """
+
+    if not is_torch_available() or not torch.cuda.is_available() or not is_kernels_available():
+        return False
+
+    # CUTLASS only supports bfloat16/float16 output
+    if output_dtype not in (torch.bfloat16, torch.float16):
+        return False
+
+    # Check block size compatibility - CUTLASS only supports [128, 128]
+    if block_size is None:
+        return False
+    if len(block_size) != 2 or block_size[0] != 128 or block_size[1] != 128:
+        return False
+
+    # Check GPU capability (SM90+)
+    capability = torch.cuda.get_device_capability()
+    cuda_capability = capability[0] * 10 + capability[1]
+
+    # Try to load the kernel and check if blockwise FP8 is supported
+    kernel = _get_quantization_kernel()
+    if kernel is None:
+        return False
+
+    try:
+        return kernel.cutlass_scaled_mm_supports_block_fp8(cuda_capability)
+    except Exception:
+        return False
+
+
 try:
     _FP8_DTYPE = torch.float8_e4m3fn
     _FP8_MIN = torch.finfo(_FP8_DTYPE).min
@@ -338,6 +396,81 @@ def w8a8_block_fp8_matmul_triton(
     return C
 
 
+def w8a8_block_fp8_matmul(
+    A: torch.Tensor,
+    B: torch.Tensor,
+    As: torch.Tensor,
+    Bs: torch.Tensor,
+    block_size: list[int],
+    output_dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
+    """
+    Dispatch to CUTLASS or Triton for block-wise FP8 matmul.
+
+    Uses CUTLASS when:
+    - Block size is [128, 128] (the only size CUTLASS supports)
+    - Running on SM90+ (Hopper or newer)
+    - The CUTLASS kernel is available
+    - Output dtype is bfloat16 or float16 (CUTLASS requirement)
+    - Tensor dimensions are compatible (divisible by 16)
+
+    Otherwise falls back to Triton.
+    """
+
+    if _supports_cutlass(block_size, output_dtype):
+        kernel = _get_quantization_kernel()
+        if kernel is not None:
+            try:
+                # CUTLASS expects:
+                # - A: [M, K] row-major, float8_e4m3fn
+                # - B: [K, N] column-major, float8_e4m3fn
+                # - As: [M, K//128] M-major (activation scales)
+                # - Bs: [K//128, N//128] K-major (weight scales)
+
+                # Reshape A to 2D if needed
+                original_shape = A.shape
+                M = A.numel() // A.shape[-1]
+                K = A.shape[-1]
+                N = B.shape[0]
+
+                # CUTLASS requires dimensions divisible by 16
+                if K % 16 != 0 or N % 16 != 0:
+                    raise ValueError(f"CUTLASS requires K ({K}) and N ({N}) divisible by 16")
+
+                A_2d = A.view(M, K).contiguous()
+                # B needs to be column-major for CUTLASS: [K, N] with stride(0)==1
+                # Our B is [N, K] row-major. Make it contiguous first, then transpose.
+                # B.contiguous() gives [N, K] with stride=(K,1)
+                # B.contiguous().t() gives [K, N] with stride=(1,K) which is column-major
+                # Do NOT call .contiguous() after .t() as it would make it row-major!
+                B_col_major = B.contiguous().t()
+
+                # Scales need proper layout for CUTLASS blockwise:
+                # As should be [M, K//128] with M-major layout (stride(0)==1)
+                # Bs should be [K//128, N//128] with K-major layout (stride(0)==1)
+
+                # As: reshape to [M, K//128], then make M-major via t().contiguous().t()
+                As_2d = As.view(M, -1).contiguous()
+                As_2d = As_2d.t().contiguous().t()  # [M, K//128] with stride(0)==1
+
+                # Bs: our input is [N//128, K//128], need [K//128, N//128] with stride(0)==1
+                # Transpose to get [K//128, N//128], then make K-major via t().contiguous().t()
+                Bs_km = Bs.contiguous().t()  # [K//128, N//128]
+                Bs_km = Bs_km.t().contiguous().t()  # Make K-major (stride(0)==1)
+
+                # Call CUTLASS kernel - it returns the output tensor
+                # Signature: cutlass_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias=None) -> Tensor
+                C = kernel.cutlass_scaled_mm(A_2d, B_col_major, As_2d, Bs_km, output_dtype, None)
+                # Reshape output back
+                C_shape = original_shape[:-1] + (N,)
+                return C.view(C_shape)
+            except Exception as e:
+                logger.warning_once(f"CUTLASS kernel failed: {e}. Falling back to Triton.")
+
+    # Fall back to Triton
+    return w8a8_block_fp8_matmul_triton(A, B, As, Bs, block_size, output_dtype)
+
+
 # Python version of the above triton function, it's much slower than the triton version, for testing
 @torch.compile
 def w8a8_block_fp8_matmul_compile(
@@ -463,7 +596,7 @@ class FP8Linear(nn.Linear):
                 else:
                     raise NotImplementedError("Not supported")
 
-                output = w8a8_block_fp8_matmul_triton(
+                output = w8a8_block_fp8_matmul(
                     qinput,
                     weight,
                     scale,
@@ -478,7 +611,6 @@ class FP8Linear(nn.Linear):
             if self.bias is not None:
                 output = output + self.bias
 
-            #            output = torch.nan_to_num(output, nan=0.0)
             return output.to(dtype=input.dtype)
 
 
@@ -571,7 +703,7 @@ class FP8Expert(nn.Module):
             torch_accelerator_module = getattr(torch, device_type, torch.cuda)
             with torch_accelerator_module.device(input.device):
                 qinput, scale = act_quant(input, self.block_size[1])
-                output = w8a8_block_fp8_matmul_triton(
+                output = w8a8_block_fp8_matmul(
                     qinput,
                     weight,
                     scale,
