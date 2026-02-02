@@ -957,9 +957,6 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
         if self.language_model._no_split_modules is not None:
             self._no_split_modules.extend(self.language_model._no_split_modules)
 
-        if self.language_model._keep_in_fp32_modules is not None:
-            self._keep_in_fp32_modules.extend(self.language_model._keep_in_fp32_modules)
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1136,9 +1133,6 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
 
         if language_model._no_split_modules is not None:
             self._no_split_modules.extend(language_model._no_split_modules)
-
-        if language_model._keep_in_fp32_modules is not None:
-            self._keep_in_fp32_modules.extend(language_model._keep_in_fp32_modules)
 
         self.language_model = language_model
 
