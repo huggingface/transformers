@@ -237,7 +237,7 @@ class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
             )
             init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
         elif isinstance(module, nn.Embedding):
-            default_flax_embed_init(module.weight)
+            init.default_flax_embed_init(module.weight)
         elif isinstance(module, Phi4MultimodalVisionAttention):
             init.normal_(module.q_proj.weight)
             init.normal_(module.k_proj.weight)
@@ -257,7 +257,7 @@ class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
             init.normal_(module.attention.in_proj_weight)
             init.zeros_(module.attention.in_proj_bias)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            lecun_normal_(module.weight)
+            init.lecun_normal_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
