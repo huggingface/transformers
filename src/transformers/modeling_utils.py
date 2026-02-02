@@ -3595,7 +3595,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return init_contexts
 
-    def _get_dtype_plan(self, dtype: torch.dtype) -> dict | None:
+    def _get_dtype_plan(self, dtype: torch.dtype) -> dict:
         """Create the dtype_plan describing modules/parameters that should use the `keep_in_fp32` flag."""
         dtype_plan = {}
 
