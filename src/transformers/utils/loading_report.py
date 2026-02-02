@@ -195,7 +195,7 @@ class LoadStateDictInfo:
                 f"\n- {_color('MISMATCH', 'yellow') + PALETTE['italic']}\t:ckpt weights were loaded, but they did not match "
                 "the original empty weight shapes."
             )
-            iterator = {a: (b, c) for a, b, c in self.mismatched_shapes}
+            iterator = {a: (b, c) for a, b, c in self.mismatched_keys}
             for key, (shape_ckpt, shape_model) in update_key_name(iterator).items():
                 status = _color("MISMATCH", "yellow")
                 data = [
