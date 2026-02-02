@@ -16,7 +16,6 @@ import inspect
 import unittest
 
 import numpy as np
-import pytest
 
 from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -179,7 +178,6 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         pass
 
     @require_av
-    @pytest.mark.xfail(reason="TODO: see issue #43676")
     def test_apply_chat_template_video_frame_sampling(self):
         processor = self.get_processor()
         if processor.chat_template is None:
