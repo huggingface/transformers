@@ -1727,6 +1727,8 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
                 for _ in range(num_pred)
             ]
         )
+        # Convert to instance attribute before modifying
+        self._tied_weights_keys = self._tied_weights_keys.copy()
         if config.with_box_refine:
             self.model.decoder.bbox_embed = self.bbox_embed
             self._tied_weights_keys["model.decoder.bbox_embed"] = "bbox_embed"
