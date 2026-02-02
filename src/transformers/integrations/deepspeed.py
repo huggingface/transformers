@@ -348,6 +348,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     # Iterate over sorted keys and pop from state_dict to free memory immediately
     conversion_mapping = {}
     key_rename_cache = {}  # Cache rename results to avoid redundant processing
+    new_state_dict = {}  # Initialize here for direct key copies (non-converted keys)
     sorted_keys = sorted(state_dict.keys(), key=lambda k: dot_natural_key(k))
     for original_key in sorted_keys:
         tensor = state_dict.pop(original_key)  # Pop to free memory immediately
@@ -359,20 +360,24 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
 
         # Only process if the renamed key is in the model's state dict
         if renamed_key in model_state_dict:
+            # If source_pattern is not None, this key needs WeightConverter (e.g., MoE fusion)
             if source_pattern is not None:
-                new_converter = copy.deepcopy(pattern_to_converter[source_pattern])
+                # Create a fresh converter for this layer to hold its tensors
+                # Share operations list (lightweight, no large data) but get new collected_tensors
+                converter = pattern_to_converter[source_pattern]
+                new_converter = WeightConverter(
+                    source_patterns=converter.source_patterns,
+                    target_patterns=converter.target_patterns,
+                    operations=converter.operations,
+                )
                 mapping = conversion_mapping.setdefault(renamed_key, new_converter)
+                mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
             else:
-                mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
-                source_pattern = original_key
-
-            # Add the tensor directly (not a Future, since it's already materialized)
-            mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
+                # No conversion needed - add tensor directly to new_state_dict
+                # (this handles keys like embed_tokens, lm_head, layernorm, attention)
+                new_state_dict[renamed_key] = tensor
 
     # Apply the conversions and build the new state dict
-    new_state_dict = {}
-    # Track which renamed_keys came from WeightConverter (need to skip their originals)
-    converted_renamed_keys = set()
     for renamed_key, mapping in conversion_mapping.items():
         try:
             # Only WeightConverter needs convert(); WeightRenaming is just a simple rename
@@ -386,8 +391,6 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
             for target_name, param in realized_value.items():
                 param = param[0] if isinstance(param, list) else param
                 new_state_dict[target_name] = param
-            # Track that this key was converted
-            converted_renamed_keys.add(renamed_key)
             # Free memory by clearing source tensors
             if hasattr(mapping, "source_tensors"):
                 mapping.source_tensors = {}

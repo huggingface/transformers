@@ -13,14 +13,14 @@
 """BitNet model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BitNetConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class BitNetConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BitNetModel`]. It is used to instantiate an BitNet
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

@@ -122,6 +122,7 @@ if TYPE_CHECKING:
     from .encodec import *
     from .encoder_decoder import *
     from .eomt import *
+    from .eomt_dinov3 import *
     from .ernie import *
     from .ernie4_5 import *
     from .ernie4_5_moe import *
@@ -306,6 +307,7 @@ if TYPE_CHECKING:
     from .plbart import *
     from .poolformer import *
     from .pop2piano import *
+    from .pp_doclayout_v3 import *
     from .prompt_depth_anything import *
     from .prophetnet import *
     from .pvt import *

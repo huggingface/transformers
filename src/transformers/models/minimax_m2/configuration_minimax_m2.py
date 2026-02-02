@@ -20,10 +20,10 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class MiniMaxM2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class MiniMaxM2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MiniMaxM2Model`]. It is used to instantiate an
     MiniMaxM2 model according to the specified arguments, defining the model architecture. Instantiating a configuration

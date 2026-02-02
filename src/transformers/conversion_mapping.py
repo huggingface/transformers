@@ -85,13 +85,13 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "mixtral": [
-            WeightRenaming(".block_sparse_moe.gate", ".mlp.gate"),
+            WeightRenaming(".block_sparse_moe.", ".mlp."),
             WeightConverter(
                 source_patterns=[
-                    "block_sparse_moe.experts.*.w1.weight",
-                    "block_sparse_moe.experts.*.w3.weight",
+                    ".experts.*.w1.weight",
+                    ".experts.*.w3.weight",
                 ],  # you give me a list of 2 keys, I collect a list of a list of tensors
-                target_patterns="mlp.experts.gate_up_proj",  # target key gets the list of two tensors
+                target_patterns=".experts.gate_up_proj",  # target key gets the list of two tensors
                 operations=[
                     MergeModulelist(
                         dim=0
@@ -101,9 +101,9 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightConverter(
                 source_patterns=[
-                    "block_sparse_moe.experts.*.w2.weight",
+                    ".experts.*.w2.weight",
                 ],
-                target_patterns="mlp.experts.down_proj",  # target key gets the list of two tensors
+                target_patterns=".experts.down_proj",  # target key gets the list of two tensors
                 operations=[
                     MergeModulelist(
                         dim=0
@@ -142,18 +142,19 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "phimoe": [
-            WeightRenaming(".block_sparse_moe.gate", ".mlp.router"),
+            WeightRenaming(".block_sparse_moe.", ".mlp."),
+            WeightRenaming(".gate.weight", ".router.weight"),
             WeightConverter(
                 source_patterns=[
-                    "block_sparse_moe.experts.*.w1.weight",
-                    "block_sparse_moe.experts.*.w3.weight",
+                    ".experts.*.w1.weight",
+                    ".experts.*.w3.weight",
                 ],
-                target_patterns="mlp.experts.gate_up_proj",
+                target_patterns=".experts.gate_up_proj",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                source_patterns="block_sparse_moe.experts.*.w2.weight",
-                target_patterns="mlp.experts.down_proj",
+                source_patterns=".experts.*.w2.weight",
+                target_patterns=".experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
