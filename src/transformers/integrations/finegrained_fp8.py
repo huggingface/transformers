@@ -625,7 +625,7 @@ class FP8Expert(nn.Module):
         from ..activations import ACT2FN
 
         self.block_size = block_size
-        self.num_experts = config.num_local_experts
+        self.num_experts = config.num_local_experts if hasattr(config, "num_local_experts") else config.num_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = (
             config.moe_intermediate_size if hasattr(config, "moe_intermediate_size") else config.intermediate_size
