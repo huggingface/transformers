@@ -586,12 +586,18 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.assertTrue(config_and_inputs[0].scale_decoder_outputs)
+        if config_and_inputs[0].__class__.__name__ == "T" + "5Config":
+            self.assertTrue(config_and_inputs[0].scale_decoder_outputs)
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_v1_1(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_v1_1()
-        self.assertFalse(config_and_inputs[0].scale_decoder_outputs)
+
+        # MT5 doesn't have decoder output scaling but since the T5 test is copied to MT5
+        # we need to make an exception here without compromising the T5 test.
+        # We format the name weirdly because otherwise the copy mechanism will change it.
+        if config_and_inputs[0].__class__.__name__ == "T" + "5Config":
+            self.assertFalse(config_and_inputs[0].scale_decoder_outputs)
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     # T5ForSequenceClassification does not support inputs_embeds
