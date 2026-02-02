@@ -4160,8 +4160,8 @@ class ModelTesterMixin:
             if model._can_set_attn_implementation() and model.config.model_type != "videomae":
                 try:
                     model.set_attn_implementation("sdpa")
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"Could not set attention implementation to sdpa: {e}")
 
             for module in model.modules():
                 if hasattr(module, "config"):
