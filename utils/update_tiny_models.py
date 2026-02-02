@@ -29,8 +29,7 @@ from create_dummy_models import COMPOSITE_MODELS, create_tiny_models
 from huggingface_hub import HfApi
 
 import transformers
-from transformers import logging
-from transformers import AutoFeatureExtractor, AutoImageProcessor, AutoTokenizer
+from transformers import AutoFeatureExtractor, AutoImageProcessor, AutoTokenizer, logging
 from transformers.image_processing_utils import BaseImageProcessor
 
 

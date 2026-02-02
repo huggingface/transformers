@@ -21,6 +21,7 @@ from typing import Union, get_args, get_origin
 
 import regex as re
 
+from . import logging
 from .doc import (
     MODELS_TO_PIPELINE,
     PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS,
@@ -28,7 +29,7 @@ from .doc import (
     _prepare_output_docstrings,
 )
 from .generic import ModelOutput
-from . import logging
+
 
 logger = logging.get_logger(__name__)
 
