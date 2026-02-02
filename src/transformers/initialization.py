@@ -163,7 +163,7 @@ def copy_(tensor: torch.Tensor, other: torch.Tensor) -> torch.Tensor:
     return tensor
 
 
-def _variance_scaling_(tensor, mode="fan_in", distribution="normal"):
+def _variance_scaling(tensor, mode="fan_in", distribution="normal"):
     fan_in, fan_out = torch.nn.init._calculate_fan_in_and_fan_out(tensor)
     if mode == "fan_in":
         denom = fan_in
@@ -187,13 +187,13 @@ def _variance_scaling_(tensor, mode="fan_in", distribution="normal"):
 
 def lecun_normal_(tensor):
     if not getattr(tensor, "_is_hf_initialized", False):
-        variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
+        _variance_scaling(tensor, mode="fan_in", distribution="truncated_normal")
     return tensor
 
 
 def default_flax_embed_init(tensor):
     if not getattr(tensor, "_is_hf_initialized", False):
-        variance_scaling_(tensor, mode="fan_in", distribution="normal")
+        _variance_scaling(tensor, mode="fan_in", distribution="normal")
     return tensor
 
 
