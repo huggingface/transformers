@@ -895,7 +895,7 @@ class ModelTesterMixin:
                 if model._keep_in_fp32_modules is not None:
                     non_existent = []
                     for module in model._keep_in_fp32_modules:
-                        if not any(re.search(rf"^|\.{module}\.|$", name) for name in state_dict_names):
+                        if not any(re.search(rf"(?:^|\.){module}(?:\.|$)", name) for name in state_dict_names):
                             non_existent.append(module)
                     self.assertTrue(
                         len(non_existent) == 0,
@@ -906,7 +906,7 @@ class ModelTesterMixin:
                 if model._keep_in_fp32_modules_strict is not None:
                     non_existent = []
                     for module in model._keep_in_fp32_modules_strict:
-                        if not any(re.search(rf"^|\.{module}\.|$", name) for name in state_dict_names):
+                        if not any(re.search(rf"(?:^|\.){module}(?:\.|$)", name) for name in state_dict_names):
                             non_existent.append(module)
                     self.assertTrue(
                         len(non_existent) == 0,
@@ -931,14 +931,14 @@ class ModelTesterMixin:
                     # Test when reloading in fp16 -> should be upcasted to fp32
                     model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
                     for name, param in model.state_dict().items():
-                        if any(re.search(rf"^|\.{k}\.|$", name) for k in model._keep_in_fp32_modules):
+                        if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules):
                             self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:
                             self.assertTrue(param.dtype == torch.float16)
 
                     # Test when reloading in bf16 -> should stay bf16
                     model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
-                    for name, param in model.state_dict().items()():
+                    for name, param in model.state_dict().items():
                         self.assertTrue(param.dtype == torch.bfloat16)
 
     def test_keep_in_fp32_modules_strict(self):
@@ -957,16 +957,16 @@ class ModelTesterMixin:
 
                     # Test when reloading in fp16 -> should be upcasted to fp32
                     model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
-                    for name, param in model.state_dict().items()():
-                        if any(re.search(rf"^|\.{k}\.|$", name) for k in model._keep_in_fp32_modules_strict):
+                    for name, param in model.state_dict().items():
+                        if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules_strict):
                             self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:
                             self.assertTrue(param.dtype == torch.float16)
 
                     # Test when reloading in bf16 -> should also be upcasted to fp32
                     model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
-                    for name, param in model.state_dict().items()():
-                        if any(re.search(rf"^|\.{k}\.|$", name) for k in model._keep_in_fp32_modules_strict):
+                    for name, param in model.state_dict().items():
+                        if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules_strict):
                             self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:
                             self.assertTrue(param.dtype == torch.bfloat16)
