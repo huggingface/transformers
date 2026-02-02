@@ -260,14 +260,13 @@ class PeAudioModelTester:
     def get_config(self):
         text_config = self.text_model_tester.get_config()
         audio_config = self.audio_model_tester.get_config()
-        config = PeAudioConfig(
+        # Use SDPA for text_config to avoid FlashAttention which only supports fp16 and bf16 data types
+        return PeAudioConfig(
             text_config=text_config.to_dict(),
             audio_config=audio_config.to_dict(),
             projection_dim=32,
+            attn_implementation={"text_config": "sdpa"},
         )
-        # Use SDPA as the default attention implementation for testing
-        config._attn_implementation = "sdpa"
-        return config
 
     def create_and_check_model(self, config, input_ids, attention_mask, input_values, padding_mask):
         model = PeAudioModel(config).to(torch_device).eval()
