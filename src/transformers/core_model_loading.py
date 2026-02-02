@@ -1066,7 +1066,7 @@ def convert_and_load_state_dict_in_model(
     device_mesh = load_config.device_mesh
     disk_offload_folder = load_config.disk_offload_folder
     offload_buffers = load_config.offload_buffers
-    dtype_plan = dtype_plan or {}
+    dtype_plan = load_config.dtype_plan or {}
     weight_mapping = load_config.weight_mapping or []
     meta_model_state_dict = model.state_dict()
     model_buffers = {k for k, _ in model.named_buffers()}
