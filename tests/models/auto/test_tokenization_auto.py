@@ -461,7 +461,9 @@ class AutoTokenizerTest(unittest.TestCase):
 
     @slow
     def test_custom_tokenizer_init(self):
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-VL", trust_remote_code=True, revision="0547ed36a86561e2e42fecec8fd0c4f6953e33c4")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "Qwen/Qwen-VL", trust_remote_code=True, revision="0547ed36a86561e2e42fecec8fd0c4f6953e33c4"
+        )
         self.assertIsInstance(tokenizer, PythonBackend)
         self.assertGreater(len(tokenizer.get_vocab()), 0)
 
