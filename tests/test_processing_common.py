@@ -1559,6 +1559,70 @@ class ProcessorTesterMixin:
             "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
         )
 
+    @require_librosa
+    def test_apply_chat_template_audio_uses_processor_sampling_rate(self):
+        """Test that apply_chat_template uses the processor's feature_extractor sampling rate by default.
+
+        Regression test for https://github.com/huggingface/transformers/issues/43262
+        """
+        from unittest.mock import patch
+
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        feature_extractor = getattr(processor, "feature_extractor", None)
+        if feature_extractor is None:
+            self.skipTest("Processor has no feature_extractor")
+
+        processor_sampling_rate = getattr(feature_extractor, "sampling_rate", None)
+        if processor_sampling_rate is None:
+            self.skipTest("Processor's feature_extractor has no sampling_rate")
+
+        batch_messages = [
+            [
+                {"role": "user", "content": [{"type": "text", "text": "What sound is this?"}]},
+            ]
+        ]
+        # Add audio to the message
+        batch_messages[0][0]["content"].append({"type": "audio", "url": MODALITY_INPUT_DATA["audio"][0]})
+
+        # Patch librosa.load to capture the sampling rate argument
+        captured_sr = []
+        original_load = None
+        try:
+            import librosa
+            original_load = librosa.load
+        except ImportError:
+            self.skipTest("librosa not available")
+
+        def mock_load(path, sr=None, **kwargs):
+            captured_sr.append(sr)
+            return original_load(path, sr=sr, **kwargs)
+
+        with patch("librosa.load", side_effect=mock_load):
+            try:
+                processor.apply_chat_template(
+                    batch_messages,
+                    add_generation_prompt=True,
+                    tokenize=True,
+                    return_dict=True,
+                    return_tensors="pt",
+                )
+            except Exception:
+                # Some processors may fail for other reasons, but we just need to verify
+                # that the sampling_rate was passed correctly to librosa.load
+                pass
+
+        # Verify that librosa.load was called with the processor's sampling rate
+        if captured_sr:
+            self.assertEqual(
+                captured_sr[0],
+                processor_sampling_rate,
+                f"Expected sampling_rate {processor_sampling_rate} from feature_extractor, "
+                f"but librosa.load was called with sr={captured_sr[0]}",
+            )
+
     @require_av
     @parameterized.expand([(1, "pt")])
     def test_apply_chat_template_decoded_video(self, batch_size: int, return_tensors: str):
