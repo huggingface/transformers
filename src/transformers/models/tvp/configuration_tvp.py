@@ -95,6 +95,8 @@ class TvpConfig(PreTrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probability of attention layers.
+        pad_token_id (`int`, *optional*):
+            The id of a PAD token in the vocabulary.
     """
 
     model_type = "tvp"
@@ -128,6 +130,7 @@ class TvpConfig(PreTrainedConfig):
         layer_norm_eps=1e-12,
         initializer_range=0.02,
         attention_probs_dropout_prob=0.1,
+        pad_token_id=None,
         **kwargs,
     ):
         if backbone_config is None and backbone is None:
@@ -172,6 +175,7 @@ class TvpConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.pad_token_id = pad_token_id
 
         super().__init__(**kwargs)
 

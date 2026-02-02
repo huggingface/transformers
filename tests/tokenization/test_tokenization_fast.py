@@ -258,13 +258,18 @@ class TokenizerVersioningTest(unittest.TestCase):
         self.assertIn("huggingface", json_tokenizer["model"]["vocab"])
 
         # Testing an older version by monkey-patching the version in the module it's used.
+        from unittest.mock import patch
+
         import transformers as old_transformers
 
-        old_transformers.tokenization_utils_base.__version__ = "3.0.0"
-        old_tokenizer = old_transformers.models.auto.AutoTokenizer.from_pretrained(repo)
-        self.assertEqual(len(old_tokenizer), 28996)
-        json_tokenizer = json.loads(old_tokenizer._tokenizer.to_str())
-        self.assertNotIn("huggingface", json_tokenizer["model"]["vocab"])
+        # Matt: The old test modified the module level version numbers
+        # which was (I think) the cause of strange flaky tests depending on test ordering.
+        # Using a context manager ensures the version mutation doesn't leak out of this test
+        with patch.object(old_transformers.tokenization_utils_base, "__version__", "3.0.0"):
+            old_tokenizer = old_transformers.models.auto.AutoTokenizer.from_pretrained(repo)
+            self.assertEqual(len(old_tokenizer), 28996)
+            json_tokenizer = json.loads(old_tokenizer._tokenizer.to_str())
+            self.assertNotIn("huggingface", json_tokenizer["model"]["vocab"])
 
 
 @require_tokenizers

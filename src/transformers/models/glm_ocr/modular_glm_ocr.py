@@ -184,7 +184,7 @@ class GlmOcrTextConfig(Glm4vTextConfig):
         super().__init__(**super_kwargs)
 
 
-class GlmOcrConfig(Glm4vConfig, nn.Module):
+class GlmOcrConfig(Glm4vConfig):
     r"""
     This is the configuration class to store the configuration of a [`GlmOcrModel`]. It is used to instantiate a
     GLM-OCR model according to the specified arguments, defining the model architecture. Instantiating a
@@ -290,9 +290,9 @@ class GlmOcrVisionAttention(Glm4vVisionAttention):
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention

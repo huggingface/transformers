@@ -904,8 +904,8 @@ def replace_class_node(
     Returns:
         A new class node corresponding to the modular definition.
     """
-    all_bases = [get_full_attribute_name(k.value) for k in modular_class_node.bases]
-    if any(base is None for base in all_bases):
+    all_new_bases = {get_full_attribute_name(k.value): k for k in modular_class_node.bases}
+    if any(base is None for base in all_new_bases.keys()):
         raise ValueError(f"Could not parse the name of the bases for {modular_class_node.name.value}")
 
     original_modeling_node = mapper.classes[renamed_super_class]
@@ -924,7 +924,7 @@ def replace_class_node(
 
     # If we explicitly passed a new base with common suffix to an old base, it is for switching the prefix
     # e.g. if the "natural" parent class is `PreTrainedModel` but we wanted to rename it to `PreTrainedVisionModel`
-    additional_bases = [base for base in all_bases if base != original_super_class]
+    additional_bases = {base for base in all_new_bases.keys() if base != original_super_class}
     new_class_bases = []
     for original_base in original_modeling_node.bases:
         new_base = original_base
@@ -936,8 +936,20 @@ def replace_class_node(
                 if len(suffix) > 0 and suffix[0].isupper():
                     new_name_node = original_base.value.with_changes(value=additional_base_name)
                     new_base = original_base.with_changes(value=new_name_node)
+                    # Remove from set
+                    additional_bases.discard(additional_base_name)
                     break
         new_class_bases.append(new_base)
+    # Add potential additional classes that may not be inherited as the parent does not use them, and that were not
+    # already replaced above
+    original_bases = {get_full_attribute_name(k.value) for k in original_modeling_node.bases}
+    new_class_bases.extend(
+        [all_new_bases[added_base] for added_base in additional_bases if added_base not in original_bases]
+    )
+    # If we have both `nn.Module` and `GradientCheckpointingLayer`, remove `nn.Module`
+    new_class_bases_names = {get_full_attribute_name(k.value) for k in new_class_bases}
+    if "nn.Module" in new_class_bases_names and "GradientCheckpointingLayer" in new_class_bases_names:
+        new_class_bases = [k for k in new_class_bases if get_full_attribute_name(k.value) != "nn.Module"]
 
     # Use class decorators redefined in modular file if any
     new_class_decorators = (
