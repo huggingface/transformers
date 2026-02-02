@@ -15,7 +15,7 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
 class Emu3VQVAEConfig(PreTrainedConfig):
@@ -108,7 +108,7 @@ class Emu3VQVAEConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class Emu3TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Emu3TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Emu3TextModel`]. It is used to instantiate a
     emu3 model according to the specified arguments, defining the model architecture. Instantiating a
@@ -166,6 +166,8 @@ class Emu3TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
 
 
     ```python
@@ -206,6 +208,7 @@ class Emu3TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         attention_bias=False,
         attention_dropout: float = 0.1,
         initializer_range: float = 0.02,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -227,6 +230,7 @@ class Emu3TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

@@ -24,10 +24,6 @@ on:
       pr_number:
         required: false
         type: string
-    outputs:
-      report:
-        description: "Content of the report of new failures"
-        value: ${{ jobs.process_new_failures_with_commit_info.outputs.report }}
 
 env:
   HF_HOME: /mnt/cache
@@ -181,6 +177,7 @@ jobs:
         env:
           job: ${{ inputs.job }}
           run_idx: ${{ matrix.run_idx }}
+          pr_number: ${{ inputs.pr_number }}
         run: python3 utils/check_bad_commit.py --start_commit "$START_SHA" --end_commit "$END_SHA" --file "ci_results_${job}/new_failures.json" --output_file "new_failures_with_bad_commit_${job}_${run_idx}.json"
 
       - name: Show results
@@ -205,8 +202,6 @@ jobs:
     if: needs.check_new_failures.outputs.process == 'true'
     runs-on:
       group: aws-g5-4xlarge-cache
-    outputs:
-      report: ${{ steps.set_output.outputs.report }}
     container:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -262,28 +257,19 @@ jobs:
             echo EOF
           } >> "$GITHUB_ENV"
 
-      # The output is useful if a caller needs more processing, for example, we have a chain
-      # self-comment-ci.yml -> self-scheduled.yml -> this one (check_failed_tests.yml),
-      # and `self-comment-ci.yml` needs further processing before sending a GitHub comment to the pull request page.
-      - name: Show results & Set outputs
-        id: set_output
+      - name: Show results
         working-directory: /transformers
         run: |
           ls -l new_failures_with_bad_commit.json
           cat new_failures_with_bad_commit.json
 
-          {
-            echo 'report<<EOF'
-            cat new_failures_with_bad_commit.json
-            echo ''  # Force a newline
-            echo EOF
-          } >> "$GITHUB_OUTPUT"
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: new_failures_with_bad_commit_${{ inputs.job }}
-          path: /transformers/new_failures_with_bad_commit.json
+          path: |
+            /transformers/new_failures_with_bad_commit.json
+            /transformers/new_failures_with_bad_commit_url.txt
 
       - name: Prepare Slack report title
         working-directory: /transformers

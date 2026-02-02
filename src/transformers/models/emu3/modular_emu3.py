@@ -866,7 +866,7 @@ class Emu3ImageVocabularyMapping:
         return img_tokens.to(device)
 
 
-class Emu3PreTrainedModel(ChameleonPreTrainedModel, Emu3VQVAE):
+class Emu3PreTrainedModel(ChameleonPreTrainedModel):
     _no_split_modules = [
         "Emu3DecoderLayer",
     ]

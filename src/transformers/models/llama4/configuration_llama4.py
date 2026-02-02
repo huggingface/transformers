@@ -15,7 +15,7 @@
 
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -76,7 +76,7 @@ class Llama4VisionConfig(PreTrainedConfig):
         "model.layers.*.self_attn.o_proj": "rowwise",
         "vision_adapter.mlp.fc1": "colwise",
         "vision_adapter.mlp.fc2": "rowwise",
-        "patch_embedding.linear": "colwise_rep",
+        "patch_embedding.linear": "colwise_gather_output",
     }
     model_type = "llama4_vision_model"
     base_config_key = "vision_config"
@@ -128,7 +128,7 @@ class Llama4VisionConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-class Llama4TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Llama4TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Llama4TextModel`]. It is used to instantiate a
     Llama4 text model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -217,16 +217,14 @@ class Llama4TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.feed_forward.shared_expert.gate_proj": "local_colwise",
-        "layers.*.feed_forward.shared_expert.up_proj": "local_colwise",
-        "layers.*.feed_forward.shared_expert.down_proj": "local_rowwise",
-        "layers.*.feed_forward.experts.gate_up_proj": "local_packed_rowwise",  # row because not linear
-        "layers.*.feed_forward.experts.down_proj": "local_colwise",  # col because not linear
-        "layers.*.feed_forward.experts": "local",
-        "layers.*.feed_forward.gate_proj": "local_colwise",
-        "layers.*.feed_forward.up_proj": "local_colwise",
-        "layers.*.feed_forward.down_proj": "local_rowwise",
-        "layers.*.feed_forward": "gather",
+        "layers.*.feed_forward.shared_expert.gate_proj": "colwise",
+        "layers.*.feed_forward.shared_expert.up_proj": "colwise",
+        "layers.*.feed_forward.shared_expert.down_proj": "rowwise",
+        "layers.*.feed_forward.experts.gate_up_proj": "packed_rowwise",  # row because not linear
+        "layers.*.feed_forward.experts.down_proj": "colwise",  # col because not linear
+        "layers.*.feed_forward.gate_proj": "colwise",
+        "layers.*.feed_forward.up_proj": "colwise",
+        "layers.*.feed_forward.down_proj": "rowwise",
     }
     base_model_ep_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -235,10 +233,9 @@ class Llama4TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",  # row because not linear
         "layers.*.feed_forward.experts.down_proj": "grouped_gemm",  # col because not linear
-        "layers.*.feed_forward.experts": "gather",  # all reduce
-        "layers.*.feed_forward.gate_proj": "local_colwise",
-        "layers.*.feed_forward.up_proj": "local_colwise",
-        "layers.*.feed_forward.down_proj": "local_rowwise",
+        "layers.*.feed_forward.gate_proj": "colwise",
+        "layers.*.feed_forward.up_proj": "colwise",
+        "layers.*.feed_forward.down_proj": "rowwise",
         "layers.*.feed_forward.router": "ep_router",
     }
 

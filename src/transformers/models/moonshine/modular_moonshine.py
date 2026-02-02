@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -47,7 +47,7 @@ from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right
 logger = logging.get_logger(__name__)
 
 
-class MoonshineConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class MoonshineConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MoonshineModel`]. It is used to instantiate a Moonshine
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -328,9 +328,9 @@ class MoonshineAttention(GlmAttention):
                     key_states, value_states, self.layer_idx, cache_kwargs
                 )
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         is_causal = self.is_causal and attention_mask is None and q_len > 1
 

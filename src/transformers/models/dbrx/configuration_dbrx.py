@@ -16,7 +16,7 @@
 from typing import Any
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -118,7 +118,7 @@ class DbrxFFNConfig(PreTrainedConfig):
             raise ValueError(f"Found unknown {kwargs=}")
 
 
-class DbrxConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class DbrxConfig(PreTrainedConfig):
     r"""
 
     This is the configuration class to store the configuration of a [`DbrxModel`]. It is used to instantiate a Dbrx model according to the

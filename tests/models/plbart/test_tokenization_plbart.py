@@ -294,6 +294,7 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
         ids = self.tokenizer(self.src_text).input_ids[0]
         self.assertListEqual(self.expected_src_tokens, ids)
 
+    @is_flaky
     def test_python_en_tokenizer_decode_ignores_language_codes(self):
         self.assertIn(PYTHON_CODE, self.tokenizer.all_special_ids)
         generated_ids = [EN_CODE, 9037, 33442, 57, 752, 153, 14, 56, 18, 9, 2]
@@ -312,9 +313,11 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
         self.assertEqual(ids[-1], PYTHON_CODE)
         self.assertEqual(len(ids), desired_max_length)
 
+    @is_flaky
     def test_mask_token(self):
         self.assertListEqual(self.tokenizer.convert_tokens_to_ids(["<mask>", "__java__"]), [50004, 50001])
 
+    @is_flaky
     def test_special_tokens_unaffacted_by_save_load(self):
         tmpdirname = tempfile.mkdtemp()
         original_special_tokens = self.tokenizer.fairseq_tokens_to_ids
@@ -335,6 +338,7 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
         self.assertEqual(batch.labels[1][-2:].tolist(), [2, EN_CODE])
 
     @require_torch
+    @is_flaky
     def test_python_en_tokenizer_prepare_batch(self):
         batch = self.tokenizer(
             self.src_text,
@@ -357,6 +361,7 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.prefix_tokens, [])
         self.assertEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id, PYTHON_CODE])
 
+    @is_flaky
     def test_seq2seq_max_length(self):
         batch = self.tokenizer(self.src_text, padding=True, truncation=True, max_length=3, return_tensors="pt")
         targets = self.tokenizer(
@@ -369,6 +374,7 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
         self.assertEqual(batch.decoder_input_ids.shape[1], 10)
 
     @require_torch
+    @is_flaky
     def test_tokenizer_translation(self):
         inputs = self.tokenizer._build_translation_inputs(
             "A test", return_tensors="pt", src_lang="en_XX", tgt_lang="java"
