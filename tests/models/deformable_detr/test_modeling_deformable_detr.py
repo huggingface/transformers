@@ -251,16 +251,16 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         config.two_stage = True
 
         model = DeformableDetrForObjectDetection(config)
-        self.assertTrue("model.decoder.bbox_embed" in model._tied_weights_keys)
-        self.assertTrue("model.decoder.class_embed" in model._tied_weights_keys)
+        self.assertTrue("bbox_embed" in model._tied_weights_keys)
+        self.assertTrue("class_embed" in model._tied_weights_keys)
 
         # if we update config attr, model's tied weights keys also change
         config.with_box_refine = False
         config.two_stage = False
 
         model = DeformableDetrForObjectDetection(config)
-        self.assertFalse("model.decoder.bbox_embed" in model._tied_weights_keys)
-        self.assertFalse("model.decoder.class_embed" in model._tied_weights_keys)
+        self.assertFalse("bbox_embed" in model._tied_weights_keys)
+        self.assertFalse("class_embed" in model._tied_weights_keys)
 
     @unittest.skip(reason="Deformable DETR does not use inputs_embeds")
     def test_inputs_embeds(self):
