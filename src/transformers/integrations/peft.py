@@ -572,7 +572,7 @@ class PeftAdapterMixin:
             sharded_metadata=sharded_metadata,
             weight_mapping=peft_weight_conversions,
         )
-        load_info = self._load_pretrained_model(
+        loading_info, _ = self._load_pretrained_model(
             model=self,
             state_dict=adapter_state_dict,
             checkpoint_files=checkpoint_files,
@@ -586,24 +586,15 @@ class PeftAdapterMixin:
         def is_adapter_key(key: str) -> bool:
             return any(marker in key for marker in adapter_key_markers)
 
-        load_info = replace(
-            load_info,
-            missing_keys=[k for k in load_info.missing_keys if is_adapter_key(k)],
-            mismatched_keys=load_info.mismatched_keys,
-        )
+        loading_info.missing_keys = {k for k in loading_info.missing_keys if is_adapter_key(k)}
 
         log_state_dict_report(
             model=self,
-            load_config=load_config,
+            pretrained_model_name_or_path=load_config.pretrained_model_name_or_path,
+            ignore_mismatched_sizes=load_config.ignore_mismatched_sizes,
+            loading_info=loading_info,
             logger=logger,
-            error_msgs=load_info.error_msgs,
-            unexpected_keys=load_info.unexpected_keys,
-            missing_keys=load_info.missing_keys,
-            mismatched_keys=load_info.mismatched_keys,
-            mismatched_shapes=load_info.mismatched_keys,
-            conversion_errors=load_info.conversion_errors,
         )
-        return load_info
 
     def enable_peft_hotswap(
         self, target_rank: int = 128, check_compiled: Literal["error", "warn", "ignore"] = "error"

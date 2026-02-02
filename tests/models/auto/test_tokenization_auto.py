@@ -152,7 +152,6 @@ class AutoTokenizerTest(unittest.TestCase):
             self.assertEqual(tokenizer.model_max_length, 512)
 
     @require_tokenizers
-    @unittest.skip("Broken right now but not very important")
     def test_tokenizer_identifier_non_existent(self):
         for tokenizer_class in [BertTokenizer, AutoTokenizer]:
             with self.assertRaisesRegex(
