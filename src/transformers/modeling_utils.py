@@ -78,9 +78,8 @@ from .integrations.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     _get_parameter_tp_plan,
     distribute_model,
+    gather_state_dict_for_save,
     initialize_tensor_parallelism,
-    repack_weights,
-    replace_state_dict_local_with_dtensor,
     shard_and_distribute_module,
     verify_tp_plan,
 )
@@ -137,9 +136,6 @@ if is_accelerate_available():
 
 
 _torch_distributed_available = torch.distributed.is_available()
-_is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
-if _is_dtensor_available:
-    from torch.distributed.tensor import DTensor
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
@@ -1318,9 +1314,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.warnings_issued = {}
         # Overwrite the class attribute to make it an instance attribute, so models like
         # `InstructBlipForConditionalGeneration` can dynamically update it without modifying the class attribute
-        # when a different component (e.g. language_model) is used.
+        # when a different component (e.g. language_model) is used. Same for `_tied_weights_keys` which pops/adds
+        # new keys dynamically depending on config values
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
         self._keep_in_fp32_modules_strict = copy.copy(self.__class__._keep_in_fp32_modules_strict)
+        self._tied_weights_keys = copy.copy(self.__class__._tied_weights_keys)
         self.dtype_plan = {}
 
         if isinstance(self._keep_in_fp32_modules, list):
@@ -1957,10 +1955,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             code = f.read()
         # heuristic -> if we find those patterns, the model uses the correct interface
         if re.search(r"class \w+Attention\(nn.Module\)", code):
-            return (
-                "eager_attention_forward" in code
-                and "ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]" in code
-            )
+            return "eager_attention_forward" in code and "ALL_ATTENTION_FUNCTIONS.get_interface(" in code
         else:
             # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
             return True
@@ -3349,10 +3344,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if ignore_key in state_dict:
                     del state_dict[ignore_key]
 
-        # If model was sharded, we cannot properly determine sizes of tensors that `local_*` strategy was used,
-        # therefore we replace them with DTensors that are equivalently sharded
+        # If model was sharded with TP, gather full tensors for saving
         if self._tp_size is not None:
-            state_dict = replace_state_dict_local_with_dtensor(state_dict, self._tp_plan, self._device_mesh)
+            state_dict = gather_state_dict_for_save(state_dict, self._tp_plan, self._device_mesh, self._tp_size)
 
         # Remove tied weights as safetensors do not handle them
         state_dict = remove_tied_weights_from_state_dict(state_dict, model_to_save)
@@ -3409,13 +3403,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             for tensor_name in tensor_names:
                 # Get the tensor, and remove it from state_dict to avoid keeping the ref
                 tensor = state_dict.pop(tensor_name)
-
-                # In case of TP, get the full parameter back
-                if _is_dtensor_available and isinstance(tensor, DTensor):
-                    tensor = tensor.full_tensor()
-                    # to get the correctly ordered tensor we need to repack if packed
-                    if _get_parameter_tp_plan(tensor_name, self._tp_plan) == "local_packed_rowwise":
-                        tensor = repack_weights(tensor, -1, self._tp_size, 2)
 
                 # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
                 # but it would otherwise not be contained in the saved shard if we were to simply move the file
@@ -4781,6 +4768,20 @@ class AttentionInterface(GeneralInterface):
         "paged|sdpa": sdpa_attention_paged_forward,
         "paged|eager": eager_paged_attention_forward,
     }
+
+    def get_interface(self, attn_implementation: str, default: Callable) -> Callable:
+        """Return the requested `attn_implementation`. Also strictly check its validity, and raise if invalid."""
+        if attn_implementation is None:
+            logger.warning_once(
+                "You tried to access the `AttentionInterface` with a `config._attn_implementation` set to `None`. This "
+                "is expected if you use an Attention Module as a standalone Module. If this is not the case, something went "
+                "wrong with the dispatch of `config._attn_implementation`"
+            )
+        elif attn_implementation != "eager" and attn_implementation not in self:
+            raise KeyError(
+                f"`{attn_implementation}` is not a valid attention implementation registered in the `AttentionInterface`"
+            )
+        return super().get(attn_implementation, default)
 
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones

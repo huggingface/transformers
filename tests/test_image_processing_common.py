@@ -30,7 +30,7 @@ import pytest
 from packaging import version
 
 from transformers import AutoImageProcessor, BatchFeature
-from transformers.image_utils import AnnotationFormat, AnnotionFormat
+from transformers.image_utils import AnnotationFormat
 from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
@@ -728,10 +728,6 @@ class ImageProcessingTestMixin:
 
 
 class AnnotationFormatTestMixin:
-    # this mixin adds a test to assert that usages of the
-    # to-be-deprecated `AnnotionFormat` continue to be
-    # supported for the time being
-
     def test_processor_can_use_legacy_annotation_format(self):
         image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
         fixtures_path = pathlib.Path(__file__).parent / "fixtures" / "tests_samples" / "COCO"
@@ -764,8 +760,6 @@ class AnnotationFormatTestMixin:
         test_cases = [
             ("coco_detection", detection_params),
             ("coco_panoptic", panoptic_params),
-            (AnnotionFormat.COCO_DETECTION, detection_params),
-            (AnnotionFormat.COCO_PANOPTIC, panoptic_params),
             (AnnotationFormat.COCO_DETECTION, detection_params),
             (AnnotationFormat.COCO_PANOPTIC, panoptic_params),
         ]
