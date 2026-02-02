@@ -1709,7 +1709,9 @@ def _single_column_cell_selection_loss(token_logits, column_logits, labels, cell
         no_cell_selected.view(column_label.size()), torch.zeros_like(column_label), column_label
     )
 
-    column_dist = torch.distributions.Categorical(logits=column_logits)  # shape (batch_size, max_num_cols)
+    column_dist = torch.distributions.Categorical(
+        logits=column_logits, validate_args=False
+    )  # shape (batch_size, max_num_cols)
     column_loss_per_example = -column_dist.log_prob(column_label)
 
     # Part 2: cell loss
