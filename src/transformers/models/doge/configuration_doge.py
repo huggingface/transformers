@@ -20,10 +20,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class DogeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class DogeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DogeModel`]. It is used to instantiate an Doge
     model according to the specified arguments, defining the model architecture like [SmallDoge/Doge-320M](https://huggingface.co/SmallDoge/Doge-320M).
@@ -123,9 +123,9 @@ class DogeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.mlp.router_gate": "colwise_rep",
-        "layers.*.mlp.down_embed": "rowwise_rep",
-        "layers.*.mlp.up_embed": "rowwise_rep",
+        "layers.*.mlp.router_gate": "colwise_gather_output",
+        "layers.*.mlp.down_embed": "rowwise_split_input",
+        "layers.*.mlp.up_embed": "rowwise_split_input",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
