@@ -878,24 +878,98 @@ class ModelTesterMixin:
                 with self.subTest(k):
                     torch.testing.assert_close(v, new_params[k], msg=f"failed on {k}")
 
-    def test_keep_in_fp32_modules(self):
+    def test_keep_in_fp32_modules_exist(self):
+        """Test that both the `_keep_in_fp32` and `_keep_in_fp32_strict` targets match some layers, to avoid any typo"""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            if model_class._keep_in_fp32_modules is None:
-                self.skipTest(reason="Model class has no _keep_in_fp32_modules attribute defined")
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config))
+                # Make sure the modules correctly exist if the flag is active
+                if len(model._keep_in_fp32_modules) == 0 and len(model._keep_in_fp32_modules_strict) == 0:
+                    self.skipTest(
+                        reason=f"{model_class.__name__} has no _keep_in_fp32_modules nor _keep_in_fp32_modules_strict attribute defined"
+                    )
 
-            model = model_class(copy.deepcopy(config))
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
+                state_dict_names = {k for k, v in model.state_dict().items()}
+                # Check that every module in the keep_in_fp32 list is part of the module graph
+                if len(model._keep_in_fp32_modules) > 0:
+                    non_existent = []
+                    for module in model._keep_in_fp32_modules:
+                        if not any(re.search(rf"(?:^|\.){module}(?:\.|$)", name) for name in state_dict_names):
+                            non_existent.append(module)
+                    self.assertTrue(
+                        len(non_existent) == 0,
+                        f"{non_existent} were specified in the `_keep_in_fp32_modules` list, but are not part of the modules in"
+                        f" {model_class.__name__}",
+                    )
 
-                model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
+                if len(model._keep_in_fp32_modules_strict) > 0:
+                    non_existent = []
+                    for module in model._keep_in_fp32_modules_strict:
+                        if not any(re.search(rf"(?:^|\.){module}(?:\.|$)", name) for name in state_dict_names):
+                            non_existent.append(module)
+                    self.assertTrue(
+                        len(non_existent) == 0,
+                        f"{non_existent} were specified in the `_keep_in_fp32_modules_strict` list, but are not part of the "
+                        f"modules in {model_class.__name__}",
+                    )
 
-                for name, param in model.named_parameters():
-                    with self.subTest(name):
-                        if re.search("|".join(model_class._keep_in_fp32_modules), name):
-                            self.assertTrue(param.dtype == torch.float32)
+    def test_keep_in_fp32_modules(self):
+        """Test that the flag `_keep_in_fp32_modules` is correctly respected."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config))
+                if len(model._keep_in_fp32_modules) == 0:
+                    self.skipTest(
+                        reason=f"{model_class.__name__} class has no _keep_in_fp32_modules attribute defined"
+                    )
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+
+                    # Test when reloading in fp16 -> should be upcasted to fp32
+                    model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
+                    for name, param in model.state_dict().items():
+                        if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules):
+                            self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:
-                            self.assertTrue(param.dtype == torch.float16, name)
+                            self.assertTrue(param.dtype == torch.float16, f"{name} was upcasted but it should NOT")
+
+                    # Test when reloading in bf16 -> should stay bf16
+                    model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+                    for name, param in model.state_dict().items():
+                        self.assertTrue(param.dtype == torch.bfloat16, f"{name} was upcasted but it should NOT")
+
+    def test_keep_in_fp32_modules_strict(self):
+        """Test that the flag `_keep_in_fp32_modules_strict` is correctly respected."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config))
+                if len(model._keep_in_fp32_modules_strict) == 0:
+                    self.skipTest(
+                        reason=f"{model_class.__name__} class has no _keep_in_fp32_modules_strict attribute defined"
+                    )
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+
+                    # Test when reloading in fp16 -> should be upcasted to fp32
+                    model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
+                    for name, param in model.state_dict().items():
+                        if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules_strict):
+                            self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
+                        else:
+                            self.assertTrue(param.dtype == torch.float16, f"{name} was upcasted but it should NOT")
+
+                    # Test when reloading in bf16 -> should also be upcasted to fp32
+                    model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+                    for name, param in model.state_dict().items():
+                        if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules_strict):
+                            self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
+                        else:
+                            self.assertTrue(param.dtype == torch.bfloat16, f"{name} was upcasted but it should NOT")
 
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4074,10 +4148,19 @@ class ModelTesterMixin:
             inputs_dict.pop("use_cache", None)
             # we don't test loss computation for now
             inputs_dict.pop("return_loss", None)
+            # we don't test loss computation for now
+            inputs_dict.pop("future_values", None)
 
             # set experts implementation to batched_mm for export
             if model._can_set_experts_implementation():
                 model.set_experts_implementation("batched_mm")
+
+            # set attention implementation to sdpa for export
+            if model._can_set_attn_implementation() and model.config.model_type != "videomae":
+                try:
+                    model.set_attn_implementation("sdpa")
+                except Exception:
+                    pass
 
             for module in model.modules():
                 if hasattr(module, "config"):
@@ -4087,9 +4170,6 @@ class ModelTesterMixin:
                     # disable returning loss for every submodel
                     if hasattr(module.config, "return_loss"):
                         module.config.return_loss = False
-                    # disable reference compile for every submodel (modernbert)
-                    if hasattr(module.config, "reference_compile"):
-                        module.config.reference_compile = False
                     # disable mamba kernels for every submodel (mamba, jamba)
                     if hasattr(module.config, "use_mamba_kernels"):
                         module.config.use_mamba_kernels = False
@@ -4111,7 +4191,9 @@ class ModelTesterMixin:
                 else:
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
                 inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                set_config_for_less_flaky_test(config)
                 model = model_class(config).eval().to(torch_device)
+                set_model_for_less_flaky_test(model)
 
                 # Prepare model and inputs for export
                 model, inputs_dict = _prepare_for_export(model, inputs_dict)

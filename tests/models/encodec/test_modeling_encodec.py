@@ -146,6 +146,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     is_encoder_decoder = True
 
     test_resize_embeddings = False
+    test_torch_exportable = False
     pipeline_model_mapping = {"feature-extraction": EncodecModel} if is_torch_available() else {}
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

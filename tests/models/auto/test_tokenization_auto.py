@@ -33,6 +33,7 @@ from transformers import (
     GPT2Tokenizer,
     HerbertTokenizer,
     PreTrainedTokenizerFast,
+    PythonBackend,
     Qwen2Tokenizer,
     Qwen2TokenizerFast,
     Qwen3MoeConfig,
@@ -457,6 +458,14 @@ class AutoTokenizerTest(unittest.TestCase):
         )
         self.assertIsNot(tokenizer.__class__, reloaded_tokenizer.__class__)
         self.assertTrue(reloaded_tokenizer.special_attribute_present)
+
+    @slow
+    def test_custom_tokenizer_init(self):
+        tokenizer = AutoTokenizer.from_pretrained(
+            "Qwen/Qwen-VL", trust_remote_code=True, revision="0547ed36a86561e2e42fecec8fd0c4f6953e33c4"
+        )
+        self.assertIsInstance(tokenizer, PythonBackend)
+        self.assertGreater(len(tokenizer.get_vocab()), 0)
 
     @require_tokenizers
     def test_from_pretrained_dynamic_tokenizer_conflict(self):

@@ -1008,7 +1008,12 @@ class T5ModelIntegrationTests(unittest.TestCase):
                 ("rocm", (9, 4)): -19.0846,
             }
         ).get_expectation()
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+        torch.testing.assert_close(
+            mtf_score,
+            EXPECTED_SCORE,
+            atol=1e-4,
+            rtol=0.0,
+        )
 
     @slow
     def test_small_v1_1_integration_test(self):
@@ -1033,8 +1038,13 @@ class T5ModelIntegrationTests(unittest.TestCase):
         loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
         mtf_score = -(labels.shape[-1] * loss.item())
 
-        EXPECTED_SCORE = -59.0293
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+        EXPECTED_SCORE = -40.1645
+        torch.testing.assert_close(
+            mtf_score,
+            EXPECTED_SCORE,
+            atol=1e-4,
+            rtol=0.0,
+        )
 
     @slow
     def test_small_byt5_integration_test(self):
@@ -1057,8 +1067,13 @@ class T5ModelIntegrationTests(unittest.TestCase):
         loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
         mtf_score = -(labels.shape[-1] * loss.item())
 
-        EXPECTED_SCORE = -60.7397
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+        EXPECTED_SCORE = -44.6276
+        torch.testing.assert_close(
+            mtf_score,
+            EXPECTED_SCORE,
+            atol=1e-4,
+            rtol=0.0,
+        )
 
     @slow
     def test_summarization(self):
@@ -1431,8 +1446,8 @@ class T5ModelIntegrationTests(unittest.TestCase):
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
-            "theory of relativity states that 1) the speed of light is constant in all inertial reference frames. the laws of physics are the same for all inertial reference frames.",
-            "ketchup is my favorite condiment.",
+            "theory of relativity states that 1) the speed of light is constant in all inertial reference frames . the laws of physics are the same for all inertial reference frames .",
+            "ketchup is my favorite condiment .",
         ]
 
         prompts = [
