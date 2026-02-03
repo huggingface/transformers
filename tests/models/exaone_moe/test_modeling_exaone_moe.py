@@ -55,7 +55,7 @@ class ExaoneMoeModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_torch
 class ExaoneMoeIntegrationTest(unittest.TestCase):
-    TEST_MODEL_ID = "nuxlear/EXAONE-MoE-Dummy-7B-A1B"
+    TEST_MODEL_ID = "hf-internal-testing/EXAONE-MoE-Dummy-7B-A1B"
 
     @classmethod
     def setUpClass(cls):
