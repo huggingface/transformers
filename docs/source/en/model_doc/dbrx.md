@@ -37,7 +37,8 @@ We used curriculum learning for pretraining, changing the data mix during traini
 
 More detailed information about DBRX Instruct and DBRX Base can be found in our [technical blog post](https://www.databricks.com/blog/introducing-dbrx-new-state-art-open-llm).
 
-This model was contributed by [eitan-turok](https://huggingface.co/eitanturok) and [abhi-db](https://huggingface.co/abhi-db). The original code can be found [here](https://github.com/databricks/dbrx-instruct), though this may not be up to date.
+This model was contributed by [eitan-turok](https://huggingface.co/eitanturok) and [abhi-db](https://huggingface.co/abhi-db).
+Note: The original `databricks/dbrx-instruct` checkpoint was closed; [`transformers-community/dbrx-instruct`](https://huggingface.co/transformers-community/dbrx-instruct) is a re-upload for compatibility, and the snippets below use that re-upload.
 
 ## Usage Examples
 
@@ -47,9 +48,9 @@ The `generate()` method can be used to generate text using DBRX. You can generat
 from transformers import DbrxForCausalLM, AutoTokenizer
 import torch
 
-tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", token="YOUR_HF_TOKEN")
+tokenizer = AutoTokenizer.from_pretrained("transformers-community/dbrx-instruct", token="YOUR_HF_TOKEN")
 model = DbrxForCausalLM.from_pretrained(
-    "databricks/dbrx-instruct",
+    "transformers-community/dbrx-instruct",
     device_map="auto",
     dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
@@ -69,9 +70,9 @@ If you have flash-attention installed (`pip install flash-attn`), it is possible
 from transformers import DbrxForCausalLM, AutoTokenizer
 import torch
 
-tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", token="YOUR_HF_TOKEN")
+tokenizer = AutoTokenizer.from_pretrained("transformers-community/dbrx-instruct", token="YOUR_HF_TOKEN")
 model = DbrxForCausalLM.from_pretrained(
-    "databricks/dbrx-instruct",
+    "transformers-community/dbrx-instruct",
     device_map="auto",
     dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
@@ -92,9 +93,9 @@ You can also generate faster using the PyTorch scaled dot product attention. (Th
 from transformers import DbrxForCausalLM, AutoTokenizer
 import torch
 
-tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", token="YOUR_HF_TOKEN")
+tokenizer = AutoTokenizer.from_pretrained("transformers-community/dbrx-instruct", token="YOUR_HF_TOKEN")
 model = DbrxForCausalLM.from_pretrained(
-    "databricks/dbrx-instruct",
+    "transformers-community/dbrx-instruct",
     device_map="auto",
     dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",

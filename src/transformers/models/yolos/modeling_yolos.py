@@ -269,9 +269,9 @@ class YolosSelfAttention(nn.Module):
         value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
         query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         context_layer, attention_probs = attention_interface(
             self,
@@ -507,8 +507,6 @@ class YolosMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
     height and width of a bounding box w.r.t. an image.
-
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 
     """
 

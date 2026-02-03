@@ -152,6 +152,12 @@ try:
                     layer_name="MegaBlocksMoeMLP",
                 )
             },
+            "xpu": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/megablocks",
+                    layer_name="MegaBlocksMoeMLP",
+                )
+            },
         },
         "FastGELU": {
             "cuda": {
@@ -210,7 +216,12 @@ try:
                 Mode.INFERENCE: FuncRepository(
                     repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
                 )
-            }
+            },
+            "cuda": {
+                Mode.INFERENCE: FuncRepository(
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                )
+            },
         }
 
     def has_key(d, key):

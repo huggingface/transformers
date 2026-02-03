@@ -27,7 +27,7 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
-from transformers.utils import is_gptqmodel_available, is_ipex_available
+from transformers.utils import is_gptqmodel_available
 
 
 if is_torch_available():
@@ -238,7 +238,7 @@ class GPTQTest(unittest.TestCase):
             self.tokenizer.save_pretrained(tmpdirname)
             self.quantized_model.save_pretrained(tmpdirname)
             if self.device_map == "cpu":
-                quant_type = "ipex" if is_ipex_available() else "torch_fused"
+                quant_type = "torch_fused"
             else:
                 quant_type = "exllamav2"
             quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
@@ -274,7 +274,7 @@ class GPTQTestCUDA(GPTQTest):
                 device_map=self.device_map,
             )
             self.assertEqual(quantized_model_from_saved.config.quantization_config.bits, self.bits)
-            quant_type = "exllamav2" if self.device_map != "cpu" else ("ipex" if is_ipex_available() else "torch")
+            quant_type = "exllamav2" if self.device_map != "cpu" else "torch"
             self.check_quantized_layers_type(quantized_model_from_saved, quant_type)
             self.check_inference_correctness(quantized_model_from_saved)
 

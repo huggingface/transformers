@@ -640,7 +640,7 @@ class TrainingArguments:
             When using distributed training, the value of the flag `broadcast_buffers` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
         ddp_backend (`str`, *optional*):
-            The backend to use for distributed training. Must be one of `"nccl"`, `"mpi"`, `"ccl"`, `"gloo"`, `"hccl"`.
+            The backend to use for distributed training. Must be one of `"nccl"`, `"mpi"`, `"xccl"`, `"gloo"`, `"hccl"`.
         ddp_timeout (`int`, *optional*, defaults to 1800):
             The timeout for `torch.distributed.init_process_group` calls, used to avoid GPU socket timeouts when
             performing slow operations in distributed runnings. Please refer to the [PyTorch documentation](https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) for more
@@ -1031,7 +1031,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "The backend to be used for distributed training",
-            "choices": ["nccl", "gloo", "mpi", "ccl", "hccl", "cncl", "mccl"],
+            "choices": ["nccl", "gloo", "mpi", "xccl", "hccl", "cncl", "mccl"],
         },
     )
     debug: str | list[DebugOption] = field(

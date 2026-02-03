@@ -14,14 +14,14 @@
 """Qwen3 model configuration"""
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Qwen3Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Qwen3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3Model`]. It is used to instantiate a
     Qwen3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -134,7 +134,7 @@ class Qwen3Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         hidden_act: str | None = "silu",
         max_position_embeddings: int | None = 32768,
         initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-6,
+        rms_norm_eps: float | None = 1e-6,
         use_cache: bool | None = True,
         tie_word_embeddings: bool | None = False,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,

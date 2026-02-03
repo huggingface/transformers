@@ -247,7 +247,7 @@ class AfmoeMoE(nn.Module):
         self.router = AfmoeTokenChoiceRouter(config)
         self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.num_shared_experts)
         self.experts = AfmoeExperts(config)
-        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts, dtype=torch.float32), requires_grad=False)
+        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
 
     def forward(self, hidden_states):
         batch_size, seq_len, hidden_dim = hidden_states.shape
@@ -405,9 +405,9 @@ class AfmoeAttention(nn.Module):
             cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         output, attn_weights = attention_interface(
             self,
@@ -635,7 +635,7 @@ class AfmoeModel(AfmoePreTrainedModel):
 @auto_docstring
 class AfmoeForCausalLM(AfmoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):

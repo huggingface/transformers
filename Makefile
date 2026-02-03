@@ -40,7 +40,7 @@ check-repo:
 	-@{ \
 		md5sum src/transformers/dependency_versions_table.py > md5sum.saved; \
 		python setup.py deps_table_update; \
-		md5sum -c --quiet md5sum.saved || (printf "Error: the version dependency table is outdated.\nPlease run 'make fix-repo' and commit the changes.\n" && exit 1); \
+		md5sum -c --quiet md5sum.saved || (printf "Error: the version dependency table is outdated.\nPlease run 'make fix-repo' and commit the changes. This requires Python 3.10.\n" && exit 1); \
 		rm md5sum.saved; \
 	}
 
