@@ -885,14 +885,14 @@ class ModelTesterMixin:
             with self.subTest(model_class.__name__):
                 model = model_class(copy.deepcopy(config))
                 # Make sure the modules correctly exist if the flag is active
-                if model._keep_in_fp32_modules is None and model._keep_in_fp32_modules_strict is None:
+                if len(model._keep_in_fp32_modules) == 0 and len(model._keep_in_fp32_modules_strict) == 0:
                     self.skipTest(
                         reason=f"{model_class.__name__} has no _keep_in_fp32_modules nor _keep_in_fp32_modules_strict attribute defined"
                     )
 
                 state_dict_names = {k for k, v in model.state_dict().items()}
                 # Check that every module in the keep_in_fp32 list is part of the module graph
-                if model._keep_in_fp32_modules is not None:
+                if len(model._keep_in_fp32_modules) > 0:
                     non_existent = []
                     for module in model._keep_in_fp32_modules:
                         if not any(re.search(rf"(?:^|\.){module}(?:\.|$)", name) for name in state_dict_names):
@@ -903,7 +903,7 @@ class ModelTesterMixin:
                         f" {model_class.__name__}",
                     )
 
-                if model._keep_in_fp32_modules_strict is not None:
+                if len(model._keep_in_fp32_modules_strict) > 0:
                     non_existent = []
                     for module in model._keep_in_fp32_modules_strict:
                         if not any(re.search(rf"(?:^|\.){module}(?:\.|$)", name) for name in state_dict_names):
@@ -920,7 +920,7 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
                 model = model_class(copy.deepcopy(config))
-                if model._keep_in_fp32_modules is None:
+                if len(model._keep_in_fp32_modules) == 0:
                     self.skipTest(
                         reason=f"{model_class.__name__} class has no _keep_in_fp32_modules attribute defined"
                     )
@@ -947,7 +947,7 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
                 model = model_class(copy.deepcopy(config))
-                if model._keep_in_fp32_modules_strict is None:
+                if len(model._keep_in_fp32_modules_strict) == 0:
                     self.skipTest(
                         reason=f"{model_class.__name__} class has no _keep_in_fp32_modules_strict attribute defined"
                     )

@@ -2432,6 +2432,8 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
 
         self.model = GroundingDinoModel(config)
         if not config.decoder_bbox_embed_share:
+            # Convert to instance attribute before modifying
+            self._tied_weights_keys = self._tied_weights_keys.copy()
             del self._tied_weights_keys[r"bbox_embed.(?![0])\d+"]
 
         self.bbox_embed = nn.ModuleList(
