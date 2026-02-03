@@ -183,8 +183,8 @@ def get_balanced_memory(
         max_memory (`Dict`, *optional*):
             A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
             Example: `max_memory={0: "1GB"}`.
-        no_split_module_classes (`List[str]`, *optional*):
-            A list of layer class names that should never be split across device (for instance any layer that has a
+        no_split_module_classes (`set[str]`, *optional*):
+            A set of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
         hf_quantizer (`HfQuantizer`, *optional*):
             A quantizer for the model.
@@ -591,7 +591,7 @@ def infer_auto_device_map(
             A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
             Example: `max_memory={0: "1GB"}`.
         no_split_module_classes (`set[str]`, *optional*):
-            A list of layer class names that should never be split across device (for instance any layer that has a
+            A set of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
         verbose (`bool`, *optional*, defaults to `False`):
             Whether or not to provide debugging statements as the function builds the device_map.
