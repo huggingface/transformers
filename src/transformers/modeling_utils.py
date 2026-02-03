@@ -1938,7 +1938,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         class_module = sys.modules[cls.__module__]
         # This can happen for a custom model in a jupyter notebook or repl for example - simply do not allow to set it then
-        if not hasattr(class_module, __file__):
+        if not hasattr(class_module, "__file__"):
             return False
         class_file = class_module.__file__
         with open(class_file, "r", encoding="utf-8") as f:
@@ -1957,7 +1957,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         class_module = sys.modules[cls.__module__]
         # This can happen for a custom model in a jupyter notebook or repl for example - simply do not allow to set it then
-        if not hasattr(class_module, __file__):
+        if not hasattr(class_module, "__file__"):
             return False
         class_file = class_module.__file__
         with open(class_file, "r", encoding="utf-8") as f:
