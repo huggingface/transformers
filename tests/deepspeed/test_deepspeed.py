@@ -500,6 +500,35 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                         self.assertEqual(len(param.shape), 3, f"down_proj should be 3D, got {param.shape}")
                         self.assertEqual(param.shape[0], 8, f"Should have 8 experts, got {param.shape[0]}")
 
+    def test_init_zero3_siglip(self):
+        """
+        Test that SigLIP model initialization works correctly with DeepSpeed ZeRO-3.
+        This tests the fix for lecun_normal_ and default_flax_embed_init initialization
+        functions that now check for _is_hf_initialized flag to prevent re-initialization
+        in ZeRO-3 environment.
+        """
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertTrue(dschf.is_zero3())
+        self.assertTrue(is_deepspeed_zero3_enabled())
+
+        with LoggingLevel(logging.INFO):
+            with mockenv_context(**self.dist_env_1_gpu):
+                logger = logging.get_logger("transformers.modeling_utils")
+                with CaptureLogger(logger) as cl:
+                    model = AutoModel.from_pretrained("google/siglip-base-patch16-224")
+
+        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+
+        self.assertIsNotNone(model)
+
 
 class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
     def setUp(self):
