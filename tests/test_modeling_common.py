@@ -4165,7 +4165,9 @@ class ModelTesterMixin:
                 try:
                     model.set_attn_implementation("sdpa")
                 except Exception as e:
-                    print(f"Could not set attention implementation to sdpa for {model} : {e}")
+                    print(
+                        f"Could not set attention implementation to sdpa for {model} of type {model.config.model_type} : {e}"
+                    )
 
             for module in model.modules():
                 if hasattr(module, "config"):
