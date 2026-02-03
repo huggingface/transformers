@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team and Google LLC. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 
 import itertools
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 from tokenizers import Tokenizer
@@ -73,9 +71,9 @@ class LasrTokenizer(T5Tokenizer, TokenizersBackend):
 
     def _decode(
         self,
-        token_ids: Union[int, list[int]],
+        token_ids: int | list[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         group_tokens: bool = True,
         **kwargs,
     ) -> str:
@@ -278,7 +276,7 @@ class LasrCTCConfig(ParakeetCTCConfig):
         vocab_size=512,
         ctc_loss_reduction="mean",
         ctc_zero_infinity=True,
-        encoder_config: Union[dict, LasrEncoderConfig] = None,
+        encoder_config: dict | LasrEncoderConfig = None,
         pad_token_id=0,
         **kwargs,
     ):
@@ -335,8 +333,8 @@ class LasrEncoderAttention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -349,9 +347,9 @@ class LasrEncoderAttention(LlamaAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -392,8 +390,8 @@ class LasrEncoderBlock(ParakeetEncoderBlock):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -476,7 +474,7 @@ class LasrEncoder(LasrPreTrainedModel):
     def forward(
         self,
         input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""

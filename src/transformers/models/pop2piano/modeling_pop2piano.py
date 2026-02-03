@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Pop2Piano Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@
 
 import copy
 import math
-from typing import Optional, Union
+from typing import Union
 
 import torch
 from torch import nn
@@ -33,6 +32,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_torch_flex_attn_available, is_torchdynamo_compiling, logging
+from ...utils.generic import is_flash_attention_requested
 from .configuration_pop2piano import Pop2PianoConfig
 
 
@@ -167,7 +167,7 @@ class Pop2PianoAttention(nn.Module):
         self,
         config: Pop2PianoConfig,
         has_relative_attention_bias=False,
-        layer_idx: Optional[int] = None,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -368,7 +368,7 @@ class Pop2PianoAttention(nn.Module):
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoLayerSelfAttention(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
+    def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
         self.SelfAttention = Pop2PianoAttention(
             config, has_relative_attention_bias=has_relative_attention_bias, layer_idx=layer_idx
@@ -403,7 +403,7 @@ class Pop2PianoLayerSelfAttention(nn.Module):
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoLayerCrossAttention(nn.Module):
-    def __init__(self, config, layer_idx: Optional[int] = None):
+    def __init__(self, config, layer_idx: int | None = None):
         super().__init__()
         self.EncDecAttention = Pop2PianoAttention(config, has_relative_attention_bias=False, layer_idx=layer_idx)
         self.layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
@@ -440,7 +440,7 @@ class Pop2PianoLayerCrossAttention(nn.Module):
 
 # Copied from transformers.models.t5.modeling_t5.T5Block with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoBlock(GradientCheckpointingLayer):
-    def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
+    def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.layer = nn.ModuleList()
@@ -810,7 +810,7 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool = False,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
@@ -990,7 +990,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
         input_features: torch.FloatTensor,
         composer: str,
         generation_config: GenerationConfig,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: torch.FloatTensor | None = None,
     ):
         """
         This method is used to concatenate mel conditioner tokens at the front of the input_features in order to
@@ -1037,23 +1037,23 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        input_features: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
+    ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Pop2Piano is a model with relative position embeddings

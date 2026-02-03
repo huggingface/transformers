@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -22,7 +21,7 @@
 from typing import Optional, Union
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -63,8 +62,6 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
-    min_pixels = None
-    max_pixels = None
     valid_kwargs = Qwen2VLImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
@@ -83,13 +80,13 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         if "shortest_edge" not in size or "longest_edge" not in size:
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-        super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        super().__init__(size=size, **kwargs)
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
-        min_pixels: Optional[int] = None,
-        max_pixels: Optional[int] = None,
+        size: SizeDict | None = None,
+        min_pixels: int | None = None,
+        max_pixels: int | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -106,7 +103,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         else:
             size = {**self.size}
 
-        return super()._further_process_kwargs(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        return super()._further_process_kwargs(size=size, **kwargs)
 
     @auto_docstring
     def preprocess(
@@ -121,7 +118,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         images: ImageInput,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[Qwen2VLImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -142,17 +139,17 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         patch_size: int,
         temporal_patch_size: int,
         merge_size: int,
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ):
         # Group images by size for batched resizing

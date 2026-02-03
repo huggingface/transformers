@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,7 @@
 import unittest
 
 from transformers import BitsAndBytesConfig, Cache, is_torch_available
-from transformers.testing_utils import require_read_token, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -146,7 +145,6 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @slow
-@require_read_token
 @require_torch_accelerator
 class DeepseekV2IntegrationTest(unittest.TestCase):
     def test_deepseek_v2_lite(self):

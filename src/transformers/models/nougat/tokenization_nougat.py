@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@ Tokenizer class for Nougat.
 import re
 from functools import partial
 from multiprocessing import Pool
-from typing import Optional, Union
 
 import numpy as np
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -398,8 +396,8 @@ class NougatTokenizer(TokenizersBackend):
         bos_token: str = "<s>",
         eos_token: str = "</s>",
         pad_token: str = "<pad>",
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges: Optional[Union[str, list]] = None,
+        vocab: str | dict | list | None = None,
+        merges: str | list | None = None,
         **kwargs,
     ):
         self._vocab = (
@@ -624,10 +622,10 @@ class NougatTokenizer(TokenizersBackend):
 
     def post_process_generation(
         self,
-        generation: Union[str, list[str]],
+        generation: str | list[str],
         fix_markdown: bool = True,
-        num_workers: Optional[int] = None,
-    ) -> Union[str, list[str]]:
+        num_workers: int | None = None,
+    ) -> str | list[str]:
         """
         Postprocess a generated text or a list of generated texts.
 

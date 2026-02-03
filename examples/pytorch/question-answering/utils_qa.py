@@ -19,7 +19,6 @@ import collections
 import json
 import logging
 import os
-from typing import Optional
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -36,9 +35,9 @@ def postprocess_qa_predictions(
     n_best_size: int = 20,
     max_answer_length: int = 30,
     null_score_diff_threshold: float = 0.0,
-    output_dir: Optional[str] = None,
-    prefix: Optional[str] = None,
-    log_level: Optional[int] = logging.WARNING,
+    output_dir: str | None = None,
+    prefix: str | None = None,
+    log_level: int | None = logging.WARNING,
 ):
     """
     Post-processes the predictions of a question-answering model to convert them to answers that are substrings of the
@@ -258,9 +257,9 @@ def postprocess_qa_predictions_with_beam_search(
     max_answer_length: int = 30,
     start_n_top: int = 5,
     end_n_top: int = 5,
-    output_dir: Optional[str] = None,
-    prefix: Optional[str] = None,
-    log_level: Optional[int] = logging.WARNING,
+    output_dir: str | None = None,
+    prefix: str | None = None,
+    log_level: int | None = logging.WARNING,
 ):
     """
     Post-processes the predictions of a question-answering model with beam search to convert them to answers that are substrings of the

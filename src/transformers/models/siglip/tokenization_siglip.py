@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@ import re
 import string
 import warnings
 from shutil import copyfile
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import sentencepiece as spm
 
@@ -93,7 +92,7 @@ class SiglipTokenizer(SentencePieceBackend):
         unk_token="<unk>",
         pad_token="</s>",
         additional_special_tokens=None,
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
+        sp_model_kwargs: dict[str, Any] | None = None,
         model_max_length=64,
         do_lower_case=True,
         **kwargs,
@@ -141,7 +140,7 @@ class SiglipTokenizer(SentencePieceBackend):
         return vocab
 
     def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -180,7 +179,7 @@ class SiglipTokenizer(SentencePieceBackend):
             return token_ids + [self.eos_token_id]
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. T5 does not make
@@ -202,7 +201,7 @@ class SiglipTokenizer(SentencePieceBackend):
         return len(token_ids_0 + eos + token_ids_1 + eos) * [0]
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
@@ -332,7 +331,7 @@ class SiglipTokenizer(SentencePieceBackend):
         out_string += self.sp_model.decode(current_sub_tokens)
         return out_string.strip()
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return

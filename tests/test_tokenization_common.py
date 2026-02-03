@@ -25,7 +25,7 @@ import unittest
 from collections import OrderedDict
 from itertools import takewhile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
 from parameterized import parameterized
 
@@ -160,7 +160,7 @@ def merge_model_tokenizer_mappings(
 
 def check_subword_sampling(
     tokenizer: PreTrainedTokenizer,
-    text: Optional[str] = None,
+    text: str | None = None,
     test_sentencepiece_ignore_case: bool = True,
 ) -> None:
     """
@@ -367,14 +367,11 @@ Hey how are you doing"""  # noqa: W293
 
         # save the first pretrained tokenizer to tmpdirname for tests to use
         if cls.from_pretrained_id and cls.tokenizer_class is not None:
-            try:
-                tokenizer = AutoTokenizer.from_pretrained(
-                    cls.from_pretrained_id[0],
-                    **(cls.from_pretrained_kwargs if cls.from_pretrained_kwargs is not None else {}),
-                )
-                tokenizer.save_pretrained(cls.tmpdirname)
-            except Exception:
-                pass
+            tokenizer = AutoTokenizer.from_pretrained(
+                cls.from_pretrained_id[0],
+                **(cls.from_pretrained_kwargs if cls.from_pretrained_kwargs is not None else {}),
+            )
+            tokenizer.save_pretrained(cls.tmpdirname)
 
     @classmethod
     def tearDownClass(cls):
@@ -488,9 +485,9 @@ Hey how are you doing"""  # noqa: W293
         self,
         expected_encoding: dict,
         model_name: str,
-        revision: Optional[str] = None,
-        sequences: Optional[list[str]] = None,
-        decode_kwargs: Optional[dict[str, Any]] = None,
+        revision: str | None = None,
+        sequences: list[str] | None = None,
+        decode_kwargs: dict[str, Any] | None = None,
         padding: bool = True,
     ):
         """
@@ -643,6 +640,7 @@ Hey how are you doing"""  # noqa: W293
                 "vocab",
                 "merges",
                 "legacy",
+                "additional_special_tokens",  # V5: deprecated, converted to extra_special_tokens
             ]:
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
 

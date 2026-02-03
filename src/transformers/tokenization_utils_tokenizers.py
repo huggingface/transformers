@@ -22,7 +22,7 @@ import os
 from collections import defaultdict
 from collections.abc import Iterable
 from shutil import copyfile
-from typing import Any, Optional, Union
+from typing import Any
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from huggingface_hub import is_offline_mode
@@ -32,6 +32,8 @@ from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.models import BPE, Unigram
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
+
+from transformers.utils.hub import cached_file
 
 from .integrations.ggml import convert_gguf_tokenizer
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
@@ -250,7 +252,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
-            gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
+            gguf_path = cached_file(kwargs.get("name_or_path", ""), gguf_file, **kwargs)
+            gguf_param = load_gguf_checkpoint(gguf_path)
             architecture = gguf_param["config"]["model_type"]
             tokenizer_dict = gguf_param["tokenizer"]
             tokenizer_config = gguf_param["tokenizer_config"]
@@ -402,7 +405,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         else:
             return True
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -750,8 +753,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     def _encode_plus(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
+        text_pair: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -768,7 +771,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        split_special_tokens: Optional[bool] = None,
+        split_special_tokens: bool | None = None,
         **kwargs,
     ) -> BatchEncoding:
         # Input validation (from _call_one)
@@ -923,7 +926,33 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             token_ids = [token_ids]
         if isinstance(token_ids, dict):
             token_ids = token_ids["input_ids"]
-        return self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
+        text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
+
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
+        if clean_up_tokenization_spaces:
+            # Call custom cleanup method if it exists
+            if hasattr(self, "clean_up_tokenization") and callable(self.clean_up_tokenization):
+                text = self.clean_up_tokenization(text)
+            else:
+                # Apply standard cleanup
+                text = (
+                    text.replace(" .", ".")
+                    .replace(" ?", "?")
+                    .replace(" !", "!")
+                    .replace(" ,", ",")
+                    .replace(" ' ", "'")
+                    .replace(" n't", "n't")
+                    .replace(" 'm", "'m")
+                    .replace(" 's", "'s")
+                    .replace(" 've", "'ve")
+                    .replace(" 're", "'re")
+                )
+
+        return text
 
     def _save_pretrained(
         self,

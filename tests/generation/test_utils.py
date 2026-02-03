@@ -26,7 +26,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from packaging import version
 from parameterized import parameterized
 
 from transformers import (
@@ -40,11 +39,11 @@ from transformers import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    is_flaky,
     require_accelerate,
     require_flash_attn,
     require_flash_attn_3,
     require_optimum_quanto,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -55,7 +54,8 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_ipex_available, is_torchdynamo_exporting
+from transformers.utils import is_sklearn_available, is_torchdynamo_exporting
+from transformers.utils.generic import is_flash_attention_requested
 
 
 if is_torch_available():
@@ -108,7 +108,9 @@ if is_torch_available():
 
 from unittest.mock import patch
 
-from transformers.utils import is_sklearn_available
+
+def is_moe_model(config):
+    return getattr(config, "_experts_implementation", None) is not None
 
 
 class GenerationTesterMixin:
@@ -536,10 +538,6 @@ class GenerationTesterMixin:
     @require_torch_multi_accelerator
     @pytest.mark.generate
     def test_model_parallel_beam_search(self):
-        if "xpu" in torch_device:
-            if not (is_ipex_available("2.5") or version.parse(torch.__version__) >= version.parse("2.6")):
-                self.skipTest(reason="device_map='auto' does not work with XPU devices")
-
         for model_class in self.all_generative_model_classes:
             if model_class._no_split_modules is None:
                 continue
@@ -618,12 +616,12 @@ class GenerationTesterMixin:
         config, _ = self.prepare_config_and_inputs_for_generate()
 
         # if no bos token id => cannot generate from None
-        if config.bos_token_id is None:
+        if config.get_text_config(decoder=True).bos_token_id is None:
             self.skipTest(reason="bos_token_id is None")
 
         # hack in case they are equal, otherwise the attn mask will be [0]
-        if config.bos_token_id == config.pad_token_id:
-            config.pad_token_id = None
+        if config.get_text_config(decoder=True).bos_token_id == config.get_text_config(decoder=True).pad_token_id:
+            config.get_text_config(decoder=True).pad_token_id = None
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config).to(torch_device)
@@ -718,12 +716,12 @@ class GenerationTesterMixin:
             generation_kwargs.update({"assistant_model": assistant_model})
             output_assisted = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
 
-            # default values of `has_similar_generate_outputs`
-            atol, rtol = 1e-5, 1e-5
             # `gpt_oss` seems to have larger differences on CPU every other generated tokens, sth. like
             # 1e-9, 1e-5, 1e-9, 1e-5. While on GPU, they are all very small 1e-9.
-            if model.config.model_type == "gpt_oss" and torch_device == "cpu":
-                atol, rtol = 1e-4, 1e-4
+            if is_moe_model(config):
+                atol = rtol = 1e-3
+            else:
+                atol = rtol = 1e-5
 
             # The two outputs must match and their shape must be as expected
             self.assertTrue(has_similar_generate_outputs(output_greedy, output_assisted, atol=atol, rtol=rtol))
@@ -731,6 +729,7 @@ class GenerationTesterMixin:
                 self._check_generate_outputs(output, model.config, use_cache=True)
 
     @pytest.mark.generate
+    @is_flaky
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         # This test ensures that the prompt lookup generation does not introduce output changes over greedy search.
         # This test is mostly a copy of test_assisted_decoding_matches_greedy_search
@@ -803,7 +802,11 @@ class GenerationTesterMixin:
             output_prompt_lookup = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
 
             # The two outputs must match and their shape must be as expected
-            self.assertTrue(has_similar_generate_outputs(output_greedy, output_prompt_lookup))
+            if is_moe_model(config):
+                atol = rtol = 1e-3
+            else:
+                atol = rtol = 1e-5
+            self.assertTrue(has_similar_generate_outputs(output_greedy, output_prompt_lookup, atol=atol, rtol=rtol))
             for output in (output_greedy, output_prompt_lookup):
                 self._check_generate_outputs(output, model.config, use_cache=True)
 
@@ -1170,8 +1173,14 @@ class GenerationTesterMixin:
             outputs_from_embeds = model.generate(
                 input_ids=input_ids, inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
             )
+            if is_moe_model(config):
+                atol = rtol = 1e-3
+            else:
+                atol = rtol = 1e-5
             if not has_complex_embeds_computation:
-                self.assertTrue(has_similar_generate_outputs(outputs_from_ids, outputs_from_embeds))
+                self.assertTrue(
+                    has_similar_generate_outputs(outputs_from_ids, outputs_from_embeds, atol=atol, rtol=rtol)
+                )
 
             # input_ids is not a required input on most models -- if we don't pass it, the newly generated tokens will
             # be the same
@@ -1180,7 +1189,9 @@ class GenerationTesterMixin:
                     inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
                 )
                 outputs_from_embeds.sequences = outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :]
-                self.assertTrue(has_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds))
+                self.assertTrue(
+                    has_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds, atol=atol, rtol=rtol)
+                )
 
     @pytest.mark.generate
     def test_generate_from_inputs_embeds_with_static_cache(self):
@@ -1207,7 +1218,7 @@ class GenerationTesterMixin:
 
             input_ids = inputs_dict.pop("input_ids")
 
-            model.config.use_cache = True
+            model.generation_config.use_cache = True
             model.config.is_decoder = True
             batch_size = input_ids.shape[0]
             max_new_tokens = 10
@@ -1322,7 +1333,11 @@ class GenerationTesterMixin:
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
+            if is_moe_model(config):
+                atol = rtol = 1e-3
+            else:
+                atol = rtol = 1e-5
+            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached, atol=atol, rtol=rtol))
             self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
     @pytest.mark.generate
@@ -1442,7 +1457,15 @@ class GenerationTesterMixin:
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
-                self.assertTrue(has_similar_generate_outputs(dynamic_cache_generation, static_cache_generation))
+                if is_moe_model(config):
+                    atol = rtol = 1e-3
+                else:
+                    atol = rtol = 1e-5
+                self.assertTrue(
+                    has_similar_generate_outputs(
+                        dynamic_cache_generation, static_cache_generation, atol=atol, rtol=rtol
+                    )
+                )
 
     @require_optimum_quanto
     @pytest.mark.generate
@@ -1497,6 +1520,11 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device)
             set_model_for_less_flaky_test(model)
             model.eval()  # otherwise `self.training` is `True` -- this flag is used at attn mask creation time
+
+            # On CPU, we don't switch to batched_mm during decoding, so the grouped_mm is what gets compiled.
+            # But since grouped_mm only supports bf16 when compiled, we need to switch to bf16 here.
+            if model.device.type == "cpu" and model.config._experts_implementation == "grouped_mm":
+                model = model.to(torch.bfloat16)
 
             # Some composite models have a custom generate and will call an inner model's generate -> that inner model
             # is the one that gets compiled.
@@ -1597,8 +1625,12 @@ class GenerationTesterMixin:
                     "See the test logs for more details."
                 )
 
+            if is_moe_model(config):
+                atol = rtol = 1e-3
+            else:
+                atol = rtol = 1e-5
             for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
-                self.assertTrue(has_similar_generate_outputs(dynamic_result, compiled_result))
+                self.assertTrue(has_similar_generate_outputs(dynamic_result, compiled_result, atol=atol, rtol=rtol))
 
     @pytest.mark.generate
     def test_generate_compilation_all_outputs(self):
@@ -1617,6 +1649,11 @@ class GenerationTesterMixin:
             if self.has_attentions:
                 config._attn_implementation = "eager"  # can't output attentions otherwise
             model = model_class(config).to(torch_device).eval()
+
+            # On CPU, we don't switch to batched_mm during decoding, so the grouped_mm is what gets compiled.
+            # But since grouped_mm only supports bf16 when compiled, we need to switch to bf16 here.
+            if model.device.type == "cpu" and model.config._experts_implementation == "grouped_mm":
+                model = model.to(torch.bfloat16)
 
             # compilation-specific setup
             torch.compiler.reset()  # prevent cached compilation from being used in the test
@@ -1676,10 +1713,10 @@ class GenerationTesterMixin:
                 self.skipTest(reason="This model does not support `logits_to_keep` argument.")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            config.use_cache = True
             config.is_decoder = True
 
             model = model_class(config).to(torch_device).eval()
+            model.generation_config.use_cache = True
             # All generation methods (except assisted decoding) rely on always extracting the last token logits of the
             # full logits matrix, so testing out only greedy search and assisted decoding is enough (if it works,
             # other methods will work as well)
@@ -1764,10 +1801,10 @@ class GenerationTesterMixin:
                     inputs_dict[input_name] = input_data
             main_input = inputs_dict[model_class.main_input_name]
 
-            # FA2 doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
+            # FA doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
             # attention masks at test time and, with generate, the mask will be appended with 1s on the right,
-            # resulting in a mask with holes (not supported properly by FA2).
-            if attn_implementation == "flash_attention_2":
+            # resulting in a mask with holes (not supported properly by FA).
+            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
                 for input_name in ("attention_mask", "decoder_attention_mask", "encoder_attention_mask"):
                     if input_name in inputs_dict:
                         inputs_dict[input_name] = torch.ones_like(inputs_dict[input_name])
@@ -2685,6 +2722,53 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         out = model.generate(input_ids, generation_config=generation_config)
         self.assertTrue(len(out[0]) == 20)  # generated max_length=20 tokens, not 50!
+
+        # Lastly try saving to make sure no errors are raised about
+        # "generation params in config" or during config validation (#43175)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.generation_config.cache_implementation = "dynamic"
+            model.generation_config.use_cache = None
+            model.save_pretrained(tmpdirname)
+
+    def test_generation_config_deprecation(self):
+        import logging as pylogging
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        input_ids = tokenizer("Hello", return_tensors="pt").input_ids.to(torch_device)
+
+        logger = pylogging.getLogger("transformers")
+
+        class OnWarningHandler(pylogging.Handler):
+            def __init__(self):
+                super().__init__()
+                self.warnings = []
+
+            def emit(self, record):
+                msg = record.getMessage()
+                if "Passing `generation_config` together with" in msg:
+                    self.warnings.append(msg)
+
+        warningHandler = OnWarningHandler()
+        logger.addHandler(warningHandler)
+
+        try:
+            # Providing generation_config and kwargs is deprecated, so we expect a warning here.
+            #
+            # We're using logging_once, make sure that we emit this warning in any case by clearing the
+            # cache on warning_once
+            logging.warning_once.cache_clear()
+            generation_config = GenerationConfig(temperature=1.0)
+            _ = model.generate(input_ids, generation_config=generation_config, do_sample=False)
+            self.assertTrue(len(warningHandler.warnings) == 1)
+
+            # Providing no generation config, only kwargs is not deprecated. No further deprecation warnings
+            # should have been sent.
+            logging.warning_once.cache_clear()
+            _ = model.generate(input_ids, do_sample=False)
+            self.assertTrue(len(warningHandler.warnings) == 1)
+        finally:
+            logger.removeHandler(warningHandler)
 
     # TODO joao, manuel: remove in v4.62.0
     @slow
@@ -3936,7 +4020,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         gen_out = compiled_generate(**model_inputs, generation_config=generation_config)
         self.assertTrue(gen_out.shape[1] > model_inputs["input_ids"].shape[1])  # some text was generated
 
-    @require_read_token
     @slow
     def test_assisted_generation_early_exit(self):
         """
@@ -4464,7 +4547,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         # test that we can generate without inputs, i.e. from BOS
         _ = model.generate()
 
-    @require_read_token
     @slow
     @require_torch_accelerator
     def test_cache_device_map_with_vision_layer_device_map(self):
@@ -4733,7 +4815,11 @@ class GenerationIntegrationTests(unittest.TestCase):
         incremental_outputs = outputs_2b
 
         # The two sets of generated text and past kv should be equal to each other
-        self.assertTrue(has_similar_generate_outputs(traditional_outputs, incremental_outputs))
+        if is_moe_model(model.config):
+            atol = rtol = 1e-3
+        else:
+            atol = rtol = 1e-5
+        self.assertTrue(has_similar_generate_outputs(traditional_outputs, incremental_outputs, atol=atol, rtol=rtol))
         cache1, cache2 = traditional_outputs.past_key_values, incremental_outputs.past_key_values
         for idx in range(len(cache1)):
             if isinstance(cache1, EncoderDecoderCache):

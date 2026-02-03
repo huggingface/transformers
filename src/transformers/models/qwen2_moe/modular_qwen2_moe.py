@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -18,8 +17,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch Qwen2MoE model."""
-
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -132,9 +129,9 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
         return expert_output
 
 
-class Qwen2MoeDecoderLayer(LlamaDecoderLayer, nn.Module):
+class Qwen2MoeDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Qwen2MoeConfig, layer_idx: int):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.self_attn = Qwen2MoeAttention(config, layer_idx)
         if (layer_idx not in config.mlp_only_layers) and (
             config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
@@ -170,13 +167,13 @@ class Qwen2MoeModel(MixtralModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -238,7 +235,7 @@ class Qwen2MoeModel(MixtralModel):
 
 class Qwen2MoeForCausalLM(MixtralForCausalLM, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):

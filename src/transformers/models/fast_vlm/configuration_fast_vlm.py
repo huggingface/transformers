@@ -51,6 +51,8 @@ class FastVlmConfig(PreTrainedConfig):
             vision features. Only -1 supported.
         multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the multimodal projector.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -82,6 +84,7 @@ class FastVlmConfig(PreTrainedConfig):
         vision_feature_select_strategy="full",
         vision_feature_layer=-1,
         multimodal_projector_bias=True,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.image_token_id = image_token_id
@@ -130,6 +133,13 @@ class FastVlmConfig(PreTrainedConfig):
 
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
+        self.tie_word_embeddings = tie_word_embeddings
+
+        # The default value is `False` but this config is used with many model types
+        # Attr `tie_word_embeddings` was saved in text config for those models, so we
+        # need an ugly workaround and forward-pass the attr from text config
+        if not tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = self.text_config.tie_word_embeddings
 
         super().__init__(**kwargs)
 

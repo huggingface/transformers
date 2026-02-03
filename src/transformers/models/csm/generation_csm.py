@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 import torch.nn as nn
@@ -67,7 +66,7 @@ class CsmGenerateOutput(GenerateDecoderOnlyOutput):
             The generated audio.
     """
 
-    audio: Optional[list[torch.Tensor]] = None
+    audio: list[torch.Tensor] | None = None
 
 
 class CsmGenerationMixin(GenerationMixin):
@@ -89,7 +88,7 @@ class CsmGenerationMixin(GenerationMixin):
         return kept_criteria
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], **kwargs: Any
+        self, generation_config: GenerationConfig | None, **kwargs: Any
     ) -> tuple[GenerationConfig, dict]:
         """
         This method overrides [~generation.utils.GenerationMixin._prepare_generation_config].
@@ -153,7 +152,7 @@ class CsmGenerationMixin(GenerationMixin):
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
-    ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
+    ) -> GenerateNonBeamOutput | torch.LongTensor:
         """
         This method overrides [~generation.utils.GenerationMixin._sample].
         To ease maintenance, modifications are marked with the comment "Csm specific".
@@ -333,17 +332,17 @@ class CsmGenerationMixin(GenerationMixin):
 
     def generate(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        input_values: Optional[torch.Tensor] = None,
-        input_values_cutoffs: Optional[torch.Tensor] = None,
-        generation_config: Optional[GenerationConfig] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = None,
-        synced_gpus: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        input_values: torch.Tensor | None = None,
+        input_values_cutoffs: torch.Tensor | None = None,
+        generation_config: GenerationConfig | None = None,
+        logits_processor: LogitsProcessorList | None = None,
+        stopping_criteria: StoppingCriteriaList | None = None,
+        synced_gpus: bool | None = None,
         streamer: Optional["BaseStreamer"] = None,
-        output_audio: Optional[bool] = False,
+        output_audio: bool | None = False,
         **kwargs,
-    ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
+    ) -> GenerateNonBeamOutput | torch.LongTensor:
         r"""
         This method overrides [`~generation.utils.GenerationMixin.generate`] to match the specifics of the Csm model.
         Indeed, Csm model requires a custom generation sampling step:

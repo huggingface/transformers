@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -60,6 +59,7 @@ class Sam3TrackerPromptEncoderTester:
         mask_input_channels=8,
         num_point_embeddings=4,
         hidden_act="gelu",
+        is_training=True,
     ):
         self.hidden_size = hidden_size
         self.input_image_size = input_image_size
@@ -67,6 +67,7 @@ class Sam3TrackerPromptEncoderTester:
         self.mask_input_channels = mask_input_channels
         self.num_point_embeddings = num_point_embeddings
         self.hidden_act = hidden_act
+        self.is_training = is_training
 
     def get_config(self):
         return Sam3TrackerPromptEncoderConfig(
@@ -97,6 +98,7 @@ class Sam3TrackerMaskDecoderTester:
         num_multimask_outputs=3,
         iou_head_depth=3,
         iou_head_hidden_dim=32,
+        is_training=True,
     ):
         self.hidden_size = hidden_size
         self.hidden_act = hidden_act
@@ -107,6 +109,7 @@ class Sam3TrackerMaskDecoderTester:
         self.num_multimask_outputs = num_multimask_outputs
         self.iou_head_depth = iou_head_depth
         self.iou_head_hidden_dim = iou_head_hidden_dim
+        self.is_training = is_training
 
     def get_config(self):
         return Sam3TrackerMaskDecoderConfig(
@@ -149,7 +152,7 @@ class Sam3TrackerModelTester:
         backbone_feature_sizes=[[32, 32], [16, 16], [8, 8]],
         memory_encoder_hidden_size=32,
         batch_size=2,
-        is_training=False,
+        is_training=True,
     ):
         if global_attn_indexes is None:
             global_attn_indexes = [0, 1]
@@ -369,7 +372,6 @@ class Sam3TrackerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                         raise ValueError("The eager model should not have SDPA attention layers")
 
     # Override as Sam3TrackerModel doesn't have hidden states
-    @unittest.skip(reason="skip for now (head_size should be a multiple of 8)")
     def flash_attn_inference_equivalence(
         self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
     ):
@@ -380,11 +382,16 @@ class Sam3TrackerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
+        # TODO take a look at this
+        # head size needs to be a multiple of 8 but needs more adjustments than our current `_prepare_config_headdim`
+        if attn_implementation != "flash_attention_2":
+            self.skipTest(
+                reason="Model fails for every other FA implementation than FA2 due to dim incompatibilities."
+            )
+
         for model_class in self.all_model_classes:
-            if (attn_implementation == "flash_attention_2" and not model_class._supports_flash_attn_2) or (
-                attn_implementation == "flash_attention_3" and not model_class._supports_flash_attn_3
-            ):
-                self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
+            if not getattr(model_class, "_supports_flash_attn"):
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -464,12 +471,12 @@ class Sam3TrackerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
-    @unittest.skip(reason="Sam3TrackerModel does not support training")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
     @unittest.skip(reason="Hidden_states is tested in sub modules tests")
     def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="Tested on the vision only counterpart; only works if vision related input is given")
+    def test_retain_grad_hidden_states_attentions(self):
         pass
 
     @slow

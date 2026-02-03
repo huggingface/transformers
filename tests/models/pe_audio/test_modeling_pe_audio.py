@@ -133,9 +133,7 @@ class PeAudioEncoderTester:
 @require_torch
 class PeAudioEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PeAudioEncoder,)
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):
@@ -284,9 +282,7 @@ class PeAudioModelTest(ModelTesterMixin, unittest.TestCase):
     # TODO: add PipelineTesterMixin
     all_model_classes = (PeAudioModel,)
     additional_model_inputs = ["input_values", "padding_mask"]
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
     _is_composite = True
 

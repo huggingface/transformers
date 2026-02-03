@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """VitPose model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -78,11 +75,11 @@ class VitPoseConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        backbone_config: Optional[PreTrainedConfig] = None,
-        backbone: Optional[str] = None,
+        backbone_config: PreTrainedConfig | None = None,
+        backbone: str | None = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
-        backbone_kwargs: Optional[dict] = None,
+        backbone_kwargs: dict | None = None,
         initializer_range: float = 0.02,
         scale_factor: int = 4,
         use_simple_decoder: bool = True,
