@@ -23,7 +23,6 @@ from typing import Union, get_args, get_origin
 
 import regex as re
 
-from . import logging
 from .doc import (
     MODELS_TO_PIPELINE,
     PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS,
@@ -31,9 +30,6 @@ from .doc import (
     _prepare_output_docstrings,
 )
 from .generic import ModelOutput
-
-
-logger = logging.get_logger(__name__)
 
 
 PATH_TO_TRANSFORMERS = Path("src").resolve() / "transformers"
@@ -1828,18 +1824,16 @@ def _is_processor_class(func, parent_class):
     # Single-modality processors are in "image_processing_*.py", "video_processing_*.py", etc.
     try:
         source_file = inspect.getsourcefile(func)
-        if source_file:
-            filename = os.path.basename(source_file)
-            # Check if it's a processing file (processing_*.py) but NOT a single-modality processor
-            # Single-modality processors: image_processing_*.py, video_processing_*.py, feature_extraction_*.py
-            if filename.startswith("processing_") and filename.endswith(".py"):
-                # This is a multimodal processor file
-                return True
-    except Exception as e:
-        logger.debug(f"Could not determine if processor is multimodal: {e}")
+    except TypeError:
+        return False
+    if not source_file:
+        return False
 
-    # Default to False (conservative approach)
-    return False
+    filename = os.path.basename(source_file)
+
+    # Multimodal processors are implemented in processing_*.py modules
+    # (single-modality processors use image_processing_*, video_processing_*, etc.)self.
+    return filename.startswith("processing_") and filename.endswith(".py")
 
 
 def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters):
