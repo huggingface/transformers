@@ -88,7 +88,7 @@ def global_wrapper(rank, func, tp, port, func_args, func_kwargs):
     world_size = tp
     setup_dist_env(rank, world_size, port)
 
-    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+    dist.init_process_group(rank=rank, world_size=world_size)
 
     func(rank, *func_args, **func_kwargs)
 
