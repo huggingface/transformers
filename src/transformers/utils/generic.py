@@ -878,7 +878,7 @@ def merge_with_config_defaults(func):
                 # Arg-specific handling
                 if arg_name == "use_cache":
                     if getattr(self, "gradient_checkpointing", False) and self.training and arg_value:
-                        logger.warning_once(
+                        logger.warning_once(  # type: ignore[attr-defined]
                             "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
                         )
                         arg_value = False
