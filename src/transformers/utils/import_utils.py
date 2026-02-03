@@ -2331,7 +2331,7 @@ class Backend:
         return current_version
 
     def is_satisfied(self) -> bool:
-        return VersionComparison.from_string(self.version_comparison)(
+        return VersionComparison.from_string(self.version_comparison).value(
             version.parse(self.get_installed_version()), version.parse(self.version)
         )
 
