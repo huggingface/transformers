@@ -899,7 +899,7 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
                     # Arg-specific handling
                     if arg_name == "use_cache":
                         if getattr(self, "gradient_checkpointing", False) and self.training and arg_value:
-                            logger.warning_once(
+                            logger.warning_once(  # type: ignore[attr-defined]
                                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
                             )
                             arg_value = False
