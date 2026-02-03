@@ -74,7 +74,7 @@ class Olmo3_5HybridConfig(PreTrainedConfig):
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
+            with longer `max_position_embeddings`. Can be `None` to disable RoPE (e.g., during long context extension).
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -152,7 +152,6 @@ class Olmo3_5HybridConfig(PreTrainedConfig):
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
         rms_norm_eps: float | None = 1e-06,
-        sliding_window: int | None = None,  # OLMo 3.5 Hybrid doesn't use swa
         layer_types: list[str] | None = None,
         linear_num_key_heads: int | None = None,
         linear_num_value_heads: int | None = None,
@@ -194,7 +193,6 @@ class Olmo3_5HybridConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rms_norm_eps = rms_norm_eps
-        self.sliding_window = sliding_window
         self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = [
@@ -213,21 +211,21 @@ class Olmo3_5HybridConfig(PreTrainedConfig):
         )
 
         if linear_num_key_heads is None:
-            linear_num_key_heads = int(num_attention_heads)
+            linear_num_key_heads = num_attention_heads
         if linear_num_value_heads is None:
-            linear_num_value_heads = int(num_attention_heads)
+            linear_num_value_heads = num_attention_heads
         if linear_key_head_dim is None:
-            linear_key_head_dim = int(0.75 * int(hidden_size) / int(linear_num_key_heads))
+            linear_key_head_dim = int(0.75 * hidden_size / linear_num_key_heads)
         if linear_value_head_dim is None:
-            linear_value_head_dim = int(2 * int(linear_key_head_dim))
+            linear_value_head_dim = 2 * linear_key_head_dim
 
-        self.linear_num_key_heads = int(linear_num_key_heads)
-        self.linear_num_value_heads = int(linear_num_value_heads)
-        self.linear_key_head_dim = int(linear_key_head_dim)
-        self.linear_value_head_dim = int(linear_value_head_dim)
-        self.linear_conv_kernel_dim = int(linear_conv_kernel_dim)
-        self.linear_use_gate = bool(linear_use_gate)
-        self.linear_allow_neg_eigval = bool(linear_allow_neg_eigval)
+        self.linear_num_key_heads = linear_num_key_heads
+        self.linear_num_value_heads = linear_num_value_heads
+        self.linear_key_head_dim = linear_key_head_dim
+        self.linear_value_head_dim = linear_value_head_dim
+        self.linear_conv_kernel_dim = linear_conv_kernel_dim
+        self.linear_use_gate = linear_use_gate
+        self.linear_allow_neg_eigval = linear_allow_neg_eigval
 
         self.cache_implementation = "hybrid"
 

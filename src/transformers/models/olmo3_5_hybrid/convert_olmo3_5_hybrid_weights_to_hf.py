@@ -370,8 +370,11 @@ def convert_attention_layer_weights(
         f"model.layers.{layer_i}.post_feedforward_layernorm.weight": loaded[
             f"blocks.{layer_i}.feed_forward_norm.weight"
         ],
-        f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq": inv_freq,
     }
+
+    if inv_freq is not None:
+        state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
+    
     return state_dict
 
 
@@ -431,11 +434,30 @@ def write_model(
     dim = model_config["d_model"]
     dims_per_head = dim // n_heads
 
-    rope_config = attention_config.get("rope", {})
-    rope_theta = rope_config.get("theta", 500000.0)
-    inv_freq = 1.0 / (rope_theta ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
+    rope_config = attention_config.get("rope")
 
-    max_position_embeddings = olmo_config.get("train_module", {}).get("max_sequence_length", 65536)
+    if rope_config is not None:
+        rope_theta = rope_config.get("theta", 500000.0)
+        inv_freq = 1.0 / (rope_theta ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
+        
+        # Build unified rope_parameters dict
+        rope_parameters = {"rope_theta": rope_theta}
+        
+        rope_scaling_config = rope_config.get("scaling")
+        if rope_scaling_config:
+            if hasattr(rope_scaling_config, "to_hf_config"):
+                rope_parameters.update(rope_scaling_config.to_hf_config())
+            else:
+                rope_parameters.update(rope_scaling_config)
+        else:
+            rope_parameters["rope_type"] = "default"
+    else:
+        rope_parameters = None
+        inv_freq = None
+
+    max_position_embeddings = olmo_config.get("train_module", {}).get("max_sequence_length")
+    if max_position_embeddings is None:
+        max_position_embeddings = olmo_config.get("dataset", {}).get("sequence_length", 65536)
 
     layer_types = get_layer_types_from_config(olmo_config)
     fla_hybrid_attention_indices = [
@@ -518,10 +540,9 @@ def write_model(
         eos_token_id=tokenizer_config.get("eos_token_id"),
         tie_word_embeddings=False,
         rms_norm_eps=block_config.get("layer_norm", {}).get("eps", 1e-6),
-        rope_theta=rope_theta,
+        rope_parameters=rope_parameters,
         sliding_window=sliding_window,
         layer_types=layer_types,
-        fla_hybrid_attention_indices=fla_hybrid_attention_indices,
         linear_num_key_heads=linear_num_heads,
         linear_num_value_heads=linear_num_heads,
         linear_key_head_dim=linear_key_head_dim,
@@ -530,6 +551,9 @@ def write_model(
         linear_use_gate=linear_use_gate,
         linear_allow_neg_eigval=linear_allow_neg_eigval,
     )
+    if rope_parameters is None:
+        config.rope_parameters = None 
+        config.rope_theta = None
     config.save_pretrained(tmp_model_path)
 
     del state_dict
@@ -547,12 +571,6 @@ def write_model(
         torch_dtype=torch.bfloat16,
         use_safetensors=False,
     )
-
-    # TODO: need to confirm if resizing embeddings is needed
-    target_vocab_size = tokenizer_config.get("vocab_size")
-    if target_vocab_size and target_vocab_size != model.config.vocab_size:
-        print(f"Resizing token embeddings from {model.config.vocab_size} to {target_vocab_size}.")
-        model.resize_token_embeddings(target_vocab_size)
 
     del model.config._name_or_path
 
