@@ -408,11 +408,11 @@ class AutoProcessor:
             (AutoFeatureExtractor, "feature extractor"),
         ):
             try:
-                return getattr(klass, "from_pretrained")(
+                return klass.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
-            except Exception as e:
-                logger.debug(f"Could not load as {klass_type}: {e}")
+            except Exception:
+                continue
 
         raise ValueError(
             f"Unrecognized processing class in {pretrained_model_name_or_path}. Can't instantiate a processor, a "
