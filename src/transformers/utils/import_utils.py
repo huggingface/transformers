@@ -2135,8 +2135,8 @@ class _LazyModule(ModuleType):
                                             try:
                                                 module = importlib.import_module(module_path)
                                                 base_tokenizer_class = getattr(module, candidate_name)
-                                            except Exception as e:
-                                                logger.debug(f"Could not import {module_path}: {e}")
+                                            except Exception:
+                                                continue
 
                                         # Fallback: try via _class_to_module
                                         if base_tokenizer_class is None and candidate_name in self._class_to_module:
