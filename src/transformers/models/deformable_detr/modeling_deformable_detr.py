@@ -535,9 +535,9 @@ class DeformableDetrSelfAttention(nn.Module):
         key_states = self.k_proj(query_key_input).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1586,16 +1586,14 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
                 for _ in range(num_pred)
             ]
         )
+        # Convert to instance attribute before modifying
+        self._tied_weights_keys = self._tied_weights_keys.copy()
         if config.with_box_refine:
-            tied_weights_keys = self._tied_weights_keys.copy()
-            tied_weights_keys["bbox_embed"] = "model.decoder.bbox_embed"
-            self._tied_weights_keys = tied_weights_keys
             self.model.decoder.bbox_embed = self.bbox_embed
+            self._tied_weights_keys["bbox_embed"] = "model.decoder.bbox_embed"
         if config.two_stage:
-            tied_weights_keys = self._tied_weights_keys.copy()
-            tied_weights_keys["class_embed"] = "model.decoder.class_embed"
-            self._tied_weights_keys = tied_weights_keys
             self.model.decoder.class_embed = self.class_embed
+            self._tied_weights_keys["class_embed"] = "model.decoder.class_embed"
         self.post_init()
 
     @auto_docstring

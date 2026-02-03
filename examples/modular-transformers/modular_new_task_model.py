@@ -18,17 +18,6 @@ class NewTaskModelForNewTask(PaliGemmaForConditionalGeneration):
         self.embedding_dim = self.config.embedding_dim
         self.custom_text_proj = nn.Linear(self.config.text_config.hidden_size, self.embedding_dim)
 
-        if self.language_model._tied_weights_keys is not None:
-            prefix = "model.language_model."
-            prefixed_mapping = {
-                f"{prefix}{target}": f"{prefix}{source}"
-                for target, source in self.language_model._tied_weights_keys.items()
-            }
-            if isinstance(self._tied_weights_keys, dict):
-                self._tied_weights_keys.update(prefixed_mapping)
-            else:
-                self._tied_weights_keys = prefixed_mapping
-
         self.post_init()
 
     def forward(

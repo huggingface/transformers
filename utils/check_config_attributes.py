@@ -32,6 +32,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
     "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],
