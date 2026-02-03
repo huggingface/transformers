@@ -511,7 +511,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                         self.assertEqual(len(param.shape), 3, f"down_proj should be 3D, got {param.shape}")
                         self.assertEqual(param.shape[0], 8, f"Should have 8 experts, got {param.shape[0]}")
 
-    def test_init_zero3_siglip(self):
+    def test_init_zero3_variance_scaling(self):
         """
         Tests whether variance scaling initializations (`lecun_normal_`, `default_flax_embed_init_`) work correctly with DeepSpeed ZeRO-3, e.g. as in SigLIP models.
         It indirectly checks for the `_is_hf_initialized` flag to prevent re-initialization
