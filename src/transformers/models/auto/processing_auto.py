@@ -37,6 +37,7 @@ from .configuration_auto import (
 from .feature_extraction_auto import AutoFeatureExtractor
 from .image_processing_auto import AutoImageProcessor
 from .tokenization_auto import AutoTokenizer
+from .video_processing_auto import AutoVideoProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -400,9 +401,9 @@ class AutoProcessor:
         elif type(config) in PROCESSOR_MAPPING:
             return PROCESSOR_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        # At this stage, there doesn't seem to be a `Processor` class available for this model, so let's try a
-        # tokenizer.
-        for klass in (AutoTokenizer, AutoImageProcessor, AutoFeatureExtractor):
+        # At this stage, there doesn't seem to be a `Processor` class available for this model.
+        # Let's try the commonly available classes
+        for klass in (AutoTokenizer, AutoImageProcessor, AutoVideoProcessor, AutoFeatureExtractor):
             try:
                 return klass.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
