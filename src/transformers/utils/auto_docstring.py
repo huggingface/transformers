@@ -11,10 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
 
 import inspect
 import os
 import textwrap
+from collections.abc import Mapping
 from pathlib import Path
 from types import UnionType
 from typing import Union, get_args, get_origin
@@ -1460,7 +1462,7 @@ def generate_processor_intro(cls) -> str:
     return intro
 
 
-def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
+def get_placeholders_dict(placeholders: set[str], model_name: str) -> Mapping[str, str]:
     """
     Get the dictionary of placeholders for the given model name.
     """
@@ -1491,7 +1493,7 @@ def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
     return placeholders_dict
 
 
-def format_args_docstring(docstring, model_name):
+def format_args_docstring(docstring: str, model_name: str) -> str:
     """
     Replaces placeholders such as {image_processor_class} in the docstring with the actual values,
     deducted from the model name and the auto modules.
@@ -1506,10 +1508,7 @@ def format_args_docstring(docstring, model_name):
     # replace the placeholders in the docstring with the values from the placeholders_dict
     for placeholder, value in placeholders_dict.items():
         if placeholder is not None:
-            try:
-                docstring = docstring.replace(f"{{{placeholder}}}", value)
-            except Exception as e:
-                logger.debug(f"Could not replace placeholder {placeholder}: {e}")
+            docstring = docstring.replace(f"{{{placeholder}}}", value)
     return docstring
 
 
