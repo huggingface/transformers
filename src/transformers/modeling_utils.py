@@ -1164,7 +1164,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     # Advanced functionalities support
     supports_gradient_checkpointing: bool = False
-    can_compile_fullgraph: bool = False
+    _can_compile_fullgraph: bool = False
     # This flag signal that the model can be used as an efficient backend in TGI and vLLM
     # In practice, it means that they support attention (mask) interface functions, fully pass the kwargs
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
