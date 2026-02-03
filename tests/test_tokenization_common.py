@@ -2826,4 +2826,4 @@ class SentencePieceBackendCommonTest(unittest.TestCase, SentencePieceBackendTest
                     )
                 except Exception as e:
                     # if the pretrained model is not loadable how could it pass locally :)
-                    print(f"Could not load pretrained model: {e}")
+                    print(f"Could not load pretrained tokenizer: {e}")
