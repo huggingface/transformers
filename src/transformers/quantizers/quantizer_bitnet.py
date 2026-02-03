@@ -83,7 +83,7 @@ class BitNetHfQuantizer(HfQuantizer):
         )
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        from ..integrations import AutoBitLinear, VALUES_PER_ITEM, unpack_weights
+        from ..integrations import VALUES_PER_ITEM, AutoBitLinear, unpack_weights
 
         for module in model.modules():
             if isinstance(module, AutoBitLinear) and not module.online_quant:
