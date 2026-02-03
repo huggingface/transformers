@@ -2311,7 +2311,7 @@ class ModelTesterMixin:
         except Exception as e:
             model_type = getattr(original_config, "model_type", "unknown")
             # Config may not have a text config
-            print(f"Could not set text config tie_word_embeddings: {e}, model type: {model_type}")
+            print(f"Could not set text config's `tie_word_embeddings` for model type `{model_type}`: {e}")
         inputs_dict.pop("labels", None)
 
         # if model cannot untied embeddings -> leave test
