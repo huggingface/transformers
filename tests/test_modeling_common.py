@@ -4148,10 +4148,19 @@ class ModelTesterMixin:
             inputs_dict.pop("use_cache", None)
             # we don't test loss computation for now
             inputs_dict.pop("return_loss", None)
+            # we don't test loss computation for now
+            inputs_dict.pop("future_values", None)
 
             # set experts implementation to batched_mm for export
             if model._can_set_experts_implementation():
                 model.set_experts_implementation("batched_mm")
+
+            # set attention implementation to sdpa for export
+            if model._can_set_attn_implementation() and model.config.model_type != "videomae":
+                try:
+                    model.set_attn_implementation("sdpa")
+                except Exception:
+                    pass
 
             for module in model.modules():
                 if hasattr(module, "config"):
@@ -4161,9 +4170,6 @@ class ModelTesterMixin:
                     # disable returning loss for every submodel
                     if hasattr(module.config, "return_loss"):
                         module.config.return_loss = False
-                    # disable reference compile for every submodel (modernbert)
-                    if hasattr(module.config, "reference_compile"):
-                        module.config.reference_compile = False
                     # disable mamba kernels for every submodel (mamba, jamba)
                     if hasattr(module.config, "use_mamba_kernels"):
                         module.config.use_mamba_kernels = False
@@ -4185,7 +4191,9 @@ class ModelTesterMixin:
                 else:
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
                 inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                set_config_for_less_flaky_test(config)
                 model = model_class(config).eval().to(torch_device)
+                set_model_for_less_flaky_test(model)
 
                 # Prepare model and inputs for export
                 model, inputs_dict = _prepare_for_export(model, inputs_dict)
