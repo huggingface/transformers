@@ -513,10 +513,9 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
     def test_init_zero3_siglip(self):
         """
-        Test that SigLIP model initialization works correctly with DeepSpeed ZeRO-3.
-        This tests the fix for lecun_normal_ and default_flax_embed_init initialization
-        functions that now check for _is_hf_initialized flag to prevent re-initialization
-        in ZeRO-3 environment.
+        Tests whether variance scaling initializations (`lecun_normal_`, `default_flax_embed_init_`) work correctly with DeepSpeed ZeRO-3, e.g. as in SigLIP models.
+        It indirectly checks for the `_is_hf_initialized` flag to prevent re-initialization
+        in ZeRO-3 environments.
         """
         ds_config = {
             "train_batch_size": 1,
