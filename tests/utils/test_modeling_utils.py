@@ -293,6 +293,51 @@ if is_torch_available():
         def forward(self, x):
             return self.decoder(self.base(x))
 
+    class VerySimpleLayer(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.simple = nn.Linear(2, 2)
+
+        def forward(self, x):
+            return self.simple(x)
+
+    class DummyLanguageModel(PreTrainedModel):
+        _keep_in_fp32_modules = ["linear"]
+        _no_split_modules = ["VerySimpleLayer"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(2, 2)
+            self.layers = nn.ModuleList((VerySimpleLayer(), VerySimpleLayer()))
+            self.post_init()
+
+        def forward(self, x):
+            return self.linear(self.layers[1](self.layers[0](x)))
+
+    class DummyVisionModel(PreTrainedModel):
+        _keep_in_fp32_modules_strict = ["simple"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.simple = nn.Linear(2, 2)
+            self.post_init()
+
+        def forward(self, x):
+            return self.simple(x)
+
+    class MultimodalModel(PreTrainedModel):
+        _keep_in_fp32_modules = ["head"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.language_model = DummyLanguageModel(config)
+            self.vision_model = DummyVisionModel(config)
+            self.head = nn.Linear(2, 2)
+            self.post_init()
+
+        def forward(self, x):
+            return self.head(self.language_model(self.vision_model(x)))
+
     class Prepare4dCausalAttentionMaskModel(nn.Module):
         def forward(self, inputs_embeds):
             batch_size, seq_length, _ = inputs_embeds.shape
@@ -1568,7 +1613,9 @@ class ModelUtilsTest(TestCasePlus):
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
                     _, loading_info = ModelWithHead.from_pretrained(tmp_dir, output_loading_info=True)
-            self.assertIn("added_key | UNEXPECTED", cl.out)
+            # Will be colored if terminal is interactive
+            expected_output = "added_key | [38;5;208mUNEXPECTED" if sys.stdout.isatty() else "added_key | UNEXPECTED"
+            self.assertIn(expected_output, cl.out)
             self.assertEqual(loading_info["unexpected_keys"], {"added_key"})
 
     def test_warn_if_padding_and_no_attention_mask(self):
@@ -2271,6 +2318,13 @@ class ModelUtilsTest(TestCasePlus):
                     RuntimeError, "We encountered some issues during automatic conversion of the weights."
                 ):
                     _ = MixtralModel.from_pretrained(tmpdirname)
+
+    def test_composite_model_inherit_properties(self):
+        model = MultimodalModel(PreTrainedConfig())
+        # Make sure the top level inherited properties from its child language and vision models
+        self.assertEqual(model._no_split_modules, {"VerySimpleLayer"})  # language model
+        self.assertEqual(model._keep_in_fp32_modules, {"linear", "head"})  # language model + composite model
+        self.assertEqual(model._keep_in_fp32_modules_strict, {"simple"})  # vision model
 
 
 @slow
@@ -3083,6 +3137,51 @@ class TestAttentionImplementation(unittest.TestCase):
             )
 
         self.assertTrue("`kernels` is either not installed or uses an incompatible version." in str(cm.exception))
+
+    def test_attention_and_experts_modules_can_be_used_standalone(self):
+        """Test that both Attention and Expert modules can be used on their own, instantiated from a config without the
+        respective `_xxx_implementation` attr set. Also checks that it correctly raises a warning"""
+        from transformers.models.mixtral.configuration_mixtral import MixtralConfig
+        from transformers.models.mixtral.modeling_mixtral import (
+            MixtralAttention,
+            MixtralExperts,
+            MixtralRotaryEmbedding,
+        )
+
+        hidden_size = 32
+        seq_len = 10
+        config = MixtralConfig(hidden_size=32, intermediate_size=16, num_hidden_layers=2)
+        experts_module = MixtralExperts(config)
+        attn_module = MixtralAttention(config, layer_idx=0)
+
+        hidden_states = torch.randn(1, seq_len, hidden_size)
+
+        # Try the Attention (check it works + raises the warning)
+        dummy_ids = torch.arange(seq_len).unsqueeze(0)
+        dummy_embeddings = MixtralRotaryEmbedding(config)(hidden_states, dummy_ids)
+        with CaptureLogger(logging.get_logger("transformers.modeling_utils")) as cl:
+            _ = attn_module(hidden_states, dummy_embeddings, None)
+        self.assertIn(
+            "You tried to access the `AttentionInterface` with a `config._attn_implementation` set to `None`.", cl.out
+        )
+        # With a wrong _attn_implementation, it should raise a proper exception
+        attn_module.config._attn_implementation = "foobar"
+        with self.assertRaisesRegex(KeyError, "`foobar` is not a valid attention implementation registered"):
+            _ = attn_module(hidden_states, dummy_embeddings, None)
+
+        # Try the Experts (check it works + raises the warning)
+        hidden_states = hidden_states.reshape(-1, hidden_size)
+        dummy_scores = torch.randn(seq_len, config.num_experts_per_tok)
+        dummy_indices = torch.randint(0, config.num_local_experts, (seq_len, config.num_experts_per_tok))
+        with CaptureLogger(logging.get_logger("transformers.integrations.moe")) as cl:
+            _ = experts_module(hidden_states, dummy_indices, dummy_scores)
+        self.assertIn(
+            "You tried to access the `ExpertsInterface` with a `config._experts_implementation` set to `None`.", cl.out
+        )
+        # With a wrong _experts_implementation, it should raise a proper exception
+        experts_module.config._experts_implementation = "foobar"
+        with self.assertRaisesRegex(KeyError, "`foobar` is not a valid experts implementation registered"):
+            _ = experts_module(hidden_states, dummy_indices, dummy_scores)
 
 
 @require_torch

@@ -30,7 +30,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...integrations.flex_attention import compile_friendly_flex_attention
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import AttentionInterface, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, is_torch_flex_attn_available, logging
@@ -54,7 +54,7 @@ if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
 
 
-class DogeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class DogeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DogeModel`]. It is used to instantiate an Doge
     model according to the specified arguments, defining the model architecture like [SmallDoge/Doge-320M](https://huggingface.co/SmallDoge/Doge-320M).
@@ -154,9 +154,9 @@ class DogeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.mlp.router_gate": "colwise_rep",
-        "layers.*.mlp.down_embed": "rowwise_rep",
-        "layers.*.mlp.up_embed": "rowwise_rep",
+        "layers.*.mlp.router_gate": "colwise_gather_output",
+        "layers.*.mlp.down_embed": "rowwise_split_input",
+        "layers.*.mlp.up_embed": "rowwise_split_input",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -360,9 +360,9 @@ class DogeAttention(nn.Module):
         )
         attn_mask = repeat_kv(attn_mask, self.num_key_value_groups)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,

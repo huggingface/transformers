@@ -21,7 +21,7 @@
 import math
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
 class Phi4MultimodalVisionConfig(PreTrainedConfig):
@@ -242,7 +242,7 @@ class Phi4MultimodalAudioConfig(PreTrainedConfig):
         self.nemo_final_size = length
 
 
-class Phi4MultimodalConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Phi4MultimodalConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Phi4MultimodalModel`]. It is used to instantiate a
     Phi4Multimodal model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -333,10 +333,10 @@ class Phi4MultimodalConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     model_type = "phi4_multimodal"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.qkv_proj": "colwise_rep",  # we need to replicate here due to the slicing of qkv
-        "layers.*.self_attn.o_proj": "rowwise_rep",  # we need to replicate here due to the slicing of qkv
-        "layers.*.mlp.gate_up_proj": "colwise_rep",  # we need to replicate here due to the `chunk` operation
-        "layers.*.mlp.down_proj": "rowwise_rep",  # we need to replicate here due to the `chunk` operation
+        "layers.*.self_attn.qkv_proj": "colwise_gather_output",  # we need to replicate here due to the slicing of qkv
+        "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the slicing of qkv
+        "layers.*.mlp.gate_up_proj": "colwise_gather_output",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.down_proj": "rowwise_split_input",  # input is replicated due to the `chunk` operation
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
