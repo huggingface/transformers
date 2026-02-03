@@ -200,7 +200,9 @@ class TestImportStructures(unittest.TestCase):
         pytest.param(Backend("torchvision==0.19.1"), "torchvision", VersionComparison.EQUAL, "0.19.1"),
     ],
 )
-def test_backend_specification(backend: Backend, package_name: str, version_comparison: VersionComparison, version: str):
+def test_backend_specification(
+    backend: Backend, package_name: str, version_comparison: VersionComparison, version: str
+):
     assert backend.package_name == package_name
     assert VersionComparison.from_string(backend.version_comparison) == version_comparison
     assert backend.version == version
