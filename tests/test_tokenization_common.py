@@ -2719,7 +2719,7 @@ Hey how are you doing"""  # noqa: W293
                     )
                 except Exception as e:
                     # if the pretrained model is not loadable how could it pass locally :)
-                    print(f"Could not load pretrained model: {e}")
+                    print(f"Could not load pretrained tokenizer {pretrained_name}: {e}")
 
 
 @require_tokenizers
