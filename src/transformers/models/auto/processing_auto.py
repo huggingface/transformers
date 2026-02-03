@@ -402,11 +402,7 @@ class AutoProcessor:
 
         # At this stage, there doesn't seem to be a `Processor` class available for this model, so let's try a
         # tokenizer.
-        for klass, klass_type in (
-            (AutoTokenizer, "tokenizer"),
-            (AutoImageProcessor, "image processor"),
-            (AutoFeatureExtractor, "feature extractor"),
-        ):
+        for klass in (AutoTokenizer, AutoImageProcessor, AutoFeatureExtractor):
             try:
                 return klass.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
