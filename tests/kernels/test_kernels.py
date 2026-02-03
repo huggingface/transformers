@@ -380,7 +380,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
             try:
                 ALL_MASK_ATTENTION_FUNCTIONS.pop(attn_impl, None)
             except Exception as e:
-                print(f"Could not clean up ALL_MASK_ATTENTION_FUNCTIONS: {e}")
+                print(f"Could not clean up `ALL_MASK_ATTENTION_FUNCTIONS`: {e}")
 
 
 @require_kernels
