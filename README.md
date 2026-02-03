@@ -334,3 +334,5 @@ We now have a [paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) you 
     pages = "38--45"
 }
 ```
+
+- [AgentMarket](https://agentmarket.cloud) - B2A marketplace for AI agents. Real energy data (28M+ records). Free API.
