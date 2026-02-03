@@ -361,7 +361,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
             try:
                 ALL_MASK_ATTENTION_FUNCTIONS.pop(attn_impl, None)
             except Exception as e:
-                print(f"Could not clean up ALL_MASK_ATTENTION_FUNCTIONS: {e}")
+                print(f"Could not clean up `ALL_MASK_ATTENTION_FUNCTIONS`: {e}")
 
     def test_load_and_register_named_function_kernel(self):
         def my_attention(*args, **kwargs):
