@@ -94,7 +94,7 @@ class ExaoneMoeIntegrationTest(unittest.TestCase):
             [[-2.2663, -3.0659, -3.0922, -3.2575, -3.2033, -3.4042, -3.1595, -3.2739, -3.8887, -0.6917]]
         )
         EXPECTED_SLICE = torch.tensor(
-            [-2.3906, -3.0781,  2.7500, -3.0469,  0.5312, -1.4297, -1.8984, -2.6875, -1.7734, -2.1094]
+            [-2.3906, -3.0781, 2.7500, -3.0469, 0.5312, -1.4297, -1.8984, -2.6875, -1.7734, -2.1094]
         )
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         torch.testing.assert_close(out[0, 0, :10], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
