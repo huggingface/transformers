@@ -105,7 +105,7 @@ class T5ModelTester:
         self.scope = None
         self.decoder_layers = decoder_layers
 
-    def prepare_config_and_inputs(self, config_fn=None):
+    def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
         decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
@@ -120,10 +120,7 @@ class T5ModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
-        if not config_fn:
-            config = self.get_config()
-        else:
-            config = config_fn()
+        config = self.get_config()
 
         return (
             config,
@@ -133,9 +130,6 @@ class T5ModelTester:
             decoder_attention_mask,
             lm_labels,
         )
-
-    def prepare_config_and_inputs_v1_1(self):
-        return self.prepare_config_and_inputs(config_fn=self.get_config_v1_1)
 
     def get_pipeline_config(self):
         return T5Config(
@@ -465,6 +459,8 @@ class T5ModelTester:
     ):
         prev_vocab_size = config.vocab_size
 
+        # V1.1 related params: uses gated-gelu and `tie_word_embeddings=False`
+        config.feed_forward_proj = "gated-gelu"
         config.tie_word_embeddings = False
         model = T5ForConditionalGeneration(config=config).to(torch_device).eval()
         model.resize_token_embeddings(prev_vocab_size - 10)
@@ -586,18 +582,16 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        if config_and_inputs[0].__class__.__name__ == "T" + "5Config":
-            self.assertTrue(config_and_inputs[0].scale_decoder_outputs)
+        self.assertTrue(config_and_inputs[0].scale_decoder_outputs)
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_v1_1(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_v1_1()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_v1 = self.model_tester.get_config_v1_1()
+        config_and_inputs = list(config_and_inputs)
+        config_and_inputs[0] = config_v1
 
-        # MT5 doesn't have decoder output scaling but since the T5 test is copied to MT5
-        # we need to make an exception here without compromising the T5 test.
-        # We format the name weirdly because otherwise the copy mechanism will change it.
-        if config_and_inputs[0].__class__.__name__ == "T" + "5Config":
-            self.assertFalse(config_and_inputs[0].scale_decoder_outputs)
+        self.assertFalse(config_and_inputs[0].scale_decoder_outputs)
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     # T5ForSequenceClassification does not support inputs_embeds

@@ -46,7 +46,6 @@ if is_torch_available():
     )
 
 
-# Copied from tests.models.t5.test_modeling_t5.T5ModelTester with T5->MT5
 class MT5ModelTester:
     def __init__(
         self,
@@ -95,7 +94,7 @@ class MT5ModelTester:
         self.scope = None
         self.decoder_layers = decoder_layers
 
-    def prepare_config_and_inputs(self, config_fn=None):
+    def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
         decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
@@ -110,10 +109,7 @@ class MT5ModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
-        if not config_fn:
-            config = self.get_config()
-        else:
-            config = config_fn()
+        config = self.get_config()
 
         return (
             config,
@@ -123,9 +119,6 @@ class MT5ModelTester:
             decoder_attention_mask,
             lm_labels,
         )
-
-    def prepare_config_and_inputs_v1_1(self):
-        return self.prepare_config_and_inputs(config_fn=self.get_config_v1_1)
 
     def get_pipeline_config(self):
         return MT5Config(
@@ -161,28 +154,6 @@ class MT5ModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
-        )
-
-    def get_config_v1_1(self):
-        return MT5Config(
-            vocab_size=self.vocab_size,
-            d_model=self.hidden_size,
-            d_ff=self.d_ff,
-            d_kv=self.hidden_size // self.num_attention_heads,
-            num_layers=self.num_hidden_layers,
-            num_decoder_layers=self.decoder_layers,
-            num_heads=self.num_attention_heads,
-            relative_attention_num_buckets=self.relative_attention_num_buckets,
-            dropout_rate=self.dropout_rate,
-            initializer_factor=self.initializer_factor,
-            eos_token_id=self.eos_token_id,
-            bos_token_id=self.pad_token_id,
-            pad_token_id=self.pad_token_id,
-            decoder_start_token_id=self.decoder_start_token_id,
-            # V1.1 related params: uses gated-gelu and `tie_word_embeddings=False` as an
-            # indicator to not scale decoder outputs
-            feed_forward_proj="gated-gelu",
-            tie_word_embeddings=False,
         )
 
     def check_prepare_lm_labels_via_shift_left(
@@ -449,20 +420,6 @@ class MT5ModelTester:
         output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
-    def check_resize_embeddings_t5_v1_1(
-        self,
-        config,
-    ):
-        prev_vocab_size = config.vocab_size
-
-        config.tie_word_embeddings = False
-        model = MT5ForConditionalGeneration(config=config).to(torch_device).eval()
-        model.resize_token_embeddings(prev_vocab_size - 10)
-
-        self.parent.assertEqual(model.get_input_embeddings().weight.shape[0], prev_vocab_size - 10)
-        self.parent.assertEqual(model.get_output_embeddings().weight.shape[0], prev_vocab_size - 10)
-        self.parent.assertEqual(model.config.vocab_size, prev_vocab_size - 10)
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -484,7 +441,6 @@ class MT5ModelTester:
 
 
 @require_torch
-# Copied from tests.models.t5.test_modeling_t5.T5ModelTest with T5->MT5, google-t5/t5-small->google/mt5-small
 class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (MT5Model, MT5ForConditionalGeneration, MT5ForSequenceClassification, MT5ForQuestionAnswering)
@@ -581,16 +537,6 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             self.assertTrue(config_and_inputs[0].scale_decoder_outputs)
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_v1_1(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_v1_1()
-
-        # MMT5 doesn't have decoder output scaling but since the MT5 test is copied to MMT5
-        # we need to make an exception here without compromising the MT5 test.
-        # We format the name weirdly because otherwise the copy mechanism will change it.
-        if config_and_inputs[0].__class__.__name__ == "T" + "5Config":
-            self.assertFalse(config_and_inputs[0].scale_decoder_outputs)
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     # MT5ForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -683,10 +629,6 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
-
-    def test_v1_1_resize_embeddings(self):
-        config = self.model_tester.prepare_config_and_inputs()[0]
-        self.model_tester.check_resize_embeddings_t5_v1_1(config)
 
     @slow
     def test_model_from_pretrained(self):
