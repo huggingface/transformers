@@ -25,7 +25,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import is_torchdynamo_compiling, logging
 from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_mamba_ssm_available,
@@ -697,7 +697,7 @@ class Zamba2MambaMixer(nn.Module):
         cache_params: Zamba2HybridDynamicCache | None = None,
         attention_mask: torch.Tensor | None = None,
     ):
-        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
+        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
 
         return self.torch_forward(hidden_states, cache_params, attention_mask)

@@ -32,7 +32,7 @@ from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BackboneOutput
+from ...modeling_outputs import BackboneOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import meshgrid
@@ -807,9 +807,6 @@ class LwDetrMultiscaleDeformableAttention(nn.Module):
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
-        return tensor if position_embeddings is None else tensor + position_embeddings
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -822,10 +819,10 @@ class LwDetrMultiscaleDeformableAttention(nn.Module):
         spatial_shapes_list=None,
         level_start_index=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = hidden_states + position_embeddings
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
@@ -1027,24 +1024,22 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     - a stacked tensor of intermediate reference points.
     """
 )
-class LwDetrDecoderOutput(ModelOutput):
+class LwDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-        Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
-        Stacked intermediate reference points (reference points of each layer of the decoder).
     cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
         Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
         used to compute the weighted average in the cross-attention heads.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
+        Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
+        layernorm.
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
     intermediate_hidden_states: torch.FloatTensor | None = None
+
     intermediate_reference_points: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
 # function to generate sine positional embedding for 4d coordinates
@@ -1244,11 +1239,11 @@ class LwDetrModel(LwDetrPreTrainedModel):
         self.post_init()
 
     def freeze_backbone(self):
-        for name, param in self.backbone.conv_encoder.model.named_parameters():
+        for name, param in self.backbone.model.named_parameters():
             param.requires_grad_(False)
 
     def unfreeze_backbone(self):
-        for name, param in self.backbone.conv_encoder.model.named_parameters():
+        for name, param in self.backbone.model.named_parameters():
             param.requires_grad_(True)
 
     def get_valid_ratio(self, mask, dtype=torch.float32):
@@ -1269,15 +1264,18 @@ class LwDetrModel(LwDetrPreTrainedModel):
         temperature = 10000
         scale = 2 * math.pi
 
-        dim_t = torch.arange(num_pos_feats, dtype=proposals.dtype, device=proposals.device)
+        # Compute position embeddings in float32 to avoid overflow with large temperature values in fp16
+        proposals_dtype = proposals.dtype
+        dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=proposals.device)
         dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
         # batch_size, num_queries, 4
-        proposals = proposals.sigmoid() * scale
+        proposals = proposals.sigmoid().to(torch.float32) * scale
         # batch_size, num_queries, 4, 128
         pos = proposals[:, :, :, None] / dim_t
         # batch_size, num_queries, 4, 64, 2 -> batch_size, num_queries, 512
         pos = torch.stack((pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()), dim=4).flatten(2)
-        return pos
+        # Convert back to target dtype after all computations are done
+        return pos.to(proposals_dtype)
 
     def gen_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
         """Generate the encoder output proposals from encoded enc_output.
@@ -1488,8 +1486,6 @@ class LwDetrMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
     height and width of a bounding box w.r.t. an image.
-
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 
     """
 

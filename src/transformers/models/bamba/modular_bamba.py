@@ -47,11 +47,7 @@ from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    auto_docstring,
-    can_return_tuple,
-    logging,
-)
+from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import is_flash_attention_requested
 from .configuration_bamba import BambaConfig
 
@@ -667,7 +663,7 @@ class BambaMixer(nn.Module):
         seq_idx: torch.IntTensor | None = None,
         **kwargs,
     ):
-        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
+        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask, seq_idx)
         if seq_idx is not None:
             raise NotImplementedError(
