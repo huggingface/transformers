@@ -137,7 +137,6 @@ if is_torch_available():
         _find_identical,
         get_total_byte_count,
     )
-    from transformers.pytorch_utils import isin_mps_friendly
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -1810,27 +1809,6 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIn("LayerNorm.weight", unexpected_keys)
         self.assertIn("LayerNorm.beta", missing_keys)
         self.assertIn("LayerNorm.bias", unexpected_keys)
-
-    def test_isin_mps_friendly(self):
-        """tests that our custom `isin_mps_friendly` matches `torch.isin`"""
-        random_ids = torch.randint(0, 100, (100,))
-        # We can match against an integer
-        random_test_integer = torch.randint(0, 100, (1,)).item()
-        self.assertTrue(
-            torch.equal(
-                torch.isin(random_ids, random_test_integer), isin_mps_friendly(random_ids, random_test_integer)
-            )
-        )
-        # We can match against an 0D tensor
-        random_test_tensor = torch.randint(0, 100, (1,)).squeeze()
-        self.assertTrue(
-            torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
-        )
-        # We can match against an 1D tensor (with many items)
-        random_test_tensor = torch.randint(0, 100, (10,))
-        self.assertTrue(
-            torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
-        )
 
     def test_can_generate(self):
         """Tests the behavior of `PreTrainedModel.can_generate` method."""
