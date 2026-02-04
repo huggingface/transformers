@@ -25,8 +25,8 @@ _import_structure = {
     ],
     "bitnet": [
         "VALUES_PER_ITEM",
-        "AutoBitLinear",
         "BitLinear",
+        "BitNetDeserialize",
         "pack_weights",
         "replace_with_bitnet_linear",
         "unpack_weights",
@@ -179,8 +179,8 @@ if TYPE_CHECKING:
     )
     from .bitnet import (
         VALUES_PER_ITEM,
-        AutoBitLinear,
         BitLinear,
+        BitNetDeserialize,
         pack_weights,
         replace_with_bitnet_linear,
         unpack_weights,

@@ -82,18 +82,6 @@ class BitNetHfQuantizer(HfQuantizer):
             quantization_config=self.quantization_config,
         )
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        from ..integrations import VALUES_PER_ITEM, AutoBitLinear, unpack_weights
-
-        for module in model.modules():
-            if isinstance(module, AutoBitLinear) and not module.online_quant:
-                if module.weight.shape[0] * VALUES_PER_ITEM == module.out_features:
-                    w = module.weight
-                    if w.dtype != torch.uint8:
-                        w = w.to(torch.uint8)
-                    module.weight.data = unpack_weights(w, dtype=module.weight.dtype)
-        return model
-
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
@@ -115,3 +103,20 @@ class BitNetHfQuantizer(HfQuantizer):
             self.quantization_config.linear_class == "autobitlinear"
             and self.quantization_config.quantization_mode == "online"
         )
+
+    def get_weight_conversions(self):
+        from ..core_model_loading import WeightConverter
+        from ..integrations.bitnet import BitNetDeserialize
+
+        if (
+            self.quantization_config.linear_class == "autobitlinear"
+            and self.quantization_config.quantization_mode == "offline"
+        ):
+            return [
+                WeightConverter(
+                    source_patterns=["weight"],
+                    target_patterns=["weight"],
+                    operations=[BitNetDeserialize(self)],
+                )
+            ]
+        return []
