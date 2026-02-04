@@ -1384,7 +1384,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
         )
         return output if return_dict else output.to_tuple()
 
-    def get_layers(self, blocks, linear_layers, mamba_layers):
+    def get_layers(self):
         layers = []
         self._tied_weights_keys = {}
         self.first_transformer_layer_id = 0

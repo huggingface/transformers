@@ -894,6 +894,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
 
         return model_inputs
 
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,

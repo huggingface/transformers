@@ -1238,12 +1238,14 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
 
-        encoder_attention_mask = create_bidirectional_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=encoder_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-        )
+        # expand encoder attention mask
+        if encoder_hidden_states is not None and encoder_attention_mask is not None:
+            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
+            encoder_attention_mask = create_bidirectional_mask(
+                self.config,
+                inputs_embeds,
+                encoder_attention_mask,
+            )
 
         # optional intermediate hidden states
         intermediate = () if self.config.auxiliary_loss else None
