@@ -440,6 +440,7 @@ OBJECTS_TO_IGNORE = {
     "SpeechT5Model",
     "SplinterConfig",
     "SplinterTokenizerFast",
+    "S3TokenizerModel",
     "SqueezeBertTokenizerFast",
     "Swin2SRImageProcessor",
     "Swinv2Model",
@@ -519,6 +520,9 @@ OBJECTS_TO_IGNORE = {
     "Llama4TextConfig",
     "BltConfig",
     "BltPatcherConfig",
+    "T3Config",
+    "S3GenConfig",
+    "S3TokenizerConfig",
 }
 # In addition to the objects above, we also ignore objects with certain prefixes. If you add an item to the list
 # below, make sure to add a comment explaining why.
