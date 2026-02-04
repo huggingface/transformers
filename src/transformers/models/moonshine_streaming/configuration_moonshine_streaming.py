@@ -159,6 +159,10 @@ class MoonshineStreamingConfig(PreTrainedConfig):
                 The attention head dimension. If None, it will default to hidden_size // num_attention_heads.
             pad_head_dim_to_multiple_of (`int`, *optional*):
                 If set, the head dimension will be padded to a multiple of this value.
+            tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+                Whether to tie weight embeddings
+            is_encoder_decoder (`bool`, *optional*, defaults to `True`):
+                Whether the model is used as an encoder/decoder or not.
 
     ```python
     >>> from transformers import MoonshineStreamingModel, MoonshineStreamingConfig
@@ -201,6 +205,8 @@ class MoonshineStreamingConfig(PreTrainedConfig):
         decoder_start_token_id: int | None = None,
         head_dim: int | None = None,
         pad_head_dim_to_multiple_of: int | None = None,
+        tie_word_embeddings: bool = False,
+        is_encoder_decoder: bool = True,
         **kwargs,
     ):
         if isinstance(encoder_config, dict):
@@ -226,12 +232,13 @@ class MoonshineStreamingConfig(PreTrainedConfig):
         self.rope_parameters = rope_parameters
         self.pad_head_dim_to_multiple_of = pad_head_dim_to_multiple_of
 
-        kwargs.update(tie_word_embeddings=False, is_encoder_decoder=True)
         super().__init__(
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             pad_token_id=pad_token_id,
             decoder_start_token_id=decoder_start_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
 
