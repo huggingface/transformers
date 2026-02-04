@@ -183,6 +183,41 @@ def get_dataset(file_path, tokenizer, max_len):
     return tokenized_dataset["train"]
 
 
+@require_torch
+def test_resume_from_checkpoint_applies_checkpoint_conversion_mapping():
+    class TinyLayerNormModel(PreTrainedModel):
+        config_class = PreTrainedConfig
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.LayerNorm = nn.LayerNorm(2, elementwise_affine=True)
+            self.post_init()
+
+        def forward(self, x):
+            return self.LayerNorm(x)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        model = TinyLayerNormModel(PreTrainedConfig())
+        args = TrainingArguments(tmp_dir, report_to="none")
+        trainer = Trainer(model=model, args=args)
+
+        checkpoint_dir = os.path.join(tmp_dir, "checkpoint-1")
+        os.makedirs(checkpoint_dir, exist_ok=True)
+
+        expected_weight = torch.tensor([1.0, 2.0])
+        expected_bias = torch.tensor([3.0, 4.0])
+        state_dict = {
+            "LayerNorm.gamma": expected_weight,
+            "LayerNorm.beta": expected_bias,
+        }
+        torch.save(state_dict, os.path.join(checkpoint_dir, "pytorch_model.bin"))
+
+        trainer._load_from_checkpoint(checkpoint_dir)
+
+        assert torch.allclose(trainer.model.LayerNorm.weight.detach().cpu(), expected_weight)
+        assert torch.allclose(trainer.model.LayerNorm.bias.detach().cpu(), expected_bias)
+
+
 class StoreLossCallback(TrainerCallback):
     """
     Simple callback to store the loss.

@@ -56,6 +56,8 @@ from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler
 
 from . import __version__
 from .configuration_utils import PreTrainedConfig
+from .conversion_mapping import get_model_conversion_mapping
+from .core_model_loading import convert_and_load_state_dict_in_model
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -2804,9 +2806,43 @@ class Trainer:
                     check_torch_load_is_safe()
                     state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
 
-                # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
-                # which takes *args instead of **kwargs
-                load_result = model.load_state_dict(state_dict, False)
+                weight_mapping = get_model_conversion_mapping(model)
+                if weight_mapping:
+                    try:
+                        param_device = next(model.parameters()).device
+                        device_map = {"": str(param_device)}
+                    except StopIteration:
+                        device_map = {"": "cpu"}
+
+                    missing_keys, unexpected_keys, mismatched_keys, _disk_offload_index, conversion_errors = (
+                        convert_and_load_state_dict_in_model(
+                            model=model,
+                            state_dict=state_dict,
+                            weight_mapping=weight_mapping,
+                            tp_plan=getattr(model, "tp_plan", None),
+                            hf_quantizer=None,
+                            device_map=device_map,
+                        )
+                    )
+
+                    class _LoadResult:
+                        def __init__(self, missing_keys, unexpected_keys):
+                            self.missing_keys = list(missing_keys)
+                            self.unexpected_keys = list(unexpected_keys)
+
+                    load_result = _LoadResult(missing_keys, unexpected_keys)
+                    if conversion_errors:
+                        logger.warning(
+                            f"There were errors while applying checkpoint conversion mapping: {list(conversion_errors.keys())}"  # noqa: E501
+                        )
+                    if mismatched_keys:
+                        logger.warning(
+                            f"There were mismatched keys in the checkpoint model loaded: {sorted(mismatched_keys)}"  # noqa: E501
+                        )
+                else:
+                    # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
+                    # which takes *args instead of **kwargs
+                    load_result = model.load_state_dict(state_dict, False)
                 # release memory
                 del state_dict
                 self._issue_warnings_after_load(load_result)
