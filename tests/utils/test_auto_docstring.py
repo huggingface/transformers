@@ -21,7 +21,7 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
-from typing import Optional, Union, Unpack
+from typing import Unpack
 
 import torch
 
@@ -240,16 +240,16 @@ class DummyForTestModel(PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         temperature: float = 1.0,
-        custom_dict: Optional[dict[str, Union[int, float]]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        custom_dict: dict[str, int | float] | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
     ) -> CausalLMOutputWithPast:
         r"""
         temperature (`float`, *optional*, defaults to 1.0):
