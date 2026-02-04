@@ -2326,17 +2326,25 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model._keep_in_fp32_modules, {"linear", "head"})  # language model + composite model
         self.assertEqual(model._keep_in_fp32_modules_strict, {"simple"})  # vision model
 
-    def test_decoder_only_model_can_be_used_as_encoder(self):
+    @parameterized.expand([("sdpa",), ("flash_attention_2",)])
+    def test_decoder_only_model_can_be_used_as_encoder(self, attn_implementation: str):
         """Test that most well-behaved decoder models can be used as encoders through the `is_causal` kwarg/config.
         Note that it's enough to test it on Llama, as the entry points are all through general code
         (masking_utils.py + `check_model_inputs` decorator). This makes it easier as the model need to use both the
         mask API from masking_utils.py and the decorator as mentionned above, and we don't know what models follow that
         standard exactly (so we cannot make it easily a common model test)."""
+        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+            self.skipTest("FA2 not available")
+
         from transformers import LlamaConfig, LlamaModel
         from transformers.masking_utils import create_bidirectional_mask
 
         config = LlamaConfig(
-            num_hidden_layers=2, hidden_size=32, intermediate_size=64, vocab_size=100, attn_implementation="sdpa"
+            num_hidden_layers=2,
+            hidden_size=32,
+            intermediate_size=64,
+            vocab_size=100,
+            attn_implementation=attn_implementation,
         )
         model = LlamaModel(copy.deepcopy(config))
 
@@ -2370,7 +2378,13 @@ class ModelUtilsTest(TestCasePlus):
 
         # Here, since we have padding, the mask created should never be None. Since the mask is never None, the sdpa
         # backend will always use `is_causal=False`, so both should be strictly equivalent
-        torch.testing.assert_close(reference, without_kwarg)
+        if attn_implementation == "sdpa":
+            torch.testing.assert_close(reference, without_kwarg)
+        # But FA2 relies solely on the `is_causal` kwarg to decide how to dispatch, as it will use varlen since we
+        # have padding, so both won't be equivalent at all
+        else:
+            # Everything should be different (we only test the maximum of the diff to avoid flakyness)
+            self.assertTrue(torch.abs(reference - without_kwarg).max() >= 1e-1)
 
         # Now if we simply forward the kwarg with the usual mask function, it should still work the exact same
         with_kwarg_only = model(input_ids, attention_mask=attention_mask, is_causal=False).last_hidden_state
