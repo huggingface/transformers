@@ -1625,6 +1625,7 @@ __all__ = [
     "T5Gemma2DecoderConfig",
     "T5Gemma2ForConditionalGeneration",
     "T5Gemma2Model",
+    "T5Gemma2Encoder",
     "T5Gemma2PreTrainedModel",
     "T5Gemma2ForSequenceClassification",
     "T5Gemma2ForTokenClassification",

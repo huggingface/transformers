@@ -163,7 +163,7 @@ def compute_module_total_buffer_size(model: nn.Module, hf_quantizer: "HfQuantize
 def get_balanced_memory(
     model: "PreTrainedModel",
     max_memory: dict[int | str, int | str] | None = None,
-    no_split_module_classes: list[str] | None = None,
+    no_split_module_classes: set[str] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
     low_zero: bool = False,
 ):
@@ -183,8 +183,8 @@ def get_balanced_memory(
         max_memory (`Dict`, *optional*):
             A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
             Example: `max_memory={0: "1GB"}`.
-        no_split_module_classes (`List[str]`, *optional*):
-            A list of layer class names that should never be split across device (for instance any layer that has a
+        no_split_module_classes (`set[str]`, *optional*):
+            A set of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
         hf_quantizer (`HfQuantizer`, *optional*):
             A quantizer for the model.
@@ -227,7 +227,7 @@ def get_balanced_memory(
     # - the mean of the layer sizes
     if no_split_module_classes is None:
         no_split_module_classes = []
-    elif not isinstance(no_split_module_classes, (list, tuple)):
+    elif not isinstance(no_split_module_classes, (list, tuple, set)):
         no_split_module_classes = [no_split_module_classes]
 
     # Identify the size of the no_split_block modules
@@ -275,7 +275,7 @@ def _get_device_map(
     Otherwise, we check for any device inconsistencies in the device_map.
     """
     if isinstance(device_map, str):
-        no_split_modules = model._get_no_split_modules(device_map)
+        no_split_modules = model._no_split_modules
 
         if device_map != "sequential":
             inferred_max_memory = get_balanced_memory(
@@ -490,7 +490,7 @@ def load_offloaded_parameter(model: "PreTrainedModel", param_name: str) -> torch
 def _init_infer_auto_device_map(
     model: nn.Module,
     max_memory: dict[int | str, int | str] | None = None,
-    no_split_module_classes: list[str] | None = None,
+    no_split_module_classes: set[str] | None = None,
     tied_parameters: list[list[str]] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
 ) -> tuple[
@@ -509,7 +509,7 @@ def _init_infer_auto_device_map(
     max_memory = get_max_memory(max_memory)
     if no_split_module_classes is None:
         no_split_module_classes = []
-    elif not isinstance(no_split_module_classes, (list, tuple)):
+    elif not isinstance(no_split_module_classes, (list, tuple, set)):
         no_split_module_classes = [no_split_module_classes]
 
     devices = list(max_memory.keys())
@@ -560,7 +560,7 @@ def _init_infer_auto_device_map(
 def infer_auto_device_map(
     model: nn.Module,
     max_memory: dict[int | str, int | str] | None = None,
-    no_split_module_classes: list[str] | None = None,
+    no_split_module_classes: set[str] | None = None,
     verbose: bool = False,
     clean_result: bool = True,
     offload_buffers: bool = False,
@@ -590,8 +590,8 @@ def infer_auto_device_map(
         max_memory (`Dict`, *optional*):
             A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
             Example: `max_memory={0: "1GB"}`.
-        no_split_module_classes (`List[str]`, *optional*):
-            A list of layer class names that should never be split across device (for instance any layer that has a
+        no_split_module_classes (`set[str]`, *optional*):
+            A set of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
         verbose (`bool`, *optional*, defaults to `False`):
             Whether or not to provide debugging statements as the function builds the device_map.

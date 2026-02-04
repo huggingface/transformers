@@ -293,6 +293,51 @@ if is_torch_available():
         def forward(self, x):
             return self.decoder(self.base(x))
 
+    class VerySimpleLayer(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.simple = nn.Linear(2, 2)
+
+        def forward(self, x):
+            return self.simple(x)
+
+    class DummyLanguageModel(PreTrainedModel):
+        _keep_in_fp32_modules = ["linear"]
+        _no_split_modules = ["VerySimpleLayer"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(2, 2)
+            self.layers = nn.ModuleList((VerySimpleLayer(), VerySimpleLayer()))
+            self.post_init()
+
+        def forward(self, x):
+            return self.linear(self.layers[1](self.layers[0](x)))
+
+    class DummyVisionModel(PreTrainedModel):
+        _keep_in_fp32_modules_strict = ["simple"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.simple = nn.Linear(2, 2)
+            self.post_init()
+
+        def forward(self, x):
+            return self.simple(x)
+
+    class MultimodalModel(PreTrainedModel):
+        _keep_in_fp32_modules = ["head"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.language_model = DummyLanguageModel(config)
+            self.vision_model = DummyVisionModel(config)
+            self.head = nn.Linear(2, 2)
+            self.post_init()
+
+        def forward(self, x):
+            return self.head(self.language_model(self.vision_model(x)))
+
     class Prepare4dCausalAttentionMaskModel(nn.Module):
         def forward(self, inputs_embeds):
             batch_size, seq_length, _ = inputs_embeds.shape
@@ -2273,6 +2318,13 @@ class ModelUtilsTest(TestCasePlus):
                     RuntimeError, "We encountered some issues during automatic conversion of the weights."
                 ):
                     _ = MixtralModel.from_pretrained(tmpdirname)
+
+    def test_composite_model_inherit_properties(self):
+        model = MultimodalModel(PreTrainedConfig())
+        # Make sure the top level inherited properties from its child language and vision models
+        self.assertEqual(model._no_split_modules, {"VerySimpleLayer"})  # language model
+        self.assertEqual(model._keep_in_fp32_modules, {"linear", "head"})  # language model + composite model
+        self.assertEqual(model._keep_in_fp32_modules_strict, {"simple"})  # vision model
 
 
 @slow
