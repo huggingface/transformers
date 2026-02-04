@@ -37,6 +37,7 @@ from .configuration_auto import (
 from .feature_extraction_auto import AutoFeatureExtractor
 from .image_processing_auto import AutoImageProcessor
 from .tokenization_auto import AutoTokenizer
+from .video_processing_auto import AutoVideoProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -147,6 +148,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("speech_to_text", "Speech2TextProcessor"),
         ("speecht5", "SpeechT5Processor"),
         ("t5gemma2", "Gemma3Processor"),
+        ("t5gemma2_encoder", "Gemma3Processor"),
         ("trocr", "TrOCRProcessor"),
         ("tvp", "TvpProcessor"),
         ("udop", "UdopProcessor"),
@@ -400,31 +402,20 @@ class AutoProcessor:
         elif type(config) in PROCESSOR_MAPPING:
             return PROCESSOR_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        # At this stage, there doesn't seem to be a `Processor` class available for this model, so let's try a
-        # tokenizer.
-        try:
-            return AutoTokenizer.from_pretrained(
-                pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-            )
-        except Exception:
+        # At this stage, there doesn't seem to be a `Processor` class available for this model.
+        # Let's try the commonly available classes
+        for klass in (AutoTokenizer, AutoImageProcessor, AutoVideoProcessor, AutoFeatureExtractor):
             try:
-                return AutoImageProcessor.from_pretrained(
+                return klass.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
             except Exception:
-                pass
-
-            try:
-                return AutoFeatureExtractor.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                )
-            except Exception:
-                pass
+                continue
 
         raise ValueError(
             f"Unrecognized processing class in {pretrained_model_name_or_path}. Can't instantiate a processor, a "
-            "tokenizer, an image processor or a feature extractor for this model. Make sure the repository contains "
-            "the files of at least one of those processing classes."
+            "tokenizer, an image processor, a video processor or a feature extractor for this model. "
+            "Make sure the repository contains the files of at least one of those processing classes."
         )
 
     @staticmethod

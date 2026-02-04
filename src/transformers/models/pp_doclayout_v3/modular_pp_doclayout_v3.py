@@ -23,6 +23,7 @@ import torchvision.transforms.v2.functional as tvF
 from torch import nn
 
 from ... import initialization as init
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -43,9 +44,8 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from ...utils.backbone_utils import verify_backbone_config_arguments
 from ...utils.generic import TensorType, can_return_tuple
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..resnet.modeling_resnet import ResNetConvLayer
 from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoder,
@@ -93,20 +93,8 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             Whether the model's input and output word embeddings should be tied.
         backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
             The configuration of the backbone model.
-        backbone (`str`, *optional*):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone.
-        use_timm_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
-            library.
         freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
             Whether to freeze the batch normalization layers in the backbone.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         encoder_hidden_dim (`int`, *optional*, defaults to 256):
             Dimension of the layers in hybrid encoder.
         encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
@@ -221,11 +209,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         tie_word_embeddings=True,
         # backbone
         backbone_config=None,
-        backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
         freeze_backbone_batch_norms=True,
-        backbone_kwargs=None,
         # encoder PPDocLayoutV3HybridEncoder
         encoder_hidden_dim=256,
         encoder_in_channels=[512, 1024, 2048],
@@ -274,12 +258,10 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         self.batch_norm_eps = batch_norm_eps
         self.tie_word_embeddings = tie_word_embeddings
 
-        if backbone_config is None and backbone is None:
-            logger.info(
-                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `HGNetV3` backbone."
-            )
-            backbone_config = {
-                "model_type": "hgnet_v2",
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=backbone_config,
+            default_config_type="hgnet_v2",
+            default_config_kwargs={
                 "arch": "L",
                 "return_idx": [0, 1, 2, 3],
                 "freeze_stem_only": True,
@@ -287,29 +269,12 @@ class PPDocLayoutV3Config(PreTrainedConfig):
                 "freeze_norm": True,
                 "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
                 "out_features": ["stage1", "stage2", "stage3", "stage4"],
-            }
-            config_class = CONFIG_MAPPING["hgnet_v2"]
-            backbone_config = config_class.from_dict(backbone_config)
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
-            if backbone_model_type is None:
-                raise ValueError("`backbone_config` dict must contain key `model_type`.")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
-            backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            },
+            **kwargs,
         )
+
         self.backbone_config = backbone_config
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
         self.freeze_backbone_batch_norms = freeze_backbone_batch_norms
-        self.backbone_kwargs = dict(backbone_kwargs) if backbone_kwargs is not None else None
 
         # ---- encoder ----
         self.encoder_hidden_dim = encoder_hidden_dim

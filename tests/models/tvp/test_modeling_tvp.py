@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch TVP model."""
 
+import copy
 import unittest
 from functools import cached_property
 
@@ -196,7 +197,7 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_backbone_selection(self):
         def _validate_backbone_init():
             for model_class in self.all_model_classes:
-                model = model_class(config)
+                model = model_class(copy.deepcopy(config))
                 model.to(torch_device)
                 model.eval()
 
@@ -211,18 +212,21 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.is_hybrid = False
 
         # We load through configs, as the modeling file assumes config.backbone_config is always set
-        config.use_pretrained_backbone = False
-        config.backbone_kwargs = None
+        config_dict = config.to_dict()
+        config_dict["use_pretrained_backbone"] = False
+        config_dict["backbone_kwargs"] = None
 
         # Load a timm backbone
         # We hack adding hidden_sizes to the config to test the backbone loading
         backbone_config = TimmBackboneConfig("resnet18", out_indices=[-2, -1], hidden_sizes=[64, 128])
-        config.backbone_config = backbone_config
+        config_dict["backbone_config"] = backbone_config
+        config = config.__class__(**config_dict)
         _validate_backbone_init()
 
         # Load a HF backbone
         backbone_config = ResNetConfig.from_pretrained("facebook/dinov2-small", out_indices=[-2, -1])
-        config.backbone_config = backbone_config
+        config_dict["backbone_config"] = backbone_config
+        config = config.__class__(**config_dict)
         _validate_backbone_init()
 
 

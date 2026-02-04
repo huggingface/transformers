@@ -30,7 +30,6 @@ from ...utils import (
     TensorType,
     TransformersKwargs,
     auto_docstring,
-    is_timm_available,
     logging,
 )
 from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
@@ -57,10 +56,6 @@ from ..detr.modeling_detr import (
     eager_attention_forward,
 )
 from .configuration_conditional_detr import ConditionalDetrConfig
-
-
-if is_timm_available():
-    pass
 
 
 logger = logging.get_logger(__name__)

@@ -930,7 +930,7 @@ class BltPatcher(BltPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1229,8 +1229,15 @@ class BltModel(BltPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+        if use_cache:
+            if past_key_values is None:
+                past_key_values = EncoderDecoderCache(
+                    DynamicCache(config=self.config), DynamicCache(config=self.config)
+                )
+            elif not isinstance(past_key_values, EncoderDecoderCache):
+                # BLT uses an encoder-decoder cache even though it is not en encoder-decoder model. Create a cross-cache
+                # if not yet created by the user
+                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache(config=self.config))
 
         # Extract input embeddings as early as possible
         if inputs_embeds is not None:
@@ -1377,7 +1384,7 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"model.local_encoder.embed_tokens.weight": "lm_head.weight"}
 
     def __init__(self, config: BltConfig):
-        super().__init__(config.get_text_config())
+        super().__init__(config)
         self.text_config = config.get_text_config()
         self.vocab_size = config.vocab_size
         self.model = BltModel(config)
@@ -1433,8 +1440,8 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, BltForCausalLM
 
-        >>> model = BltForCausalLM.from_pretrained("Llama-3.2-11B-Vision")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Llama-3.2-11B-Vision")
+        >>> model = BltForCausalLM.from_pretrained("itazap/blt-1b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-hf")
 
         >>> prompt = "If I had to write a haiku, it would be:"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
