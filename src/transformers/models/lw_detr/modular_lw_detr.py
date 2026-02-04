@@ -21,6 +21,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
@@ -29,7 +30,7 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import meshgrid
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import check_model_inputs
-from ..auto.configuration_auto import AutoConfig
+from ..auto import AutoConfig
 from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..dab_detr.modeling_dab_detr import gen_sine_position_embeddings
 from ..deformable_detr.modeling_deformable_detr import (
@@ -40,7 +41,6 @@ from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrMultiscaleDeformableAttention,
 )
 from ..llama.modeling_llama import eager_attention_forward
-from ..rt_detr.configuration_rt_detr import CONFIG_MAPPING
 from ..rt_detr.modeling_rt_detr import RTDetrConvNormLayer
 from ..vit.modeling_vit import ViTAttention, ViTEncoder, ViTSelfAttention
 from ..vitdet.configuration_vitdet import VitDetConfig
@@ -337,24 +337,18 @@ class LwDetrConfig(PreTrainedConfig):
     ):
         self.batch_norm_eps = batch_norm_eps
 
-        # backbone
-        if backbone_config is None:
-            logger.info(
-                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `LwDetrViT` backbone."
-            )
-            backbone_config = LwDetrViTConfig(
-                image_size=1024,
-                hidden_size=192,
-                num_hidden_layers=10,
-                num_attention_heads=12,
-                window_block_indices=[0, 1, 3, 6, 7, 9],
-                out_indices=[2, 4, 5, 9],
-                **kwargs,
-            )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.pop("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=backbone_config,
+            default_config_type="lw_detr_vit",
+            default_config_kwargs={
+                "image_size": 1024,
+                "hidden_size": 192,
+                "num_hidden_layers": 10,
+                "window_block_indices": [0, 1, 3, 6, 7, 9],
+                "out_indices": [2, 4, 5, 9],
+            },
+            **kwargs,
+        )
 
         self.backbone_config = backbone_config
         # projector

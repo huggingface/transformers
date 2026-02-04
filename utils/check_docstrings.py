@@ -48,6 +48,7 @@ from typing import Any
 from check_repo import ignore_undocumented
 from git import Repo
 
+from transformers import logging
 from transformers.utils import direct_transformers_import
 from transformers.utils.auto_docstring import (
     ImageProcessorArgs,
@@ -58,6 +59,9 @@ from transformers.utils.auto_docstring import (
     parse_docstring,
     set_min_indent,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -1422,8 +1426,8 @@ def _find_typed_dict_classes(source: str) -> list[dict]:
     standard_args = set()
     try:
         standard_args.update(get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs]).keys())
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Could not get standard args from source: {e}")
 
     # Collect all TypedDict class names first (for excluding nested TypedDicts)
     typed_dict_names = set()
@@ -1548,8 +1552,8 @@ def _process_typed_dict_docstrings(
         if td["docstring"]:
             try:
                 documented_fields, remaining_docstring = parse_docstring(td["docstring"])
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Could not parse docstring for {td.get('name', 'unknown')}: {e}")
 
         # Find missing, fill, and redundant fields
         missing_fields = []
@@ -1610,8 +1614,8 @@ def _process_typed_dict_docstrings(
             if td["docstring"]:
                 try:
                     documented_fields, remaining_docstring = parse_docstring(td["docstring"])
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Could not parse docstring for {td.get('name', 'unknown')}: {e}")
 
             # Determine which fields to remove (redundant with source)
             fields_to_remove = set()

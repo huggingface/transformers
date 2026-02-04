@@ -26,12 +26,12 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_tracing
-from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import check_model_inputs
 from .configuration_pixio import PixioConfig
 
@@ -430,10 +430,9 @@ class PixioModel(PixioPreTrainedModel):
     Pixio backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class PixioBackbone(PixioPreTrainedModel, BackboneMixin):
+class PixioBackbone(BackboneMixin, PixioPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = PixioEmbeddings(config)
