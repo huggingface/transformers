@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The OFA-Sys Team Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -66,9 +65,10 @@ class ChineseCLIPTextConfig(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
+        bos_token_id (`int`, *optional*, defaults to 0):
+            Beginning of sequence token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     Example:
 
@@ -104,11 +104,14 @@ class ChineseCLIPTextConfig(PreTrainedConfig):
         initializer_factor=1.0,
         layer_norm_eps=1e-12,
         pad_token_id=0,
-        use_cache=True,
+        bos_token_id=0,
+        eos_token_id=None,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
-
+        super().__init__(**kwargs)
+        self.bos_token_id = bos_token_id
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -122,7 +125,6 @@ class ChineseCLIPTextConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
 
 
 class ChineseCLIPVisionConfig(PreTrainedConfig):

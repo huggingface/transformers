@@ -21,7 +21,6 @@ allow to make our dependency on SentencePiece optional.
 import warnings
 from collections.abc import Collection
 from functools import lru_cache
-from typing import Optional
 
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -120,7 +119,7 @@ def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
     return prepend_scheme
 
 
-def generate_merges(vocab, vocab_scores, skip_tokens: Optional[Collection[str]] = None):
+def generate_merges(vocab, vocab_scores, skip_tokens: Collection[str] | None = None):
     skip_tokens = set(skip_tokens) if skip_tokens is not None else set()
     reverse = vocab_scores is not None
     vocab_scores = dict(vocab_scores) if reverse else vocab
@@ -420,9 +419,7 @@ class OpenAIGPTConverter(Converter):
 
 
 class GPT2Converter(Converter):
-    def converted(
-        self, vocab: Optional[dict[str, int]] = None, merges: Optional[list[tuple[str, str]]] = None
-    ) -> Tokenizer:
+    def converted(self, vocab: dict[str, int] | None = None, merges: list[tuple[str, str]] | None = None) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
@@ -491,9 +488,7 @@ class HerbertConverter(Converter):
 
 
 class Qwen2Converter(Converter):
-    def converted(
-        self, vocab: Optional[dict[str, int]] = None, merges: Optional[list[tuple[str, str]]] = None
-    ) -> Tokenizer:
+    def converted(self, vocab: dict[str, int] | None = None, merges: list[tuple[str, str]] | None = None) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
@@ -1897,9 +1892,10 @@ class TikTokenConverter:
         )
         tokenizer.decoder = decoders.ByteLevel()
 
-        tokenizer.add_special_tokens(
-            [AddedToken(token, normalized=False, special=True) for token in self.extra_special_tokens]
-        )
+        if self.extra_special_tokens is not None:
+            tokenizer.add_special_tokens(
+                [AddedToken(token, normalized=False, special=True) for token in self.extra_special_tokens]
+            )
 
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
 
@@ -1947,6 +1943,7 @@ class MistralConverter:
             vocab[token.content] = idx
         bpe_ranks = [base64.b64decode(k["token_bytes"]) for k in bpe_ranks]
         rank_set = set(bpe_ranks)
+        token_to_rank = {token: rank for rank, token in enumerate(bpe_ranks)}
         for rank, token in enumerate(tqdm(bpe_ranks, desc="Converting tekken.json to tokenizer.json")):
             vocab[token_bytes_to_string(token)] = rank
             if len(token) == 1:
@@ -1956,7 +1953,7 @@ class MistralConverter:
                 piece_l, piece_r = token[:index], token[index:]
                 if piece_l in rank_set and piece_r in rank_set and (piece_l + piece_r) in rank_set:
                     local.append((piece_l, piece_r, rank))
-            local = sorted(local, key=lambda x: (bpe_ranks.index(x[0]), bpe_ranks.index(x[1])), reverse=False)
+            local = sorted(local, key=lambda x: (token_to_rank[x[0]], token_to_rank[x[1]]), reverse=False)
             merges.extend(local)
         merges = sorted(merges, key=lambda val: val[2], reverse=False)
         merges = [(token_bytes_to_string(val[0]), token_bytes_to_string(val[1])) for val in merges]

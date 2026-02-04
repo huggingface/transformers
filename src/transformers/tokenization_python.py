@@ -415,6 +415,9 @@ class PythonBackend(PreTrainedTokenizerBase):
 
         self.tokens_trie = Trie()
 
+        # Initialize total_vocab_size early to avoid issues if get_vocab() is called early (custom tokenizers)
+        self.total_vocab_size = 0
+
         # 2. init `_added_tokens_decoder` if child class did not
         if not hasattr(self, "_added_tokens_decoder"):
             self._added_tokens_decoder: dict[int, AddedToken] = {}
@@ -439,9 +442,6 @@ class PythonBackend(PreTrainedTokenizerBase):
         # 7. init the parent class
         super().__init__(**kwargs)
 
-        if self._added_tokens_decoder:
-            self._update_total_vocab_size()
-
         # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
         # V5: the order of addition follows self.SPECIAL_TOKENS_ATTRIBUTES, then extra special tokens
         # Note: _add_tokens will automatically skip tokens that are already in the base vocab
@@ -449,7 +449,6 @@ class PythonBackend(PreTrainedTokenizerBase):
             [token for token in self.all_special_tokens if token not in self._added_tokens_encoder],
             special_tokens=True,
         )
-        self._update_total_vocab_size()
 
     @property
     def is_fast(self) -> bool:
@@ -501,6 +500,9 @@ class PythonBackend(PreTrainedTokenizerBase):
         """
         Size of the full vocabulary with the added tokens.
         """
+        # Lazy evaluation: compute if not already set (e.g., during initialization)
+        if self.total_vocab_size == 0:
+            self._update_total_vocab_size()
         return self.total_vocab_size
 
     def _update_total_vocab_size(self):

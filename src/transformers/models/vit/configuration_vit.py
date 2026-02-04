@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 Google AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -104,8 +103,6 @@ class ViTConfig(PreTrainedConfig):
         pooler_act="tanh",
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -122,6 +119,8 @@ class ViTConfig(PreTrainedConfig):
         self.encoder_stride = encoder_stride
         self.pooler_output_size = pooler_output_size if pooler_output_size else hidden_size
         self.pooler_act = pooler_act
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["ViTConfig"]

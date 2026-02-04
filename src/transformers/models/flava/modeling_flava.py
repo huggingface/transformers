@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,7 @@ import collections
 import math
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 from torch import nn
@@ -28,7 +27,8 @@ from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, filter_out_non_signature_kwargs, logging, torch_int
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from .configuration_flava import (
     FlavaConfig,
     FlavaImageCodebookConfig,
@@ -45,7 +45,7 @@ _CHECKPOINT_FOR_CODEBOOK_DOC = "facebook/flava-image-codebook"
 LOGIT_SCALE_CLAMP_MIN = 0
 LOGIT_SCALE_CLAMP_MAX = 4.6052
 
-FlavaPossibleConfigs = Union[FlavaTextConfig, FlavaImageConfig, FlavaMultimodalConfig]
+FlavaPossibleConfigs = FlavaTextConfig | FlavaImageConfig | FlavaMultimodalConfig
 
 
 @dataclass
@@ -74,12 +74,12 @@ class FlavaModelOutput(ModelOutput):
         The output of the [`FlavaMultimodalModel`].
     """
 
-    image_embeddings: Optional[torch.FloatTensor] = None
-    image_output: Optional[BaseModelOutputWithPooling] = None
-    text_embeddings: Optional[torch.FloatTensor] = None
-    text_output: Optional[BaseModelOutputWithPooling] = None
-    multimodal_embeddings: Optional[torch.FloatTensor] = None
-    multimodal_output: Optional[BaseModelOutputWithPooling] = None
+    image_embeddings: torch.FloatTensor | None = None
+    image_output: BaseModelOutputWithPooling | None = None
+    text_embeddings: torch.FloatTensor | None = None
+    text_output: BaseModelOutputWithPooling | None = None
+    multimodal_embeddings: torch.FloatTensor | None = None
+    multimodal_output: BaseModelOutputWithPooling | None = None
 
     def to_tuple(self) -> tuple[Any]:
         return tuple(
@@ -112,12 +112,12 @@ class FlavaLosses(ModelOutput):
         Masked Multimodal Modeling loss's text component calculated on paired image-text data.
     """
 
-    mim: Optional[torch.FloatTensor] = None
-    mlm: Optional[torch.FloatTensor] = None
-    itm: Optional[torch.FloatTensor] = None
-    global_contrastive: Optional[torch.FloatTensor] = None
-    mmm_image: Optional[torch.FloatTensor] = None
-    mmm_text: Optional[torch.FloatTensor] = None
+    mim: torch.FloatTensor | None = None
+    mlm: torch.FloatTensor | None = None
+    itm: torch.FloatTensor | None = None
+    global_contrastive: torch.FloatTensor | None = None
+    mmm_image: torch.FloatTensor | None = None
+    mmm_text: torch.FloatTensor | None = None
 
     def all_none(self) -> bool:
         all_none = True
@@ -194,27 +194,27 @@ class FlavaForPreTrainingOutput(ModelOutput):
             some of the tokens masked.
     """
 
-    loss: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
     loss_info: FlavaLosses = None
-    image_embeddings: Optional[torch.FloatTensor] = None
-    image_output: Optional[BaseModelOutputWithPooling] = None
-    text_embeddings: Optional[torch.FloatTensor] = None
-    text_output: Optional[BaseModelOutputWithPooling] = None
-    multimodal_embeddings: Optional[torch.FloatTensor] = None
-    multimodal_output: Optional[BaseModelOutputWithPooling] = None
-    image_masked_embeddings: Optional[torch.FloatTensor] = None
-    image_masked_output: Optional[BaseModelOutputWithPooling] = None
-    text_masked_embeddings: Optional[torch.FloatTensor] = None
-    text_masked_output: Optional[BaseModelOutputWithPooling] = None
-    multimodal_masked_embeddings: Optional[torch.FloatTensor] = None
-    multimodal_masked_output: Optional[BaseModelOutputWithPooling] = None
-    mim_logits: Optional[torch.FloatTensor] = None
-    mlm_logits: Optional[torch.FloatTensor] = None
-    itm_logits: Optional[torch.FloatTensor] = None
-    contrastive_logits_per_image: Optional[torch.FloatTensor] = None
-    contrastive_logits_per_text: Optional[torch.FloatTensor] = None
-    mmm_image_logits: Optional[torch.FloatTensor] = None
-    mmm_text_logits: Optional[torch.FloatTensor] = None
+    image_embeddings: torch.FloatTensor | None = None
+    image_output: BaseModelOutputWithPooling | None = None
+    text_embeddings: torch.FloatTensor | None = None
+    text_output: BaseModelOutputWithPooling | None = None
+    multimodal_embeddings: torch.FloatTensor | None = None
+    multimodal_output: BaseModelOutputWithPooling | None = None
+    image_masked_embeddings: torch.FloatTensor | None = None
+    image_masked_output: BaseModelOutputWithPooling | None = None
+    text_masked_embeddings: torch.FloatTensor | None = None
+    text_masked_output: BaseModelOutputWithPooling | None = None
+    multimodal_masked_embeddings: torch.FloatTensor | None = None
+    multimodal_masked_output: BaseModelOutputWithPooling | None = None
+    mim_logits: torch.FloatTensor | None = None
+    mlm_logits: torch.FloatTensor | None = None
+    itm_logits: torch.FloatTensor | None = None
+    contrastive_logits_per_image: torch.FloatTensor | None = None
+    contrastive_logits_per_text: torch.FloatTensor | None = None
+    mmm_image_logits: torch.FloatTensor | None = None
+    mmm_text_logits: torch.FloatTensor | None = None
 
     def to_tuple(self) -> tuple[Any]:
         transformer_outputs = [
@@ -297,7 +297,7 @@ class FlavaImageEmbeddings(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
@@ -338,7 +338,7 @@ class PatchEmbeddings(nn.Module):
     def __init__(
         self,
         image_size: int = 224,
-        patch_size: Union[int, tuple[int, int]] = 16,
+        patch_size: int | tuple[int, int] = 16,
         num_channels: int = 3,
         embed_dim: int = 768,
     ):
@@ -387,9 +387,9 @@ class FlavaTextEmbeddings(nn.Module):
 
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
     ):
         input_shape = input_ids.size()
         seq_length = input_shape[1]
@@ -442,9 +442,9 @@ class FlavaSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
             self.query(hidden_states)
@@ -515,9 +515,9 @@ class FlavaAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
         self_outputs = self.attention(
             hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
         )
@@ -579,9 +579,9 @@ class FlavaLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in ViT, layernorm is applied before self-attention
             attention_mask=attention_mask,
@@ -615,11 +615,11 @@ class FlavaEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -667,7 +667,7 @@ class FlavaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, FlavaMaskedPredictionHead):
@@ -721,15 +721,15 @@ class FlavaImageModel(FlavaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
+        interpolate_pos_encoding: bool | None = None,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, image_num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -801,15 +801,15 @@ class FlavaTextModel(FlavaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_seq_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -837,7 +837,8 @@ class FlavaTextModel(FlavaPreTrainedModel):
             attention_mask = torch.ones(input_shape, device=input_ids.device)
 
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask, input_shape, input_ids.device
+            attention_mask,
+            input_shape,
         )
 
         embedding_output = self.embeddings(
@@ -897,12 +898,12 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         hidden_states (`torch.FloatTensor` of shape `(batch_size, image_num_patches + text_seq_len, hidden_size)`):
             The concatenated hidden states of unimodal encoders.
@@ -924,7 +925,8 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
             attention_mask = torch.ones((batch_size, seq_length), device=hidden_states.device)
 
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask, (batch_size, seq_length), hidden_states.device
+            attention_mask,
+            (batch_size, seq_length),
         )
 
         encoder_outputs = self.encoder(
@@ -996,15 +998,16 @@ class FlavaModel(FlavaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_seq_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -1016,10 +1019,6 @@ class FlavaModel(FlavaPreTrainedModel):
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
             [What are token type IDs?](../glossary#token-type-ids)
-
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`FlavaTextModel`].
 
         Examples:
 
@@ -1042,28 +1041,27 @@ class FlavaModel(FlavaPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            return_dict=True,
+            **kwargs,
         )
-        pooled_output = text_outputs.last_hidden_state
-        text_features = self.text_projection(pooled_output)
+        last_hidden_state = text_outputs.last_hidden_state
+        text_outputs.pooler_output = self.text_projection(last_hidden_state)
 
-        return text_features
+        return text_outputs
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        bool_masked_pos: torch.BoolTensor | None = None,
+        interpolate_pos_encoding: bool | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, image_num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`FlavaImageModel`].
 
         Examples:
 
@@ -1089,28 +1087,30 @@ class FlavaModel(FlavaPreTrainedModel):
             bool_masked_pos=bool_masked_pos,
             attention_mask=attention_mask,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
+            **kwargs,
         )
-        pooled_output = image_outputs.last_hidden_state
-        image_features = self.image_projection(pooled_output)
+        last_hidden_state = image_outputs.last_hidden_state
+        image_outputs.pooler_output = self.image_projection(last_hidden_state)
 
-        return image_features
+        return image_outputs
 
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        image_attention_mask: Optional[torch.Tensor] = None,
-        skip_multimodal_encoder: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        bool_masked_pos: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        image_attention_mask: torch.Tensor | None = None,
+        skip_multimodal_encoder: bool | None = None,
+        output_attentions: bool | None = None,
         output_hidden_states: bool = True,
-        return_dict: Optional[bool] = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, FlavaModelOutput]:
+    ) -> tuple | FlavaModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, image_num_patches + text_seq_len)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -1135,14 +1135,16 @@ class FlavaModel(FlavaPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, FlavaModel
 
         >>> model = FlavaModel.from_pretrained("facebook/flava-full")
         >>> processor = AutoProcessor.from_pretrained("facebook/flava-full")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(text=["a photo of a cat"], images=image, return_tensors="pt", padding=True)
 
@@ -1365,14 +1367,16 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoImageProcessor, FlavaImageCodebook
 
         >>> model = FlavaImageCodebook.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
         >>> image_processor = AutoImageProcessor.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = image_processor([image], return_codebook_pixels=True, return_tensors="pt")
         >>> inputs = dict(pixel_values=inputs.codebook_pixel_values)
@@ -1398,14 +1402,16 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoImageProcessor, FlavaImageCodebook
 
         >>> model = FlavaImageCodebook.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
         >>> image_processor = AutoImageProcessor.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = image_processor([image], return_codebook_pixels=True, return_tensors="pt")
         >>> inputs = dict(pixel_values=inputs.codebook_pixel_values)
@@ -1522,7 +1528,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         "mmm_image_head.bias": "mmm_image_head.decoder.bias",
     }
 
-    def __init__(self, config: FlavaConfig, image_codebook: Optional[nn.Module] = None):
+    def __init__(self, config: FlavaConfig, image_codebook: nn.Module | None = None):
         r"""
         image_codebook ([`nn.Module`]):
             If passed, the image codebook will be set to this. Otherwise, it will be initialized using the
@@ -1565,25 +1571,25 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        input_ids_masked: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        codebook_pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        image_attention_mask: Optional[torch.Tensor] = None,
-        skip_unmasked_multimodal_encoder: Optional[bool] = None,
-        mlm_labels: Optional[torch.Tensor] = None,
-        mim_labels: Optional[torch.Tensor] = None,
-        itm_labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        input_ids_masked: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        codebook_pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        bool_masked_pos: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        image_attention_mask: torch.Tensor | None = None,
+        skip_unmasked_multimodal_encoder: bool | None = None,
+        mlm_labels: torch.Tensor | None = None,
+        mim_labels: torch.Tensor | None = None,
+        itm_labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
         output_hidden_states: bool = True,
-        return_dict: Optional[bool] = None,
-        return_loss: Optional[bool] = None,
+        return_dict: bool | None = None,
+        return_loss: bool | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], FlavaForPreTrainingOutput]:
+    ) -> tuple[torch.Tensor] | FlavaForPreTrainingOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_seq_len)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -1633,11 +1639,13 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import FlavaForPreTraining, AutoProcessor
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> model = FlavaForPreTraining.from_pretrained("facebook/flava-full")
         >>> processor = AutoProcessor.from_pretrained("facebook/flava-full")
@@ -1842,7 +1850,8 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             image_embedding = self.flava.image_projection(image_embeddings[:, 0, :])
             image_embedding = nn.functional.normalize(image_embedding, dim=-1)
 
-            self.flava.logit_scale.data.clamp_(LOGIT_SCALE_CLAMP_MIN, LOGIT_SCALE_CLAMP_MAX)
+            if self.training:
+                self.flava.logit_scale.data.clamp_(LOGIT_SCALE_CLAMP_MIN, LOGIT_SCALE_CLAMP_MAX)
 
             logits_per_image, logits_per_text, gc_labels = self.global_contrastive_head(
                 image_embedding, text_embedding, self.flava.logit_scale

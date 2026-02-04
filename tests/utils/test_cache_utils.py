@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     cleanup,
     get_gpu_count,
     is_torch_available,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -177,7 +176,7 @@ class CacheIntegrationTest(unittest.TestCase):
         """
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
         if cache_implementation == "offloaded_hybrid_chunked":
-            # TODO (joao, cyril): something is off with `offloaded_hybrid_chunked` aka `OffloadedHybridCache`: the
+            # TODO (joao, cyril): something is off with `offloaded_hybrid_chunked`: the
             # output sequence (and the corresponding beam scores, if we add `output_scores=True`) are significantly
             # different from the other caches.
             self.skipTest("`offloaded_hybrid_chunked` fails this test")
@@ -497,7 +496,6 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
     @require_torch_multi_accelerator
     @slow
-    @require_read_token
     def test_static_cache_multi_accelerator(self):
         """Regression test for #35164: static cache with multi-accelerator"""
 
@@ -688,8 +686,6 @@ class CacheExportIntegrationTest(unittest.TestCase):
         """
         Tests that static cache works with `torch.export()`
         """
-        if not is_torch_greater_or_equal("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         set_seed(0)
         device = torch_device

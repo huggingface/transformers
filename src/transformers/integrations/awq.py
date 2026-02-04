@@ -13,14 +13,9 @@
 # limitations under the License.
 "AWQ (Activation aware Weight Quantization) integration file"
 
-from typing import Optional, Union
-
 from ..quantizers.quantizers_utils import should_convert_module
-from ..utils import is_accelerate_available, is_torch_available, logging
+from ..utils import is_torch_available, logging
 
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 if is_torch_available():
     import torch
@@ -62,7 +57,7 @@ def replace_with_awq_linear(
     model,
     modules_to_not_convert=None,
     quantization_config=None,
-    device_map: Optional[Union[str, dict]] = None,
+    device_map: str | dict | None = None,
 ) -> bool:
     """
     Public method that replaces the linear layers of the given model with awq quantized layers.
@@ -97,7 +92,7 @@ def replace_with_awq_linear(
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
-        with init_empty_weights():
+        with torch.device("meta"):
             if isinstance(module, nn.Linear):
                 new_module = target_cls(
                     bits=quantization_config.bits,

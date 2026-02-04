@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The LG AI Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import (
     AutoTokenizer,
@@ -66,7 +64,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
     def tearDown(self):
         # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
         # some memory allocated in the cache, which means some object is not being released properly. This causes some
-        # unoptimal memory usage, e.g. after certain teruff format examples tests src utilssts a 7B model in FP16 no longer fits in a 24GB GPU.
+        # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
         # Investigate the root cause.
         cleanup(torch_device, gc_collect=True)
 
@@ -153,9 +151,6 @@ class Exaone4IntegrationTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,

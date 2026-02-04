@@ -58,6 +58,14 @@ def get_keys_to_not_convert(model) -> list:
     return list(modules_to_not_convert)
 
 
+def _assign_is_quantized(model):
+    from ..modeling_utils import PreTrainedModel
+
+    for module in model.modules():
+        if isinstance(module, PreTrainedModel):
+            module.config._is_quantized = True
+
+
 class HfQuantizer(ABC):
     """
     Abstract class of the HuggingFace quantizer. Supports for now quantizing HF transformers models for inference and/or quantization.
@@ -176,6 +184,8 @@ class HfQuantizer(ABC):
 
         if self.pre_quantized and getattr(self.quantization_config, "dequantize", False):
             self.remove_quantization_config(model)
+        else:
+            _assign_is_quantized(model)
 
         return self._process_model_after_weight_loading(model, **kwargs)
 
@@ -260,15 +270,13 @@ class HfQuantizer(ABC):
     def is_trainable(self): ...
 
     def _convert_model_for_quantization(self, model):
-        from accelerate import init_empty_weights
-
         for name, module in model.named_modules():
             module_class_name = module.__class__.__name__
             if module_class_name in MODULES_TO_PATCH_FOR_QUANTIZATION and (
                 self.quantization_config.quant_method
                 in MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name]["quantization_methods"]
             ):
-                with init_empty_weights():
+                with torch.device("meta"):
                     parent_module, name = get_module_from_name(model, name)
                     parent_module._modules[name] = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name]["module_name"](
                         model.config.get_text_config()

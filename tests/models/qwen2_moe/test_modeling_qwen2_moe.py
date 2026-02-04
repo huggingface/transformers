@@ -119,7 +119,7 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.model = Qwen2MoeForCausalLM.from_pretrained(
-                "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16
+                "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16, experts_implementation="eager"
             )
         return cls.model
 

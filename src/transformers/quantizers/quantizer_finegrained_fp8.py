@@ -33,7 +33,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             return
 
         if not torch.cuda.is_available() and not is_torch_xpu_available():
-            if self.pre_quantized and not self.quantization_config.dequantize:
+            if self.pre_quantized:
                 logger.warning_once(
                     "Using FP8 quantized models requires a GPU or XPU, we will default to dequantizing the model to bf16 since no GPU or XPU is available"
                 )
@@ -46,10 +46,13 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             compute_capability = torch.cuda.get_device_capability()
             major, minor = compute_capability
             if (major < 8) or (major == 8 and minor < 9):
-                raise ValueError(
+                logger.warning_once(
                     "FP8 quantized models is only supported on GPUs with compute capability >= 8.9 (e.g 4090/H100)"
-                    f", actual = `{major}.{minor}`"
+                    f", actual = `{major}.{minor}`. We will default to dequantizing the model to bf16. Feel free "
+                    f"to use a different quantization method like bitsandbytes or torchao"
                 )
+                self.quantization_config.dequantize = True
+                return
 
         device_map = kwargs.get("device_map")
         if device_map is None:
@@ -107,29 +110,23 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
-    # NOTE: TP is applied before quantization so this is only to add hooks.
-    # Quantization is incompatible with DTensors, so we have to anyway have
-    # gathers! But it should be model independant -> figure out where to put
-    # the gather and that's it.
     def update_tp_plan(self, config):
         if "Qwen3" in config.__class__.__name__:
             text_plan = {
-                "layers.*.self_attn.q_proj.weight": "local_colwise",
-                "layers.*.self_attn.q_proj.weight_scale_inv": "local_colwise",
-                "layers.*.self_attn.k_proj.weight": "local_colwise",
-                "layers.*.self_attn.k_proj.weight_scale_inv": "local_colwise",
-                "layers.*.self_attn.v_proj.weight": "local_colwise",
-                "layers.*.self_attn.v_proj.weight_scale_inv": "local_colwise",
-                "layers.*.self_attn.o_proj.weight": "local_rowwise",
-                "layers.*.self_attn.o_proj.weight_scale_inv": "local_rowwise",
-                "layers.*.self_attn": "gather",
-                "layers.*.mlp.gate_proj.weight": "local_colwise",
-                "layers.*.mlp.gate_proj.weight_scale_inv": "local_colwise",
-                "layers.*.mlp.up_proj.weight": "local_colwise",
-                "layers.*.mlp.up_proj.weight_scale_inv": "local_colwise",
-                "layers.*.mlp.down_proj.weight": "local_rowwise",
-                "layers.*.mlp.down_proj.weight_scale_inv": "local_rowwise",
-                "layers.*.mlp": "gather",
+                "layers.*.self_attn.q_proj.weight": "colwise",
+                "layers.*.self_attn.q_proj.weight_scale_inv": "colwise",
+                "layers.*.self_attn.k_proj.weight": "colwise",
+                "layers.*.self_attn.k_proj.weight_scale_inv": "colwise",
+                "layers.*.self_attn.v_proj.weight": "colwise",
+                "layers.*.self_attn.v_proj.weight_scale_inv": "colwise",
+                "layers.*.self_attn.o_proj.weight": "rowwise",
+                "layers.*.self_attn.o_proj.weight_scale_inv": "rowwise",
+                "layers.*.mlp.gate_proj.weight": "colwise",
+                "layers.*.mlp.gate_proj.weight_scale_inv": "colwise",
+                "layers.*.mlp.up_proj.weight": "colwise",
+                "layers.*.mlp.up_proj.weight_scale_inv": "colwise",
+                "layers.*.mlp.down_proj.weight": "rowwise",
+                "layers.*.mlp.down_proj.weight_scale_inv": "rowwise",
             }
 
             config.base_model_tp_plan = text_plan

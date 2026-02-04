@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018, Hao Tan, Mohit Bansal
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -97,6 +96,14 @@ class LxmertConfig(PreTrainedConfig):
             Whether or not to calculate the attribute-prediction loss objective
         visual_feat_loss (`bool`, *optional*, defaults to `True`):
             Whether or not to calculate the feature-regression loss objective
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     """
 
     model_type = "lxmert"
@@ -130,6 +137,10 @@ class LxmertConfig(PreTrainedConfig):
         visual_obj_loss=True,
         visual_attr_loss=True,
         visual_feat_loss=True,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -158,6 +169,10 @@ class LxmertConfig(PreTrainedConfig):
         self.visual_obj_loss = visual_obj_loss
         self.visual_attr_loss = visual_attr_loss
         self.visual_feat_loss = visual_feat_loss
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.num_hidden_layers = {"vision": r_layers, "cross_encoder": x_layers, "language": l_layers}
         super().__init__(**kwargs)
 

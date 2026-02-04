@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -47,6 +45,8 @@ class DeepseekVLHybridConfig(PreTrainedConfig):
             The config object or dictionary of the high resolution vision backbone.
         image_token_id (`int`, *optional*, defaults to 100015):
             The index representing image tokens in the model's token vocabulary.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -68,10 +68,11 @@ class DeepseekVLHybridConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        text_config: Optional[AutoConfig] = None,
-        vision_config: Optional[AutoConfig] = None,
-        high_res_vision_config: Optional[AutoConfig] = None,
+        text_config: AutoConfig | None = None,
+        vision_config: AutoConfig | None = None,
+        high_res_vision_config: AutoConfig | None = None,
         image_token_id: int = 100015,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         if high_res_vision_config is None:
@@ -102,6 +103,7 @@ class DeepseekVLHybridConfig(PreTrainedConfig):
         self.text_config = text_config
         self.vision_config = vision_config
         self.image_token_id = image_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

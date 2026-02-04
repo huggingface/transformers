@@ -34,7 +34,7 @@ class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class(vocab_file=SAMPLE_VOCAB)
+        tokenizer = tokenizer_class.from_pretrained(SAMPLE_VOCAB)
         tokenizer.pad_token_id = 0
         tokenizer.sep_token_id = 1
         tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})

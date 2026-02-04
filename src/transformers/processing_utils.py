@@ -24,7 +24,7 @@ import sys
 import typing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal, Optional, TypedDict, TypeVar, Union
+from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union
 
 import numpy as np
 import typing_extensions
@@ -199,26 +199,26 @@ class TextKwargs(TypedDict, total=False):
             - `'np'`: Return NumPy `np.ndarray` objects.
     """
 
-    text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
-    text_target: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
-    text_pair_target: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
-    add_special_tokens: Optional[bool]
-    padding: Annotated[Optional[Union[bool, str, PaddingStrategy]], padding_validator()]
-    truncation: Annotated[Optional[Union[bool, str, TruncationStrategy]], truncation_validator()]
-    max_length: Annotated[Optional[int], positive_int()]
-    stride: Annotated[Optional[int], positive_int()]
-    is_split_into_words: Optional[bool]
-    pad_to_multiple_of: Annotated[Optional[int], positive_int()]
-    return_token_type_ids: Optional[bool]
-    return_attention_mask: Optional[bool]
-    return_overflowing_tokens: Optional[bool]
-    return_special_tokens_mask: Optional[bool]
-    return_offsets_mapping: Optional[bool]
-    return_length: Optional[bool]
-    verbose: Optional[bool]
-    padding_side: Optional[Literal["left", "right"]]
-    return_mm_token_type_ids: Optional[bool]
-    return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
+    text_pair: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None
+    text_target: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None
+    text_pair_target: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None
+    add_special_tokens: bool | None
+    padding: Annotated[bool | str | PaddingStrategy | None, padding_validator()]
+    truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator()]
+    max_length: Annotated[int | None, positive_int()]
+    stride: Annotated[int | None, positive_int()]
+    is_split_into_words: bool | None
+    pad_to_multiple_of: Annotated[int | None, positive_int()]
+    return_token_type_ids: bool | None
+    return_attention_mask: bool | None
+    return_overflowing_tokens: bool | None
+    return_special_tokens_mask: bool | None
+    return_offsets_mapping: bool | None
+    return_length: bool | None
+    verbose: bool | None
+    padding_side: Literal["left", "right"] | None
+    return_mm_token_type_ids: bool | None
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
 
 
 class ImagesKwargs(TypedDict, total=False):
@@ -272,25 +272,25 @@ class ImagesKwargs(TypedDict, total=False):
             Added for backward compatibility but this should be set as a processor attribute in future models.
     """
 
-    do_convert_rgb: Optional[bool]
-    do_resize: Optional[bool]
-    size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
-    crop_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
-    resample: Annotated[Optional[Union["PILImageResampling", int]], resampling_validator()]
-    do_rescale: Optional[bool]
-    rescale_factor: Optional[float]
-    do_normalize: Optional[bool]
-    image_mean: Optional[Union[float, list[float], tuple[float, ...]]]
-    image_std: Optional[Union[float, list[float], tuple[float, ...]]]
-    do_pad: Optional[bool]
-    pad_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
-    do_center_crop: Optional[bool]
-    data_format: Optional[Union[str, ChannelDimension]]
-    input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Annotated[Optional[Union[str, "torch.device"]], device_validator()]
-    return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
-    disable_grouping: Optional[bool]
-    image_seq_length: Optional[int]
+    do_convert_rgb: bool | None
+    do_resize: bool | None
+    size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    crop_size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    resample: Annotated[Union["PILImageResampling", int] | None, resampling_validator()]
+    do_rescale: bool | None
+    rescale_factor: float | None
+    do_normalize: bool | None
+    image_mean: float | list[float] | tuple[float, ...] | None
+    image_std: float | list[float] | tuple[float, ...] | None
+    do_pad: bool | None
+    pad_size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    do_center_crop: bool | None
+    data_format: str | ChannelDimension | None
+    input_data_format: str | ChannelDimension | None
+    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
+    disable_grouping: bool | None
+    image_seq_length: int | None
 
 
 class VideosKwargs(TypedDict, total=False):
@@ -346,28 +346,28 @@ class VideosKwargs(TypedDict, total=False):
             - `'np'`: Return NumPy `np.ndarray` objects.
     """
 
-    do_convert_rgb: Optional[bool]
-    do_resize: Optional[bool]
-    size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
-    default_to_square: Optional[bool]
-    resample: Annotated[Optional[Union["PILImageResampling", int]], resampling_validator()]
-    do_rescale: Optional[bool]
-    rescale_factor: Optional[float]
-    do_normalize: Optional[bool]
-    image_mean: Optional[Union[float, list[float], tuple[float, ...]]]
-    image_std: Optional[Union[float, list[float], tuple[float, ...]]]
-    do_center_crop: Optional[bool]
-    do_pad: Optional[bool]
-    crop_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
-    data_format: Optional[Union[str, ChannelDimension]]
-    input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Annotated[Optional[Union[str, "torch.device"]], device_validator()]
-    do_sample_frames: Optional[bool]
-    video_metadata: Annotated[Optional[VideoMetadataType], video_metadata_validator()]
-    fps: Annotated[Optional[Union[int, float]], positive_any_number()]
-    num_frames: Annotated[Optional[int], positive_int()]
-    return_metadata: Optional[bool]
-    return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
+    do_convert_rgb: bool | None
+    do_resize: bool | None
+    size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    default_to_square: bool | None
+    resample: Annotated[Union["PILImageResampling", int] | None, resampling_validator()]
+    do_rescale: bool | None
+    rescale_factor: float | None
+    do_normalize: bool | None
+    image_mean: float | list[float] | tuple[float, ...] | None
+    image_std: float | list[float] | tuple[float, ...] | None
+    do_center_crop: bool | None
+    do_pad: bool | None
+    crop_size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    data_format: str | ChannelDimension | None
+    input_data_format: str | ChannelDimension | None
+    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
+    do_sample_frames: bool | None
+    video_metadata: Annotated[VideoMetadataType | None, video_metadata_validator()]
+    fps: Annotated[int | float | None, positive_any_number()]
+    num_frames: Annotated[int | None, positive_int()]
+    return_metadata: bool | None
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
 
 
 class AudioKwargs(TypedDict, total=False):
@@ -404,14 +404,14 @@ class AudioKwargs(TypedDict, total=False):
             - `'np'`: Return NumPy `np.ndarray` objects.
     """
 
-    sampling_rate: Annotated[Optional[int], positive_int()]
-    raw_speech: Optional[Union["np.ndarray", list[float], list["np.ndarray"], list[list[float]]]]
-    padding: Annotated[Optional[Union[bool, str, PaddingStrategy]], padding_validator()]
-    max_length: Annotated[Optional[int], positive_int()]
-    truncation: Annotated[Optional[Union[bool, str, TruncationStrategy]], truncation_validator()]
-    pad_to_multiple_of: Annotated[Optional[int], positive_int()]
-    return_attention_mask: Optional[bool]
-    return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
+    sampling_rate: Annotated[int | None, positive_int()]
+    raw_speech: Union["np.ndarray", list[float], list["np.ndarray"], list[list[float]]] | None
+    padding: Annotated[bool | str | PaddingStrategy | None, padding_validator()]
+    max_length: Annotated[int | None, positive_int()]
+    truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator()]
+    pad_to_multiple_of: Annotated[int | None, positive_int()]
+    return_attention_mask: bool | None
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
 
 
 class ProcessingKwargs(TypedDict, total=False):
@@ -501,29 +501,14 @@ class TokenizerChatTemplateKwargs(TypedDict, total=False):
         This functionality is only available for chat templates that support it via the `{% generation %}` keyword.
     """
 
-    tools: Optional[list[dict]] = None
-    documents: Optional[list[dict[str, str]]] = None
-    add_generation_prompt: Optional[bool] = False
-    continue_final_message: Optional[bool] = False
-    return_assistant_tokens_mask: Optional[bool] = False
+    tools: list[dict] | None = None
+    documents: list[dict[str, str]] | None = None
+    add_generation_prompt: bool | None = False
+    continue_final_message: bool | None = False
+    return_assistant_tokens_mask: bool | None = False
 
 
-class ChatTemplateLoadKwargs(TypedDict, total=False):
-    """
-    Keyword arguments used to load multimodal data in processor chat templates.
-
-    num_frames (`int`, *optional*):
-        Number of frames to sample uniformly. If not passed, the whole video is loaded.
-    load_audio_from_video (`bool`, *optional*):
-            Whether to use the audio track of input video. If `True` the audio track will be loaded and passed to the
-            processor. This flag has no effect if the model doesn't support audio modality.
-    """
-
-    sampling_rate: Optional[int] = 16_000
-    load_audio_from_video: Optional[bool] = False
-
-
-class ProcessorChatTemplateKwargs(ChatTemplateLoadKwargs, TokenizerChatTemplateKwargs, total=False):
+class ProcessorChatTemplateKwargs(TokenizerChatTemplateKwargs, total=False):
     """
     Keyword arguments for processor's `apply_chat_template`.
 
@@ -531,15 +516,18 @@ class ProcessorChatTemplateKwargs(ChatTemplateLoadKwargs, TokenizerChatTemplateK
         Whether to tokenize the output or not.
     return_dict (`bool`, defaults to `False`):
         Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
+    load_audio_from_video (`bool`, *optional*, defaults to `False`):
+        Whether to use the audio track of input video. If `True` the audio track will be loaded and passed to the
+        processor. This flag has no effect if the model doesn't support audio modality.
     """
 
-    tokenize: Optional[bool] = False
-    return_dict: Optional[bool] = False
+    tokenize: bool | None = False
+    return_dict: bool | None = False
+    load_audio_from_video: bool | None = False
 
 
 class AllKwargsForChatTemplate(TypedDict, total=False):
     processor_kwargs: ProcessingKwargs
-    mm_load_kwargs: ChatTemplateLoadKwargs
     template_kwargs: ProcessorChatTemplateKwargs
 
 
@@ -555,10 +543,10 @@ class MultiModalData:
     and we might change its API in the future.
     """
 
-    num_image_tokens: Optional[list[int]] = None
-    num_video_tokens: Optional[list[int]] = None
-    num_audio_tokens: Optional[list[int]] = None
-    num_image_patches: Optional[list[int]] = None
+    num_image_tokens: list[int] | None = None
+    num_video_tokens: list[int] | None = None
+    num_audio_tokens: list[int] | None = None
+    num_image_patches: list[int] | None = None
 
     def __contains__(self, key):
         return hasattr(self, key) and getattr(self, key) is not None
@@ -616,10 +604,10 @@ class ProcessorMixin(PushToHubMixin):
 
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        videos: Optional[VideoInput] = None,
-        audio: Optional[AudioInput] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        videos: VideoInput | None = None,
+        audio: AudioInput | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
         """
@@ -773,7 +761,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+    def to_json_file(self, json_file_path: str | os.PathLike):
         """
         Save this instance to a JSON file.
 
@@ -897,7 +885,7 @@ class ProcessorMixin(PushToHubMixin):
 
     @classmethod
     def get_processor_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
@@ -1190,7 +1178,7 @@ class ProcessorMixin(PushToHubMixin):
     def _merge_kwargs(
         self,
         ModelProcessorKwargs: ProcessingKwargs,
-        tokenizer_init_kwargs: Optional[dict] = None,
+        tokenizer_init_kwargs: dict | None = None,
         **kwargs,
     ) -> dict[str, dict]:
         """
@@ -1233,7 +1221,8 @@ class ProcessorMixin(PushToHubMixin):
 
         """
         # holding a copy to avoid mutating user-provided arguments
-        kwargs = kwargs.copy()
+        # Use deepcopy to also copy nested dicts (like videos_kwargs) that will be modified via pop()
+        kwargs = copy.deepcopy(kwargs)
 
         # Initialize dictionaries
         output_kwargs = {
@@ -1364,11 +1353,11 @@ class ProcessorMixin(PushToHubMixin):
     @classmethod
     def from_pretrained(
         cls: type[SpecificProcessorType],
-        pretrained_model_name_or_path: Union[str, os.PathLike],
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        pretrained_model_name_or_path: str | os.PathLike,
+        cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
+        token: str | bool | None = None,
         revision: str = "main",
         **kwargs,
     ) -> SpecificProcessorType:
@@ -1513,10 +1502,20 @@ class ProcessorMixin(PushToHubMixin):
             modality = _get_modality_for_attribute(sub_processor_type)
             is_primary = sub_processor_type == modality
 
-            if "tokenizer" in sub_processor_type:
-                tokenizer = cls._load_tokenizer_from_pretrained(
-                    sub_processor_type, pretrained_model_name_or_path, subfolder=subfolder, **kwargs
-                )
+            if (
+                "tokenizer" in sub_processor_type
+            ):  # This is only necessary for the checkpoing in test_procesing_mistral3.py which has no config.json and
+                # the tokenizer_config.json references LlamaTokenizerFast. TODO: update the config on the hub.
+                if "PixtralProcessor" in cls.__name__:
+                    from .tokenization_utils_tokenizers import TokenizersBackend
+
+                    tokenizer = TokenizersBackend.from_pretrained(
+                        pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                    )
+                else:
+                    tokenizer = cls._load_tokenizer_from_pretrained(
+                        sub_processor_type, pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                    )
                 args.append(tokenizer)
             elif is_primary:
                 # Primary non-tokenizer sub-processor: load via Auto class
@@ -1622,8 +1621,8 @@ class ProcessorMixin(PushToHubMixin):
 
     def apply_chat_template(
         self,
-        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
-        chat_template: Optional[str] = None,
+        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
+        chat_template: str | None = None,
         **kwargs: Unpack[AllKwargsForChatTemplate],
     ) -> str:
         """
@@ -1700,22 +1699,25 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 kwargs["return_offsets_mapping"] = True  # force offset mapping so we can infer token boundaries
 
-        # Fill sets of kwargs that should be used by different parts of template
-        processed_kwargs = {
-            "mm_load_kwargs": {},
-            "template_kwargs": {},
-        }
-
-        for kwarg_type in processed_kwargs:
-            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__:
-                kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
-                default_value = getattr(kwarg_type_defaults, key, None)
-                value = kwargs.pop(key, default_value)
-                if value is not None and not isinstance(value, dict):
-                    processed_kwargs[kwarg_type][key] = value
+        # Fill sets of kwargs that should be used by jinja template, filtering out kwargs used in `processor.__call__`
+        # NOTE: we don't only filter but also set the default values here. Without default values, we can remove it
+        template_kwargs = {}
+        for key in AllKwargsForChatTemplate.__annotations__["template_kwargs"].__annotations__:
+            kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__["template_kwargs"]
+            default_value = getattr(kwarg_type_defaults, key, None)
+            value = kwargs.pop(key, default_value)
+            if value is not None and not isinstance(value, dict):
+                template_kwargs[key] = value
 
         # Pass unprocessed custom kwargs
-        processed_kwargs["template_kwargs"].update(kwargs)
+        template_kwargs.update(kwargs)
+
+        # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`
+        if "sampling_rate" not in template_kwargs:
+            if hasattr(self, "feature_extractor") and hasattr(self.feature_extractor, "sampling_rate"):
+                template_kwargs["sampling_rate"] = self.feature_extractor.sampling_rate
+            else:
+                template_kwargs["sampling_rate"] = 16_000
 
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
@@ -1726,9 +1728,8 @@ class ProcessorMixin(PushToHubMixin):
             is_batched = False
             conversations = [conversation]
 
-        tokenize = processed_kwargs["template_kwargs"].pop("tokenize", False)
-        return_dict = processed_kwargs["template_kwargs"].pop("return_dict", True)
-        mm_load_kwargs = processed_kwargs["mm_load_kwargs"]
+        tokenize = template_kwargs.pop("tokenize", False)
+        return_dict = template_kwargs.pop("return_dict", True)
 
         if tokenize:
             batch_images, batch_videos = [], []
@@ -1759,12 +1760,12 @@ class ProcessorMixin(PushToHubMixin):
                     videos.extend(video_fnames)
 
                     # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
-                    if not mm_load_kwargs["load_audio_from_video"]:
+                    if not template_kwargs["load_audio_from_video"]:
                         for fname in audio_fnames:
-                            batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
+                            batch_audios.append(load_audio(fname, sampling_rate=template_kwargs["sampling_rate"]))
                     else:
                         for fname in video_fnames:
-                            batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
+                            batch_audios.append(load_audio(fname, sampling_rate=template_kwargs["sampling_rate"]))
 
                 # Currently all processors can accept nested list of batches, but not flat list of visuals
                 # So we'll make a batched list of images and let the processor handle it
@@ -1775,14 +1776,12 @@ class ProcessorMixin(PushToHubMixin):
         if hasattr(self, "tokenizer") and hasattr(self.tokenizer, "special_tokens_map"):
             special_tokens = self.tokenizer.special_tokens_map
             # Filter out tokens that conflict with template kwargs
-            special_tokens_map = {
-                k: v for k, v in special_tokens.items() if k not in processed_kwargs["template_kwargs"]
-            }
+            special_tokens_map = {k: v for k, v in special_tokens.items() if k not in template_kwargs}
 
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
             chat_template=chat_template,
-            **processed_kwargs["template_kwargs"],  # different flags such as `return_assistant_mask`
+            **template_kwargs,  # different flags such as `return_assistant_mask`
             **special_tokens_map,  # tokenizer special tokens are used by some templates
         )
 
@@ -1818,7 +1817,7 @@ class ProcessorMixin(PushToHubMixin):
             )
 
             if return_dict:
-                if processed_kwargs["template_kwargs"].get("return_assistant_tokens_mask", False):
+                if template_kwargs.get("return_assistant_tokens_mask", False):
                     assistant_masks = []
                     offset_mapping = out.pop("offset_mapping")
                     input_ids = out["input_ids"]

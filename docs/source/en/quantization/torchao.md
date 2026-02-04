@@ -86,6 +86,9 @@ Create a [`TorchAoConfig`] and specify the quantization type and `group_size` of
 
 We'll show examples for recommended quantization methods based on hardwares, e.g. A100 GPU, H100 GPU, CPU.
 
+> [!WARNING]
+> torchao automatically compiles the model during the first inference if we set `cache_implementation="static"`. The model is recompiled every time batch size or `max_new_tokens` is modified. Pass `disable_compile=True` in [`~GenerationMixin.generate`] to quantize without compilation.
+
 ### H100 GPU
 
 <hfoptions id="examples-H100-GPU">
@@ -111,7 +114,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -140,7 +143,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -207,7 +210,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -243,7 +246,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -275,7 +278,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Sparse-Llama-3.1-8B-2of4")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -310,7 +313,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -342,7 +345,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -376,7 +379,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt")
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -387,16 +390,14 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="int4-weight-only">
 
 > [!TIP]
-> Run the quantized model on a CPU by changing `device_map` to `"cpu"` and `layout` to `Int4CPULayout()`.
+> CPU int4 weight-only quantization requires torchao version 0.15.0 or later.
 
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-from torchao.quantization import Int4WeightOnlyConfig
-from torchao.dtypes import Int4CPULayout
+from torchao.prototype.int4_opaque_tensor import Int4WeightOnlyOpaqueTensorConfig
 
-quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4CPULayout(), int4_packing_format="opaque")
-quantization_config = TorchAoConfig(quant_type=quant_config)
+quantization_config = TorchAoConfig(Int4WeightOnlyOpaqueTensorConfig(group_size=128))
 
 # Load and quantize the model
 quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -408,7 +409,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt")
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -443,7 +444,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 # Manual Testing
 prompt = "Hey, are you conscious? Can you talk to me?"
-inputs = tokenizer(prompt, return_tensors="pt").to(quantized_model.device.type)
+inputs = tokenizer(prompt, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 generated_ids = quantized_model.generate(**inputs, max_new_tokens=128)
 output_text = tokenizer.batch_decode(
     generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
@@ -482,7 +483,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 # Manual Testing
 prompt = "Hey, are you conscious? Can you talk to me?"
-inputs = tokenizer(prompt, return_tensors="pt").to("cpu")
+inputs = tokenizer(prompt, return_tensors="pt").to("cpu", quantized_model.dtype)
 generated_ids = quantized_model.generate(**inputs, max_new_tokens=128, cache_implementation="static")
 output_text = tokenizer.batch_decode(
     generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
@@ -577,7 +578,7 @@ print("Prompt:", prompt)
 inputs = tokenizer(
     prompt,
     return_tensors="pt",
-).to("cuda")
+).to(quantized_model.device, quantized_model.dtype)
 # setting temperature to 0 to make sure result deterministic
 generated_ids = quantized_model.generate(**inputs, max_new_tokens=128, temperature=0)
 
@@ -604,39 +605,6 @@ print("Response:", output_text[0][len(prompt) :])
 assert(correct_output_text == output_text)
 ```
 
-### Autoquant
-
-If you want to automatically choose a quantization type for quantizable layers (`nn.Linear`) you can use the [autoquant](https://pytorch.org/ao/stable/generated/torchao.quantization.autoquant.html#torchao.quantization.autoquant) API.
-
-The `autoquant` API automatically chooses a quantization type by micro-benchmarking on input type and shape and compiling a single linear layer.
-
-Note: autoquant is for GPU only right now.
-
-Create a [`TorchAoConfig`] and set to `"autoquant"`. Set the `cache_implementation` to `"static"` to automatically [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) the forward method. Finally, call `finalize_autoquant` on the quantized model to finalize the quantization and log the input shapes.
-
-```py
-import torch
-from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-
-quantization_config = TorchAoConfig("autoquant", min_sqnr=None)
-quantized_model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-3.1-8B-Instruct",
-    dtype="auto",
-    device_map="auto",
-    quantization_config=quantization_config
-)
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
-input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device.type)
-
-# auto-compile the quantized model with `cache_implementation="static"` to get speed up
-output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
-# explicitly call `finalize_autoquant` (may be refactored and removed in the future)
-quantized_model.finalize_autoquant()
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
 ## Serialization
 
 Saving the quantized model with `save_pretrained` (in [safetensors](https://huggingface.co/docs/safetensors/en/index) format) is only supported for torchao >= v0.15. For any version below, it is only possible to manually save as unsafe `.bin` checkpoints with [torch.save](https://docs.pytorch.org/docs/stable/generated/torch.save.html).
@@ -660,7 +628,6 @@ REPO_ID = "llama3-8b-int4wo-128"
 quantized_model.push_to_hub(f"{USER_ID}/llama3-8b-int4wo-128")
 tokenizer.push_to_hub(f"{USER_ID}/llama3-8b-int4wo-128")
 ```
-
 
 ```py
 # torchao < 0.15 -> unsafe serialization
@@ -739,7 +706,7 @@ reloaded_model = AutoModelForCausalLM.from_pretrained(
 )
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt")
+input_ids = tokenizer(input_text, return_tensors="pt").to(reloaded_model.device.type)
 
 output = reloaded_model.generate(**input_ids, max_new_tokens=10)
 print(tokenizer.decode(output[0], skip_special_tokens=True))

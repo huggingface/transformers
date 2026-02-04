@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -71,7 +70,7 @@ class Sam3VisionModelTester:
         fpn_hidden_size=32,
         scale_factors=None,
         batch_size=2,
-        is_training=False,
+        is_training=True,
     ):
         if global_attn_indexes is None:
             global_attn_indexes = [0, 1]
@@ -148,7 +147,6 @@ class Sam3VisionModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Sam3VisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = Sam3VisionModelTester(self)
@@ -270,7 +268,7 @@ class Sam3ModelTester:
         detr_decoder_num_queries=5,  # Reduced from 10 to 5
         mask_decoder_hidden_size=32,
         batch_size=2,
-        is_training=False,
+        is_training=True,
     ):
         if global_attn_indexes is None:
             global_attn_indexes = [0, 1]
@@ -341,7 +339,7 @@ class Sam3ModelTester:
             "hidden_size": 32,
             "intermediate_size": 64,
             "projection_dim": 32,
-            "num_hidden_layers": 1,
+            "num_hidden_layers": self.num_hidden_layers,
             "num_attention_heads": 4,
             "max_position_embeddings": 32,  # Keep at 32 for stability
             "hidden_act": "gelu",
@@ -428,7 +426,6 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = {"mask-generation": Sam3Model} if is_torch_available() else {}
 
     test_resize_embeddings = False
-    test_torch_exportable = False
     _is_composite = True
 
     def setUp(self):
@@ -753,8 +750,8 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # First get text embeddings
             with torch.no_grad():
                 text_embeds = model.get_text_features(
-                    input_ids=inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"]
-                )
+                    input_ids=inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"], return_dict=True
+                ).pooler_output
 
             # Forward with text_embeds (remove input_ids)
             inputs_with_embeds = {
