@@ -426,7 +426,7 @@ class Siglip2PreTrainedModel(PreTrainedModel):
             if hasattr(module, "position_ids"):
                 init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, nn.Embedding):
-            init.default_flax_embed_init(module.weight)
+            init.default_flax_embed_init_(module.weight)
         elif isinstance(module, Siglip2Attention):
             init.xavier_uniform_(module.q_proj.weight)
             init.xavier_uniform_(module.k_proj.weight)
