@@ -21,7 +21,6 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
-from typing import Unpack
 
 import torch
 
@@ -31,7 +30,7 @@ from transformers.image_processing_utils_fast import BaseImageProcessorFast
 from transformers.image_utils import ImageInput
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.modeling_utils import PreTrainedModel
-from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
+from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.testing_utils import require_torch
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 from transformers.utils.auto_docstring import (
