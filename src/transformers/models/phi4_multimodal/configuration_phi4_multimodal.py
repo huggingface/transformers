@@ -333,10 +333,10 @@ class Phi4MultimodalConfig(PreTrainedConfig):
     model_type = "phi4_multimodal"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.qkv_proj": "colwise_rep",  # we need to replicate here due to the slicing of qkv
-        "layers.*.self_attn.o_proj": "rowwise_rep",  # we need to replicate here due to the slicing of qkv
-        "layers.*.mlp.gate_up_proj": "colwise_rep",  # we need to replicate here due to the `chunk` operation
-        "layers.*.mlp.down_proj": "rowwise_rep",  # we need to replicate here due to the `chunk` operation
+        "layers.*.self_attn.qkv_proj": "colwise_gather_output",  # we need to replicate here due to the slicing of qkv
+        "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the slicing of qkv
+        "layers.*.mlp.gate_up_proj": "colwise_gather_output",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.down_proj": "rowwise_split_input",  # input is replicated due to the `chunk` operation
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -376,12 +376,12 @@ class Phi4MultimodalConfig(PreTrainedConfig):
         if isinstance(vision_config, dict):
             vision_config = Phi4MultimodalVisionConfig(**vision_config)
         elif vision_config is None:
-            Phi4MultimodalVisionConfig()
+            vision_config = Phi4MultimodalVisionConfig()
         self.vision_config = vision_config
 
         if isinstance(audio_config, dict):
             audio_config = Phi4MultimodalAudioConfig(**audio_config)
-        elif vision_config is None:
+        elif audio_config is None:
             audio_config = Phi4MultimodalAudioConfig()
         self.audio_config = audio_config
         self.vocab_size = vocab_size

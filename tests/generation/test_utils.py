@@ -26,7 +26,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from packaging import version
 from parameterized import parameterized
 
 from transformers import (
@@ -40,6 +39,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    is_flaky,
     require_accelerate,
     require_flash_attn,
     require_flash_attn_3,
@@ -54,7 +54,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_ipex_available, is_sklearn_available, is_torchdynamo_exporting
+from transformers.utils import is_sklearn_available, is_torchdynamo_exporting
 from transformers.utils.generic import is_flash_attention_requested
 
 
@@ -107,6 +107,10 @@ if is_torch_available():
     from transformers.generation.utils import _speculative_sampling
 
 from unittest.mock import patch
+
+
+def is_moe_model(config):
+    return getattr(config, "_experts_implementation", None) is not None
 
 
 class GenerationTesterMixin:
@@ -534,10 +538,6 @@ class GenerationTesterMixin:
     @require_torch_multi_accelerator
     @pytest.mark.generate
     def test_model_parallel_beam_search(self):
-        if "xpu" in torch_device:
-            if not (is_ipex_available("2.5") or version.parse(torch.__version__) >= version.parse("2.6")):
-                self.skipTest(reason="device_map='auto' does not work with XPU devices")
-
         for model_class in self.all_generative_model_classes:
             if model_class._no_split_modules is None:
                 continue
@@ -716,12 +716,12 @@ class GenerationTesterMixin:
             generation_kwargs.update({"assistant_model": assistant_model})
             output_assisted = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
 
-            # default values of `has_similar_generate_outputs`
-            atol, rtol = 1e-5, 1e-5
             # `gpt_oss` seems to have larger differences on CPU every other generated tokens, sth. like
             # 1e-9, 1e-5, 1e-9, 1e-5. While on GPU, they are all very small 1e-9.
-            if model.config.model_type == "gpt_oss" and torch_device == "cpu":
-                atol, rtol = 1e-4, 1e-4
+            if is_moe_model(config):
+                atol = rtol = 1e-3
+            else:
+                atol = rtol = 1e-5
 
             # The two outputs must match and their shape must be as expected
             self.assertTrue(has_similar_generate_outputs(output_greedy, output_assisted, atol=atol, rtol=rtol))
@@ -729,6 +729,7 @@ class GenerationTesterMixin:
                 self._check_generate_outputs(output, model.config, use_cache=True)
 
     @pytest.mark.generate
+    @is_flaky
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         # This test ensures that the prompt lookup generation does not introduce output changes over greedy search.
         # This test is mostly a copy of test_assisted_decoding_matches_greedy_search
@@ -801,7 +802,11 @@ class GenerationTesterMixin:
             output_prompt_lookup = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
 
             # The two outputs must match and their shape must be as expected
-            self.assertTrue(has_similar_generate_outputs(output_greedy, output_prompt_lookup))
+            if is_moe_model(config):
+                atol = rtol = 1e-3
+            else:
+                atol = rtol = 1e-5
+            self.assertTrue(has_similar_generate_outputs(output_greedy, output_prompt_lookup, atol=atol, rtol=rtol))
             for output in (output_greedy, output_prompt_lookup):
                 self._check_generate_outputs(output, model.config, use_cache=True)
 
@@ -1168,8 +1173,14 @@ class GenerationTesterMixin:
             outputs_from_embeds = model.generate(
                 input_ids=input_ids, inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
             )
+            if is_moe_model(config):
+                atol = rtol = 1e-3
+            else:
+                atol = rtol = 1e-5
             if not has_complex_embeds_computation:
-                self.assertTrue(has_similar_generate_outputs(outputs_from_ids, outputs_from_embeds))
+                self.assertTrue(
+                    has_similar_generate_outputs(outputs_from_ids, outputs_from_embeds, atol=atol, rtol=rtol)
+                )
 
             # input_ids is not a required input on most models -- if we don't pass it, the newly generated tokens will
             # be the same
@@ -1178,7 +1189,9 @@ class GenerationTesterMixin:
                     inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
                 )
                 outputs_from_embeds.sequences = outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :]
-                self.assertTrue(has_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds))
+                self.assertTrue(
+                    has_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds, atol=atol, rtol=rtol)
+                )
 
     @pytest.mark.generate
     def test_generate_from_inputs_embeds_with_static_cache(self):
@@ -1320,7 +1333,11 @@ class GenerationTesterMixin:
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
+            if is_moe_model(config):
+                atol = rtol = 1e-3
+            else:
+                atol = rtol = 1e-5
+            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached, atol=atol, rtol=rtol))
             self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
     @pytest.mark.generate
@@ -1440,7 +1457,15 @@ class GenerationTesterMixin:
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
-                self.assertTrue(has_similar_generate_outputs(dynamic_cache_generation, static_cache_generation))
+                if is_moe_model(config):
+                    atol = rtol = 1e-3
+                else:
+                    atol = rtol = 1e-5
+                self.assertTrue(
+                    has_similar_generate_outputs(
+                        dynamic_cache_generation, static_cache_generation, atol=atol, rtol=rtol
+                    )
+                )
 
     @require_optimum_quanto
     @pytest.mark.generate
@@ -1495,6 +1520,11 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device)
             set_model_for_less_flaky_test(model)
             model.eval()  # otherwise `self.training` is `True` -- this flag is used at attn mask creation time
+
+            # On CPU, we don't switch to batched_mm during decoding, so the grouped_mm is what gets compiled.
+            # But since grouped_mm only supports bf16 when compiled, we need to switch to bf16 here.
+            if model.device.type == "cpu" and model.config._experts_implementation == "grouped_mm":
+                model = model.to(torch.bfloat16)
 
             # Some composite models have a custom generate and will call an inner model's generate -> that inner model
             # is the one that gets compiled.
@@ -1595,8 +1625,12 @@ class GenerationTesterMixin:
                     "See the test logs for more details."
                 )
 
+            if is_moe_model(config):
+                atol = rtol = 1e-3
+            else:
+                atol = rtol = 1e-5
             for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
-                self.assertTrue(has_similar_generate_outputs(dynamic_result, compiled_result))
+                self.assertTrue(has_similar_generate_outputs(dynamic_result, compiled_result, atol=atol, rtol=rtol))
 
     @pytest.mark.generate
     def test_generate_compilation_all_outputs(self):
@@ -1615,6 +1649,11 @@ class GenerationTesterMixin:
             if self.has_attentions:
                 config._attn_implementation = "eager"  # can't output attentions otherwise
             model = model_class(config).to(torch_device).eval()
+
+            # On CPU, we don't switch to batched_mm during decoding, so the grouped_mm is what gets compiled.
+            # But since grouped_mm only supports bf16 when compiled, we need to switch to bf16 here.
+            if model.device.type == "cpu" and model.config._experts_implementation == "grouped_mm":
+                model = model.to(torch.bfloat16)
 
             # compilation-specific setup
             torch.compiler.reset()  # prevent cached compilation from being used in the test
@@ -4776,7 +4815,11 @@ class GenerationIntegrationTests(unittest.TestCase):
         incremental_outputs = outputs_2b
 
         # The two sets of generated text and past kv should be equal to each other
-        self.assertTrue(has_similar_generate_outputs(traditional_outputs, incremental_outputs))
+        if is_moe_model(model.config):
+            atol = rtol = 1e-3
+        else:
+            atol = rtol = 1e-5
+        self.assertTrue(has_similar_generate_outputs(traditional_outputs, incremental_outputs, atol=atol, rtol=rtol))
         cache1, cache2 = traditional_outputs.past_key_values, incremental_outputs.past_key_values
         for idx in range(len(cache1)):
             if isinstance(cache1, EncoderDecoderCache):

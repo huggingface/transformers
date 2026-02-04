@@ -208,7 +208,7 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
 
             # remove one image but leave all the image tokens in text
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-2:, ...]
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
             # simulate the multi-image/single set of placeholders case by concatenating
@@ -217,7 +217,7 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
 
             # two images and one set of image tokens raise an error
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
             # two images and two sets of image tokens don't raise an error

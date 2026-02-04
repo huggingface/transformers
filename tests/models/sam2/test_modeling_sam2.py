@@ -70,7 +70,7 @@ class Sam2VisionModelTester:
         backbone_channel_list=[96, 48, 24, 12],
         backbone_feature_sizes=[[32, 32], [16, 16], [8, 8]],
         fpn_hidden_size=32,
-        is_training=False,
+        is_training=True,
     ):
         self.parent = parent
         self.hidden_size = hidden_size
@@ -371,7 +371,7 @@ class Sam2ModelTester:
         fpn_hidden_size=32,
         memory_encoder_hidden_size=32,
         batch_size=2,
-        is_training=False,
+        is_training=True,
     ):
         self.parent = parent
         self.image_size = image_size

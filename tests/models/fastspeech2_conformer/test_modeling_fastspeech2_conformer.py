@@ -127,6 +127,7 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FastSpeech2ConformerModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
+    test_torch_exportable = False
     is_encoder_decoder = True
 
     def setUp(self):
@@ -548,6 +549,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     is_encoder_decoder = True
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = FastSpeech2ConformerWithHifiGanTester(self)

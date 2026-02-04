@@ -244,12 +244,11 @@ def to_py_obj(obj):
     elif isinstance(obj, (dict, UserDict)):
         return {k: to_py_obj(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
-        try:
-            arr = np.array(obj)
-            if np.issubdtype(arr.dtype, np.integer) or np.issubdtype(arr.dtype, np.floating):
-                return arr.tolist()
-        except Exception:
-            pass
+        # Only convert directly if all elements are numeric scalars
+        if all(isinstance(x, (int, float, np.number)) for x in obj):
+            return list(obj)
+
+        # Otherwise recurse element-wise
         return [to_py_obj(o) for o in obj]
 
     framework_to_py_obj = {

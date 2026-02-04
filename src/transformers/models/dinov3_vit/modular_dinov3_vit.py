@@ -31,13 +31,13 @@ from transformers.models.llama.modeling_llama import LlamaMLP
 from transformers.models.pixtral.modeling_pixtral import PixtralAttention, rotate_half
 
 from ... import initialization as init
+from ...backbone_utils import BackboneMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
@@ -252,9 +252,9 @@ class DINOv3ViTAttention(PixtralAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -411,10 +411,9 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
 
 
 @auto_docstring
-class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
+class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.embeddings = DINOv3ViTEmbeddings(config)
         self.rope_embeddings = DINOv3ViTRopePositionEmbedding(config)

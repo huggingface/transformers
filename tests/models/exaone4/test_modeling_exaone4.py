@@ -65,7 +65,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
     def tearDown(self):
         # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
         # some memory allocated in the cache, which means some object is not being released properly. This causes some
-        # unoptimal memory usage, e.g. after certain teruff format examples tests src utilssts a 7B model in FP16 no longer fits in a 24GB GPU.
+        # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
         # Investigate the root cause.
         cleanup(torch_device, gc_collect=True)
 
