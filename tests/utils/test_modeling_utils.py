@@ -2346,11 +2346,11 @@ class ModelUtilsTest(TestCasePlus):
             vocab_size=100,
             attn_implementation=attn_implementation,
         )
-        model = LlamaModel(copy.deepcopy(config))
+        model = LlamaModel(copy.deepcopy(config)).to(device=torch_device, dtype=torch.bfloat16)
 
         # Create inputs, making sure we use padding to verify that mask creation accounts for it correctly
-        input_ids = torch.randint(5, 95, (2, 17))
-        attention_mask = torch.ones_like(input_ids)
+        input_ids = torch.randint(5, 95, (2, 17), device=torch_device)
+        attention_mask = torch.ones_like(input_ids, device=torch_device)
         attention_mask[1, 0:3] = 0
 
         # The original `create_causal_mask` used in modeling_llama forward more kwargs than `create_bidirectional_mask`,
