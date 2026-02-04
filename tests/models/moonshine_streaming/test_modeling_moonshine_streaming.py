@@ -309,6 +309,7 @@ class MoonshineStreamingModelTest(ModelTesterMixin, PipelineTesterMixin, unittes
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
+            config.encoder_config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
