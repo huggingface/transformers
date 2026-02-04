@@ -236,8 +236,6 @@ class MoonshineStreamingEncoderEmbedder(nn.Module):
 
 
 class MoonshineStreamingPreTrainedModel(MoonshinePreTrainedModel):
-    supports_gradient_checkpointing = False  # TODO: check
-
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor) -> torch.LongTensor:
         frame_len = int(round(self.config.encoder_config.sample_rate * self.config.encoder_config.frame_ms / 1000.0))
         output_lengths = input_lengths // frame_len
