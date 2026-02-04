@@ -55,28 +55,10 @@ from check_docstrings import (  # noqa: E402
 
 
 class TestCheckDocstrings(unittest.TestCase):
-    """
-    Test check_docstrings module functionality.
-
-    Focuses on integration tests for the check_auto_docstrings workflow:
-    - Missing argument detection
-    - Redundant documentation removal
-    - Placeholder generation
-    - Code and example preservation
-    - TypedDict handling
-    """
+    """Test check_auto_docstrings static analysis tool for detecting and fixing docstring issues."""
 
     def test_missing_args_detection_and_placeholder_generation(self):
-        """
-        Test end-to-end workflow: detects missing custom args, generates placeholders, preserves Examples.
-
-        Validates:
-        - Missing custom arg detection (custom_temperature not documented)
-        - Standard args are automatically included (input_ids from ModelArgs)
-        - Placeholder generation with overwrite=True
-        - Example section preservation
-        - Function code preservation
-        """
+        """Test that missing custom args are detected and placeholders generated while preserving Examples and code."""
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = os.path.join(tmpdir, "model.py")
 
@@ -124,15 +106,7 @@ class TestCheckDocstrings(unittest.TestCase):
             self.assertIn("result = input_ids * custom_temperature", updated)  # Code preserved
 
     def test_multi_item_file_processing(self):
-        """
-        Test processing file with multiple @auto_docstring decorators.
-
-        Validates:
-        - Multiple decorated items detected (class + method)
-        - Missing args detected in each
-        - Code preservation for both
-        - Example preservation
-        """
+        """Test processing files with multiple @auto_docstring decorators (class + method) in a single pass."""
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = os.path.join(tmpdir, "modeling.py")
 
@@ -194,12 +168,7 @@ class TestCheckDocstrings(unittest.TestCase):
             self.assertIn("return self.layer(input_ids) * scale_factor", updated)  # forward code preserved
 
     def test_typed_dict_field_detection(self):
-        """
-        Test TypedDict kwargs field detection.
-
-        Validates that check_auto_docstrings can find TypedDict classes and identify
-        custom fields vs standard fields (from ImagesKwargs/TextKwargs/etc).
-        """
+        """Test that _find_typed_dict_classes correctly identifies custom fields vs standard inherited fields."""
         content = textwrap.dedent("""
             from typing import TypedDict
             from transformers.processing_utils import ImagesKwargs
@@ -417,34 +386,14 @@ class DummyForTestImageProcessorFast(BaseImageProcessorFast):
 @require_torch
 class TestFullDocstringGeneration(unittest.TestCase):
     """
-    Comprehensive end-to-end tests with realistic dummy classes.
+    End-to-end tests for @auto_docstring runtime docstring generation.
 
-    These tests validate COMPLETE docstring generation using single assertEqual
-    assertions against full hardcoded expected docstrings. This ensures:
-    1. The entire docstring structure is correct (not just individual parts)
-    2. Indentation is preserved exactly
-    3. All sections (intro, Args, Returns, Example) are formatted correctly
-    4. Standard args from ModelArgs/ImageProcessorArgs/ProcessorArgs are included
-    5. Custom parameters are documented correctly
-    6. TypedDict kwargs are properly unrolled
-
-    Dummy classes properly inherit from base classes (PreTrainedModel, ProcessorMixin, BaseImageProcessor)
-    to ensure @auto_docstring works exactly as it does in real models/processors.
+    Tests validate complete docstrings with single assertEqual assertions to ensure structure,
+    formatting, standard args, custom params, and TypedDict unrolling work correctly.
     """
 
     def test_dummy_model_complete_docstring(self):
-        """
-        Test complete forward method docstring for PreTrainedModel with proper type annotations.
-
-        This test validates:
-        - Class docstring generation from PreTrainedModel inheritance
-        - Forward method intro generation
-        - Standard args from ModelArgs with proper type annotations (Optional[torch.Tensor])
-        - Custom parameters with complex types (Union, Optional, dict)
-        - Returns section from CausalLMOutputWithPast type annotation
-        - Example section preservation
-        - Complete docstring structure with single assertEqual
-        """
+        """Test complete class and forward method docstrings for PreTrainedModel with ModelArgs and custom parameters."""
         actual_class_docstring = DummyForTestModel.__doc__
         expected_class_docstring = """
 This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -553,17 +502,7 @@ Parameters:
         self.assertEqual(actual_docstring, expected_docstring)
 
     def test_dummy_processor_complete_docstring(self):
-        """
-        Test complete processor __call__ docstring for ProcessorMixin with complex TypedDict kwargs.
-
-        This test validates:
-        - Complex TypedDict kwargs unrolling with multiple fields
-        - Custom documented parameters with proper type annotations
-        - Processor intro generation
-        - Union types in parameters
-        - Complete Args section with all parameters
-        - Single assertEqual against complete expected docstring
-        """
+        """Test complete class and __call__ docstrings for ProcessorMixin with complex TypedDict kwargs unrolling."""
 
         actual_docstring = DummyProcessorForTest.__call__.__doc__
 
@@ -629,20 +568,7 @@ Parameters:
         self.assertEqual(actual_class_docstring, expected_class_docstring)
 
     def test_dummy_image_processor_complete_docstring(self):
-        """
-        Test complete image processor class and preprocess docstrings for BaseImageProcessor with custom ImagesKwargs.
-
-        This test validates:
-        - @auto_docstring on both class and preprocess method (like LlavaNextImageProcessorFast)
-        - Custom ImagesKwargs TypedDict that extends ImagesKwargs
-        - Unpacking custom kwargs in both __init__ and preprocess
-        - Standard args from ImageProcessorArgs with proper types
-        - Multiple custom parameters with complex types
-        - Returns section preservation
-        - Class docstring generation
-        - Proper indentation and formatting
-        - Single assertEqual against complete expected docstrings
-        """
+        """Test complete class and preprocess docstrings for BaseImageProcessorFast with custom ImagesKwargs and custom_intro."""
 
         actual_preprocess_docstring = DummyForTestImageProcessorFast.preprocess.__doc__
 
