@@ -36,7 +36,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import Conv1D, isin_mps_friendly
+from ...pytorch_utils import Conv1D
 from ...utils import (
     ModelOutput,
     TransformersKwargs,
@@ -131,7 +131,7 @@ def _pad_extra_bos_eos_tokens(
         )
         for i, each_input_id in enumerate(input_ids):
             # locate where the valid tokens end and then add the eos token
-            if isin_mps_friendly(each_input_id, pad_token_id).sum():
+            if torch.isin(each_input_id, pad_token_id).sum():
                 pos = torch.where(each_input_id == pad_token_id)[0].min()
                 modified_input_ids[i] = torch.concatenate(
                     [each_input_id[:pos], torch.tensor([eos_token_id], device=input_ids.device), each_input_id[pos:]]

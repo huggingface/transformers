@@ -601,12 +601,7 @@ class KyutaiSpeechToTextFlashAttention2(KyutaiSpeechToTextAttention):
         device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
-                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
-                target_dtype = (
-                    torch.get_autocast_dtype(device_type)
-                    if hasattr(torch, "get_autocast_dtype")
-                    else torch.get_autocast_gpu_dtype()
-                )
+                target_dtype = torch.get_autocast_dtype(device_type)
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_is_quantized"):
                 target_dtype = self.config.dtype
@@ -1080,7 +1075,7 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
 @auto_docstring
 class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _keep_in_fp32_modules_strict = ["codec_model"]
     output_modalities = ("audio", "text")
@@ -1220,7 +1215,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         # Add cache-related methods from GenerationMixin to codec model
         cache_methods = [
             "_prepare_cache_for_generation",
-            "_get_cache",
+            "_prepare_static_cache",
         ]
         for method in cache_methods:
             setattr(self.codec_model, method, types.MethodType(getattr(self, method).__func__, self.codec_model))

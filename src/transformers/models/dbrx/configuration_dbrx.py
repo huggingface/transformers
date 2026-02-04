@@ -16,7 +16,7 @@
 from typing import Any
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -118,12 +118,13 @@ class DbrxFFNConfig(PreTrainedConfig):
             raise ValueError(f"Found unknown {kwargs=}")
 
 
-class DbrxConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class DbrxConfig(PreTrainedConfig):
     r"""
 
     This is the configuration class to store the configuration of a [`DbrxModel`]. It is used to instantiate a Dbrx model according to the
     specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a different configuration to that of the [databricks/dbrx-instruct](https://huggingface.co/databricks/dbrx-instruct) architecture.
+    defaults will yield a different configuration to that of the [transformers-community/dbrx-instruct](https://huggingface.co/transformers-community/dbrx-instruct) architecture.
+    Note: this link points to a re-upload; the original repository is closed.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.

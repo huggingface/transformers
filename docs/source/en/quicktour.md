@@ -55,7 +55,7 @@ hf auth login
 </hfoption>
 </hfoptions>
 
-Install Pytorch.
+Install PyTorch.
 
 ```bash
 !pip install torch

@@ -42,7 +42,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseMo
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check, torch_int
 from ...utils.generic import check_model_inputs, is_flash_attention_requested, maybe_autocast
 from .configuration_paddleocr_vl import PaddleOCRTextConfig, PaddleOCRVisionConfig, PaddleOCRVLConfig
 
@@ -340,9 +340,9 @@ class PaddleOCRAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -695,9 +695,9 @@ class PaddleOCRVisionAttention(nn.Module):
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         if is_flash_attention_requested(self.config):
             # Flash Attention 2: Use cu_seqlens for variable length attention
@@ -1256,10 +1256,10 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}",
+        )
         return special_image_mask
 
     @can_return_tuple

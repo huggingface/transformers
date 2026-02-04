@@ -122,6 +122,7 @@ if TYPE_CHECKING:
     from .encodec import *
     from .encoder_decoder import *
     from .eomt import *
+    from .eomt_dinov3 import *
     from .ernie import *
     from .ernie4_5 import *
     from .ernie4_5_moe import *
@@ -129,6 +130,7 @@ if TYPE_CHECKING:
     from .esm import *
     from .evolla import *
     from .exaone4 import *
+    from .exaone_moe import *
     from .falcon import *
     from .falcon_h1 import *
     from .falcon_mamba import *

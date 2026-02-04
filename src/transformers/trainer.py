@@ -73,9 +73,6 @@ from .models.auto.modeling_auto import (
 )
 from .optimization import Adafactor, get_scheduler
 from .processing_utils import ProcessorMixin
-from .pytorch_utils import (
-    is_torch_greater_or_equal_than_2_3,
-)
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -701,8 +698,6 @@ class Trainer:
                     f"setting to {smp.state.cfg.fp16}"
                 )
                 args.fp16 = smp.state.cfg.fp16
-        if args.fp16 and args.device == torch.device("cpu") and not is_torch_greater_or_equal_than_2_3:
-            raise ValueError("Tried to use `fp16` but it is not supported on cpu. You need to have torch>=2.3")
 
         # Label smoothing
         if self.args.label_smoothing_factor != 0:
@@ -2313,7 +2308,7 @@ class Trainer:
 
         # as the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases such as
-        # FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
+        # FSDP-XLA, SageMaker MP/DP, DataParallel
         use_accelerator_prepare = model is self.model
 
         if use_accelerator_prepare and self.is_fsdp_enabled:
