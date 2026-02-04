@@ -538,15 +538,10 @@ class NomicBertPreTrainedModel(PreTrainedModel):
             init.zeros_(module.token_type_ids)
 
     def get_input_embeddings(self):
-        if hasattr(self, "nomic_bert"):
-            return self.nomic_bert.get_input_embeddings()
-        return self.model.get_input_embeddings()
+        return self.nomic_bert.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        if hasattr(self, "nomic_bert"):
-            self.nomic_bert.set_input_embeddings(value)
-        else:
-            self.model.set_input_embeddings(value)
+        self.nomic_bert.set_input_embeddings(value)
 
 
 @dataclass
@@ -582,12 +577,12 @@ class NomicBertPredictionHeadTransform(nn.Module):
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
         return hidden_states
 
 
