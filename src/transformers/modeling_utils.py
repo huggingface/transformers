@@ -1110,81 +1110,67 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         - **can_record_outputs** (dict):
     """
 
-    config_class = None
-    base_model_prefix = ""
-    main_input_name = "input_ids"
-    model_tags = None
-
-    _checkpoint_conversion_mapping = {}  # used for BC support in VLMs, not meant to be used by new models
-
+    # General model properties
+    config_class: type[PreTrainedConfig] | None = None
     _auto_class = None
-    _no_split_modules = None
-    _skip_keys_device_placement = None
+    base_model_prefix: str = ""
+    _is_stateful: bool = False
+    model_tags: list[str] | None = None
 
-    _keep_in_fp32_modules = None
-    # the _keep_in_fp32_modules will avoid casting to anything other than float32, except bfloat16
-    # to also prevent bfloat16 casting, use the _keep_in_fp32_modules_strict flag
-    _keep_in_fp32_modules_strict = None
+    # Input-related properties
+    main_input_name: str = "input_ids"
+    # Attributes used mainly in multimodal LLMs, though all models contain a valid field for these
+    # Possible values are: text, image, video, audio and time
+    input_modalities: str | list[str] = "text"
 
-    # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
-    # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
-    _keys_to_ignore_on_load_missing = None
-    # a list of `re` patterns of `state_dict` keys that should be removed from the list of
-    # unexpected keys we find (keys inside the checkpoint but not the model) and avoid unnecessary
-    # warnings.
-    _keys_to_ignore_on_load_unexpected = None
-    # a list of `state_dict` keys to ignore when saving the model (useful for keys that aren't
-    # trained, but which are either deterministic or tied variables)
-    _keys_to_ignore_on_save = None
-    # a list of `state_dict` keys that are potentially tied to another key in the state_dict.
-    _tied_weights_keys = None
+    # Device-map related properties
+    _no_split_modules: set[str] | list[str] | None = None
+    _skip_keys_device_placement: str | list[str] | None = None
 
-    supports_gradient_checkpointing = False
-    _is_stateful = False
+    # Specific dtype upcasting
+    # `_keep_in_fp32_modules` will upcast to fp32 only if the requested dtype is fp16
+    # `_keep_in_fp32_modules_strict` will upcast to fp32 independently if the requested dtype is fp16 or bf16
+    _keep_in_fp32_modules: set[str] | list[str] | None = None
+    _keep_in_fp32_modules_strict: set[str] | list[str] | None = None
 
-    # Flash Attention support
-    _supports_flash_attn = False
+    # Loading-specific properties
+    # A dictionary `{"target": "source"}` of checkpoint keys that are potentially tied to one another
+    _tied_weights_keys: dict[str, str] = None
+    # Used for BC support in VLMs, not meant to be used by new models
+    _checkpoint_conversion_mapping: dict[str, str] = {}
+    # A list of `re` patterns describing keys to ignore if they are missing from checkpoints to avoid warnings
+    _keys_to_ignore_on_load_missing: list[str] | None = None
+    # A list of `re` patterns describing keys to ignore if they are unexpected in the checkpoints to avoid warnings
+    _keys_to_ignore_on_load_unexpected: list[str] | None = None
+    # A list of keys to ignore when saving the model
+    _keys_to_ignore_on_save: list[str] | None = None
 
-    # SDPA support
-    _supports_sdpa = False
+    # Attention interfaces support properties
+    _supports_sdpa: bool = False
+    _supports_flash_attn: bool = False
+    _supports_flex_attn: bool = False
 
-    # Flex Attention support
-    _supports_flex_attn = False
-
-    _can_compile_fullgraph = False
-
-    # A tensor parallel plan to be applied to the model when TP is enabled. For
-    # top-level models, this attribute is currently defined in respective model
-    # code. For base models, this attribute comes from
-    # `config.base_model_tp_plan` during `__init__`.
-    # It should identify the layers exactly: if you want to TP model.language_model.layers.fc1
-    # by passing `tp_plan` to the init, it should be {"model.language_model.layers.fc1":"colwise"}
-    # for example.
-    _tp_plan = None
-
-    # tensor parallel degree to which model is sharded to.
+    # Tensor-parallelism-related properties
+    # A tensor parallel plan of the form `{"model.layer.mlp.param": "colwise"}` to be applied to the model when TP is enabled.
+    # For top-level models, this attribute is currently defined in respective model code. For base models, this attribute comes
+    # from `config.base_model_tp_plan` during `post_init`.
+    _tp_plan: dict[str, str] = None
+    # Tensor parallel degree to which model is sharded to
     _tp_size = None
+    # A pipeline parallel plan specifying the layers which may not be present on all ranks when PP is enabled. For top-level
+    # models, this attribute is currently defined in respective model code. For base models, it comes from
+    # `config.base_model_pp_plan` during `post_init`.
+    _pp_plan: dict[str, PipelineParallel] | None = None
 
-    # A pipeline parallel plan specifying the layers which may not be present
-    # on all ranks when PP is enabled. For top-level models, this attribute is
-    # currently defined in respective model code. For base models, this
-    # attribute comes from `config.base_model_pp_plan` during `post_init`.
-    #
-    # The variable names for the inputs and outputs of the specified layers can
-    # be indexed using the `PipelineParallel` enum as follows:
-    # - `_pp_plan["layers"][PipelineParallel.inputs]`
-    # - `_pp_plan["layers"][PipelineParallel.outputs]`
-    _pp_plan = None
-
+    # Advanced functionalities support
+    supports_gradient_checkpointing: bool = False
+    _can_compile_fullgraph: bool = False
     # This flag signal that the model can be used as an efficient backend in TGI and vLLM
     # In practice, it means that they support attention (mask) interface functions, fully pass the kwargs
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
-    _supports_attention_backend = False
-    _can_record_outputs = None
-
-    # Attributes used mainly in multimodal LLMs, though all models contain a valid field for these
-    # Possible values are: text, image, video, audio and time
-    input_modalities: str | list[str] = "text"  # most models are text
+    _supports_attention_backend: bool = False
+    # A mapping describing what outputs can be captured by `check_model_inputs` decorator during the forward pass
+    _can_record_outputs: dict | None = None
 
     @property
     @torch._dynamo.allow_in_graph
