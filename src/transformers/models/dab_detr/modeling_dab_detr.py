@@ -21,6 +21,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import load_backbone
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
@@ -30,7 +31,6 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.backbone_utils import load_backbone
 from .configuration_dab_detr import DabDetrConfig
 
 
@@ -231,7 +231,7 @@ class DabDetrConvEncoder(nn.Module):
         return out
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->DabDetr
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->DabDetr
 class DabDetrConvModel(nn.Module):
     """
     This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
@@ -1395,7 +1395,7 @@ class DabDetrModel(DabDetrPreTrainedModel):
         )
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrMHAttentionMap with Detr->DabDetr
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrMHAttentionMap with Detr->DabDetr
 class DabDetrMHAttentionMap(nn.Module):
     """This is a 2D attention module, which only returns the attention softmax (no multiplication by value)"""
 

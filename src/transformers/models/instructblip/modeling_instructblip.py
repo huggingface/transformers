@@ -954,12 +954,6 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
         self.language_model = AutoModel.from_config(config.text_config)
 
-        if self.language_model._no_split_modules is not None:
-            self._no_split_modules.extend(self.language_model._no_split_modules)
-
-        if self.language_model._keep_in_fp32_modules is not None:
-            self._keep_in_fp32_modules.extend(self.language_model._keep_in_fp32_modules)
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1133,12 +1127,6 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             language_model = AutoModelForCausalLM.from_config(config.text_config)
         else:
             language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
-
-        if language_model._no_split_modules is not None:
-            self._no_split_modules.extend(language_model._no_split_modules)
-
-        if language_model._keep_in_fp32_modules is not None:
-            self._keep_in_fp32_modules.extend(language_model._keep_in_fp32_modules)
 
         self.language_model = language_model
 

@@ -26,6 +26,7 @@ from torch import nn
 
 from transformers.cache_utils import Cache
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import DynamicCache
 from ...generation import GenerationMixin
@@ -288,6 +289,29 @@ class HunYuanDenseV1PreTrainedModel(PreTrainedModel):
         "hidden_states": HunYuanDenseV1DecoderLayer,
         "attentions": HunYuanDenseV1Attention,
     }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        # DynamicNTKAlphaRotary - unique to this model
+        if "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
+            if module.rope_type == "dynamic" and module.config.rope_parameters.get("alpha"):
+                dim = module.config.head_dim
+                rope_theta = module.config.rope_parameters["rope_theta"]
+                alpha = module.config.rope_parameters["alpha"]
+
+                base = rope_theta * alpha ** (dim / (dim - 2))
+                buffer_value = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+            else:
+                rope_fn = (
+                    ROPE_INIT_FUNCTIONS[module.rope_type]
+                    if module.rope_type != "default"
+                    else module.compute_default_rope_parameters
+                )
+                buffer_value, _ = rope_fn(module.config)
+            init.copy_(module.inv_freq, buffer_value)
+            init.copy_(module.original_inv_freq, buffer_value)
 
 
 class HunYuanDenseV1RotaryEmbedding(nn.Module):

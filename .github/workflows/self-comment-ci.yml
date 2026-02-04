@@ -203,7 +203,7 @@ jobs:
 
   report:
     name: Check & Report
-    needs: [get-pr-number, check-timestamps, create_run, model-ci, quantization-ci]
+    needs: [get-pr-number, get-pr-info, check-timestamps, create_run, model-ci, quantization-ci]
     permissions:
       pull-requests: write
       statuses: write
@@ -357,14 +357,31 @@ jobs:
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           github_repository: ${{ github.repository }}
           pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+          pr_head_repo: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
+          run_commit: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
+          pr_commit: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
+          main_commit: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_BASE_SHA }}
           model_ci_result: ${{ needs.model-ci.result }}
           quantization_ci_result: ${{ needs.quantization-ci.result }}
         run: |
+          # Create commit links (8 chars display, full SHA in URL)
+          run_commit_link="[${run_commit:0:8}](https://github.com/${github_repository}/commit/${run_commit})"
+          pr_commit_link="[${pr_commit:0:8}](https://github.com/${pr_head_repo}/commit/${pr_commit})"
+          main_commit_link="[${main_commit:0:8}](https://github.com/${github_repository}/commit/${main_commit})"
+
           {
             echo '## CI Results'
             echo "[Workflow Run ⚙️]($GITHUB_RUN_URL)"
             echo ''
 
+            echo '### Commit Info'
+            echo "| Context | Commit | Description |"
+            echo "|---------|--------|-------------|"
+            echo "| RUN | ${run_commit_link} | merge commit |"
+            echo "| PR | ${pr_commit_link} | branch commit |"
+            echo "| main | ${main_commit_link} | base commit |"
+            echo ''
+      
             # Check if both jobs were skipped or cancelled
             if [[ "$model_ci_result" == "skipped" || "$model_ci_result" == "cancelled" ]] && \
                [[ "$quantization_ci_result" == "skipped" || "$quantization_ci_result" == "cancelled" ]]; then

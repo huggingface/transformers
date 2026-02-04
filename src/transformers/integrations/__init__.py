@@ -20,7 +20,6 @@ _import_structure = {
     "aqlm": ["replace_with_aqlm_linear"],
     "awq": [
         "post_init_awq_exllama_modules",
-        "post_init_awq_ipex_modules",
         "replace_quantization_scales",
         "replace_with_awq_linear",
     ],
@@ -148,17 +147,11 @@ else:
         "convert_and_export_with_cache",
     ]
 
-try:
-    if not is_torch_greater_or_equal("2.3"):
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tensor_parallel"] = [
-        "shard_and_distribute_module",
-        "ALL_PARALLEL_STYLES",
-        "translate_to_torch_parallel_style",
-    ]
+_import_structure["tensor_parallel"] = [
+    "shard_and_distribute_module",
+    "ALL_PARALLEL_STYLES",
+    "translate_to_torch_parallel_style",
+]
 try:
     if not is_torch_greater_or_equal("2.5"):
         raise OptionalDependencyNotAvailable()
@@ -173,7 +166,6 @@ if TYPE_CHECKING:
     from .aqlm import replace_with_aqlm_linear
     from .awq import (
         post_init_awq_exllama_modules,
-        post_init_awq_ipex_modules,
         replace_quantization_scales,
         replace_with_awq_linear,
     )
@@ -291,17 +283,11 @@ if TYPE_CHECKING:
     else:
         from .executorch import TorchExportableModuleWithStaticCache, convert_and_export_with_cache
 
-    try:
-        if not is_torch_greater_or_equal("2.3"):
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tensor_parallel import (
-            ALL_PARALLEL_STYLES,
-            shard_and_distribute_module,
-            translate_to_torch_parallel_style,
-        )
+    from .tensor_parallel import (
+        ALL_PARALLEL_STYLES,
+        shard_and_distribute_module,
+        translate_to_torch_parallel_style,
+    )
 
     try:
         if not is_torch_greater_or_equal("2.5"):
