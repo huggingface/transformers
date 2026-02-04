@@ -53,6 +53,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
+
 def get_module_size_with_ties(
     tied_params,
     module_size,
@@ -87,6 +88,7 @@ def get_module_size_with_ties(
         module_size_with_ties += module_sizes[tied_module_name] - module_sizes[tied_param]
 
     return module_size_with_ties, tied_module_names, tied_modules
+
 
 def check_and_set_device_map(device_map: "torch.device | int | str | dict | None") -> dict | str | None:
     from ..modeling_utils import get_torch_context_manager_or_global_device
