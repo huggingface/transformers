@@ -411,7 +411,7 @@ class MambaMixer(nn.Module):
             scan_output = scan_output * self.act(gate)
         else:
             # Use associative_scan for parallel computation when available
-            if associative_scan is not None and cache_params is None:
+            if associative_scan is not None and cache_params is None and is_torchdynamo_compiling():
                 def combine_fn(left, right):
                     a_left, b_left = left
                     a_right, b_right = right
