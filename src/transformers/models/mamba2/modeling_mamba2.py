@@ -724,12 +724,6 @@ class Mamba2PreTrainedModel(PreTrainedModel):
         """Initialize the weights."""
         std = self.config.initializer_range
         if isinstance(module, Mamba2Mixer):
-            # S4D real initialization. These are not discretized!
-            # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
-            A = torch.arange(1, self.config.num_heads + 1)
-            init.copy_(module.A_log, torch.log(A))
-            init.ones_(module.D)
-
             init.kaiming_uniform_(module.conv1d.weight, a=math.sqrt(5))
             if module.conv1d.bias is not None:
                 init.zeros_(module.conv1d.bias)
