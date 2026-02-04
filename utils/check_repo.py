@@ -110,6 +110,12 @@ PRIVATE_MODELS = [
     "PeAudioPreTrainedModel",
     "PeAudioVideoPreTrainedModel",
     "PeVideoPreTrainedModel",
+    "GroupViTTextTransformer",
+    "Owlv2TextTransformer",
+    "Owlv2VisionTransformer",
+    "OwlViTTextTransformer",
+    "OwlViTVisionTransformer",
+    "XCLIPTextTransformer",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.

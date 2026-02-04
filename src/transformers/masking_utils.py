@@ -876,9 +876,6 @@ def create_causal_mask(
             and_mask_function=and_mask_function,
         )
 
-    if config._attn_implementation is None:
-        raise ValueError("For debugging")
-
     # If we have an hybrid cache structure, here we want to create the mask for the full layers
     if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
         layer_idx = past_key_values.is_sliding.index(False)
