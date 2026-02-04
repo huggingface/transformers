@@ -611,6 +611,9 @@ class TensorBoardCallback(TrainerCallback):
                 # overwrite logging dir for trials
                 self.logging_dir = os.path.join(args.output_dir, default_logdir(), trial_name)
 
+        if self.logging_dir is None and getattr(args, "logging_dir", None):
+            self.logging_dir = os.path.expanduser(args.logging_dir)
+
         if self.logging_dir is None:
             self.logging_dir = os.path.join(args.output_dir, default_logdir())
 
