@@ -68,7 +68,7 @@ from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, i
 from .integrations.peft import MIN_PEFT_VERSION
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
-from .modeling_utils import PreTrainedModel, unwrap_model
+from .modeling_utils import LoadStateDictConfig, PreTrainedModel, unwrap_model
 from .models.auto.modeling_auto import (
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
@@ -2814,30 +2814,29 @@ class Trainer:
                     except StopIteration:
                         device_map = {"": "cpu"}
 
-                    missing_keys, unexpected_keys, mismatched_keys, _disk_offload_index, conversion_errors = (
-                        convert_and_load_state_dict_in_model(
-                            model=model,
-                            state_dict=state_dict,
-                            weight_mapping=weight_mapping,
-                            tp_plan=getattr(model, "tp_plan", None),
-                            hf_quantizer=None,
-                            device_map=device_map,
-                        )
+                    load_config = LoadStateDictConfig(
+                        device_map=device_map,
+                        weight_mapping=weight_mapping,
+                        hf_quantizer=None,
+                        weights_only=True,
+                    )
+                    loading_info, _disk_offload_index = convert_and_load_state_dict_in_model(
+                        model=model,
+                        state_dict=state_dict,
+                        load_config=load_config,
+                        tp_plan=getattr(model, "_tp_plan", None),
                     )
 
-                    class _LoadResult:
-                        def __init__(self, missing_keys, unexpected_keys):
-                            self.missing_keys = list(missing_keys)
-                            self.unexpected_keys = list(unexpected_keys)
-
-                    load_result = _LoadResult(missing_keys, unexpected_keys)
-                    if conversion_errors:
+                    load_result = loading_info
+                    if loading_info.conversion_errors:
                         logger.warning(
-                            f"There were errors while applying checkpoint conversion mapping: {list(conversion_errors.keys())}"  # noqa: E501
+                            "There were errors while applying checkpoint conversion mapping: "
+                            f"{list(loading_info.conversion_errors.keys())}"
                         )
-                    if mismatched_keys:
+                    if loading_info.mismatched_keys:
                         logger.warning(
-                            f"There were mismatched keys in the checkpoint model loaded: {sorted(mismatched_keys)}"  # noqa: E501
+                            "There were mismatched keys in the checkpoint model loaded: "
+                            f"{sorted(loading_info.mismatched_keys)}"
                         )
                 else:
                     # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
