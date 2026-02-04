@@ -197,7 +197,16 @@ def _leading_symbol_prefix(name: str) -> str:
     Returns:
         `str`: The leading prefix, or empty string if no match.
     """
-    match = re.match(r"^([A-Z][a-z0-9]+)", name) or re.match(r"^([A-Za-z0-9]+)", name)
+    # match camel-case prefix (ex. "Llama" from "LlamaAttention")
+    match = re.match(r"^([A-Z][a-z0-9]+)", name)
+    if match:
+        return match.group(1)
+    # match lowercase prefix followed by capital (ex. "newmodel" from "newmodelAttention")
+    match = re.match(r"^([a-z0-9]+)(?=[A-Z])", name)
+    if match:
+        return match.group(1)
+    # fallback: match any alphanumeric
+    match = re.match(r"^([A-Za-z0-9]+)", name)
     return match.group(1) if match else ""
 
 
@@ -458,23 +467,31 @@ class CodeSimilarityAnalyzer:
         self_model_normalized: str,
         self_name: str,
         k: int,
+        dates: dict[str, str] | None = None,
     ) -> list[tuple[str, float]]:
         similarities = query_embedding_row @ base_embeddings.T
-        indices = np.argpartition(-similarities, k + 32)[: k + 32]
+        buffer_size = min(k + 200, len(similarities))
+        indices = np.argpartition(-similarities, buffer_size)[: buffer_size]
         indices = indices[np.argsort(-similarities[indices])]
         output = []
         for match_id in indices:
             identifier = identifier_map[int(match_id)]
             parent_relative_path, match_name = identifier.split(":", 1)
             parent_model = Path(parent_relative_path).parts[0]
-            if match_name == self_name:
-                continue
+            # Skip if BOTH same name AND same model
             if self_model_normalized and _normalize(parent_model) == self_model_normalized:
                 continue
             output.append((identifier, float(similarities[match_id])))
-            if len(output) >= k:
-                break
-        return output
+        # Sort by score (descending), then by release date (ascending, oldest first) for tie-breaking
+        if dates:
+            def sort_key(item):
+                identifier, score = item
+                relative_path = identifier.split(":")[0]
+                model_id = Path(relative_path).parts[0] if Path(relative_path).parts else ""
+                release = dates.get(model_id, "9999-99-99")  # Unknown dates sort last
+                return (-score, release)
+            output.sort(key=sort_key)
+        return output[:k]
 
     def _topk_jaccard(
         self,
@@ -503,8 +520,7 @@ class CodeSimilarityAnalyzer:
         for identifier in identifiers:
             parent_relative_path, match_name = identifier.split(":", 1)
             parent_model = Path(parent_relative_path).parts[0]
-            if match_name == self_name:
-                continue
+            # Skip only if same model
             if self_model_normalized and _normalize(parent_model) == self_model_normalized:
                 continue
             tokens = set(tokens_map.get(identifier, []))
@@ -517,7 +533,7 @@ class CodeSimilarityAnalyzer:
         return scores[:k]
 
     def analyze_file(
-        self, modeling_file: Path, top_k_per_item: int = 5, allow_hub_fallback: bool = True, use_jaccard=False
+        self, modeling_file: Path, top_k_per_item: int = 10, allow_hub_fallback: bool = True, use_jaccard=False, dates: dict[str, str] | None = None
     ) -> dict[str, dict[str, list]]:
         """
         Analyze a modeling file and find similar code definitions in the index.
@@ -526,6 +542,7 @@ class CodeSimilarityAnalyzer:
             modeling_file (`Path`): Path to the modeling file to analyze.
             top_k_per_item (`int`, *optional*, defaults to 5): Number of top matches to return per definition.
             allow_hub_fallback (`bool`, *optional*, defaults to `True`): Whether to download index from Hub if not found locally.
+            dates (`dict[str, str]` or `None`, *optional*): Mapping of model_id to release date for tie-breaking.
 
         Returns:
             `dict[str, dict[str, list]]`: Dictionary mapping definition names to their similarity results.
@@ -560,7 +577,7 @@ class CodeSimilarityAnalyzer:
         for i, query_identifier in enumerate(query_identifiers):
             query_name = query_identifier.split(":")[-1]
             embedding_top = self._topk_embedding(
-                query_embeddings[i], base_embeddings, identifier_map, self_model_normalized, query_name, top_k_per_item
+                query_embeddings[i], base_embeddings, identifier_map, self_model_normalized, query_name, top_k_per_item, dates
             )
             embedding_set = {identifier for identifier, _ in embedding_top}
             kind = definitions_kind.get(query_identifier, "function")
@@ -721,7 +738,7 @@ def main():
         modeling_file = os.path.join("src", "transformers", "models", modeling_file, f"modeling_{modeling_file}.py")
 
     results = analyzer.analyze_file(
-        Path(modeling_file), top_k_per_item=5, allow_hub_fallback=True, use_jaccard=args.use_jaccard
+        Path(modeling_file), top_k_per_item=10, allow_hub_fallback=True, use_jaccard=args.use_jaccard, dates=dates
     )
     modeling_filename = Path(modeling_file).name
     release_key = modeling_filename.split("modeling_")[-1][:-3]
