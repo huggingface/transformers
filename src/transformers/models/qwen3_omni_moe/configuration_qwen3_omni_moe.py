@@ -582,8 +582,6 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig, RotaryEmbeddingCon
         eos_token_id: int | None = None,
         **kwargs,
     ):
-        self.sliding_window = sliding_window
-        self.max_window_layers = max_window_layers
         self.num_code_groups = num_code_groups
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

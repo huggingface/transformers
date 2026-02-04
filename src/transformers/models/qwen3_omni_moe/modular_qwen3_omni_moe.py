@@ -474,8 +474,6 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
         eos_token_id: int | None = None,
         **kwargs,
     ):
-        self.sliding_window = sliding_window
-        self.max_window_layers = max_window_layers
         self.num_code_groups = num_code_groups
         super().__init__(
             vocab_size,
@@ -505,6 +503,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
         )
         del self.use_sliding_window
         self.sliding_window = sliding_window
+        self.max_window_layers = max_window_layers
 
 
 class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):

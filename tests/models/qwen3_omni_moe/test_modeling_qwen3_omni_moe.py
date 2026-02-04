@@ -649,6 +649,31 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
             model_tester = self.model_tester
         return model_tester.vision_config["depth"] + 1
 
+    def test_code_predictor_config_init(self):
+        """
+        Test that Qwen3OmniMoeTalkerCodePredictorConfig initializes correctly
+        and accepts max_window_layers while removing use_sliding_window.
+        """
+
+        config = Qwen3OmniMoeTalkerCodePredictorConfig(
+            vocab_size=100,
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            max_window_layers=28,
+            sliding_window=2048,
+        )
+
+        # 1. Check max_window_layers is present
+        self.assertEqual(config.max_window_layers, 28)
+
+        # 2. Check sliding_window is present
+        self.assertEqual(config.sliding_window, 2048)
+
+        # 3. Check use_sliding_window is removed
+        with self.assertRaises(AttributeError):
+            _ = config.use_sliding_window
+
 
 @require_torch
 class Qwen3OmniModelIntegrationTest(unittest.TestCase):
@@ -912,30 +937,3 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
         decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(decoded_texts[0], EXPECTED_DECODED_TEXT)
         self.assertEqual(decoded_texts[1], EXPECTED_DECODED_TEXT)
-
-
-class TestQwen3OmniMoeCodePredictorConfig(unittest.TestCase):
-    def test_code_predictor_config_init(self):
-        """
-        Test that Qwen3OmniMoeTalkerCodePredictorConfig initializes correctly
-        and accepts max_window_layers while removing use_sliding_window.
-        """
-
-        config = Qwen3OmniMoeTalkerCodePredictorConfig(
-            vocab_size=100,
-            hidden_size=32,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            max_window_layers=28,
-            sliding_window=2048,
-        )
-
-        # 1. Check max_window_layers is present
-        self.assertEqual(config.max_window_layers, 28)
-
-        # 2. Check sliding_window is present
-        self.assertEqual(config.sliding_window, 2048)
-
-        # 3. Check use_sliding_window is removed
-        with self.assertRaises(AttributeError):
-            _ = config.use_sliding_window
