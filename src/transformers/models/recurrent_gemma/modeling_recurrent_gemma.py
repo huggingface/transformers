@@ -37,6 +37,11 @@ from .configuration_recurrent_gemma import RecurrentGemmaConfig
 logger = logging.get_logger(__name__)
 _MAX_SQRT_GRADIENT = 1000.0
 
+try:
+    from torch._higher_order_ops.associative_scan import associative_scan
+except ImportError:
+    associative_scan = None
+
 
 # Copied from transformers.models.gemma.modeling_gemma.GemmaRMSNorm with Gemma->RecurrentGemma
 class RecurrentGemmaRMSNorm(nn.Module):
@@ -414,11 +419,28 @@ class RecurrentGemmaRglru(nn.Module):
             if recurrent_states is None:
                 recurrent_states = torch.zeros(hidden_states[:, 0].shape, dtype=acc_dtype, device=hidden_states.device)
 
-            contextualized_states = torch.zeros_like(hidden_states)
-            for t in range(hidden_states.shape[1]):
-                recurrent_states = recurrent_gate[:, t].type(acc_dtype) * recurrent_states.to(recurrent_gate.device)
-                recurrent_states = recurrent_states + hidden_states[:, t].type(acc_dtype)
-                contextualized_states[:, t] = recurrent_states.type(hidden_states.dtype)
+            if associative_scan is not None:
+                # Use parallel associative scan
+                def combine_fn(left, right):
+                    a_left, b_left = left
+                    a_right, b_right = right
+                    return (a_left * a_right, a_right * b_left + b_right)
+
+                combine_mode = "pointwise" if hidden_states.device.type in ("cuda", "xpu") else "generic"
+                _, contextualized_states = associative_scan(
+                    combine_fn,
+                    (recurrent_gate.type(acc_dtype), hidden_states.type(acc_dtype)),
+                    dim=1,
+                    combine_mode=combine_mode,
+                )
+                recurrent_states = contextualized_states[:, -1]
+                contextualized_states = contextualized_states.type(hidden_states.dtype)
+            else:
+                contextualized_states = torch.zeros_like(hidden_states)
+                for t in range(hidden_states.shape[1]):
+                    recurrent_states = recurrent_gate[:, t].type(acc_dtype) * recurrent_states.to(recurrent_gate.device)
+                    recurrent_states = recurrent_states + hidden_states[:, t].type(acc_dtype)
+                    contextualized_states[:, t] = recurrent_states.type(hidden_states.dtype)
 
         return contextualized_states, recurrent_states
 
