@@ -21,12 +21,12 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_dinov2 import Dinov2Config
 
@@ -544,10 +544,9 @@ class Dinov2ForImageClassification(Dinov2PreTrainedModel):
     Dinov2 backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
+class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = Dinov2Embeddings(config)
