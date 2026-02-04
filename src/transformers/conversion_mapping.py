@@ -70,6 +70,16 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "t5gemma2": [
+            WeightRenaming(r"(?<!vision_model\.)encoder.embed_tokens.", "encoder.text_model.embed_tokens."),
+            WeightRenaming(r"(?<!vision_model\.)encoder.norm.", "encoder.text_model.norm."),
+            WeightRenaming(r"(?<!vision_model\.)encoder.layers.", "encoder.text_model.layers."),
+        ],
+        "t5gemma2_encoder": [
+            WeightRenaming("^embed_tokens.", "text_model.embed_tokens."),
+            WeightRenaming("^norm.", "text_model.norm."),
+            WeightRenaming("^layers.", "text_model.layers."),
+        ],
         "gpt_oss": [
             # NOTE: These converters are only applied if the model is being loaded from pre-dequantized checkpoint.
             # If you are dequantizing the model on the fly, these converters will be ignored because the tensors
