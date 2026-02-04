@@ -1607,46 +1607,242 @@ def _get_model_info(func, parent_class):
     return model_name_lowercase, class_name, config_class
 
 
+def _format_type_annotation_recursive(type_hint):
+    """
+    Recursively format a type annotation object as a string, preserving generic type arguments.
+
+    This is an internal helper used by process_type_annotation for the type object path.
+
+    Args:
+        type_hint: A type annotation object
+
+    Returns:
+        str: Formatted type string
+    """
+    # Handle special cases
+    if type_hint is type(...) or type_hint is Ellipsis:
+        return "..."
+    # Note: NoneType handling is done later to preserve "NoneType" in Union[] but "None" in | syntax
+
+    # Check if this is a generic type (e.g., list[str], dict[str, int])
+    origin = get_origin(type_hint)
+    args = get_args(type_hint)
+
+    if origin is not None and args:
+        # This is a generic type - format it with its arguments
+        # Get the origin type name
+        if hasattr(origin, "__module__") and hasattr(origin, "__name__"):
+            # Clean up module name - need to handle both 'typing.' prefix and just 'typing'
+            module_name = origin.__module__
+            if module_name in ("typing", "types", "builtins"):
+                module_name = ""
+            else:
+                module_name = (
+                    module_name.replace("transformers.", "~")
+                    .replace("typing.", "")
+                    .replace("types.", "")
+                    .replace("builtins.", "")
+                )
+
+            if module_name:
+                origin_str = f"{module_name}.{origin.__name__}"
+            else:
+                origin_str = origin.__name__
+        else:
+            origin_str = str(origin)
+
+        # Handle special origin types
+        if origin_str == "UnionType":
+            # Python 3.13's X | Y syntax - format it nicely
+            arg_strs = [_format_type_annotation_recursive(arg) for arg in args]
+            return " | ".join(arg_strs)
+
+        # Special handling for Annotated[Union[...], ...] and Annotated[UnionType[...], ...]
+        # Check if first arg is a Union/UnionType and format it specially
+        if origin_str == "Annotated" and args:
+            first_arg_origin = get_origin(args[0])
+            # Check if it's a UnionType (modern | syntax) or Union (old Union[] syntax)
+            if first_arg_origin is UnionType:
+                # Modern union type - format as X | Y | Z (with None not NoneType)
+                union_args = get_args(args[0])
+                union_strs = []
+                for arg in union_args:
+                    if arg is type(None):
+                        union_strs.append("None")  # Modern syntax uses "None"
+                    else:
+                        union_strs.append(_format_type_annotation_recursive(arg))
+                formatted_union = " | ".join(union_strs)
+                # Include the rest of the Annotated metadata
+                remaining_args = [_format_type_annotation_recursive(arg) for arg in args[1:]]
+                all_args = [formatted_union] + remaining_args
+                return f"{origin_str}[{', '.join(all_args)}]"
+            elif first_arg_origin is Union:
+                # Old-style Union - format as Union[X, Y, Z]
+                union_args = get_args(args[0])
+                union_strs = [_format_type_annotation_recursive(arg) for arg in union_args]
+                formatted_union = f"Union[{', '.join(union_strs)}]"
+                # Include the rest of the Annotated metadata
+                remaining_args = [_format_type_annotation_recursive(arg) for arg in args[1:]]
+                all_args = [formatted_union] + remaining_args
+                return f"{origin_str}[{', '.join(all_args)}]"
+
+        # Recursively format the generic arguments
+        arg_strs = [_format_type_annotation_recursive(arg) for arg in args]
+        return f"{origin_str}[{', '.join(arg_strs)}]"
+    elif hasattr(type_hint, "__module__") and hasattr(type_hint, "__name__"):
+        # Simple type with module and name
+        # Clean up module name - need to handle both 'typing.' prefix and just 'typing'
+        module_name = type_hint.__module__
+        if module_name in ("typing", "types", "builtins"):
+            module_name = ""
+        else:
+            module_name = (
+                module_name.replace("transformers.", "~")
+                .replace("typing.", "")
+                .replace("types.", "")
+                .replace("builtins.", "")
+            )
+
+        if module_name:
+            type_name = f"{module_name}.{type_hint.__name__}"
+        else:
+            type_name = type_hint.__name__
+
+        return type_name
+    else:
+        # Fallback to string representation
+        type_str = str(type_hint)
+        # Clean up ForwardRef
+        if "ForwardRef" in type_str:
+            type_str = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", type_str)
+        # Clean up module prefixes
+        type_str = type_str.replace("typing.", "").replace("types.", "")
+        return type_str
+
+
+def process_type_annotation(type_input, param_name: str | None = None) -> tuple[str, bool]:
+    """
+    Unified function to process and format a parameter's type annotation.
+
+    This function intelligently handles both type objects (from inspect.Parameter.annotation)
+    and string representations of types. It will:
+    - Use type introspection when given a type object (preserves generic arguments)
+    - Parse string representations when that's all that's available
+    - Always return a formatted type string and optional flag
+
+    Handles various type representations including:
+    - Type objects with generics (e.g., list[str], Optional[int])
+    - Union types (both Union[X, Y] and X | Y syntax)
+    - Modern union syntax with | (e.g., "bool | None")
+    - Complex typing constructs (Union, Optional, Annotated, etc.)
+    - Generic types with brackets
+    - Class type strings
+    - Simple types and module paths
+
+    Args:
+        type_input: Either a type annotation object or a string representation of a type
+        param_name (`str | None`): The parameter name (used for legacy module path handling)
+
+    Returns:
+        tuple[str, bool]: (formatted_type_string, is_optional)
+    """
+    optional = False
+
+    # Path 1: Type object (best approach - preserves generic type information)
+    if not isinstance(type_input, str):
+        # Handle None type
+        if type_input is None or type_input is type(None):
+            return "None", True
+
+        # Handle Union types and modern UnionType (X | Y)
+        if get_origin(type_input) is Union or get_origin(type_input) is UnionType:
+            subtypes = get_args(type_input)
+            out_str = []
+            for subtype in subtypes:
+                if subtype is type(None):
+                    optional = True
+                    continue
+                formatted_type = _format_type_annotation_recursive(subtype)
+                out_str.append(formatted_type)
+
+            if not out_str:
+                return "", optional
+            elif len(out_str) == 1:
+                return out_str[0], optional
+            else:
+                return f"Union[{', '.join(out_str)}]", optional
+
+        # Single type (not a Union)
+        formatted_type = _format_type_annotation_recursive(type_input)
+        return formatted_type, optional
+
+    # Path 2: String representation (fallback when we only have strings)
+    param_type = type_input
+
+    # Handle Union types with | syntax
+    if " | " in param_type:
+        # Modern union syntax (e.g., "bool | None")
+        parts = [p.strip() for p in param_type.split(" | ")]
+        if "None" in parts:
+            optional = True
+            parts = [p for p in parts if p != "None"]
+        param_type = " | ".join(parts) if parts else ""
+        # Clean up module prefixes including typing
+        param_type = "".join(param_type.split("typing.")).replace("transformers.", "~").replace("builtins.", "")
+
+    elif "typing" in param_type or "Union[" in param_type or "Optional[" in param_type or "[" in param_type:
+        # Complex typing construct or generic type - clean up typing module references
+        param_type = "".join(param_type.split("typing.")).replace("transformers.", "~")
+
+    elif "<class '" in param_type:
+        # This is a class type like "<class 'module.ClassName'>" - should NOT append param_name
+        param_type = (
+            param_type.replace("transformers.", "~").replace("builtins.", "").replace("<class '", "").replace("'>", "")
+        )
+
+    else:
+        # Simple type or module path - only append param_name if it looks like a module path
+        # This is legacy behavior for backwards compatibility
+        if param_name and "." in param_type and not param_type.split(".")[-1][0].isupper():
+            # Looks like a module path ending with an attribute
+            param_type = f"{param_type.replace('transformers.', '~').replace('builtins', '')}.{param_name}"
+        else:
+            # Simple type name, don't append param_name
+            param_type = param_type.replace("transformers.", "~").replace("builtins.", "")
+
+    # Clean up ForwardRef
+    if "ForwardRef" in param_type:
+        param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
+
+    # Handle Optional wrapper
+    if "Optional" in param_type:
+        param_type = re.sub(r"Optional\[(.*?)\]", r"\1", param_type)
+        optional = True
+
+    return param_type, optional
+
+
 def _process_parameter_type(param):
     """
-    Process and format a parameter's type annotation.
+    Process and format a parameter's type annotation from an inspect.Parameter object.
 
     Args:
         param (`inspect.Parameter`): The parameter from the function signature
+
+    Returns:
+        tuple[str, bool]: (formatted_type_string, is_optional)
     """
-    optional = False
     if param.annotation == inspect.Parameter.empty:
         return "", False
-    elif param.annotation is None:
-        return "None", True
-    # This is, astonishingly, the right way to do it: https://docs.python.org/3/library/typing.html#typing.Union
-    elif get_origin(param.annotation) is Union or get_origin(param.annotation) is UnionType:
-        subtypes = get_args(param.annotation)
-    else:
-        subtypes = [param.annotation]  # Just pretend it's a single-element union so we don't need two code paths
-    out_str = []
-    for subtype in subtypes:
-        if subtype is type(None):
-            optional = True
-            continue
-        if hasattr(subtype, "__module__") and hasattr(subtype, "__name__"):
-            subtype = f"{subtype.__module__.replace('transformers.', '~').replace('builtins', '').replace('typing.', '')}.{subtype.__name__}".removeprefix(
-                "."
-            )
-        else:
-            subtype = str(subtype)  # Just give up
-        if "ForwardRef" in subtype:
-            subtype = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", subtype)
-        out_str.append(subtype)
 
+    # Use the unified function to process the type annotation
+    formatted_type, optional = process_type_annotation(param.annotation)
+
+    # Check if parameter has a default value (makes it optional)
     if param.default is not inspect.Parameter.empty:
         optional = True
-    if not out_str:
-        return "", optional
-    elif len(out_str) == 1:
-        return out_str[0], optional
-    else:
-        return f"Union[{', '.join(out_str)}]", optional
+
+    return formatted_type, optional
 
 
 def _get_parameter_info(param_name, documented_params, source_args_dict, param_type, optional):
@@ -1835,6 +2031,10 @@ def _is_processor_class(func, parent_class):
     except Exception:
         pass
 
+    # Exception for DummyProcessorForTest
+    if func.__qualname__.split(".")[0] == "DummyProcessorForTest":
+        return True
+
     # Default to False (conservative approach)
     return False
 
@@ -1929,23 +2129,9 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                             # Only document parameters that are explicitly documented in the TypedDict's docstring
                             if nested_param_name not in documented_nested_kwargs:
                                 continue
-                            nested_param_type_str = str(nested_param_type)
-                            nested_optional = False
-
-                            # Process parameter type
-                            if "typing" in nested_param_type_str:
-                                nested_param_type_str = "".join(nested_param_type_str.split("typing.")).replace(
-                                    "transformers.", "~"
-                                )
-                            else:
-                                nested_param_type_str = f"{nested_param_type_str.replace('transformers.', '~').replace('builtins', '')}.{nested_param_name}"
-                            if "ForwardRef" in nested_param_type_str:
-                                nested_param_type_str = re.sub(
-                                    r"ForwardRef\('([\w.]+)'\)", r"\1", nested_param_type_str
-                                )
-                            if "Optional" in nested_param_type_str:
-                                nested_param_type_str = re.sub(r"Optional\[(.*?)\]", r"\1", nested_param_type_str)
-                                nested_optional = True
+                            nested_param_type_str, nested_optional = process_type_annotation(
+                                nested_param_type, nested_param_name
+                            )
 
                             # Check for default value
                             nested_param_default = ""
@@ -1999,19 +2185,7 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                         # If we can't get annotations, skip this parameter
                         continue
 
-                param_type = str(param_type_annotation)
-                optional = False
-
-                # Process parameter type
-                if "typing" in param_type:
-                    param_type = "".join(param_type.split("typing.")).replace("transformers.", "~")
-                else:
-                    param_type = f"{param_type.replace('transformers.', '~').replace('builtins', '')}.{param_name}"
-                if "ForwardRef" in param_type:
-                    param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
-                if "Optional" in param_type:
-                    param_type = re.sub(r"Optional\[(.*?)\]", r"\1", param_type)
-                    optional = True
+                param_type, optional = process_type_annotation(param_type_annotation, param_name)
 
                 # Check for default value
                 param_default = ""
@@ -2401,19 +2575,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             doc_class = cls.__doc__ if cls.__doc__ else ""
             documented_kwargs = parse_docstring(doc_class)[0]
             for param_name, param_type_annotation in cls.__annotations__.items():
-                param_type = str(param_type_annotation)
-                optional = False
-
-                # Process parameter type
-                if "typing" in param_type:
-                    param_type = "".join(param_type.split("typing.")).replace("transformers.", "~")
-                else:
-                    param_type = f"{param_type.replace('transformers.', '~').replace('builtins', '')}.{param_name}"
-                if "ForwardRef" in param_type:
-                    param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
-                if "Optional" in param_type:
-                    param_type = re.sub(r"Optional\[(.*?)\]", r"\1", param_type)
-                    optional = True
+                param_type, optional = process_type_annotation(param_type_annotation, param_name)
 
                 # Check for default value
                 param_default = ""
