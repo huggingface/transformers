@@ -31,6 +31,7 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ...utils.generic import maybe_autocast
+from ...utils.import_utils import is_torchdynamo_compiling
 from .configuration_recurrent_gemma import RecurrentGemmaConfig
 
 
@@ -419,7 +420,7 @@ class RecurrentGemmaRglru(nn.Module):
             if recurrent_states is None:
                 recurrent_states = torch.zeros(hidden_states[:, 0].shape, dtype=acc_dtype, device=hidden_states.device)
 
-            if associative_scan is not None:
+            if associative_scan is not None and is_torchdynamo_compiling():
                 # Use parallel associative scan
                 def combine_fn(left, right):
                     a_left, b_left = left
