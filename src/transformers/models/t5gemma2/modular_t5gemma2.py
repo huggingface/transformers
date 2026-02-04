@@ -463,35 +463,13 @@ class T5Gemma2Config(PreTrainedConfig):
             if special_token_key not in kwargs:
                 kwargs[special_token_key] = getattr(decoder, special_token_key)
 
-        super().__init__(**kwargs)
-
-        self.is_encoder_decoder = is_encoder_decoder
-        self.dropout_rate = dropout_rate
-        self.attention_dropout = attention_dropout
         self.classifier_dropout_rate = classifier_dropout_rate
         self.initializer_range = initializer_range
         self.eoi_token_index = encoder.eoi_token_index
         self.image_token_index = image_token_index
         self.tie_word_embeddings = tie_word_embeddings
 
-    def __setattr__(self, key, value):
-        shared_attr_with_submodules = [
-            "output_hidden_states",
-            "output_attentions",
-            "_attn_implementation_internal",
-            "dropout_rate",
-            "attention_dropout",
-            "vocab_size",
-            "dtype",
-            "return_dict",
-        ]
-
-        if key in shared_attr_with_submodules:
-            setattr(self.encoder.text_config, key, value)
-            setattr(self.encoder.vision_config, key, value)
-            setattr(self.decoder, key, value)
-            setattr(self.encoder, key, value)
-        super().__setattr__(key, value)
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 class T5Gemma2RMSNorm(Gemma3RMSNorm):
@@ -815,8 +793,8 @@ class T5Gemma2PreTrainedModel(Gemma3PreTrainedModel):
         return shifted_input_ids
 
 
-class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
-    config: T5Gemma2EncoderConfig
+class T5Gemma2TextEncoder(T5Gemma2PreTrainedModel):
+    config: T5Gemma2TextConfig
     _can_record_outputs = {
         "attentions": T5Gemma2SelfAttention,
         "hidden_states": T5Gemma2EncoderLayer,
@@ -824,40 +802,119 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
 
     def __init__(
         self,
+        config: T5Gemma2TextConfig,
+        eoi_token_index: int = 256_000,
+    ):
+        super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        self.embed_tokens = T5Gemma2TextScaledWordEmbedding(
+            config.vocab_size,
+            config.hidden_size,
+            self.padding_idx,
+            embed_scale=config.hidden_size**0.5,
+            eoi_token_index=eoi_token_index,
+        )
+        self.norm = T5Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.gradient_checkpointing = False
+
+        self.layers = nn.ModuleList(
+            [T5Gemma2EncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.dropout = nn.Dropout(config.dropout_rate)
+        self.rotary_emb = T5Gemma2RotaryEmbedding(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @check_model_inputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        # Unused for processor compatibility kept in signature.
+        token_type_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        # As we want to pass `past_key_values=None` explicitly everywhere, we need to pop them from kwargs if present
+        kwargs.pop("past_key_values", None)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if position_ids is None:
+            position_ids = torch.arange(0, inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
+
+        if not isinstance(self_attn_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "input_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+            }
+            self_attn_mask_mapping = {
+                "full_attention": create_bidirectional_mask(**mask_kwargs),
+                "sliding_attention": create_bidirectional_mask(
+                    **mask_kwargs,
+                    and_mask_function=sliding_window_mask_function(self.config.sliding_window, is_causal=False),
+                ),
+            }
+
+        # input layer
+        hidden_states = inputs_embeds
+
+        # global and local position embeddings
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
+
+        # dropout
+        hidden_states = self.dropout(hidden_states)
+
+        for layer_module in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = layer_module(
+                hidden_states,
+                position_embeddings[layer_module.attention_type],
+                self_attn_mask_mapping[layer_module.attention_type],
+                position_ids,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+        )
+
+
+class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
+    config: T5Gemma2EncoderConfig
+
+    def __init__(
+        self,
         config: T5Gemma2EncoderConfig,
         eoi_token_index: int = 256_000,
     ):
         super().__init__(config)
-        self.padding_idx = config.text_config.pad_token_id
-        self.vocab_size = config.text_config.vocab_size
 
-        vision_config = config.vision_config
-        text_config = config.text_config
-
-        # setup vision tower
-        self.vision_tower = AutoModel.from_config(config=vision_config)
+        self.text_model = T5Gemma2TextEncoder._from_config(config.text_config, eoi_token_index=eoi_token_index)
+        self.vision_tower = AutoModel.from_config(config=config.vision_config)
         self.multi_modal_projector = T5Gemma2MultiModalProjector(config)
-
-        self.embed_tokens = T5Gemma2TextScaledWordEmbedding(
-            text_config.vocab_size,
-            text_config.hidden_size,
-            self.padding_idx,
-            embed_scale=text_config.hidden_size**0.5,
-            eoi_token_index=eoi_token_index,
-        )
-        self.norm = T5Gemma2RMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
-        self.gradient_checkpointing = False
-
-        self.layers = nn.ModuleList(
-            [T5Gemma2EncoderLayer(text_config, layer_idx) for layer_idx in range(text_config.num_hidden_layers)]
-        )
-        self.dropout = nn.Dropout(text_config.dropout_rate)
-        self.rotary_emb = T5Gemma2RotaryEmbedding(text_config)
-
-        self.text_config = text_config
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.text_model.get_input_embeddings()
+
+    def set_input_embeddings(self, new_embeddings):
+        return self.text_model.set_input_embeddings(new_embeddings)
 
     @can_return_tuple
     @auto_docstring
@@ -903,23 +960,6 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         )
         return special_image_mask
 
-    def preprocess_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        input_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-    ):
-        """Convert pixel images to image features and merge into input embeds."""
-        image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
-        image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-
-        image_mask = self.get_image_placeholder_mask(
-            input_ids, inputs_embeds=inputs_embeds, image_features=image_features
-        )
-
-        inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
-        return inputs_embeds
-
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -933,60 +973,29 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         token_type_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        del token_type_ids
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        # As we want to pass `past_key_values=None` explicitly everywhere, we need to pop them from kwargs if present
-        kwargs.pop("past_key_values", None)
-
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds = self.text_model.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            inputs_embeds = self.preprocess_image_features(
-                pixel_values, input_ids=input_ids, inputs_embeds=inputs_embeds
+            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+
+            image_mask = self.get_image_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
 
-        if position_ids is None:
-            position_ids = torch.arange(0, inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
-        if not isinstance(self_attn_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "input_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-            }
-            self_attn_mask_mapping = {
-                "full_attention": create_bidirectional_mask(**mask_kwargs),
-                "sliding_attention": create_bidirectional_mask(
-                    **mask_kwargs,
-                    and_mask_function=sliding_window_mask_function(self.text_config.sliding_window, is_causal=False),
-                ),
-            }
+        hidden_states = self.text_model(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            **kwargs,
+        )
 
-        # input layer
-        hidden_states = inputs_embeds
-
-        # global and local position embeddings
-        position_embeddings = {}
-        for layer_type in self.text_config.layer_types:
-            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
-
-        # dropout
-        hidden_states = self.dropout(hidden_states)
-
-        for layer_module in self.layers[: self.text_config.num_hidden_layers]:
-            hidden_states = layer_module(
-                hidden_states,
-                position_embeddings[layer_module.attention_type],
-                self_attn_mask_mapping[layer_module.attention_type],
-                position_ids,
-                **kwargs,
-            )
-
-        hidden_states = self.norm(hidden_states)
-        hidden_states = self.dropout(hidden_states)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
         )
@@ -1134,8 +1143,8 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
 @auto_docstring
 class T5Gemma2Model(T5Gemma2PreTrainedModel):
     _tied_weights_keys = {
-        "decoder.embed_tokens.weight": "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.eoi_embedding": "encoder.embed_tokens.eoi_embedding",
+        "decoder.embed_tokens.weight": "encoder.text_model.embed_tokens.weight",
+        "decoder.embed_tokens.eoi_embedding": "encoder.text_model.embed_tokens.eoi_embedding",
     }
 
     def __init__(self, config: T5Gemma2Config):
@@ -1229,7 +1238,7 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
 
 class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
-        "lm_head.out_proj.weight": "model.encoder.embed_tokens.weight",
+        "lm_head.out_proj.weight": "model.encoder.text_model.embed_tokens.weight",
     }
     _tp_plan = {"lm_head.out_proj": "colwise_gather_output"}
     _pp_plan = {"lm_head.out_proj": (["hidden_states"], ["logits"])}
@@ -1262,6 +1271,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     def get_decoder(self):
         return self.model.get_decoder()
 
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]

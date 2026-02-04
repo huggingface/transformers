@@ -20,7 +20,6 @@ from functools import cached_property
 import pytest
 
 from transformers import T5Config, is_torch_available
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -1506,8 +1505,6 @@ class T5ModelIntegrationTests(unittest.TestCase):
     @slow
     def test_export_encoder(self):
         """Test exporting T5EncoderModel to torch export format."""
-        if not is_torch_greater_or_equal_than_2_4:
-            self.skipTest("This test requires torch >= 2.4 to run.")
 
         from transformers.integrations.executorch import Seq2SeqLMEncoderExportableModule
 
@@ -1543,8 +1540,6 @@ class T5ModelIntegrationTests(unittest.TestCase):
     @slow
     def test_export_decoder(self):
         """Test exporting T5 decoder with static cache to torch export format."""
-        if not is_torch_greater_or_equal_than_2_4:
-            self.skipTest("This test requires torch >= 2.4 to run.")
 
         from transformers import AutoModelForSeq2SeqLM, T5ForConditionalGeneration
         from transformers.integrations.executorch import Seq2SeqLMDecoderExportableModuleWithStaticCache
@@ -1605,8 +1600,6 @@ class T5ModelIntegrationTests(unittest.TestCase):
     @slow
     def test_export_t5_summarization(self):
         """Test composing exported T5 encoder and decoder for summarization."""
-        if not is_torch_greater_or_equal_than_2_4:
-            self.skipTest("This test requires torch >= 2.4 to run.")
 
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, T5ForConditionalGeneration
         from transformers.integrations.executorch import Seq2SeqLMExportableModule
