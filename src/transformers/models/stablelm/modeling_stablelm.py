@@ -19,7 +19,7 @@
 """PyTorch StableLM model."""
 
 from collections.abc import Callable
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torch import nn

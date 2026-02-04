@@ -836,6 +836,7 @@ class AutoformerPreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
             init.zeros_(module.bias)
 
+
 # copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerEncoder with TimeSeriesTransformer->Autoformer,TimeSeries->Autoformer
 class AutoformerEncoder(AutoformerPreTrainedModel):
     """

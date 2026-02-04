@@ -804,7 +804,9 @@ class FalconModel(FalconPreTrainedModel):
 
             # Only using non-bool mask for alibi
             if causal_mask.dtype == torch.bool:
-                causal_mask = torch.where(causal_mask, torch.tensor(0.0, device=causal_mask.device, dtype=inputs_embeds.dtype), min_dtype)
+                causal_mask = torch.where(
+                    causal_mask, torch.tensor(0.0, device=causal_mask.device, dtype=inputs_embeds.dtype), min_dtype
+                )
 
             # We take care to integrate alibi bias in the causal_mask here
             alibi = alibi.reshape(batch_size, -1, *alibi.shape[1:])

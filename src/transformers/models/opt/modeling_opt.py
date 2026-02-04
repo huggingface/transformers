@@ -14,7 +14,6 @@
 """PyTorch OPT model."""
 
 from collections.abc import Callable
-from typing import Union
 
 import torch
 from torch import nn

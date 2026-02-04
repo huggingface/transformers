@@ -14,7 +14,6 @@
 """PyTorch CodeGen model."""
 
 import math
-from typing import Union
 
 import torch
 from torch import nn
@@ -31,7 +30,6 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import is_flash_attention_requested
 from .configuration_codegen import CodeGenConfig
 
 
