@@ -119,46 +119,46 @@ class MoonshineStreamingConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        encoder_config (`MoonshineStreamingEncoderConfig`, *optional*):
-            Configuration of the encoder. If not provided, a default `MoonshineStreamingEncoderConfig` will be
-            instantiated.
-        vocab_size (`int`, *optional*, defaults to 32768):
-            Vocabulary size of the Moonshine Streaming decoder model. Defines the number of different tokens that can
-            be represented by the `inputs_ids` passed when calling [`MoonshineStreamingModel`].
-        hidden_size (`int`, *optional*, defaults to 320):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 1280):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 6):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        hidden_act (`str`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 4096):
-            The maximum sequence length that this model might ever be used with.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            End of stream token id.
-        rope_parameters (`RopeParameters` or `dict`, *optional*, defaults to `{"rope_type": "default", "rope_theta": 10000.0, "partial_rotary_factor": 0.8}`):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta`, `rope_type`, and optionally `partial_rotary_factor` for partial RoPE application.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        decoder_start_token_id (`int`, *optional*):
-            The decoder start token id. If not specified, it will default to `bos_token_id`.
-        head_dim (`int`, *optional*):
-            The attention head dimension. If None, it will default to hidden_size // num_attention_heads.
-        pad_head_dim_to_multiple_of (`int`, *optional*):
-            If set, the head dimension will be padded to a multiple of this value.
+            encoder_config (`MoonshineStreamingEncoderConfig`, *optional*):
+                Configuration of the encoder. If not provided, a default `MoonshineStreamingEncoderConfig` will be
+                instantiated.
+            vocab_size (`int`, *optional*, defaults to 32768):
+                Vocabulary size of the Moonshine Streaming decoder model. Defines the number of different tokens that can
+                be represented by the `inputs_ids` passed when calling [`MoonshineStreamingModel`].
+            hidden_size (`int`, *optional*, defaults to 320):
+                Dimension of the hidden representations.
+            intermediate_size (`int`, *optional*, defaults to 1280):
+                Dimension of the MLP representations.
+            num_hidden_layers (`int`, *optional*, defaults to 6):
+                Number of hidden layers in the Transformer decoder.
+            num_attention_heads (`int`, *optional*, defaults to 8):
+                Number of attention heads for each attention layer in the Transformer decoder.
+            hidden_act (`str`, *optional*, defaults to `"silu"`):
+                The non-linear activation function (function or string) in the decoder.
+            max_position_embeddings (`int`, *optional*, defaults to 4096):
+                The maximum sequence length that this model might ever be used with.
+            use_cache (`bool`, *optional*, defaults to `True`):
+                Whether or not the model should return the last key/values attentions (not used by all models). Only
+                relevant if `config.is_decoder=True`.
+            pad_token_id (`int`, *optional*, defaults to 0):
+                Padding token id.
+            bos_token_id (`int`, *optional*, defaults to 1):
+                Beginning of stream token id.
+            eos_token_id (`int`, *optional*, defaults to 2):
+                End of stream token id.
+            rope_parameters (`RopeParameters` or `dict`, *optional*, defaults to `{'rope_type': 'default', 'rope_theta': 10000.0, 'partial_rotary_factor': 0.8}`):
+                Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+                a value for `rope_theta`, `rope_type`, and optionally `partial_rotary_factor` for partial RoPE application.
+            attention_bias (`bool`, *optional*, defaults to `False`):
+                Whether to use a bias in the query, key, value and output projection layers during self-attention.
+            attention_dropout (`float`, *optional*, defaults to 0.0):
+                The dropout ratio for the attention probabilities.
+            decoder_start_token_id (`int`, *optional*):
+                The decoder start token id. If not specified, it will default to `bos_token_id`.
+            head_dim (`int`, *optional*):
+                The attention head dimension. If None, it will default to hidden_size // num_attention_heads.
+            pad_head_dim_to_multiple_of (`int`, *optional*):
+                If set, the head dimension will be padded to a multiple of this value.
 
     ```python
     >>> from transformers import MoonshineStreamingModel, MoonshineStreamingConfig

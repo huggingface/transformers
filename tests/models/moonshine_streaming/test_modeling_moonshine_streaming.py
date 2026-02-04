@@ -259,7 +259,6 @@ class MoonshineStreamingModelTest(ModelTesterMixin, PipelineTesterMixin, unittes
                 [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
             )
 
-    # Copied from tests.models.whisper.test_modeling_whisper.WhisperModelTest.test_hidden_states_output
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -310,7 +309,6 @@ class MoonshineStreamingModelTest(ModelTesterMixin, PipelineTesterMixin, unittes
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
-            config.encoder_config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
