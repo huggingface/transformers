@@ -678,14 +678,17 @@ class Owlv2Encoder(nn.Module):
 
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTTextTransformer with OWLVIT->OWLV2,OwlViT->Owlv2
-class Owlv2TextTransformer(nn.Module):
+class Owlv2TextTransformer(Owlv2PreTrainedModel):
     def __init__(self, config: Owlv2TextConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
+
         embed_dim = config.hidden_size
         self.embeddings = Owlv2TextEmbeddings(config)
         self.encoder = Owlv2Encoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @auto_docstring
     def forward(
@@ -808,15 +811,17 @@ class Owlv2TextModel(Owlv2PreTrainedModel):
 
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTVisionTransformer with OWLVIT->OWLV2,OwlViT->Owlv2
-class Owlv2VisionTransformer(nn.Module):
+class Owlv2VisionTransformer(Owlv2PreTrainedModel):
     def __init__(self, config: Owlv2VisionConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
 
         self.embeddings = Owlv2VisionEmbeddings(config)
         self.pre_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.encoder = Owlv2Encoder(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @auto_docstring
     def forward(

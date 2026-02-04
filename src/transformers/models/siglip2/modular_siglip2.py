@@ -358,16 +358,17 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
                 attention_mask=attention_mask,
                 encoder_hidden_states=hidden_state,
             )
-            attention_mask = attention_mask.repeat(1, self.num_heads, target_len, 1)
-            attention_mask = attention_mask.reshape(-1, target_len, source_len)
+            if attention_mask is not None:
+                attention_mask = attention_mask.repeat(1, self.num_heads, target_len, 1)
+                attention_mask = attention_mask.reshape(-1, target_len, source_len)
 
-            # `nn.MultiheadAttention` cannot handle boolean masks (which SDPA can)
-            if attention_mask.dtype == torch.bool:
-                attention_mask = torch.where(
-                    attention_mask,
-                    torch.tensor(0.0, device=attention_mask.device, dtype=probe.dtype),
-                    torch.finfo(probe.dtype).min,
-                )
+                # `nn.MultiheadAttention` cannot handle boolean masks (which SDPA can)
+                if attention_mask.dtype == torch.bool:
+                    attention_mask = torch.where(
+                        attention_mask,
+                        torch.tensor(0.0, device=attention_mask.device, dtype=probe.dtype),
+                        torch.finfo(probe.dtype).min,
+                    )
 
         hidden_state = self.attention(probe, hidden_state, hidden_state, attn_mask=attention_mask)[0]
 

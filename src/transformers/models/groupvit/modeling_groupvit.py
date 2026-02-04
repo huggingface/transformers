@@ -913,10 +913,9 @@ class GroupViTTextEncoder(nn.Module):
         )
 
 
-class GroupViTTextTransformer(nn.Module):
+class GroupViTTextTransformer(GroupViTPreTrainedModel):
     def __init__(self, config: GroupViTTextConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         embed_dim = config.hidden_size
         self.embeddings = GroupViTTextEmbeddings(config)
         self.encoder = GroupViTTextEncoder(config)
@@ -924,6 +923,8 @@ class GroupViTTextTransformer(nn.Module):
 
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
+
+        self.post_init()
 
     @auto_docstring
     def forward(

@@ -663,14 +663,17 @@ class OwlViTEncoder(nn.Module):
         )
 
 
-class OwlViTTextTransformer(nn.Module):
+class OwlViTTextTransformer(OwlViTPreTrainedModel):
     def __init__(self, config: OwlViTTextConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
+
         embed_dim = config.hidden_size
         self.embeddings = OwlViTTextEmbeddings(config)
         self.encoder = OwlViTEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @auto_docstring
     def forward(
@@ -791,15 +794,17 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         )
 
 
-class OwlViTVisionTransformer(nn.Module):
+class OwlViTVisionTransformer(OwlViTPreTrainedModel):
     def __init__(self, config: OwlViTVisionConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
 
         self.embeddings = OwlViTVisionEmbeddings(config)
         self.pre_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.encoder = OwlViTEncoder(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @auto_docstring
     def forward(

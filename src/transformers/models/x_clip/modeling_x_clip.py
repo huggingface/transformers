@@ -620,14 +620,16 @@ class XCLIPEncoder(nn.Module):
         )
 
 
-class XCLIPTextTransformer(nn.Module):
+class XCLIPTextTransformer(XCLIPPreTrainedModel):
     def __init__(self, config: XCLIPTextConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
+
         embed_dim = config.hidden_size
         self.embeddings = XCLIPTextEmbeddings(config)
         self.encoder = XCLIPEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+        self.post_init()
 
     @auto_docstring
     def forward(
