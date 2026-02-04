@@ -335,14 +335,13 @@ class MoonshineStreamingPreTrainedModel(PreTrainedModel):
         return output_lengths
 
     def _init_weights(self, module: nn.Module):
-        std = self.config.initializer_range if hasattr(self.config, "initializer_range") else 0.02
         if isinstance(module, MoonshineStreamingLayerNorm):
             nn.init.constant_(module.gamma, 1.0 - module.unit_offset)
         else:
             super()._init_weights(module)
 
 
-def sliding_window_mask_function(sliding_window: tuple[int, int], is_causal=True) -> Callable:
+def sliding_window_mask_function(sliding_window: tuple[int, int]) -> Callable:
     """
     This creates uni/bidirectional attention mask with sliding window.
     """
@@ -413,14 +412,12 @@ class MoonshineStreamingEncoder(MoonshineStreamingPreTrainedModel):
                 )
                 for layer_idx in range(self.config.num_hidden_layers)
             ]
-        else:
-            per_layer_attention_mask = [None] * self.config.num_hidden_layers
 
         hidden_states = inputs_embeds
         for layer_idx, encoder_layer in enumerate(self.layers):
             hidden_states = encoder_layer(
                 hidden_states,
-                attention_mask=per_layer_attention_mask[layer_idx],
+                attention_mask=per_layer_attention_mask[layer_idx] if attention_mask is not None else None,
                 **kwargs,
             )
 
@@ -919,6 +916,10 @@ class MoonshineStreamingModel(MoonshineStreamingPreTrainedModel):
         self.encoder._freeze_parameters()
 
     def _mask_input_features(self):
+        """
+        Masks extracted features along time axis and/or along feature axis according to
+        [SpecAugment](https://huggingface.co/papers/1904.08779).
+        """
         raise AttributeError("Not needed for MoonshineStreaming")
 
     @can_return_tuple
