@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -141,9 +142,10 @@ class MoonshineConfig(PreTrainedConfig):
     model_type = "moonshine"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
-        "num_key_value_heads": "encoder_num_key_value_heads",
-        "num_attention_heads": "encoder_num_attention_heads",
-        "num_hidden_layers": "encoder_num_hidden_layers",
+        "num_key_value_heads": "decoder_num_key_value_heads",
+        "num_attention_heads": "decoder_num_attention_heads",
+        "num_hidden_layers": "decoder_num_hidden_layers",
+        "hidden_act": "decoder_hidden_act",
     }
 
     def __init__(
@@ -210,6 +212,16 @@ class MoonshineConfig(PreTrainedConfig):
         kwargs.setdefault("partial_rotary_factor", 0.9)  # assign default for BC
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Extends [~modeling_outputs.BaseModelOutput] to include the output attention mask since sequence length is not preserved in the model's forward.
+    """
+)
+class MoonshineEncoderModelOutput(BaseModelOutput):
+    attention_mask: torch.Tensor | None = None
 
 
 class MoonshineEncoderMLP(nn.Module):
@@ -383,18 +395,18 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
             config=config,
             layer_idx=layer_idx,
             is_causal=True,
-            num_attention_heads=config.decoder_num_attention_heads,
-            num_key_value_heads=config.decoder_num_key_value_heads,
+            num_attention_heads=config.num_attention_heads,
+            num_key_value_heads=config.num_key_value_heads,
         )
         self.encoder_attn = MoonshineAttention(
             config=config,
             layer_idx=layer_idx,
             is_causal=False,
-            num_attention_heads=config.decoder_num_attention_heads,
-            num_key_value_heads=config.decoder_num_key_value_heads,
+            num_attention_heads=config.num_attention_heads,
+            num_key_value_heads=config.num_key_value_heads,
         )
 
-        self.mlp = MoonshineDecoderMLP(config, config.decoder_hidden_act)
+        self.mlp = MoonshineDecoderMLP(config, config.hidden_act)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
@@ -545,11 +557,14 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             mask_len = self._get_feat_extract_output_lengths(attention_mask.shape[-1])
             downsample_stride = 64 * 3 * 2  # conv strides
             attention_mask = attention_mask[..., ::downsample_stride][..., :mask_len]
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                input_embeds=hidden_states,
-                attention_mask=attention_mask,
-            )
+            output_attention_mask = attention_mask
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=attention_mask,
+            encoder_hidden_states=hidden_states,
+        )
 
         position_ids = torch.arange(0, hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -565,8 +580,9 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
 
         hidden_states = self.layer_norm(hidden_states)
 
-        return BaseModelOutputWithPast(
+        return MoonshineEncoderModelOutput(
             last_hidden_state=hidden_states,
+            attention_mask=output_attention_mask.int() if attention_mask is not None else None,
         )
 
 
@@ -581,9 +597,7 @@ class MoonshineDecoder(LlamaModel):
     def __init__(self, config: MoonshineConfig):
         super().__init__(config)
         self.norm = nn.LayerNorm(config.hidden_size, bias=False)
-        self.layers = nn.ModuleList(
-            [MoonshineDecoderLayer(config, idx) for idx in range(config.decoder_num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([MoonshineDecoderLayer(config, idx) for idx in range(config.num_hidden_layers)])
 
     @check_model_inputs
     def forward(
@@ -635,20 +649,15 @@ class MoonshineDecoder(LlamaModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
+        encoder_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=encoder_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+        )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
-
-        if encoder_attention_mask is not None:
-            mask_len = encoder_hidden_states.shape[-2]
-            downsample_stride = 64 * 3 * 2  # conv strides
-            encoder_attention_mask = encoder_attention_mask[..., ::downsample_stride][..., :mask_len]
-            encoder_attention_mask = create_bidirectional_mask(
-                config=self.config,
-                input_embeds=hidden_states,
-                attention_mask=encoder_attention_mask,
-                encoder_hidden_states=encoder_hidden_states,
-            )
 
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
@@ -673,6 +682,9 @@ class MoonshineDecoder(LlamaModel):
 
 
 class MoonshineModel(WhisperModel):
+    def _mask_input_features(self):
+        raise AttributeError("Not needed for Moonshine")
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -725,8 +737,8 @@ class MoonshineModel(WhisperModel):
         decoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
-            encoder_attention_mask=attention_mask,
             encoder_hidden_states=encoder_outputs.last_hidden_state,
+            encoder_attention_mask=encoder_outputs.attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             position_ids=decoder_position_ids,
