@@ -238,24 +238,6 @@ def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     return tensor.device, unique_id, storage_size(tensor)
 
 
-def isin_mps_friendly(elements: torch.Tensor, test_elements: torch.Tensor | int) -> torch.Tensor:
-    """
-    Same as `torch.isin` without flags, but MPS-friendly. We can remove this function when we stop supporting
-    torch <= 2.3. See https://github.com/pytorch/pytorch/issues/77764#issuecomment-2067838075
-
-    Args:
-        elements (`torch.Tensor`): Input elements
-        test_elements (`torch.Tensor` or `int`): The elements to check against.
-
-    Returns:
-        `torch.Tensor`: A boolean tensor of the same shape as `elements` that is True for `elements` in `test_elements`
-        and False otherwise
-    """
-
-    # Note: don't use named arguments in `torch.isin`, see https://github.com/pytorch/pytorch/issues/126045
-    return torch.isin(elements, test_elements)
-
-
 @wraps(lru_cache)
 def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
     """

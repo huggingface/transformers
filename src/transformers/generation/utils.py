@@ -42,7 +42,6 @@ from ..dynamic_module_utils import (
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
 from ..masking_utils import create_masks_for_generate
-from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_python import ExtensionsTrie
 from ..utils import (
     ModelOutput,
@@ -862,11 +861,9 @@ class GenerationMixin(ContinuousMixin):
         if not is_input_ids:
             return default_attention_mask
 
-        is_pad_token_in_inputs = (pad_token_id is not None) and (
-            isin_mps_friendly(elements=inputs_tensor, test_elements=pad_token_id).any()
-        )
+        is_pad_token_in_inputs = (pad_token_id is not None) and (torch.isin(inputs_tensor, pad_token_id).any())
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or ~(
-            isin_mps_friendly(elements=eos_token_id, test_elements=pad_token_id).any()
+            torch.isin(eos_token_id, pad_token_id).any()
         )
         can_infer_attention_mask = is_pad_token_in_inputs * is_pad_token_not_equal_to_eos_token_id
         attention_mask_from_padding = inputs_tensor.ne(pad_token_id).long()
@@ -2113,10 +2110,7 @@ class GenerationMixin(ContinuousMixin):
             raise ValueError(
                 "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
             )
-        if (
-            eos_token_tensor is not None
-            and isin_mps_friendly(elements=eos_token_tensor, test_elements=pad_token_tensor).any()
-        ):
+        if eos_token_tensor is not None and torch.isin(eos_token_tensor, pad_token_tensor).any():
             if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
                 logger.warning_once(
                     "The attention mask is not set and cannot be inferred from input because pad token is same as "
