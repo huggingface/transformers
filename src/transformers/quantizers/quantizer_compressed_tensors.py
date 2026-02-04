@@ -68,8 +68,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         ct_quantization_config = self.compressor.quantization_config
 
-        # Always initialize compressed wrappers to match the checkpoint
-        apply_quantization_config(model, ct_quantization_config, self.run_compressed)
+        apply_quantization_config(model, ct_quantization_config)
         if (
             self.quantization_config.is_quantization_compressed
             or self.quantization_config.is_sparsification_compressed
@@ -78,11 +77,26 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
+        from compressed_tensors import __version__ as ct_version
+        from packaging import version
 
-        if (
+        if version.parse(ct_version) > version.parse("0.13"):
+            self.compressor.decompress_model(model=model)
+        elif (
             self.quantization_config.is_quantization_compressed and not self.run_compressed
         ) or self.quantization_config.is_sparsification_compressed:
             self.compressor.decompress_model(model=model)
+
+    def _dequantize(self, model):
+        from compressed_tensors.quantization import QuantizationStatus
+
+        self.compressor.decompress_model(model=model)
+
+        for module in model.modules():
+            if hasattr(module, "quantization_status"):
+                module.quantization_status = QuantizationStatus.FROZEN
+
+        return model
 
     # NOTE: TP plan override for compressed tensors removed - unsupported styles were used.
     # TODO: Implement proper TP support for compressed tensors quantization

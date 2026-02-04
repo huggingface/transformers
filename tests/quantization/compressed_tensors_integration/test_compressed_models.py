@@ -169,49 +169,6 @@ class RunCompressedTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
-    def test_default_run_compressed__True(self):
-        from compressed_tensors.linear.compressed_linear import CompressedLinear
-        from compressed_tensors.quantization.utils import iter_named_leaf_modules
-
-        for stub in self.stubs:
-            model = AutoModelForCausalLM.from_pretrained(
-                stub,
-            )
-            compressed_linear_counts = 0
-
-            for _, submodule in iter_named_leaf_modules(
-                model,
-            ):
-                if isinstance(submodule, CompressedLinear):
-                    compressed_linear_counts += 1
-
-            # some linear models are not compressed - ex. lm_head
-            assert compressed_linear_counts > 0
-
-    def test_default_run_compressed__False(self):
-        from compressed_tensors.linear.compressed_linear import CompressedLinear
-        from compressed_tensors.quantization.utils import iter_named_leaf_modules
-
-        from transformers.utils.quantization_config import CompressedTensorsConfig
-
-        quantization_config = CompressedTensorsConfig(run_compressed=False)
-
-        for stub in self.stubs:
-            model = AutoModelForCausalLM.from_pretrained(
-                stub,
-                quantization_config=quantization_config,
-            )
-            compressed_linear_counts = 0
-
-            for _, submodule in iter_named_leaf_modules(
-                model,
-            ):
-                if isinstance(submodule, CompressedLinear):
-                    compressed_linear_counts += 1
-
-            # No modules should be CompressedLinear
-            assert compressed_linear_counts == 0
-
     def test_run_compressed_outputs_match(self):
         """Check that run_compressed=True/False output are the same"""
 
