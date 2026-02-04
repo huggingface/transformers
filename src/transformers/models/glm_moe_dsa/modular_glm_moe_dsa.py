@@ -12,26 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
-from collections.abc import Callable
+
+import math
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...models.deepseek_v3.modeling_deepseek_v3 import (
-    apply_rotary_pos_emb_interleave,
-    yarn_get_mscale,
-)
 from ...models.llama.modeling_llama import (
     apply_rotary_pos_emb,
-    eager_attention_forward,
 )
-from ...processing_utils import Unpack
 from ...utils import logging
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2Attention
+from ..deepseek_v3.modeling_deepseek_v3 import apply_rotary_pos_emb_interleave
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeDecoderLayer,
     Glm4MoeForCausalLM,
@@ -47,10 +40,10 @@ logger = logging.get_logger(__name__)
 
 class GlmMoeDsaConfig(Glm4MoeLiteConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GlmMoeDsaModel`]. It is used to instantiate an DeepSeek
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the DeepSeek-V3.
-    e.g. [bzantium/tiny-deepseek-v3](https://huggingface.co/bzantium/tiny-deepseek-v3)
+    This is the configuration class to store the configuration of a [`GlmMoeDsaModel`]. It is used to instantiate a
+    GLM-5 model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the GLM-5.
+    e.g. [zai-org/GLM-5](https://huggingface.co/zai-org/GLM-5)
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
@@ -208,7 +201,86 @@ class GlmMoeDsaRMSNorm(Glm4MoeRMSNorm):
     pass
 
 
-class GlmMoeDsaAttention(nn.Module):
+class GLmMoeDsaIndexer(nn.Module):
+    def __init__(self, config: "GlmMoeDsaConfig", index_layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = index_layer_idx
+
+        self.hidden_size: int = config.hidden_size
+        self.num_heads: int = config.index_n_heads
+        self.num_local_heads: int = config.index_n_heads  # world_size handling can be added as needed
+        self.head_dim: int = config.index_head_dim
+        self.qk_rope_head_dim: int = config.qk_rope_head_dim
+        self.index_topk: int = config.index_topk
+        self.q_lora_rank: int = config.q_lora_rank
+
+        self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(self.hidden_size, self.head_dim, bias=False)
+        self.k_layernorm = nn.LayerNorm(self.head_dim)
+        self.weights_proj = nn.Linear(self.hidden_size, self.num_heads, dtype=torch.get_default_dtype(), bias=False)
+        self.softmax_scale = self.head_dim**-0.5
+
+    @torch.no_grad()
+    def forward(
+        self,
+        hidden_states: torch.Tensor,  # [B, S, hidden]
+        q_resid: torch.Tensor,  # [B, S, q_lora_rank]
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
+        past_key_values_index: "Cache",
+        cache_position: torch.LongTensor | None,
+    ) -> torch.LongTensor:
+        B, S, _ = hidden_states.shape
+        cos, sin = position_embeddings
+
+        # Queries
+        q_states = self.q_b_proj(q_resid)  # [B, S, H*D]
+        q_states = q_states.view(B, S, self.num_heads, self.head_dim)  # [B, S, H, D]
+        q_rot, q_pass = torch.split(q_states, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+        q_rot = apply_rotary_pos_emb_interleave(q_rot, cos, sin)  # [B, S, H, rope_D]
+        q_states = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
+
+        # Keys
+        k = self.k_layernorm(self.k_proj(hidden_states))  # [B, S, D]
+        k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+        # MLA uses single-head rope stream, then expands later; keep [B, 1, S, rope_D] here
+        k_rot = k_rot.unsqueeze(1)  # [B, 1, S, rope_D]
+        k_rot = apply_rotary_pos_emb_interleave(k_rot, cos, sin)  # [B, 1, S, rope_D]
+        k_states = torch.cat(
+            [
+                k_rot.expand(B, self.num_heads, S, -1),  # expand rope
+                k_pass.view(B, 1, S, -1).expand(B, self.num_heads, S, -1),
+            ],
+            dim=-1,
+        )  # [B, H, S, D]
+
+        # Quantize (per provided utilities)
+        # Update indexer cache (layer idx belongs to the attention layer using this indexer)
+        # We store as: keys = k_fp8 (as [B, 1, S, D] or [B, H, S, D]? We keep [B, 1, S, D] like original)
+        # For compactness, collapse heads to 1 for the indexer (you can keep H if your fp8_index expects it).
+        k_1h = k_states.mean(dim=1, keepdim=True)  # [B, 1, S, D]  (cheap head merge; adjust if needed)
+        k_cache = past_key_values_index.update(k_1h, self.layer_idx, cache_kwargs={"cache_position": cache_position})
+
+        # Weights per head
+        head_weights = self.weights_proj(hidden_states) * (self.num_heads**-0.5)  # [B, S, H]
+        head_weights = head_weights.unsqueeze(-1) * self.softmax_scale  # [B, S, H, *]
+        logits = torch.matmul(k_cache.unsqueeze(1), q_states.transpose(-1, -2))  # [B, M, N, H]
+
+        # ReLU and sum over heads -> [B, M, N]
+        logits.clamp_min_(0)
+        index_scores = logits.sum(dim=-1)  # [B, M, N]
+
+        if attention_mask is not None:
+            index_scores = index_scores + attention_mask
+
+        T = index_scores.shape[-1]
+        topk = min(self.index_topk, T)
+        topk_indices = index_scores.topk(topk, dim=-1).indices  # [..., topk]
+        return topk_indices
+
+
+class GlmMoeDsaAttention(DeepseekV2Attention):
     """
     DeepSeek V3.2 sparse attention mechanism with indexer.
 
@@ -218,163 +290,158 @@ class GlmMoeDsaAttention(nn.Module):
     Switch to the implementation from this [PR](https://github.com/huggingface/transformers/pull/41251) as soon as it’s merged.
     """
 
-    def __init__(self, config: GlmMoeDsaConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.attention_dropout = config.attention_dropout
-        self.num_heads = config.num_attention_heads
+    def __init__(self, config, layer_idx):
+        super().__init__(config, layer_idx)
+        self.softmax_scale = self.qk_head_dim**-0.5
+        if config.max_seq_len > config.original_seq_len:
+            mscale = 0.1 * config.mscale * math.log(config.rope_factor) + 1.0
+            self.softmax_scale = self.softmax_scale * mscale * mscale
 
-        self.q_lora_rank = config.q_lora_rank
-        self.qk_rope_head_dim = config.qk_rope_head_dim
-        self.kv_lora_rank = config.kv_lora_rank
-        self.v_head_dim = config.v_head_dim
-        self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.qk_head_dim = config.qk_head_dim
-        self.index_topk = config.index_topk
-
-        self.is_causal = True
-
-        # Query projection
-        if self.q_lora_rank is None:
-            self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        else:
-            self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-            self.q_a_layernorm = GlmMoeDsaRMSNorm(config.q_lora_rank)
-            self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-
-        # Key-Value projections
-        self.kv_a_proj_with_mqa = nn.Linear(
-            config.hidden_size,
-            self.kv_lora_rank + self.qk_rope_head_dim,
-            bias=config.attention_bias,
-        )
-        self.kv_a_layernorm = GlmMoeDsaRMSNorm(self.kv_lora_rank)
-        self.kv_b_proj = nn.Linear(
-            self.kv_lora_rank,
-            self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
-            bias=False,
-        )
-
-        # Output projection
-        self.o_proj = nn.Linear(
-            self.num_heads * self.v_head_dim,
-            config.hidden_size,
-            bias=config.attention_bias,
-        )
-
-        # Indexer components for sparse attention
-        self.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-        self.wk = nn.Linear(config.hidden_size, self.qk_head_dim, bias=config.attention_bias)
-        self.k_norm = GlmMoeDsaRMSNorm(self.qk_head_dim)
-        self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
-
-        self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_parameters.get("rope_type", "default") != "default":
-            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_parameters["factor"]
-            if mscale_all_dim:
-                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
-                self.scaling = self.scaling * mscale * mscale
+        self.indexer = GLmMoeDsaIndexer(config, layer_idx)
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        hidden_states: torch.Tensor,  # [B, S, hidden]
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],  # (cos, sin)
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        past_key_values: Cache | None = None,  # must be Cache with MlaLayer at `layer_idx`
         cache_position: torch.LongTensor | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        batch_size, seq_length = hidden_states.shape[:-1]
-
-        # For training or when index_topk is not effective, fall back to standard attention
-        # This is a simplified implementation - in practice, you'd implement the full sparse indexer
-        if self.training or seq_length <= self.index_topk:
-            warnings.warn(
-                "DeepSeek V3.2 sparse attention is not fully implemented in this version. "
-                "Falling back to standard attention. For production use, please use vLLM or "
-                "other optimized inference engines.",
-                UserWarning,
-            )
-            return self._standard_attention(
-                hidden_states, position_embeddings, attention_mask, past_key_values, cache_position, **kwargs
-            )
-
-        # Sparse attention implementation would go here
-        # This requires custom CUDA kernels for efficient top-k selection and indexing
-        return self._standard_attention(
-            hidden_states, position_embeddings, attention_mask, past_key_values, cache_position, **kwargs
-        )
-
-    def _standard_attention(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        """Standard attention fallback (same as DeepSeek V3)"""
-        batch_size, seq_length = hidden_states.shape[:-1]
-        query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
-        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
-
-        if self.q_lora_rank is None:
-            q_states = self.q_proj(hidden_states)
-        else:
-            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
-        q_states = q_states.view(query_shape).transpose(1, 2)
-        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
-
-        compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-
-        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
-        k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
-        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-
+        B, S, _ = hidden_states.shape
         cos, sin = position_embeddings
-        if self.config.rope_interleave:
-            q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
-        else:
-            q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
-        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
-        query_states = torch.cat((q_pass, q_rot), dim=-1)
-        key_states = torch.cat((k_pass, k_rot), dim=-1)
+        # ----- Q path -----
+        q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))  # [B, S, q_lora_rank]
+        q_states = self.q_b_proj(q_resid).view(B, S, self.num_heads, self.qk_head_dim)  # [B, S, H, D]
+        # Split into pass/rot then apply RoPE on q_rot
+        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+        q_rot = apply_rotary_pos_emb(q_rot, cos, sin)  # [B, S, H, rope_D]
+        q_states = torch.cat([q_pass, q_rot], dim=-1)  # [B, S, H, D]
 
+        # Layout for matmul: [B, H, S, D]
+        q_states = q_states.transpose(1, 2).contiguous()  # [B, H, S, D]
+
+        # ----- KV path (compressed + rope stream) -----
+        kv_all = self.kv_a_proj_with_mqa(hidden_states)  # [B, S, kv_rank + rope_D]
+        kv_compressed, k_rot = torch.split(kv_all, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        kv_compressed = self.kv_a_layernorm(kv_compressed)  # [B, S, kv_rank]
+        # Pre-project to K_pass and V
+        kv_proj = self.kv_b_proj(kv_compressed)  # [B, S, H*(qk_nope + v)]
+        kv_proj = kv_proj.view(B, S, self.num_heads, self.qk_nope_head_dim + self.v_head_dim)
+        k_pass, v_states = torch.split(
+            kv_proj, [self.qk_nope_head_dim, self.v_head_dim], dim=-1
+        )  # [B,S,H,nope], [B,S,H,V]
+
+        # Rope on K side: keep a single-head rope stream like MLA, then expand
+        k_rot = k_rot.view(B, 1, S, self.qk_rope_head_dim)  # [B, 1, S, rope_D]
+        k_rot = apply_rotary_pos_emb(k_rot, cos, sin)  # [B, 1, S, rope_D]
+
+        # Concatenate K = [K_pass, K_rot(expanded)]
+        k_states = torch.cat(
+            (
+                k_pass.transpose(1, 2),  # [B, H, S, nope_D]
+                k_rot.expand(B, self.num_heads, S, -1),
+            ),  # [B, H, S, rope_D]
+            dim=-1,
+        )  # [B, H, S, D]
+        v_states = v_states.transpose(1, 2).contiguous()  # [B, H, S, V]
+
+        # ----- Cache update/usage -----
         if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            # Store compressed stream & rope stream (as in original MLA path)
+            # We cache `kv_compressed` under `keys` and `k_rot` under `values` in MlaLayer.
+            # Shapes must be [B, H, t, *] and [B, 1, t, rope_D].
+            kv_comp_cache = kv_compressed.view(B, 1, S, self.kv_lora_rank).expand(B, self.num_heads, S, -1)
+            k_rot_cache = k_rot  # [B, 1, S, rope_D]
+            cached_kv, cached_pe = past_key_values.update(
+                kv_comp_cache, k_rot_cache, layer_idx=self.layer_idx, cache_kwargs={"cache_position": cache_position}
+            )
+            # Decode path makes use of cached projections; Prefill can use full K/V directly.
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
-            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
+        # ----- Two paths (prefill vs decode) -----
+        if attention_mask is not None:
+            # Prefill (full attention over local window): standard scaled dot-product with top-k pruning from indexer
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            # Build scores: [B, H, S, S_total]
+            # K layout already [B, H, T, D]
+            scores = (q_states.float() @ k_states.float().transpose(-1, -2)) * self.scaling  # [B, H, S, T]
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
+            # Indexer top-k
+            if past_key_values is not None:
+                topk_idx = self.indexer(
+                    hidden_states,
+                    q_resid,
+                    position_embeddings,
+                    attention_mask,
+                    past_key_values_index=past_key_values,  # we reuse same Cache with IndexerLayer? (separate cache recommended)
+                    cache_position=cache_position,
+                )
+                # Build mask to keep only top-k per (B,S,head?)
+                # Expect topk_idx shape to broadcast to [B, H, S, T]. We scatter along last dim.
+                keep_mask = torch.full_like(scores, float("-inf"))
+                # If topk_idx is [B,S,topk], expand for heads:
+                if topk_idx.dim() == 3:
+                    topk_idx = topk_idx.unsqueeze(1).expand(B, self.num_heads, S, -1)
+                keep_mask.scatter_(-1, topk_idx, 0.0)
+                scores = scores + keep_mask
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
-            attn_output = attn_output[:, :, :, : self.v_head_dim]
+            probs = nn.functional.softmax(scores, dim=-1, dtype=torch.float32).type_as(hidden_states)  # [B, H, S, T]
+            attn_output = probs @ v_states  # [B, H, S, V]
 
-        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+        elif past_key_values is not None:
+            # Decode: use cached compressed KV & rope stream to recompose attention scores efficiently
+            # Compose q_pass and q_rot pieces as in MLA math, but via matmul
+            # 1) Rebuild "nope" term via kv_b weights (dequant on the fly)
+            wkv_b = self.kv_b_proj.weight.view(
+                self.num_heads, self.qk_nope_head_dim + self.v_head_dim, self.kv_lora_rank
+            )
+            w_k_nope = wkv_b[:, : self.qk_nope_head_dim, :]  # [H, nope_D, kv_rank]
+            w_v = wkv_b[:, self.qk_nope_head_dim :, :]  # [H, V,     kv_rank]
+
+            # q_pass: [B,H,S,nope_D]; cached_kv: [B,H,T,kv_rank]
+            q_pass = q_states[..., : self.qk_nope_head_dim]  # [B,H,S,nope_D]
+            kv_comp = past_key_values[self.layer_idx][0]  # keys -> [B,H,T,kv_rank]
+            pe_full = past_key_values[self.layer_idx][1]  # values -> [B,1,T,rope_D]
+            # Project q_pass with w_k_nope: [B,H,S,kv_rank]
+            qk_nope = torch.matmul(q_pass, w_k_nope.transpose(-1, -2))  # [B,H,S,kv_rank]
+            # Scores_nope = qk_nope @ kv_comp^T
+            scores_nope = torch.matmul(qk_nope.float(), kv_comp.float().transpose(-1, -2))  # [B,H,S,T]
+
+            # 2) Rope term: q_rot @ k_rot^T
+            q_rot_only = q_states[..., -self.qk_rope_head_dim :]  # [B,H,S,rope_D]
+            k_rot_only = pe_full.expand(B, self.num_heads, -1, -1)  # [B,H,T,rope_D]
+            scores_rot = torch.matmul(q_rot_only.float(), k_rot_only.float().transpose(-1, -2))  # [B,H,S,T]
+
+            scores = (scores_nope + scores_rot) * self.scaling
+
+            # Indexer top-k (decode)
+            topk_idx = self.indexer(
+                hidden_states,
+                q_resid,
+                position_embeddings,
+                attention_mask,
+                past_key_values_index=past_key_values,
+                cache_position=cache_position,
+            )
+            # For decode single-step S==1 typically; build a [B,H,1,T] mask
+            keep_mask = torch.full_like(scores, float("-inf"))
+            if topk_idx.dim() == 3:
+                topk_idx = topk_idx.unsqueeze(1).expand(B, self.num_heads, S, -1)
+            keep_mask.scatter_(-1, topk_idx, 0.0)
+            scores = scores + keep_mask
+
+            probs = nn.functional.softmax(scores, dim=-1, dtype=torch.float32).type_as(hidden_states)  # [B,H,S,T]
+
+            # Rebuild V for decode fast-path: v = (kv_comp @ w_v^T)
+            # kv_comp: [B,H,T,kv_rank], w_v: [H, V, kv_rank]
+            v_from_comp = torch.matmul(kv_comp, w_v.transpose(-1, -2))  # [B,H,T,V]
+            attn_output = torch.matmul(probs, v_from_comp)  # [B,H,S,V]
+
+        # Output projection
+        attn_output = attn_output.transpose(1, 2).reshape(B, S, -1).contiguous()  # [B,S,H*V]
+        attn_output = self.o_proj(attn_output)  # [B,S,hidden]
+        return attn_output, None, None
 
 
 class GlmMoeDsaDecoderLayer(Glm4MoeDecoderLayer):

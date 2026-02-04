@@ -18,16 +18,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
 
 
 class GlmMoeDsaConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GlmMoeDsaModel`]. It is used to instantiate an DeepSeek
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the DeepSeek-V3.
-    e.g. [bzantium/tiny-deepseek-v3](https://huggingface.co/bzantium/tiny-deepseek-v3)
+    This is the configuration class to store the configuration of a [`GlmMoeDsaModel`]. It is used to instantiate a
+    GLM-5 model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the GLM-5.
+    e.g. [zai-org/GLM-5](https://huggingface.co/zai-org/GLM-5)
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
