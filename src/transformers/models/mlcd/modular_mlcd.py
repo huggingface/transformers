@@ -395,7 +395,6 @@ class MLCDVisionTransformer(CLIPVisionTransformer):
         self.vision_rotary_embedding = MLCDRotaryEmbedding(config.hidden_size // config.num_attention_heads // 2)
         self.class_pos_emb = nn.Parameter(torch.randn(1, config.hidden_size // config.num_attention_heads // 2))
 
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,

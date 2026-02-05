@@ -960,6 +960,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         cu_seqlens: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(sequence_length, hidden_size)`, *optional*):
@@ -1003,6 +1004,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 position_embeddings=position_embeddings,
+                **kwargs,
             )
 
         return BaseModelOutput(
@@ -1037,7 +1039,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
         cu_seqlens: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         """
         Args:
@@ -1057,6 +1059,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
             cu_seqlens=cu_seqlens,
             attention_mask=attention_mask,
             image_grid_thw=image_grid_thw,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
@@ -1086,7 +1089,7 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
         pixel_values: torch.FloatTensor,
         cu_seqlens: torch.Tensor,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
         Args:
@@ -1101,6 +1104,7 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
             pixel_values=pixel_values,
             cu_seqlens=cu_seqlens,
             image_grid_thw=image_grid_thw,
+            **kwargs,
         )
 
 
