@@ -159,11 +159,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 [[autodoc]] Qwen2TokenizerFast
 
-## Qwen2RMSNorm
-
-[[autodoc]] Qwen2RMSNorm
-    - forward
-
 ## Qwen2Model
 
 [[autodoc]] Qwen2Model
