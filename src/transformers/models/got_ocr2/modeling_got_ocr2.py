@@ -25,6 +25,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from transformers.utils.generic import check_model_inputs
+
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -34,7 +36,6 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_got_ocr2 import GotOcr2Config, GotOcr2VisionConfig
 
@@ -587,7 +588,7 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
         )
         return special_image_mask
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

@@ -21,7 +21,7 @@ from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -120,7 +120,8 @@ class Mistral3PreTrainedModel(LlavaPreTrainedModel):
 
 
 class Mistral3Model(LlavaModel):
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
+    @merge_with_config_defaults
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -159,7 +160,7 @@ class Mistral3Model(LlavaModel):
 
         return image_outputs
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

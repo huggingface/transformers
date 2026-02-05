@@ -1172,7 +1172,7 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
         return special_image_mask, special_video_mask
 
     @auto_docstring
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1287,6 +1287,8 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             rope_deltas=self.rope_deltas,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

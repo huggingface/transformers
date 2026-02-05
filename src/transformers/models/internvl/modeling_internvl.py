@@ -36,7 +36,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseMo
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check, torch_int
-from ...utils.generic import check_model_inputs
+from ...utils.generic import can_return_tuple, check_model_inputs, merge_with_config_defaults
 from ..auto import AutoModel
 from .configuration_internvl import InternVLConfig, InternVLVisionConfig
 
@@ -544,7 +544,8 @@ class InternVLModel(InternVLPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
+    @merge_with_config_defaults
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -618,7 +619,7 @@ class InternVLModel(InternVLPreTrainedModel):
         )
         return special_image_mask
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -779,7 +780,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
             **kwargs,
         )
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

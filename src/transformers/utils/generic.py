@@ -851,6 +851,60 @@ def can_return_tuple(func):
     return wrapper
 
 
+def merge_with_config_defaults(func):
+    """
+    Decorator using config field (if they exist) as default value for some args and kwargs. Precedence is always
+    given to the args/kwargs that are explicitly passed.
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        args_with_config_defaults = [
+            "use_cache",
+            "vision_feature_layer",
+            "vision_feature_select_strategy",
+            "vision_aspect_ratio",
+        ]
+        for arg_name in args_with_config_defaults:
+            arg_index = None
+            if arg_name in func.__code__.co_varnames:
+                arg_index = func.__code__.co_varnames.index(arg_name) - 1  # -1 for self
+
+            if arg_index is not None and len(args) > arg_index and args[arg_index] is not None:
+                arg_value = args[arg_index]
+            elif kwargs.get(arg_name) is not None:
+                arg_value = kwargs[arg_name]
+            else:
+                arg_value = getattr(self.config, arg_name, None)
+
+            if arg_value is not None:
+                # Arg-specific handling
+                if arg_name == "use_cache":
+                    if getattr(self, "gradient_checkpointing", False) and self.training and arg_value:
+                        logger.warning_once(
+                            "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+                        )
+                        arg_value = False
+                elif arg_name == "vision_feature_select_strategy":
+                    valid_strategies = ["default", "full"]
+                    if arg_value not in valid_strategies:
+                        raise ValueError(
+                            f"`Unexpected select feature strategy: {arg_value}. Please select from {valid_strategies}."
+                        )
+
+                if arg_index is not None and len(args) > arg_index:
+                    args = list(args)
+                    args[arg_index] = arg_value
+                    args = tuple(args)
+                else:
+                    kwargs[arg_name] = arg_value
+
+        output = func(self, *args, **kwargs)
+        return output
+
+    return wrapper
+
+
 @dataclass
 @requires(backends=("torch",))
 class OutputRecorder:

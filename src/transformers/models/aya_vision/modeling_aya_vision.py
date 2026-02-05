@@ -30,7 +30,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
-from ...utils.generic import check_model_inputs
+from ...utils.generic import can_return_tuple, check_model_inputs
 from ..auto import AutoModel
 from .configuration_aya_vision import AyaVisionConfig
 
@@ -339,7 +339,7 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
             **kwargs,
         )
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

@@ -26,7 +26,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import OutputRecorder, can_return_tuple
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3NaiveMoe
 from ..glm4.modeling_glm4 import Glm4Attention
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
@@ -493,7 +493,7 @@ class Glm4vMoeTextModel(Glm4vTextModel):
 
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
     @auto_docstring
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
