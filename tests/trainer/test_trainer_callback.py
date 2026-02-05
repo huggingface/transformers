@@ -151,12 +151,14 @@ class ModifyControlCallback(TrainerCallback):
         self.control_modifications = []
 
     def on_step_end(self, args, state, control, **kwargs):
-        self.control_modifications.append({
-            "step": state.global_step,
-            "should_log": control.should_log,
-            "should_save": control.should_save,
-            "should_evaluate": control.should_evaluate,
-        })
+        self.control_modifications.append(
+            {
+                "step": state.global_step,
+                "should_log": control.should_log,
+                "should_save": control.should_save,
+                "should_evaluate": control.should_evaluate,
+            }
+        )
         return control
 
 
@@ -665,10 +667,7 @@ class StatefulCallbackTest(unittest.TestCase):
         checkpoint = os.path.join(self.output_dir, "checkpoint-2")
         trainer.train(resume_from_checkpoint=checkpoint)
 
-        restored = [
-            cb for cb in trainer.callback_handler.callbacks
-            if isinstance(cb, StatefulTestCallback)
-        ]
+        restored = [cb for cb in trainer.callback_handler.callbacks if isinstance(cb, StatefulTestCallback)]
 
         self.assertEqual(len(restored), 2)
         self.assertEqual(restored[0].my_value, "first")
@@ -768,8 +767,8 @@ class TrainerStateTest(unittest.TestCase):
 
         class MockArgs:
             logging_steps = 0.1  # 10% of max_steps
-            eval_steps = 0.2    # 20% of max_steps
-            save_steps = 0.5    # 50% of max_steps
+            eval_steps = 0.2  # 20% of max_steps
+            save_steps = 0.5  # 50% of max_steps
 
         state.compute_steps(MockArgs(), max_steps=100)
 

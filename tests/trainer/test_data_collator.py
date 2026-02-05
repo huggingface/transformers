@@ -171,9 +171,14 @@ class TestDefaultDataCollator(DataCollatorTestMixin, unittest.TestCase):
 
     def test_immutability(self):
         """Test that collation does not mutate input data."""
-        for return_tensors in ["pt", "np"]:
-            collator = lambda x, rt=return_tensors: default_data_collator(x, return_tensors=rt)
 
+        def collator_pt(x):
+            return default_data_collator(x, return_tensors="pt")
+
+        def collator_np(x):
+            return default_data_collator(x, return_tensors="np")
+
+        for collator in [collator_pt, collator_np]:
             # Test with various input types
             for features in [
                 [{"label": i, "inputs": [0, 1, 2, 3]} for i in range(4)],
@@ -557,7 +562,9 @@ class TestDataCollatorForSeq2Seq(DataCollatorTestMixin, unittest.TestCase):
         tokenizer = BertTokenizer(self.vocab_file)
 
         for return_tensors in ["pt", "np"]:
-            collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, return_tensors=return_tensors)
+            collator = DataCollatorForSeq2Seq(
+                tokenizer, padding=PaddingStrategy.LONGEST, return_tensors=return_tensors
+            )
             self._check_immutability(collator, self._get_features())
 
 
@@ -704,80 +711,96 @@ class TestDataCollatorForLanguageModeling(DataCollatorTestMixin, unittest.TestCa
 
     def test_calc_word_ids_and_prob_mask(self):
         """Test word ID assignment and probability mask generation."""
-        offsets = np.array([
-            [(0, 0), (0, 3), (3, 4), (5, 6), (6, 7), (8, 9)],
-            [(0, 0), (0, 3), (3, 4), (5, 6), (6, 7), (0, 0)],
-            [(0, 0), (0, 3), (3, 4), (0, 0), (6, 7), (0, 0)],
-            [(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)],
-            [(1, 1), (2, 2), (3, 4), (5, 6), (7, 8), (9, 10)],
-            [(0, 0), (0, 0), (0, 0), (0, 0), (0, 0), (0, 0)],
-        ])
+        offsets = np.array(
+            [
+                [(0, 0), (0, 3), (3, 4), (5, 6), (6, 7), (8, 9)],
+                [(0, 0), (0, 3), (3, 4), (5, 6), (6, 7), (0, 0)],
+                [(0, 0), (0, 3), (3, 4), (0, 0), (6, 7), (0, 0)],
+                [(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)],
+                [(1, 1), (2, 2), (3, 4), (5, 6), (7, 8), (9, 10)],
+                [(0, 0), (0, 0), (0, 0), (0, 0), (0, 0), (0, 0)],
+            ]
+        )
 
-        special_tokens_mask = np.array([
-            [1, 0, 0, 0, 0, 0],
-            [1, 0, 0, 0, 0, 1],
-            [1, 0, 0, 1, 0, 1],
-            [0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0],
-            [1, 1, 1, 1, 1, 1],
-        ])
+        special_tokens_mask = np.array(
+            [
+                [1, 0, 0, 0, 0, 0],
+                [1, 0, 0, 0, 0, 1],
+                [1, 0, 0, 1, 0, 1],
+                [0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0],
+                [1, 1, 1, 1, 1, 1],
+            ]
+        )
 
-        word_ids, prob_mask = DataCollatorForLanguageModeling._calc_word_ids_and_prob_mask(offsets, special_tokens_mask)
+        word_ids, prob_mask = DataCollatorForLanguageModeling._calc_word_ids_and_prob_mask(
+            offsets, special_tokens_mask
+        )
 
-        expected_word_ids = np.array([
-            [-1, 1, 1, 2, 2, 3],
-            [-1, 1, 1, 2, 2, -1],
-            [-1, 1, 1, -1, 2, -1],
-            [1, 1, 1, 1, 1, 1],
-            [1, 2, 3, 4, 5, 6],
-            [-1, -1, -1, -1, -1, -1],
-        ])
+        expected_word_ids = np.array(
+            [
+                [-1, 1, 1, 2, 2, 3],
+                [-1, 1, 1, 2, 2, -1],
+                [-1, 1, 1, -1, 2, -1],
+                [1, 1, 1, 1, 1, 1],
+                [1, 2, 3, 4, 5, 6],
+                [-1, -1, -1, -1, -1, -1],
+            ]
+        )
 
-        expected_prob_mask = np.array([
-            [1, 0, 1, 0, 1, 0],
-            [1, 0, 1, 0, 1, 1],
-            [1, 0, 1, 1, 0, 1],
-            [0, 1, 1, 1, 1, 1],
-            [0, 0, 0, 0, 0, 0],
-            [1, 1, 1, 1, 1, 1],
-        ])
+        expected_prob_mask = np.array(
+            [
+                [1, 0, 1, 0, 1, 0],
+                [1, 0, 1, 0, 1, 1],
+                [1, 0, 1, 1, 0, 1],
+                [0, 1, 1, 1, 1, 1],
+                [0, 0, 0, 0, 0, 0],
+                [1, 1, 1, 1, 1, 1],
+            ]
+        )
 
         np.testing.assert_array_equal(word_ids, expected_word_ids)
         np.testing.assert_array_equal(prob_mask, expected_prob_mask)
 
     def test_whole_word_mask_internal(self):
         """Test mask expansion to cover all subword tokens of masked words."""
-        word_ids = np.array([
-            [-1, 1, 1, 2, 2, 3],
-            [-1, 1, 1, 2, 2, -1],
-            [-1, 1, 1, -1, 2, -1],
-            [1, 1, 1, 1, 1, 1],
-            [1, 2, 3, 4, 5, 6],
-            [1, 2, 3, 4, 5, 6],
-            [-1, -1, -1, -1, -1, -1],
-        ])
+        word_ids = np.array(
+            [
+                [-1, 1, 1, 2, 2, 3],
+                [-1, 1, 1, 2, 2, -1],
+                [-1, 1, 1, -1, 2, -1],
+                [1, 1, 1, 1, 1, 1],
+                [1, 2, 3, 4, 5, 6],
+                [1, 2, 3, 4, 5, 6],
+                [-1, -1, -1, -1, -1, -1],
+            ]
+        )
 
-        mask = np.array([
-            [0, 1, 0, 0, 0, 0],
-            [0, 1, 0, 1, 0, 0],
-            [0, 0, 0, 0, 1, 0],
-            [1, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 1, 0, 1],
-            [0, 0, 0, 0, 0, 0],
-        ]).astype(bool)
+        mask = np.array(
+            [
+                [0, 1, 0, 0, 0, 0],
+                [0, 1, 0, 1, 0, 0],
+                [0, 0, 0, 0, 1, 0],
+                [1, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0],
+                [0, 1, 0, 1, 0, 1],
+                [0, 0, 0, 0, 0, 0],
+            ]
+        ).astype(bool)
 
         output = DataCollatorForLanguageModeling._whole_word_mask(word_ids, mask)
 
-        expected = np.array([
-            [0, 1, 1, 0, 0, 0],
-            [0, 1, 1, 1, 1, 0],
-            [0, 0, 0, 0, 1, 0],
-            [1, 1, 1, 1, 1, 1],
-            [0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 1, 0, 1],
-            [0, 0, 0, 0, 0, 0],
-        ]).astype(bool)
+        expected = np.array(
+            [
+                [0, 1, 1, 0, 0, 0],
+                [0, 1, 1, 1, 1, 0],
+                [0, 0, 0, 0, 1, 0],
+                [1, 1, 1, 1, 1, 1],
+                [0, 0, 0, 0, 0, 0],
+                [0, 1, 0, 1, 0, 1],
+                [0, 0, 0, 0, 0, 0],
+            ]
+        ).astype(bool)
 
         np.testing.assert_array_equal(output, expected)
 
