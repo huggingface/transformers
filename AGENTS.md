@@ -83,7 +83,7 @@ See [docs/source/en/modular_transformers.md](docs/source/en/modular_transformers
 
 **Docs Notes**
 - Docs use MDX-like syntax; keep formatting minimal and consistent.
-- Adding a doc requires updating `docs/source/en/_toctree.yml`.
+- Adding a doc requires updating the Toc tree with `make check-repo`.
 - Local docs build uses `doc-builder` and dev extras in `docs/README.md`.
 
 **Makefile Truth**
