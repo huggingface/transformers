@@ -677,7 +677,7 @@ def _dequantize_mxfp4_weight(packed_weights: Tensor, scales: Tensor) -> Tensor:
 
     # Apply scales
     # scales shape: [n_experts, K//32, N] -> need to broadcast over K dimension
-    scales_exp = (scales.to(torch.int32).view(torch.uint8).to(torch.int32) - 127)
+    scales_exp = scales.to(torch.int32).view(torch.uint8).to(torch.int32) - 127
     scale_factors = torch.pow(2.0, scales_exp.to(dtype))
 
     # Broadcast scales over the block size (32 elements in K dimension)

@@ -385,7 +385,9 @@ class Mxfp4GptOssExperts(nn.Module):
             )
         return intermediate_cache3
 
-    def _forward_with_backward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
+    def _forward_with_backward(
+        self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx
+    ) -> torch.Tensor:
         """
         Forward pass with backward support for training.
 

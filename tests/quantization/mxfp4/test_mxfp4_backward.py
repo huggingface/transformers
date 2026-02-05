@@ -209,9 +209,7 @@ class MoEBackwardTest(unittest.TestCase):
         w = torch.randn(n_experts, hidden_size, hidden_size)
 
         # Call backward
-        grad_x = _matmul_ogs_backward_moe(
-            grad_output, w, x, routing_data, gather_indx, scatter_indx
-        )
+        grad_x = _matmul_ogs_backward_moe(grad_output, w, x, routing_data, gather_indx, scatter_indx)
 
         self.assertEqual(grad_x.shape, x.shape)
 
