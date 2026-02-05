@@ -807,7 +807,7 @@ def is_timm_local_checkpoint(pretrained_model_path: str) -> bool:
     return False
 
 
-def set_attribute_for_modules(module: torch.nn.Module, key: str, value: Any):
+def set_attribute_for_modules(module: nn.Module, key: str, value: Any):
     """
     Set a value to a module and all submodules.
     """
@@ -816,7 +816,7 @@ def set_attribute_for_modules(module: torch.nn.Module, key: str, value: Any):
         set_attribute_for_modules(submodule, key, value)
 
 
-def del_attribute_from_modules(module: torch.nn.Module, key: str):
+def del_attribute_from_modules(module: nn.Module, key: str):
     """
     Delete a value from a module and all submodules.
     """
@@ -864,7 +864,7 @@ class OutputRecorder:
         class_name (Optional[str]): Name of the class to which the hook will be attached. Could be the suffix of class name in some cases.
     """
 
-    target_class: type[torch.nn.Module]
+    target_class: type[nn.Module]
     index: int = 0
     layer_name: str | None = None
     class_name: str | None = None
@@ -938,7 +938,9 @@ def install_output_capuring_hook(module: nn.Module, key: str, index: int) -> Non
     module.register_forward_hook(output_capturing_hook)
 
 
-def recursively_install_hooks(parent_module: nn.Module, capture_tasks: list[tuple[str, OutputRecorder]]) -> None:
+def recursively_install_hooks(
+    parent_module: nn.Module, module_name: str, capture_tasks: list[tuple[str, OutputRecorder]]
+) -> None:
     """
     Recursively install all output capturing hooks on all submodules of `parent_module`.
     Note that we need to use this recursive approach instead of simply iteratating over all modules, because we want
@@ -951,15 +953,15 @@ def recursively_install_hooks(parent_module: nn.Module, capture_tasks: list[tupl
     # First dispatch to children if needed
     for name, module in parent_module.named_children():
         if not isinstance(module, PreTrainedModel):
-            recursively_install_hooks(module, capture_tasks)
+            recursively_install_hooks(module, f"{module_name}.{name}", capture_tasks)
 
     # Potentially install the hook on current `parent_module`
     for key, specs in capture_tasks:
         # The second check is for multimodals where only backbone layer suffix is available
         if (specs.target_class is not None and isinstance(parent_module, specs.target_class)) or (
-            specs.class_name is not None and name.endswith(specs.class_name)
+            specs.class_name is not None and module_name.endswith(specs.class_name)
         ):
-            if specs.layer_name is not None and specs.layer_name not in name:
+            if specs.layer_name is not None and specs.layer_name not in module_name:
                 continue
             install_output_capuring_hook(parent_module, key, specs.index)
 
@@ -985,7 +987,7 @@ def install_all_output_capturing_hooks(model: PreTrainedModel) -> None:
             capture_tasks.append((key, specs))
 
     # Install the hooks
-    recursively_install_hooks(model, capture_tasks)
+    recursively_install_hooks(model, "", capture_tasks)
 
 
 def check_model_inputs(func=None, *, tie_last_hidden_states=True):
