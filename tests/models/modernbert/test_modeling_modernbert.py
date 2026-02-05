@@ -11,31 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 import os
-import tempfile
 import unittest
 
 import pytest
-from pytest import mark
 
 from transformers import AutoTokenizer, ModernBertConfig, is_torch_available
-from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
-    CaptureLogger,
     Expectations,
-    force_serialization_as_bin_files,
-    require_accelerate,
     require_flash_attn,
-    require_non_hpu,
     require_torch,
     require_torch_accelerator,
-    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
-from transformers.utils import CONFIG_NAME, GENERATION_CONFIG_NAME
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -47,18 +37,13 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
-        AutoModel,
-        AutoModelForSequenceClassification,
         ModernBertForMaskedLM,
         ModernBertForMultipleChoice,
         ModernBertForQuestionAnswering,
         ModernBertForSequenceClassification,
         ModernBertForTokenClassification,
         ModernBertModel,
-        logging,
     )
-    from transformers.integrations.accelerate import compute_module_sizes
-    from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 
 
 class ModernBertModelTester:
@@ -463,9 +448,9 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
     @pytest.mark.flash_attn_test
     @slow
     def test_inference_masked_lm_flash_attention_2(self):
-        model = ModernBertForMaskedLM.from_pretrained("answerdotai/ModernBERT-base", dtype=torch.float16, attn_implementation="flash_attention_2").to(
-            torch_device
-        )
+        model = ModernBertForMaskedLM.from_pretrained(
+            "answerdotai/ModernBERT-base", dtype=torch.float16, attn_implementation="flash_attention_2"
+        ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
 
         inputs = tokenizer("Hello World!", return_tensors="pt").to(torch_device)
