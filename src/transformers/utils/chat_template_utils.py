@@ -22,14 +22,7 @@ from copy import deepcopy
 from datetime import datetime
 from functools import lru_cache
 from inspect import isfunction
-from typing import (
-    Any,
-    Literal,
-    Union,
-    get_args,
-    get_origin,
-    get_type_hints,
-)
+from typing import Any, Literal, Union, get_args, get_origin, get_type_hints, no_type_check
 
 from packaging import version
 
@@ -393,11 +386,15 @@ def _render_with_assistant_indices(
 
 @lru_cache
 def _compile_jinja_template(chat_template):
+    return _cached_compile_jinja_template(chat_template)
+
+
+@no_type_check
+def _cached_compile_jinja_template(chat_template):
     if not is_jinja_available():
         raise ImportError(
             "apply_chat_template requires jinja2 to be installed. Please install it using `pip install jinja2`."
         )
-    assert jinja2 is not None
 
     class AssistantTracker(Extension):
         # This extension is used to track the indices of assistant-generated tokens in the rendered chat
@@ -410,17 +407,16 @@ def _compile_jinja_template(chat_template):
             self._rendered_blocks = None
             self._generation_indices = None
 
-        def parse(self, parser: jinja2.parser.Parser) -> jinja2.nodes.CallBlock:  # type: ignore[name-defined]
+        def parse(self, parser: jinja2.parser.Parser) -> jinja2.nodes.CallBlock:
             lineno = next(parser.stream).lineno
             body = parser.parse_statements(["name:endgeneration"], drop_needle=True)
-            return jinja2.nodes.CallBlock(self.call_method("_generation_support"), [], [], body).set_lineno(lineno)  # type: ignore[attr-defined]
+            return jinja2.nodes.CallBlock(self.call_method("_generation_support"), [], [], body).set_lineno(lineno)
 
         @jinja2.pass_eval_context
         def _generation_support(self, context: jinja2.nodes.EvalContext, caller: jinja2.runtime.Macro) -> str:
             rv = caller()
             if self.is_active():
                 # Only track generation indices if the tracker is active
-                assert self._rendered_blocks is not None and self._generation_indices is not None
                 start_index = len("".join(self._rendered_blocks))
                 end_index = start_index + len(rv)
                 self._generation_indices.append((start_index, end_index))
@@ -448,7 +444,6 @@ def _compile_jinja_template(chat_template):
         )
 
     def raise_exception(message):
-        assert jinja2 is not None
         raise jinja2.exceptions.TemplateError(message)
 
     def tojson(x, ensure_ascii=False, indent=None, separators=None, sort_keys=False):
