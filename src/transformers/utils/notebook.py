@@ -15,12 +15,21 @@
 import os
 import re
 import time
-from typing import Optional
+from typing import Optional, TypeVar
 
 import IPython.display as disp
 
 from ..trainer_callback import TrainerCallback
 from ..trainer_utils import IntervalStrategy, has_length
+
+
+_T = TypeVar("_T")
+
+
+def _require(x: _T | None, msg: str) -> _T:
+    if x is None:
+        raise RuntimeError(msg)
+    return x
 
 
 def format_time(t):
@@ -307,8 +316,8 @@ class NotebookProgressCallback(TrainerCallback):
 
     def on_step_end(self, args, state, control, **kwargs):
         epoch = int(state.epoch) if int(state.epoch) == state.epoch else f"{state.epoch:.2f}"
-        assert self.training_tracker is not None, "on_train_begin must be called before on_step_end"
-        self.training_tracker.update(
+        tt = _require(self.training_tracker, "on_train_begin must be called before on_step_end")
+        tt.update(
             state.global_step + 1,
             comment=f"Epoch {epoch}/{state.num_train_epochs}",
             force_update=self._force_next_update,
@@ -335,14 +344,15 @@ class NotebookProgressCallback(TrainerCallback):
     def on_log(self, args, state, control, logs=None, **kwargs):
         # Only for when there is no evaluation
         if args.eval_strategy == IntervalStrategy.NO and "loss" in logs:
+            tt = _require(self.training_tracker, "on_train_begin must be called before on_log")
             values = {"Training Loss": logs["loss"]}
             # First column is necessarily Step sine we're not in epoch eval strategy
             values["Step"] = state.global_step
-            assert self.training_tracker is not None, "on_train_begin must be called before on_log"
-            self.training_tracker.write_line(values)
+            tt.write_line(values)
 
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
-        assert self.training_tracker is not None, "on_train_begin must be called before on_evaluate"
+        tt = _require(self.training_tracker, "on_train_begin must be called before on_evaluate")
+
         values = {"Training Loss": "No log", "Validation Loss": "No log"}
         for log in reversed(state.log_history):
             if "loss" in log:
@@ -371,15 +381,15 @@ class NotebookProgressCallback(TrainerCallback):
                 # Single dataset
                 name = "Validation Loss"
             values[name] = v
-        self.training_tracker.write_line(values)
-        self.training_tracker.remove_child()
+        tt.write_line(values)
+        tt.remove_child()
         self.prediction_bar = None
         # Evaluation takes a long time so we should force the next update.
         self._force_next_update = True
 
     def on_train_end(self, args, state, control, **kwargs):
-        assert self.training_tracker is not None, "on_train_begin must be called before on_train_end"
-        self.training_tracker.update(
+        tt = _require(self.training_tracker, "on_train_begin must be called before on_train_end")
+        tt.update(
             state.global_step,
             comment=f"Epoch {int(state.epoch)}/{state.num_train_epochs}",
             force_update=True,
