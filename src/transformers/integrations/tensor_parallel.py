@@ -460,7 +460,7 @@ class _AllReduceBackward(torch.autograd.Function):
         device_mesh = ctx.device_mesh
         if device_mesh.size() == 1:
             return grad_output, None
-        dist.all_reduce(grad_output, op=dist.ReduceOp.SUM, group=device_mesh.get_group(), async_op=False)
+        dist.all_reduce(grad_output, op=dist.ReduceOp.SUM, group=device_mesh.get_group())
         return grad_output, None
 
 
@@ -471,7 +471,7 @@ class _AllReduceForward(torch.autograd.Function):
     def forward(ctx, x, device_mesh):
         if device_mesh.size() == 1:
             return x
-        dist.all_reduce(x, op=dist.ReduceOp.SUM, group=device_mesh.get_group(), async_op=False)
+        dist.all_reduce(x, op=dist.ReduceOp.SUM, group=device_mesh.get_group())
         return x
 
     @staticmethod
@@ -1059,10 +1059,6 @@ class MoeTensorParalellExperts(TensorParallelLayer):
 
     @staticmethod
     def _prepare_input_fn(mod, inputs, device_mesh):
-        if not getattr(mod, "_modified_for_tp", False):
-            mod.num_experts = mod.num_experts // device_mesh.size()
-            mod._modified_for_tp = True
-
         # inputs = (hidden_states, top_k_index, top_k_weights)
         hidden_states = inputs[0]
         top_k_index = inputs[1]
