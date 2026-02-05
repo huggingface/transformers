@@ -160,10 +160,16 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     # Download the adapter config and weights to the temp directory
                     adapter_config_path = hf_hub_download(
-                        peft_model_id, "adapter_config.json", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                        repo_id=peft_model_id,
+                        filename="adapter_config.json",
+                        local_dir=tmpdirname,
+                        local_dir_use_symlinks=False,
                     )
                     adapter_weights_path = hf_hub_download(
-                        peft_model_id, "adapter_model.safetensors", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                        repo_id=peft_model_id,
+                        filename="adapter_model.safetensors",
+                        local_dir=tmpdirname,
+                        local_dir_use_symlinks=False,
                     )
 
                     # Verify adapter files exist
@@ -182,10 +188,16 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     # Download the base model to the same directory (simulating a local checkpoint)
                     # This simulates the scenario where user has both adapter and base model locally
                     base_model_config_path = hf_hub_download(
-                        base_model_id, "config.json", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                        repo_id=base_model_id,
+                        filename="config.json",
+                        local_dir=tmpdirname,
+                        local_dir_use_symlinks=False,
                     )
                     base_model_weights_path = hf_hub_download(
-                        base_model_id, "pytorch_model.bin", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                        repo_id=base_model_id,
+                        filename="pytorch_model.bin",
+                        local_dir=tmpdirname,
+                        local_dir_use_symlinks=False,
                     )
 
                     # Verify base model files exist
@@ -224,18 +236,30 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     # Download adapter files
                     adapter_config_path = hf_hub_download(
-                        peft_model_id, "adapter_config.json", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                        repo_id=peft_model_id,
+                        filename="adapter_config.json",
+                        local_dir=tmpdirname,
+                        local_dir_use_symlinks=False,
                     )
                     hf_hub_download(
-                        peft_model_id, "adapter_model.safetensors", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                        repo_id=peft_model_id,
+                        filename="adapter_model.safetensors",
+                        local_dir=tmpdirname,
+                        local_dir_use_symlinks=False,
                     )
 
                     # Download base model files
                     hf_hub_download(
-                        base_model_id, "config.json", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                        repo_id=base_model_id,
+                        filename="config.json",
+                        local_dir=tmpdirname,
+                        local_dir_use_symlinks=False,
                     )
                     hf_hub_download(
-                        base_model_id, "pytorch_model.bin", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                        repo_id=base_model_id,
+                        filename="pytorch_model.bin",
+                        local_dir=tmpdirname,
+                        local_dir_use_symlinks=False,
                     )
 
                     # Read adapter config to verify it has a hub path
@@ -275,18 +299,30 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                     # Download adapter files to adapter directory
                     adapter_config_path = hf_hub_download(
-                        peft_model_id, "adapter_config.json", local_dir=adapter_dir, local_dir_use_symlinks=False,
+                        repo_id=peft_model_id,
+                        filename="adapter_config.json",
+                        local_dir=adapter_dir,
+                        local_dir_use_symlinks=False,
                     )
                     hf_hub_download(
-                        peft_model_id, "adapter_model.safetensors", local_dir=adapter_dir, local_dir_use_symlinks=False,
+                        repo_id=peft_model_id,
+                        filename="adapter_model.safetensors",
+                        local_dir=adapter_dir,
+                        local_dir_use_symlinks=False,
                     )
 
                     # Download base model files to base_model directory
                     hf_hub_download(
-                        base_model_id, "config.json", local_dir=base_model_dir, local_dir_use_symlinks=False,
+                        repo_id=base_model_id,
+                        filename="config.json",
+                        local_dir=base_model_dir,
+                        local_dir_use_symlinks=False,
                     )
                     hf_hub_download(
-                        base_model_id, "pytorch_model.bin", local_dir=base_model_dir, local_dir_use_symlinks=False,
+                        repo_id=base_model_id,
+                        filename="pytorch_model.bin",
+                        local_dir=base_model_dir,
+                        local_dir_use_symlinks=False,
                     )
 
                     # Modify adapter config to point to local base model path
@@ -317,29 +353,50 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 # Download adapter files
                 adapter_config_path = hf_hub_download(
-                    peft_model_id, "adapter_config.json", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                    repo_id=peft_model_id,
+                    filename="adapter_config.json",
+                    local_dir=tmpdirname,
+                    local_dir_use_symlinks=False,
                 )
                 hf_hub_download(
-                    peft_model_id, "adapter_model.safetensors", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                    repo_id=peft_model_id,
+                    filename="adapter_model.safetensors",
+                    local_dir=tmpdirname,
+                    local_dir_use_symlinks=False,
                 )
 
                 # Download base model files
                 hf_hub_download(
-                    base_model_id, "config.json", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                    repo_id=base_model_id,
+                    filename="config.json",
+                    local_dir=tmpdirname,
+                    local_dir_use_symlinks=False,
                 )
                 hf_hub_download(
-                    base_model_id, "pytorch_model.bin", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                    repo_id=base_model_id,
+                    filename="pytorch_model.bin",
+                    local_dir=tmpdirname,
+                    local_dir_use_symlinks=False,
                 )
 
                 # Download tokenizer files
                 hf_hub_download(
-                    base_model_id, "tokenizer.json", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                    repo_id=base_model_id,
+                    filename="tokenizer.json",
+                    local_dir=tmpdirname,
+                    local_dir_use_symlinks=False,
                 )
                 hf_hub_download(
-                    base_model_id, "vocab.json", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                    repo_id=base_model_id,
+                    filename="vocab.json",
+                    local_dir=tmpdirname,
+                    local_dir_use_symlinks=False,
                 )
                 hf_hub_download(
-                    base_model_id, "merges.txt", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                    repo_id=base_model_id,
+                    filename="merges.txt",
+                    local_dir=tmpdirname,
+                    local_dir_use_symlinks=False,
                 )
 
                 # Verify adapter config has hub path
@@ -394,16 +451,28 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                     # Download files
                     adapter_config_path = hf_hub_download(
-                        peft_model_id, "adapter_config.json", local_dir=abs_path, local_dir_use_symlinks=False,
+                        repo_id=peft_model_id,
+                        filename="adapter_config.json",
+                        local_dir=abs_path,
+                        local_dir_use_symlinks=False,
                     )
                     hf_hub_download(
-                        peft_model_id, "adapter_model.safetensors", local_dir=abs_path, local_dir_use_symlinks=False,
+                        repo_id=peft_model_id,
+                        filename="adapter_model.safetensors",
+                        local_dir=abs_path,
+                        local_dir_use_symlinks=False,
                     )
                     hf_hub_download(
-                        base_model_id, "config.json", local_dir=abs_path, local_dir_use_symlinks=False,
+                        repo_id=base_model_id,
+                        filename="config.json",
+                        local_dir=abs_path,
+                        local_dir_use_symlinks=False,
                     )
                     hf_hub_download(
-                        base_model_id, "pytorch_model.bin", local_dir=abs_path, local_dir_use_symlinks=False,
+                        repo_id=base_model_id,
+                        filename="pytorch_model.bin",
+                        local_dir=abs_path,
+                        local_dir_use_symlinks=False,
                     )
 
                     # Verify adapter config has hub path
@@ -432,18 +501,30 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     # Download adapter files
                     adapter_config_path = hf_hub_download(
-                        peft_model_id, "adapter_config.json", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                        repo_id=peft_model_id,
+                        filename="adapter_config.json",
+                        local_dir=tmpdirname,
+                        local_dir_use_symlinks=False,
                     )
                     hf_hub_download(
-                        peft_model_id, "adapter_model.safetensors", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                        repo_id=peft_model_id,
+                        filename="adapter_model.safetensors",
+                        local_dir=tmpdirname,
+                        local_dir_use_symlinks=False,
                     )
 
                     # Download base model files
                     hf_hub_download(
-                        base_model_id, "config.json", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                        repo_id=base_model_id,
+                        filename="config.json",
+                        local_dir=tmpdirname,
+                        local_dir_use_symlinks=False,
                     )
                     hf_hub_download(
-                        base_model_id, "pytorch_model.bin", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                        repo_id=base_model_id,
+                        filename="pytorch_model.bin",
+                        local_dir=tmpdirname,
+                        local_dir_use_symlinks=False,
                     )
 
                     # Remove base_model_name_or_path from adapter config (edge case)
@@ -510,16 +591,28 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     # Download all files locally
                     adapter_config_path = hf_hub_download(
-                        peft_model_id, "adapter_config.json", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                        repo_id=peft_model_id,
+                        filename="adapter_config.json",
+                        local_dir=tmpdirname,
+                        local_dir_use_symlinks=False,
                     )
                     hf_hub_download(
-                        peft_model_id, "adapter_model.safetensors", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                        repo_id=peft_model_id,
+                        filename="adapter_model.safetensors",
+                        local_dir=tmpdirname,
+                        local_dir_use_symlinks=False,
                     )
                     hf_hub_download(
-                        base_model_id, "config.json", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                        repo_id=base_model_id,
+                        filename="config.json",
+                        local_dir=tmpdirname,
+                        local_dir_use_symlinks=False,
                     )
                     hf_hub_download(
-                        base_model_id, "pytorch_model.bin", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                        repo_id=base_model_id,
+                        filename="pytorch_model.bin",
+                        local_dir=tmpdirname,
+                        local_dir_use_symlinks=False,
                     )
 
                     # Verify adapter config has hub path
@@ -562,25 +655,46 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 # Download all files locally
                 hf_hub_download(
-                    peft_model_id, "adapter_config.json", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                    repo_id=peft_model_id,
+                    filename="adapter_config.json",
+                    local_dir=tmpdirname,
+                    local_dir_use_symlinks=False,
                 )
                 hf_hub_download(
-                    peft_model_id, "adapter_model.safetensors", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                    repo_id=peft_model_id,
+                    filename="adapter_model.safetensors",
+                    local_dir=tmpdirname,
+                    local_dir_use_symlinks=False,
                 )
                 hf_hub_download(
-                    base_model_id, "config.json", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                    repo_id=base_model_id,
+                    filename="config.json",
+                    local_dir=tmpdirname,
+                    local_dir_use_symlinks=False,
                 )
                 hf_hub_download(
-                    base_model_id, "pytorch_model.bin", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                    repo_id=base_model_id,
+                    filename="pytorch_model.bin",
+                    local_dir=tmpdirname,
+                    local_dir_use_symlinks=False,
                 )
                 hf_hub_download(
-                    base_model_id, "tokenizer.json", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                    repo_id=base_model_id,
+                    filename="tokenizer.json",
+                    local_dir=tmpdirname,
+                    local_dir_use_symlinks=False,
                 )
                 hf_hub_download(
-                    base_model_id, "vocab.json", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                    repo_id=base_model_id,
+                    filename="vocab.json",
+                    local_dir=tmpdirname,
+                    local_dir_use_symlinks=False,
                 )
                 hf_hub_download(
-                    base_model_id, "merges.txt", local_dir=tmpdirname, local_dir_use_symlinks=False,
+                    repo_id=base_model_id,
+                    filename="merges.txt",
+                    local_dir=tmpdirname,
+                    local_dir_use_symlinks=False,
                 )
 
                 # Test pipeline with local_files_only=True
@@ -1225,8 +1339,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         # There is a potential error when using load_best_model_at_end=True with a prompt learning PEFT method. This is
         # because Trainer uses load_adapter under the hood but with some prompt learning methods, there is an
         # optimization on the saved model to remove parameters that are not required for inference, which in turn
-        # requires a change to the model architecture. This is why load_adapter will fail in such cases and users should
-        # instead set load_best_model_at_end=False and use PeftModel.from_pretrained. As this is not obvious, we now
+        # requires a change to the model architecture. This is why load_adapter will fail in such cases and users
+        # should instead set load_best_model_at_end=False and use PeftModel.from_pretrained. As this is not obvious,
+        # we now
         # intercept the error and add a helpful error message.
         # This test checks this error message. It also tests the "happy path" (i.e. no error) when using LoRA.
         from peft import LoraConfig, PrefixTuningConfig, TaskType, get_peft_model
