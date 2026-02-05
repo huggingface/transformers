@@ -30,7 +30,7 @@ def neftune_post_forward_hook(module, input, output):
     https://github.com/neelsjain/NEFTune. Simply add it to your model as follows:
     ```python
     from transformers.integrations.neftune import neftune_post_forward_hook
-    
+
     model = ...
     model.embed_tokens.neftune_noise_alpha = 0.1
     model.embed_tokens.register_forward_hook(neftune_post_forward_hook)
