@@ -21,6 +21,7 @@ import re
 import textwrap
 import types
 from collections import OrderedDict
+from typing import cast
 
 
 def get_docstring_indentation_level(func):
