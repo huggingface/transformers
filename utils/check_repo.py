@@ -162,6 +162,9 @@ IGNORE_NON_TESTED = (
         "PaddleOCRVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "PaddleOCRVisionTransformer",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "PaddleOCRTextModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
+        "PPChart2TableModel",  # Building part of bigger (tested) model. Tested implicitly through PPChart2TableForConditionalGeneration.
+        "PPChart2TableVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PPChart2TableForConditionalGeneration.
+        "PPChart2TableTextModel",  # Building part of bigger (tested) model. Tested implicitly through PPChart2TableForConditionalGeneration.
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
         "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
         "Qwen3VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLForConditionalGeneration.
@@ -398,6 +401,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PaddleOCRVisionModel",  # Building part of bigger (tested) model
     "PaddleOCRVisionTransformer",  # Building part of bigger (tested) model
     "PaddleOCRTextModel",  # Building part of bigger (tested) model
+    "PPChart2TableModel",  # Building part of bigger (tested) model
+    "PPChart2TableVisionModel",  # Building part of bigger (tested) model
+    "PPChart2TableTextModel",  # Building part of bigger (tested) model
     "Qwen2_5OmniTalkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen2_5OmniTalkerModel",  # Building part of a bigger model
     "Qwen2_5OmniThinkerForConditionalGeneration",  # Building part of a bigger model

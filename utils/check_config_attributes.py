@@ -60,6 +60,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_period",
     ],
     "PaddleOCRTextConfig": ["tie_word_embeddings"],
+    "PPChart2TableConfig": ["tie_word_embeddings"],
     "Qwen2Config": ["use_sliding_window", "max_window_layers"],
     "Qwen2MoeConfig": ["use_sliding_window", "max_window_layers"],
     "Qwen2VLTextConfig": ["use_sliding_window", "max_window_layers"],

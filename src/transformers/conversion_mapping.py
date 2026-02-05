@@ -288,6 +288,7 @@ VLMS = [
     "sam3_tracker",
     "sam3_tracker_video",
     "paddleocrvl",
+    "ppchart2table",
     "ernie4_5_vl_moe",
 ]
 
