@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+import json
 import sys
 import tempfile
 import unittest
@@ -27,9 +28,11 @@ from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
     RequestCounter,
+    require_peft,
     require_torch,
     slow,
 )
+from transformers.utils import ADAPTER_CONFIG_NAME
 
 from ..bert.test_modeling_bert import BertModelTester
 
@@ -541,3 +544,45 @@ class AutoModelTest(unittest.TestCase):
 
         model = AutoModel.from_pretrained(model_id, trust_remote_code=True)
         self.assertIsNotNone(model)
+
+    @require_peft
+    def test_adapter_path_not_overwritten_for_complete_model(self):
+        """
+        Test for issue #43746: Only overwrite the pretrained_model_name_or_path if needed with adapter.
+
+        This test ensures that when a model has an adapter config and the pretrained_model_name_or_path
+        points to a complete model with an embedded adapter (i.e., it has a config.json file),
+        the path should NOT be overwritten with the base_model_name_or_path.
+
+        The bug was that the path was being unconditionally overwritten, which would cause
+        incorrect behavior when loading models with adapters that are embedded within the
+        same directory as the base model.
+        """
+
+        peft_test_model = "peft-internal-testing/tiny-OPTForCausalLM-lora"
+        transformers_test_model = "hf-internal-testing/tiny-random-OPTForCausalLM"
+
+        # Create a temporary directory with a complete adapter model structure
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
+
+            # Save the model and adapter locally
+            config = AutoConfig.from_pretrained(transformers_test_model)
+            model = AutoModel.from_pretrained(transformers_test_model)
+            adapter_model = AutoModel.from_pretrained(peft_test_model)
+            config.save_pretrained(tmp_dir)
+            model.save_pretrained(tmp_dir)
+            adapter_model.save_pretrained(tmp_dir)
+
+            # Overwrite the base_model_name_or_path to an invalid value that
+            # would cause the load to fail later
+            adapter_config_path = tmp_dir / ADAPTER_CONFIG_NAME
+            with open(adapter_config_path, "r") as handle:
+                adapter_config = json.load(handle)
+            adapter_config["base_model_name_or_path"] = "some/model/that/does/not/exist"
+            with open(adapter_config_path, "w") as handle:
+                json.dump(adapter_config, handle)
+
+            # Load from the saved path and make sure it actually loads despite
+            # the invalid adapter config path
+            AutoModel.from_pretrained(tmp_dir)
