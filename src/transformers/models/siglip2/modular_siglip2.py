@@ -284,7 +284,9 @@ class Siglip2MLP(SiglipMLP):
 
 
 class Siglip2PreTrainedModel(SiglipPreTrainedModel):
-    pass
+    # nn.MultiHeadAttention mask doesn't allow for non 4d mask
+    _supports_flex_attn = False
+    _supports_flash_attn = False
 
 
 class Siglip2VisionTransformer(SiglipVisionTransformer):

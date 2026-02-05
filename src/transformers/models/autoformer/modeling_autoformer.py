@@ -1067,7 +1067,6 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
-        encoder_attention_mask = None
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
             input_embeds=inputs_embeds,

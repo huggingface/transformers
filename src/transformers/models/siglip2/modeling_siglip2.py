@@ -403,9 +403,10 @@ class Siglip2PreTrainedModel(PreTrainedModel):
         "Siglip2EncoderLayer",
         "Siglip2MultiheadAttentionPoolingHead",
     ]
-    _supports_flash_attn = True
+    _supports_flash_attn = False
     _supports_sdpa = True
-    _supports_flex_attn = True
+    # nn.MultiHeadAttention mask doesn't allow for non 4d mask
+    _supports_flex_attn = False
     _supports_attention_backend = True
 
     _can_record_outputs = {
