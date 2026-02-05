@@ -2320,10 +2320,18 @@ def _prepare_return_docstring(output_type, config_class, add_intro=True):
     """
     output_docstring = output_type.__doc__
 
+    # If the class has no docstring, try to use the parent class's docstring
+    if output_docstring is None and hasattr(output_type, "__mro__"):
+        for base in output_type.__mro__[1:]:  # Skip the class itself
+            if base.__doc__ is not None:
+                output_docstring = base.__doc__
+                break
+
     if output_docstring is None:
         if add_intro:
             raise ValueError(
-                f"No docstring found for `{output_type.__name__}`. Make sure the ModelOutput class has a docstring."
+                f"No docstring found for `{output_type.__name__}` or its parent classes. "
+                "Make sure the ModelOutput class or one of its parents has a docstring."
             )
         return ""
 
