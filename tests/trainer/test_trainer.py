@@ -3470,6 +3470,32 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # We should be back to 14 again, picking up based upon the last ran Trainer
         self.assertEqual(trainer._train_batch_size, previous_batch_size)
 
+    def test_train_batch_size_not_saved_without_auto_find_batch_size(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/43708
+        # train_batch_size should only be saved to TrainerState when auto_find_batch_size is enabled
+        train_dataset = RegressionDataset(length=64)
+
+        config = RegressionModelConfig(a=0, b=2)
+        model = RegressionRandomPreTrainedModel(config)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+
+        args = RegressionTrainingArguments(
+            tmp_dir,
+            do_train=True,
+            max_steps=2,
+            save_steps=1,
+            per_device_train_batch_size=4,
+            auto_find_batch_size=False,
+        )
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.train()
+
+        # Check that train_batch_size is None in the saved checkpoint
+        checkpoint = os.path.join(tmp_dir, "checkpoint-1")
+        state = TrainerState.load_from_json(os.path.join(checkpoint, "trainer_state.json"))
+        self.assertIsNone(state.train_batch_size)
+
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):
         train_dataset = RegressionDataset(length=128)
