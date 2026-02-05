@@ -260,16 +260,20 @@ class ImagesKwargs(TypedDict, total=False):
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input image.
         device (`Union[str, torch.Tensor]`, *optional*):
-            The device to use for processing (e.g. "cpu", "cuda"), only relevant for fast image processing.
+            The device to use for processing (e.g. "cpu", "cuda"), only relevant for torchvision backend.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
             - `'np'`: Return NumPy `np.ndarray` objects.
         disable_grouping (`bool`, *optional*):
-            Whether to group images by shapes when processing or not, only relevant for fast image processing.
+            Whether to group images by shapes when processing or not, only relevant for torchvision backend.
         image_seq_length (`int`, *optional*):
             The number of image tokens to be used for each image in the input.
             Added for backward compatibility but this should be set as a processor attribute in future models.
+        backend (`str`, *optional*):
+            The backend to use for processing. Acceptable values are:
+            - `'torchvision'`: Use torchvision backend.
+            - `'pil'`: Use PIL backend.
     """
 
     do_convert_rgb: bool | None
@@ -291,6 +295,7 @@ class ImagesKwargs(TypedDict, total=False):
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
     disable_grouping: bool | None
     image_seq_length: int | None
+    backend: str | None
 
 
 class VideosKwargs(TypedDict, total=False):

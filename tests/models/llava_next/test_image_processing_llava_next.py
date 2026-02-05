@@ -19,7 +19,7 @@ import numpy as np
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension
 from transformers.models.llava_next.image_processing_llava_next import select_best_resolution
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -31,9 +31,6 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import LlavaNextImageProcessor
-
-    if is_torchvision_available():
-        from transformers import LlavaNextImageProcessorFast
 
 
 class LlavaNextImageProcessingTester:
@@ -105,7 +102,6 @@ class LlavaNextImageProcessingTester:
 @require_vision
 class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = LlavaNextImageProcessor if is_vision_available() else None
-    fast_image_processing_class = LlavaNextImageProcessorFast if is_torchvision_available() else None
 
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->LlavaNext
     def setUp(self):
@@ -118,12 +114,12 @@ class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
-            image_processing = image_processing_class(**self.image_processor_dict)
+        for backend_name in self.image_processors_backends_list:
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
             self.assertTrue(hasattr(image_processing, "do_center_crop"))
-            self.assertTrue(hasattr(image_processing, "center_crop"))
+            self.assertTrue(hasattr(image_processing, "crop_size"))
             self.assertTrue(hasattr(image_processing, "do_normalize"))
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -132,12 +128,14 @@ class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.test_image_processor_from_dict_with_kwargs
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+        for backend_name in self.image_processors_backends_list:
+            image_processor = self.image_processing_class.from_dict(self.image_processor_dict, backend=backend_name)
             self.assertEqual(image_processor.size, {"shortest_edge": 20})
             self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
 
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
+            image_processor = self.image_processing_class.from_dict(
+                self.image_processor_dict, backend=backend_name, size=42, crop_size=84
+            )
             self.assertEqual(image_processor.size, {"shortest_edge": 42})
             self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
@@ -149,9 +147,9 @@ class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(best_resolution, (672, 336))
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name in self.image_processors_backends_list:
             # Initialize image_processing
-            image_processing = image_processing_class(**self.image_processor_dict)
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
             # create random PIL images
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
             for image in image_inputs:
@@ -168,9 +166,9 @@ class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name in self.image_processors_backends_list:
             # Initialize image_processing
-            image_processing = image_processing_class(**self.image_processor_dict)
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
             # create random numpy tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
             for image in image_inputs:
@@ -187,9 +185,9 @@ class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name in self.image_processors_backends_list:
             # Initialize image_processing
-            image_processing = image_processing_class(**self.image_processor_dict)
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
             # create random PyTorch tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
@@ -213,8 +211,8 @@ class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         pass
 
     def test_nested_input(self):
-        for image_processing_class in self.image_processor_list:
-            image_processing = image_processing_class(**self.image_processor_dict)
+        for backend_name in self.image_processors_backends_list:
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
 
             # Test batched as a list of images
@@ -232,16 +230,14 @@ class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue((encoded_images_nested == encoded_images).all())
 
     def test_pad_for_patching(self):
-        for image_processing_class in self.image_processor_list:
-            if image_processing_class == self.fast_image_processing_class:
+        for backend_name in self.image_processors_backends_list:
+            if backend_name == "torchvision":
                 numpify = False
                 torchify = True
-                input_data_format = image_processing_class.data_format
             else:
                 numpify = True
                 torchify = False
-                input_data_format = ChannelDimension.LAST
-            image_processing = image_processing_class(**self.image_processor_dict)
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
             # Create odd-sized images
             image_input = self.image_processor_tester.prepare_image_inputs(
                 equal_resolution=True,
@@ -250,26 +246,26 @@ class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )[0]
             self.assertIn(image_input.shape, [(3, 400, 400), (400, 400, 3)])
 
+            if numpify:
+                image_input = image_input.transpose(2, 0, 1)
             # Test odd-width
             image_shape = (400, 601)
-            encoded_images = image_processing._pad_for_patching(image_input, image_shape, input_data_format)
-            encoded_image_shape = (
-                encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
+            encoded_images = image_processing._backend_instance._pad_for_patching(
+                image_input, image_shape, ChannelDimension.FIRST
             )
-            self.assertEqual(encoded_image_shape, image_shape)
+            self.assertEqual(encoded_images.shape[-2:], image_shape)
 
             # Test odd-height
             image_shape = (503, 400)
-            encoded_images = image_processing._pad_for_patching(image_input, image_shape, input_data_format)
-            encoded_image_shape = (
-                encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
+            encoded_images = image_processing._backend_instance._pad_for_patching(
+                image_input, image_shape, ChannelDimension.FIRST
             )
-            self.assertEqual(encoded_image_shape, image_shape)
+            self.assertEqual(encoded_images.shape[-2:], image_shape)
 
     def test_call_without_padding(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name in self.image_processors_backends_list:
             # Initialize image_processing
-            image_processing = image_processing_class(**self.image_processor_dict)
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
             # create random PyTorch tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
 

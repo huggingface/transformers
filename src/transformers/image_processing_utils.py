@@ -210,6 +210,10 @@ class ImageProcessingBackend:
     processor methods.
     """
 
+    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
+        """Convert an image to RGB format."""
+        return convert_to_rgb(image)
+
     def process_image(self, *args, **kwargs):
         """Process a single image for preprocessing."""
         raise NotImplementedError
@@ -255,7 +259,7 @@ class TorchVisionBackend(ImageProcessingBackend):
             raise ValueError(f"Unsupported input image type {image_type}")
 
         if do_convert_rgb:
-            image = convert_to_rgb(image)
+            image = self.convert_to_rgb(image)
 
         if image_type == ImageType.PIL:
             image = tvF.pil_to_tensor(image)
@@ -543,7 +547,7 @@ class PilBackend(ImageProcessingBackend):
             raise ValueError(f"Unsupported input image type {image_type}")
 
         if do_convert_rgb:
-            image = convert_to_rgb(image)
+            image = self.convert_to_rgb(image)
 
         if image_type == ImageType.PIL:
             image = np.array(image)

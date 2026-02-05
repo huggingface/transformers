@@ -15,16 +15,13 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_vision_available():
     from transformers import PoolFormerImageProcessor
-
-    if is_torchvision_available():
-        from transformers import PoolFormerImageProcessorFast
 
 
 class PoolFormerImageProcessingTester:
@@ -61,7 +58,8 @@ class PoolFormerImageProcessingTester:
     def prepare_image_processor_dict(self):
         return {
             "size": self.size,
-            "do_resize_and_center_crop": self.do_resize_and_center_crop,
+            "do_resize": self.do_resize_and_center_crop,
+            "do_center_crop": self.do_resize_and_center_crop,
             "crop_pct": self.crop_pct,
             "crop_size": self.crop_size,
             "do_normalize": self.do_normalize,
@@ -88,7 +86,6 @@ class PoolFormerImageProcessingTester:
 @require_vision
 class PoolFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = PoolFormerImageProcessor if is_vision_available() else None
-    fast_image_processing_class = PoolFormerImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -99,9 +96,10 @@ class PoolFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_resize_and_center_crop"))
+        for backend_name in self.image_processors_backends_list:
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "do_center_crop"))
             self.assertTrue(hasattr(image_processing, "size"))
             self.assertTrue(hasattr(image_processing, "crop_pct"))
             self.assertTrue(hasattr(image_processing, "do_normalize"))
@@ -109,14 +107,13 @@ class PoolFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             self.assertTrue(hasattr(image_processing, "image_std"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"shortest_edge": 30})
-            self.assertEqual(image_processor.crop_size, {"height": 30, "width": 30})
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        self.assertEqual(image_processor.size, {"shortest_edge": 30})
+        self.assertEqual(image_processor.crop_size, {"height": 30, "width": 30})
 
-            image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
-            self.assertEqual(image_processor.size, {"shortest_edge": 42})
-            self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
+        self.assertEqual(image_processor.size, {"shortest_edge": 42})
+        self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
 
 @require_torch

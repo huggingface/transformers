@@ -19,9 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_beit import *
-    from .feature_extraction_beit import *
     from .image_processing_beit import *
-    from .image_processing_beit_fast import *
     from .modeling_beit import *
 else:
     import sys

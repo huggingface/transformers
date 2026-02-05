@@ -13,6 +13,8 @@
 # limitations under the License.
 """Image processor class for LLaVa."""
 
+from typing import Optional, Union
+
 import numpy as np
 
 from ...image_processing_utils import (
@@ -65,7 +67,7 @@ class LlavaTorchVisionBackend(TorchVisionBackend):
         if height == width:
             return images
 
-        num_channels = images.shape[1]
+        num_channels = images.shape[1] if len(images.shape) == 4 else images.shape[0]
         if isinstance(background_color, int):
             background_color = [background_color] + [0] * (num_channels - 1)
         elif len(background_color) != num_channels:
@@ -89,7 +91,7 @@ class LlavaTorchVisionBackend(TorchVisionBackend):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None,
+        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -109,7 +111,7 @@ class LlavaTorchVisionBackend(TorchVisionBackend):
         for shape, stacked_images in grouped_images.items():
             if do_pad:
                 stacked_images = self.pad_to_square(
-                    images=stacked_images, background_color=tuple(int(x * 255) for x in self.image_mean)
+                    images=stacked_images, background_color=tuple(int(x * 255) for x in image_mean)
                 )
             resized_images_grouped[shape] = stacked_images
         padded_images = reorder_images(resized_images_grouped, grouped_images_index)
@@ -132,7 +134,7 @@ class LlavaTorchVisionBackend(TorchVisionBackend):
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
             # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
+            stacked_images = self._rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images
@@ -193,7 +195,7 @@ class LlavaPilBackend(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling" | "tvF.InterpolationMode" | int | None,
+        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

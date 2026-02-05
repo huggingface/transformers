@@ -15,16 +15,13 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_vision_available():
     from transformers import BitImageProcessor
-
-    if is_torchvision_available():
-        from transformers import BitImageProcessorFast
 
 
 class BitImageProcessingTester:
@@ -94,7 +91,6 @@ class BitImageProcessingTester:
 @require_vision
 class BitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = BitImageProcessor if is_vision_available() else None
-    fast_image_processing_class = BitImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -105,23 +101,25 @@ class BitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
-            image_processing = image_processing_class(**self.image_processor_dict)
+        for backend_name in self.image_processors_backends_list:
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
             self.assertTrue(hasattr(image_processing, "do_center_crop"))
-            self.assertTrue(hasattr(image_processing, "center_crop"))
+            self.assertTrue(hasattr(image_processing, "crop_size"))
             self.assertTrue(hasattr(image_processing, "do_normalize"))
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+        for backend_name in self.image_processors_backends_list:
+            image_processor = self.image_processing_class.from_dict(self.image_processor_dict, backend=backend_name)
             self.assertEqual(image_processor.size, {"shortest_edge": 20})
             self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
 
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
+            image_processor = self.image_processing_class.from_dict(
+                self.image_processor_dict, backend=backend_name, size=42, crop_size=84
+            )
             self.assertEqual(image_processor.size, {"shortest_edge": 42})
             self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
