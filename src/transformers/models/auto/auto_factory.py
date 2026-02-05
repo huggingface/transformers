@@ -35,6 +35,7 @@ from ...utils import (
     is_torch_available,
     logging,
     requires_backends,
+    resolve_peft_base_model_path,
 )
 from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
 
@@ -302,7 +303,16 @@ class _BaseAutoModelClass:
                     adapter_config = json.load(f)
 
                     adapter_kwargs["_adapter_model_path"] = pretrained_model_name_or_path
-                    pretrained_model_name_or_path = adapter_config["base_model_name_or_path"]
+                    base_model_name_or_path = adapter_config.get("base_model_name_or_path")
+                    
+                    # Use centralized path resolution logic
+                    local_files_only = bool(kwargs.get("local_files_only", False))
+                    pretrained_model_name_or_path, _ = resolve_peft_base_model_path(
+                        pretrained_model_name_or_path,
+                        base_model_name_or_path,
+                        local_files_only=local_files_only,
+                        adapter_config=adapter_config,
+                    )
 
         if not isinstance(config, PreTrainedConfig):
             kwargs_orig = copy.deepcopy(kwargs)

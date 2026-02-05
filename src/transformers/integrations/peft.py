@@ -42,6 +42,7 @@ from ..utils import (
     is_peft_available,
     is_torch_available,
     logging,
+    resolve_peft_base_model_path,
 )
 from ..utils.hub import DownloadKwargs
 from ..utils.loading_report import log_state_dict_report
@@ -953,8 +954,18 @@ def maybe_load_adapters(
 
     if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
         with open(_adapter_model_path, "r", encoding="utf-8") as f:
+            adapter_config = json.load(f)
             _adapter_model_path = pretrained_model_name_or_path
-            pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
+            base_model_name_or_path = adapter_config.get("base_model_name_or_path")
+            
+            # Use centralized path resolution logic
+            local_files_only = bool(download_kwargs.get("local_files_only", False))
+            pretrained_model_name_or_path, _ = resolve_peft_base_model_path(
+                pretrained_model_name_or_path,
+                base_model_name_or_path,
+                local_files_only=local_files_only,
+                adapter_config=adapter_config,
+            )
 
     return _adapter_model_path, pretrained_model_name_or_path, adapter_kwargs
 

@@ -43,6 +43,7 @@ from ..utils import (
     is_pyctcdecode_available,
     is_torch_available,
     logging,
+    resolve_peft_base_model_path,
 )
 from .any_to_any import AnyToAnyPipeline
 from .audio_classification import AudioClassificationPipeline
@@ -729,7 +730,16 @@ def pipeline(
                 with open(maybe_adapter_path, "r", encoding="utf-8") as f:
                     adapter_config = json.load(f)
                     adapter_path = model
-                    model = adapter_config["base_model_name_or_path"]
+                    base_model_name_or_path = adapter_config.get("base_model_name_or_path")
+                    
+                    # Use centralized path resolution logic
+                    local_files_only = bool(hub_kwargs.get("local_files_only", False))
+                    model, _ = resolve_peft_base_model_path(
+                        model,
+                        base_model_name_or_path,
+                        local_files_only=local_files_only,
+                        adapter_config=adapter_config,
+                    )
 
         config = AutoConfig.from_pretrained(
             model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs

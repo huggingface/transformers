@@ -140,6 +140,465 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     peft_model = transformers_class.from_pretrained(tmpdirname).to(torch_device)
                     self.assertTrue(self._check_lora_correctly_converted(peft_model))
 
+    def test_peft_from_pretrained_local_path(self):
+        """
+        Test that verifies loading a PEFT model from a local directory preserves the local path
+        instead of downloading from the hub. This addresses issue #43746 where adapter configs
+        with hub paths would override local paths.
+        
+        The scenario: User downloads a model with PEFT adapters locally. The adapter_config.json
+        contains a hub path for base_model_name_or_path, but the user wants to use the local copy
+        instead of downloading from hub.
+        """
+        import json
+
+        logger = logging.get_logger("transformers.integrations.peft")
+
+        for peft_model_id, base_model_id in zip(self.peft_test_model_ids, self.transformers_test_model_ids):
+            for transformers_class in self.transformers_test_model_classes:
+                # First, download the PEFT model to a temporary directory
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    # Download the adapter config and weights to the temp directory
+                    adapter_config_path = hf_hub_download(
+                        peft_model_id, "adapter_config.json", local_dir=tmpdirname, local_dir_use_symlinks=False
+                    )
+                    adapter_weights_path = hf_hub_download(
+                        peft_model_id, "adapter_model.safetensors", local_dir=tmpdirname, local_dir_use_symlinks=False
+                    )
+
+                    # Verify adapter files exist
+                    self.assertTrue(os.path.exists(adapter_config_path))
+                    self.assertTrue(os.path.exists(adapter_weights_path))
+
+                    # Read the adapter config to verify it has a hub path
+                    with open(adapter_config_path, "r", encoding="utf-8") as f:
+                        adapter_config = json.load(f)
+                    base_model_name_or_path = adapter_config.get("base_model_name_or_path")
+                    # Verify the adapter config points to a hub path (not a local path)
+                    self.assertIsNotNone(base_model_name_or_path)
+                    self.assertFalse(os.path.isdir(base_model_name_or_path))
+                    self.assertFalse(os.path.exists(base_model_name_or_path))
+
+                    # Download the base model to the same directory (simulating a local checkpoint)
+                    # This simulates the scenario where user has both adapter and base model locally
+                    base_model_config_path = hf_hub_download(
+                        base_model_id, "config.json", local_dir=tmpdirname, local_dir_use_symlinks=False
+                    )
+                    base_model_weights_path = hf_hub_download(
+                        base_model_id, "pytorch_model.bin", local_dir=tmpdirname, local_dir_use_symlinks=False
+                    )
+
+                    # Verify base model files exist
+                    self.assertTrue(os.path.exists(base_model_config_path))
+                    self.assertTrue(os.path.exists(base_model_weights_path))
+
+                    # Now test loading from the local directory
+                    # The model should use the local path instead of downloading from hub
+                    # We use local_files_only=False initially to allow downloading if needed,
+                    # but the fix should prevent downloading by using the local path
+                    with CaptureLogger(logger) as cl:
+                        peft_model = transformers_class.from_pretrained(tmpdirname).to(torch_device)
+
+                    # Verify the model loaded correctly
+                    self.assertTrue(self._check_lora_correctly_converted(peft_model))
+                    self.assertTrue(peft_model._hf_peft_config_loaded)
+
+                    # Verify no errors about missing files
+                    self.assertNotIn("Error", cl.out)
+
+                    # Test that we can generate with the model
+                    dummy_input = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device)
+                    _ = peft_model.generate(input_ids=dummy_input, max_new_tokens=10)
+
+    def test_peft_from_pretrained_local_path_with_warning(self):
+        """
+        Test that verifies a warning is logged when preserving a local path that differs from
+        the hub path in the adapter config. This ensures users are aware of potential mismatches.
+        """
+        import json
+
+        logger = logging.get_logger("transformers.integrations.peft")
+
+        for peft_model_id, base_model_id in zip(self.peft_test_model_ids, self.transformers_test_model_ids):
+            for transformers_class in self.transformers_test_model_classes:
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    # Download adapter files
+                    adapter_config_path = hf_hub_download(
+                        peft_model_id, "adapter_config.json", local_dir=tmpdirname, local_dir_use_symlinks=False
+                    )
+                    hf_hub_download(
+                        peft_model_id, "adapter_model.safetensors", local_dir=tmpdirname, local_dir_use_symlinks=False
+                    )
+
+                    # Download base model files
+                    hf_hub_download(
+                        base_model_id, "config.json", local_dir=tmpdirname, local_dir_use_symlinks=False
+                    )
+                    hf_hub_download(
+                        base_model_id, "pytorch_model.bin", local_dir=tmpdirname, local_dir_use_symlinks=False
+                    )
+
+                    # Read adapter config to verify it has a hub path
+                    with open(adapter_config_path, "r", encoding="utf-8") as f:
+                        adapter_config = json.load(f)
+                    base_model_name_or_path = adapter_config.get("base_model_name_or_path")
+                    self.assertIsNotNone(base_model_name_or_path)
+                    self.assertFalse(os.path.isdir(base_model_name_or_path))
+
+                    # Test that warning is logged when preserving local path
+                    with CaptureLogger(logger) as cl:
+                        peft_model = transformers_class.from_pretrained(tmpdirname).to(torch_device)
+
+                    # Verify warning about using local path instead of hub path
+                    self.assertIn("Adapter config specifies base model", cl.out)
+                    self.assertIn("but using local path", cl.out)
+                    self.assertIn(tmpdirname, cl.out)
+
+                    # Verify model still loads correctly
+                    self.assertTrue(self._check_lora_correctly_converted(peft_model))
+
+    def test_peft_from_pretrained_adapter_config_with_local_base_path(self):
+        """
+        Test that when adapter config points to a local path, that local path is used.
+        This tests the case where adapter config's base_model_name_or_path is also a local path.
+        """
+        import json
+
+        for peft_model_id, base_model_id in zip(self.peft_test_model_ids, self.transformers_test_model_ids):
+            for transformers_class in self.transformers_test_model_classes:
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    # Create separate directories for adapter and base model
+                    adapter_dir = os.path.join(tmpdirname, "adapter")
+                    base_model_dir = os.path.join(tmpdirname, "base_model")
+                    os.makedirs(adapter_dir, exist_ok=True)
+                    os.makedirs(base_model_dir, exist_ok=True)
+
+                    # Download adapter files to adapter directory
+                    adapter_config_path = hf_hub_download(
+                        peft_model_id, "adapter_config.json", local_dir=adapter_dir, local_dir_use_symlinks=False
+                    )
+                    hf_hub_download(
+                        peft_model_id, "adapter_model.safetensors", local_dir=adapter_dir, local_dir_use_symlinks=False
+                    )
+
+                    # Download base model files to base_model directory
+                    hf_hub_download(
+                        base_model_id, "config.json", local_dir=base_model_dir, local_dir_use_symlinks=False
+                    )
+                    hf_hub_download(
+                        base_model_id, "pytorch_model.bin", local_dir=base_model_dir, local_dir_use_symlinks=False
+                    )
+
+                    # Modify adapter config to point to local base model path
+                    with open(adapter_config_path, "r", encoding="utf-8") as f:
+                        adapter_config = json.load(f)
+                    adapter_config["base_model_name_or_path"] = base_model_dir
+
+                    with open(adapter_config_path, "w", encoding="utf-8") as f:
+                        json.dump(adapter_config, f)
+
+                    # Test loading from adapter directory - should use base_model_dir from config
+                    peft_model = transformers_class.from_pretrained(adapter_dir).to(torch_device)
+
+                    # Verify model loads correctly
+                    self.assertTrue(self._check_lora_correctly_converted(peft_model))
+                    self.assertTrue(peft_model._hf_peft_config_loaded)
+
+    def test_peft_pipeline_local_path(self):
+        """
+        Test that pipelines work correctly with PEFT models loaded from local paths.
+        This ensures the fix works for pipeline loading as well.
+        """
+        import json
+
+        from transformers import pipeline
+
+        for peft_model_id, base_model_id in zip(self.peft_test_model_ids, self.transformers_test_model_ids):
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                # Download adapter files
+                adapter_config_path = hf_hub_download(
+                    peft_model_id, "adapter_config.json", local_dir=tmpdirname, local_dir_use_symlinks=False
+                )
+                hf_hub_download(
+                    peft_model_id, "adapter_model.safetensors", local_dir=tmpdirname, local_dir_use_symlinks=False
+                )
+
+                # Download base model files
+                hf_hub_download(
+                    base_model_id, "config.json", local_dir=tmpdirname, local_dir_use_symlinks=False
+                )
+                hf_hub_download(
+                    base_model_id, "pytorch_model.bin", local_dir=tmpdirname, local_dir_use_symlinks=False
+                )
+
+                # Download tokenizer files
+                hf_hub_download(
+                    base_model_id, "tokenizer.json", local_dir=tmpdirname, local_dir_use_symlinks=False
+                )
+                hf_hub_download(
+                    base_model_id, "vocab.json", local_dir=tmpdirname, local_dir_use_symlinks=False
+                )
+                hf_hub_download(
+                    base_model_id, "merges.txt", local_dir=tmpdirname, local_dir_use_symlinks=False
+                )
+
+                # Verify adapter config has hub path
+                with open(adapter_config_path, "r", encoding="utf-8") as f:
+                    adapter_config = json.load(f)
+                base_model_name_or_path = adapter_config.get("base_model_name_or_path")
+                self.assertIsNotNone(base_model_name_or_path)
+                self.assertFalse(os.path.isdir(base_model_name_or_path))
+
+                # Test pipeline loading from local path
+                pipe = pipeline(
+                    task="text-generation",
+                    model=tmpdirname,
+                    tokenizer=tmpdirname,
+                    device=torch_device,
+                )
+
+                # Verify pipeline works
+                result = pipe("Hello", max_new_tokens=5)
+                self.assertIsInstance(result, list)
+                self.assertGreater(len(result), 0)
+
+    def test_peft_from_pretrained_hub_path_still_works(self):
+        """
+        Test that loading from hub paths still works (backward compatibility).
+        This ensures the fix doesn't break existing functionality.
+        """
+        for model_id in self.peft_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                # Test loading directly from hub (should still work)
+                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+
+                # Verify model loads correctly
+                self.assertTrue(self._check_lora_correctly_converted(peft_model))
+                self.assertTrue(peft_model._hf_peft_config_loaded)
+
+                # Test generation
+                dummy_input = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device)
+                _ = peft_model.generate(input_ids=dummy_input, max_new_tokens=10)
+
+    def test_peft_from_pretrained_absolute_path(self):
+        """
+        Test that absolute paths work correctly with the fix.
+        """
+        import json
+
+        for peft_model_id, base_model_id in zip(self.peft_test_model_ids, self.transformers_test_model_ids):
+            for transformers_class in self.transformers_test_model_classes:
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    # Use absolute path
+                    abs_path = os.path.abspath(tmpdirname)
+
+                    # Download files
+                    adapter_config_path = hf_hub_download(
+                        peft_model_id, "adapter_config.json", local_dir=abs_path, local_dir_use_symlinks=False
+                    )
+                    hf_hub_download(
+                        peft_model_id, "adapter_model.safetensors", local_dir=abs_path, local_dir_use_symlinks=False
+                    )
+                    hf_hub_download(
+                        base_model_id, "config.json", local_dir=abs_path, local_dir_use_symlinks=False
+                    )
+                    hf_hub_download(
+                        base_model_id, "pytorch_model.bin", local_dir=abs_path, local_dir_use_symlinks=False
+                    )
+
+                    # Verify adapter config has hub path
+                    with open(adapter_config_path, "r", encoding="utf-8") as f:
+                        adapter_config = json.load(f)
+                    base_model_name_or_path = adapter_config.get("base_model_name_or_path")
+                    self.assertIsNotNone(base_model_name_or_path)
+                    self.assertFalse(os.path.isdir(base_model_name_or_path))
+
+                    # Test loading with absolute path
+                    peft_model = transformers_class.from_pretrained(abs_path).to(torch_device)
+
+                    # Verify model loads correctly
+                    self.assertTrue(self._check_lora_correctly_converted(peft_model))
+                    self.assertTrue(peft_model._hf_peft_config_loaded)
+
+    def test_peft_from_pretrained_missing_base_model_name_in_config(self):
+        """
+        Test edge case where adapter config doesn't have base_model_name_or_path.
+        Should handle gracefully without errors.
+        """
+        import json
+
+        for peft_model_id, base_model_id in zip(self.peft_test_model_ids, self.transformers_test_model_ids):
+            for transformers_class in self.transformers_test_model_classes:
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    # Download adapter files
+                    adapter_config_path = hf_hub_download(
+                        peft_model_id, "adapter_config.json", local_dir=tmpdirname, local_dir_use_symlinks=False
+                    )
+                    hf_hub_download(
+                        peft_model_id, "adapter_model.safetensors", local_dir=tmpdirname, local_dir_use_symlinks=False
+                    )
+
+                    # Download base model files
+                    hf_hub_download(
+                        base_model_id, "config.json", local_dir=tmpdirname, local_dir_use_symlinks=False
+                    )
+                    hf_hub_download(
+                        base_model_id, "pytorch_model.bin", local_dir=tmpdirname, local_dir_use_symlinks=False
+                    )
+
+                    # Remove base_model_name_or_path from adapter config (edge case)
+                    with open(adapter_config_path, "r", encoding="utf-8") as f:
+                        adapter_config = json.load(f)
+                    if "base_model_name_or_path" in adapter_config:
+                        del adapter_config["base_model_name_or_path"]
+
+                    with open(adapter_config_path, "w", encoding="utf-8") as f:
+                        json.dump(adapter_config, f)
+
+                    # Should still work - will use the local path since base_model_name_or_path is missing
+                    peft_model = transformers_class.from_pretrained(tmpdirname).to(torch_device)
+
+                    # Verify model loads correctly
+                    self.assertTrue(self._check_lora_correctly_converted(peft_model))
+
+    def test_peft_save_and_load_local_roundtrip(self):
+        """
+        Test saving a PEFT model and loading it back from local path.
+        This simulates a common workflow where users save and reload models.
+        """
+        for model_id in self.peft_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                # Load from hub first
+                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                self.assertTrue(self._check_lora_correctly_converted(peft_model))
+
+                # Save to local directory
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    peft_model.save_pretrained(tmpdirname)
+
+                    # Verify adapter files exist
+                    self.assertTrue(os.path.exists(os.path.join(tmpdirname, "adapter_config.json")))
+                    self.assertTrue(
+                        os.path.exists(os.path.join(tmpdirname, "adapter_model.safetensors"))
+                        or os.path.exists(os.path.join(tmpdirname, "adapter_model.bin"))
+                    )
+
+                    # Load back from local directory
+                    loaded_model = transformers_class.from_pretrained(tmpdirname).to(torch_device)
+
+                    # Verify model loads correctly
+                    self.assertTrue(self._check_lora_correctly_converted(loaded_model))
+                    self.assertTrue(loaded_model._hf_peft_config_loaded)
+
+                    # Test generation with both models produces similar results
+                    dummy_input = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device)
+                    original_output = peft_model.generate(input_ids=dummy_input, max_new_tokens=5)
+                    loaded_output = loaded_model.generate(input_ids=dummy_input, max_new_tokens=5)
+
+                    # Outputs should be identical
+                    self.assertTrue(torch.equal(original_output, loaded_output))
+
+    def test_peft_from_pretrained_local_files_only(self):
+        """
+        Test that local_files_only=True works correctly with local PEFT models.
+        This ensures offline mode is properly handled.
+        """
+        import json
+
+        for peft_model_id, base_model_id in zip(self.peft_test_model_ids, self.transformers_test_model_ids):
+            for transformers_class in self.transformers_test_model_classes:
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    # Download all files locally
+                    adapter_config_path = hf_hub_download(
+                        peft_model_id, "adapter_config.json", local_dir=tmpdirname, local_dir_use_symlinks=False
+                    )
+                    hf_hub_download(
+                        peft_model_id, "adapter_model.safetensors", local_dir=tmpdirname, local_dir_use_symlinks=False
+                    )
+                    hf_hub_download(
+                        base_model_id, "config.json", local_dir=tmpdirname, local_dir_use_symlinks=False
+                    )
+                    hf_hub_download(
+                        base_model_id, "pytorch_model.bin", local_dir=tmpdirname, local_dir_use_symlinks=False
+                    )
+
+                    # Verify adapter config has hub path
+                    with open(adapter_config_path, "r", encoding="utf-8") as f:
+                        adapter_config = json.load(f)
+                    base_model_name_or_path = adapter_config.get("base_model_name_or_path")
+                    self.assertIsNotNone(base_model_name_or_path)
+                    self.assertFalse(os.path.isdir(base_model_name_or_path))
+
+                    # Test with local_files_only=True - should work with local path
+                    peft_model = transformers_class.from_pretrained(
+                        tmpdirname, local_files_only=True
+                    ).to(torch_device)
+
+                    # Verify model loads correctly
+                    self.assertTrue(self._check_lora_correctly_converted(peft_model))
+                    self.assertTrue(peft_model._hf_peft_config_loaded)
+
+    def test_peft_from_pretrained_local_files_only_error(self):
+        """
+        Test that local_files_only=True raises an error when adapter config points to hub
+        and the original path is also a hub path (not local).
+        """
+        # This test verifies that if someone tries to load from hub with local_files_only=True
+        # and the adapter config also points to hub, we get a clear error
+        for model_id in self.peft_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                # Try loading from hub with local_files_only=True
+                # This should fail because we can't download
+                with self.assertRaises((OSError, ValueError)):
+                    transformers_class.from_pretrained(model_id, local_files_only=True)
+
+    def test_peft_pipeline_local_files_only(self):
+        """
+        Test that pipelines work with local_files_only=True for local PEFT models.
+        """
+        import json
+
+        from transformers import pipeline
+
+        for peft_model_id, base_model_id in zip(self.peft_test_model_ids, self.transformers_test_model_ids):
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                # Download all files locally
+                adapter_config_path = hf_hub_download(
+                    peft_model_id, "adapter_config.json", local_dir=tmpdirname, local_dir_use_symlinks=False
+                )
+                hf_hub_download(
+                    peft_model_id, "adapter_model.safetensors", local_dir=tmpdirname, local_dir_use_symlinks=False
+                )
+                hf_hub_download(
+                    base_model_id, "config.json", local_dir=tmpdirname, local_dir_use_symlinks=False
+                )
+                hf_hub_download(
+                    base_model_id, "pytorch_model.bin", local_dir=tmpdirname, local_dir_use_symlinks=False
+                )
+                hf_hub_download(
+                    base_model_id, "tokenizer.json", local_dir=tmpdirname, local_dir_use_symlinks=False
+                )
+                hf_hub_download(
+                    base_model_id, "vocab.json", local_dir=tmpdirname, local_dir_use_symlinks=False
+                )
+                hf_hub_download(
+                    base_model_id, "merges.txt", local_dir=tmpdirname, local_dir_use_symlinks=False
+                )
+
+                # Test pipeline with local_files_only=True
+                pipe = pipeline(
+                    task="text-generation",
+                    model=tmpdirname,
+                    tokenizer=tmpdirname,
+                    device=torch_device,
+                    local_files_only=True,
+                )
+
+                # Verify pipeline works
+                result = pipe("Hello", max_new_tokens=5)
+                self.assertIsInstance(result, list)
+                self.assertGreater(len(result), 0)
+
     def test_peft_enable_disable_adapters(self):
         """
         A test that checks if `enable_adapters` and `disable_adapters` methods work as expected.

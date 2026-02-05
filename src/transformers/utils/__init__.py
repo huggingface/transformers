@@ -254,6 +254,7 @@ from .peft_utils import (
     ADAPTER_WEIGHTS_NAME,
     check_peft_version,
     find_adapter_config_file,
+    resolve_peft_base_model_path,
 )
 
 
