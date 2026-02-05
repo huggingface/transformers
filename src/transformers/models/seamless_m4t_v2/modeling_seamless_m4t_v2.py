@@ -862,6 +862,8 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
 
 # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerAdapterLayer with SeamlessM4T->SeamlessM4Tv2
 class SeamlessM4Tv2ConformerAdapterLayer(SeamlessM4Tv2PreTrainedModel):
+    supports_gradient_checkpointing = False  # we need pretrained due to the mask creation
+
     def __init__(self, config):
         super().__init__(config)
 

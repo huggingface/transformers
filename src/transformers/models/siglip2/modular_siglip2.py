@@ -343,6 +343,8 @@ class Siglip2TextModel(SiglipTextModel):
 
 
 class Siglip2MultiheadAttentionPoolingHead(Siglip2PreTrainedModel):
+    supports_gradient_checkpointing = False  # we need pretrained due to the mask creation
+
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__(config)
 

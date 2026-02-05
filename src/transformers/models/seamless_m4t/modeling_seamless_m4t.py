@@ -873,6 +873,8 @@ class SeamlessM4TConformerEncoder(nn.Module):
 
 
 class SeamlessM4TConformerAdapterLayer(SeamlessM4TPreTrainedModel):
+    supports_gradient_checkpointing = False  # we need pretrained due to the mask creation
+
     def __init__(self, config):
         super().__init__(config)
 

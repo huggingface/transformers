@@ -119,6 +119,7 @@ PRIVATE_MODELS = [
     "CLIPSegTextTransformer",
     "DetrDecoder",
     "SeamlessM4TConformerAdapterLayer",
+    "SeamlessM4Tv2ConformerAdapterLayer",
     "Siglip2MultiheadAttentionPoolingHead",
     "VitsEncoder",
     "Wav2Vec2BertAdapterLayer",
