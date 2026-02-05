@@ -2227,7 +2227,7 @@ class SwanLabCallback(TrainerCallback):
     A [`TrainerCallback`] that logs metrics, media, model checkpoints to [SwanLab](https://swanlab.cn/).
     """
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         if not is_swanlab_available():
             raise RuntimeError("SwanLabCallback requires swanlab to be installed. Run `pip install swanlab`.")
         import swanlab
@@ -2235,6 +2235,7 @@ class SwanLabCallback(TrainerCallback):
         self._swanlab = swanlab
         self._initialized = False
         self._log_model = os.getenv("SWANLAB_LOG_MODEL", None)
+        self._init_kwargs = kwargs
 
     def setup(self, args, state, model, **kwargs):
         """
@@ -2302,6 +2303,7 @@ class SwanLabCallback(TrainerCallback):
             init_args["project"] = os.getenv("SWANLAB_PROJECT", None)
 
             if self._swanlab.get_run() is None:
+                init_args.update(self._init_kwargs)
                 self._swanlab.init(
                     **init_args,
                 )
