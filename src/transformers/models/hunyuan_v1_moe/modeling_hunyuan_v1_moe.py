@@ -209,9 +209,9 @@ class HunYuanMoEV1Attention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -384,6 +384,24 @@ class HunYuanMoEV1PreTrainedModel(PreTrainedModel):
         if isinstance(module, HunYuanMoEV1Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        # DynamicNTKAlphaRotary - unique to this model
+        elif "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
+            if module.rope_type == "dynamic" and module.config.rope_parameters.get("alpha"):
+                dim = module.config.head_dim
+                rope_theta = module.config.rope_parameters["rope_theta"]
+                alpha = module.config.rope_parameters["alpha"]
+
+                base = rope_theta * alpha ** (dim / (dim - 2))
+                buffer_value = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+            else:
+                rope_fn = (
+                    ROPE_INIT_FUNCTIONS[module.rope_type]
+                    if module.rope_type != "default"
+                    else module.compute_default_rope_parameters
+                )
+                buffer_value, _ = rope_fn(module.config)
+            init.copy_(module.inv_freq, buffer_value)
+            init.copy_(module.original_inv_freq, buffer_value)
 
 
 class HunYuanMoEV1RotaryEmbedding(nn.Module):
@@ -544,7 +562,7 @@ class HunYuanMoEV1Model(HunYuanMoEV1PreTrainedModel):
 @auto_docstring
 class HunYuanMoEV1ForCausalLM(HunYuanMoEV1PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):

@@ -19,10 +19,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class Cohere2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Cohere2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CohereModel`]. It is used to instantiate an Cohere
     model according to the specified arguments, defining the model architecture.
@@ -185,10 +185,6 @@ class Cohere2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

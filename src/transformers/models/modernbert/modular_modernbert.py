@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -46,7 +46,7 @@ from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, rotate_half
 logger = logging.get_logger(__name__)
 
 
-class ModernBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class ModernBertConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ModernBertModel`]. It is used to instantiate an ModernBert
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -172,7 +172,7 @@ class ModernBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         max_position_embeddings: int | None = 8192,
         initializer_range: float | None = 0.02,
         initializer_cutoff_factor: float | None = 2.0,
-        norm_eps: int | None = 1e-5,
+        norm_eps: float | None = 1e-5,
         norm_bias: bool | None = False,
         pad_token_id: int | None = 50283,
         eos_token_id: int | None = 50282,

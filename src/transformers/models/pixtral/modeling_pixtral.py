@@ -236,9 +236,9 @@ class PixtralAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=0)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -493,7 +493,8 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             image_sizes = [(height, width)] * batch_size
 
         # pass images through initial convolution independently
-        patch_embeds = self.patch_conv(pixel_values)
+        target_dtype = self.patch_conv.weight.dtype
+        patch_embeds = self.patch_conv(pixel_values.to(dtype=target_dtype))
         patch_embeds_list = [
             embed[..., : (size[0] // self.patch_size), : (size[1] // self.patch_size)]
             for embed, size in zip(patch_embeds, image_sizes)

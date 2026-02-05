@@ -32,7 +32,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
@@ -53,8 +53,6 @@ from ..siglip.modeling_siglip import (
     SiglipMultiheadAttentionPoolingHead,
     SiglipPreTrainedModel,
     SiglipVisionEmbeddings,
-    default_flax_embed_init,
-    lecun_normal_,
 )
 
 
@@ -279,7 +277,7 @@ class Phi4MultimodalAudioConfig(PreTrainedConfig):
         self.nemo_final_size = length
 
 
-class Phi4MultimodalConfig(Phi3Config, RotaryEmbeddingConfigMixin):
+class Phi4MultimodalConfig(Phi3Config):
     r"""
     This is the configuration class to store the configuration of a [`Phi4MultimodalModel`]. It is used to instantiate a
     Phi4Multimodal model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -491,9 +489,9 @@ class Phi4MultimodalVisionAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = simple_eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, simple_eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -553,7 +551,7 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
             )
             init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
         elif isinstance(module, nn.Embedding):
-            default_flax_embed_init(module.weight)
+            init.default_flax_embed_init_(module.weight)
         elif isinstance(module, Phi4MultimodalVisionAttention):
             init.normal_(module.q_proj.weight)
             init.normal_(module.k_proj.weight)
@@ -573,7 +571,7 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
             init.normal_(module.attention.in_proj_weight)
             init.zeros_(module.attention.in_proj_bias)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            lecun_normal_(module.weight)
+            init.lecun_normal_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
@@ -920,9 +918,9 @@ class Phi4MultimodalAudioAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = simple_eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, simple_eager_attention_forward
+        )
 
         attn_output, _ = attention_interface(
             self,

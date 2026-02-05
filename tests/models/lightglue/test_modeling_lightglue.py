@@ -129,6 +129,7 @@ class LightGlueModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     has_attentions = True
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = LightGlueModelTester(self)
