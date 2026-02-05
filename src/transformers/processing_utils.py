@@ -121,7 +121,7 @@ class _LazyAutoProcessorMapping(dict):
 MODALITY_TO_AUTOPROCESSOR_MAPPING = _LazyAutoProcessorMapping()
 
 MODALITY_TO_BASE_CLASS_MAPPING = {
-    "audio_tokenizer": "DacModel",
+    "audio_tokenizer": ("DacModel", "EncodecModel"),
     "audio_processor": "FeatureExtractionMixin",
     "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
     "feature_extractor": "FeatureExtractionMixin",
