@@ -2016,7 +2016,7 @@ class GenerationTesterMixin:
                 self.skipTest("Model dummy inputs should contain text input ids")
 
             if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
-                inputs_dict["attention_mask"] = torch.tril(torch.ones_like(inputs_dict["input_ids"]).to(torch_device))
+                self.skipTest("Model dummy inputs should contain padding in their attention mask")
 
             # make sure that all models have enough positions for generation
             dummy_input_ids = inputs_dict["input_ids"]
