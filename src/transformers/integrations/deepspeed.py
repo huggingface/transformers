@@ -549,8 +549,6 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
                 return lr_scheduler
 
             lr_scheduler = DummyScheduler(optimizer, lr_scheduler_callable=_lr_scheduler_callable)
-        else:
-            lr_scheduler = trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
 
     return optimizer, lr_scheduler
 

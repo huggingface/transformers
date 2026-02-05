@@ -865,6 +865,17 @@ def create_causal_mask(
             An optional mask function to combine with the causal mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
     """
+    # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention.
+    # It allows to use decoder-only models with bi-directional attention as well
+    if not getattr(config, "is_causal", True):
+        return create_bidirectional_mask(
+            config,
+            input_embeds,
+            attention_mask,
+            or_mask_function=or_mask_function,
+            and_mask_function=and_mask_function,
+        )
+
     # If we have an hybrid cache structure, here we want to create the mask for the full layers
     if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
         layer_idx = past_key_values.is_sliding.index(False)
@@ -1057,6 +1068,17 @@ def create_sliding_window_causal_mask(
             An optional mask function to combine with the sliding causal mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
     """
+    # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention
+    # It allows to use decoder-only models with bi-directional attention as well
+    if not getattr(config, "is_causal", True):
+        return create_bidirectional_sliding_window_mask(
+            config,
+            input_embeds,
+            attention_mask,
+            or_mask_function=or_mask_function,
+            and_mask_function=and_mask_function,
+        )
+
     # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
     if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
         layer_idx = past_key_values.is_sliding.index(True)

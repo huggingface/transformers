@@ -19,10 +19,10 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import can_return_tuple
 from .configuration_dinov3_convnext import DINOv3ConvNextConfig
 
@@ -244,12 +244,11 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
 
 
 @auto_docstring
-class DINOv3ConvNextBackbone(DINOv3ConvNextPreTrainedModel, BackboneMixin):
+class DINOv3ConvNextBackbone(BackboneMixin, DINOv3ConvNextPreTrainedModel):
     config: DINOv3ConvNextConfig
 
     def __init__(self, config: DINOv3ConvNextConfig):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_features = [config.num_channels] + list(config.hidden_sizes)
 
