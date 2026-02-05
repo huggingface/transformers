@@ -588,32 +588,6 @@ class Wav2Vec2BertAdapter(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.seamless_m4t_v2.modeling_seamless_m4t_v2._compute_new_attention_mask
-def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Tensor):
-    """
-    Computes an attention mask of the form `(batch, seq_len)` with an attention for each element in the batch that
-    stops at the corresponding element in `seq_lens`.
-    Args:
-        hidden_states (`torch.FloatTensor` of shape `(batch, seq_len, *)`):
-            The sequences to mask, where `*` is any number of sequence-specific dimensions including none.
-        seq_lens (`torch.Tensor` of shape `(batch)`:
-            Each element represents the length of the sequence at the same index in `hidden_states`
-    Returns:
-        `torch.FloatTensor`: The float attention mask of shape `(batch, seq_len)`
-    """
-    batch_size, mask_seq_len = hidden_states.shape[:2]
-
-    indices = torch.arange(mask_seq_len, device=seq_lens.device).expand(batch_size, -1)
-
-    bool_mask = indices >= seq_lens.unsqueeze(1).expand(-1, mask_seq_len)
-
-    mask = hidden_states.new_ones((batch_size, mask_seq_len))
-
-    mask = mask.masked_fill(bool_mask, 0)
-
-    return mask
-
-
 @auto_docstring
 class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
     config: Wav2Vec2BertConfig
@@ -708,6 +682,32 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
         attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
+
+
+# Copied from transformers.models.seamless_m4t_v2.modeling_seamless_m4t_v2._compute_new_attention_mask
+def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Tensor):
+    """
+    Computes an attention mask of the form `(batch, seq_len)` with an attention for each element in the batch that
+    stops at the corresponding element in `seq_lens`.
+    Args:
+        hidden_states (`torch.FloatTensor` of shape `(batch, seq_len, *)`):
+            The sequences to mask, where `*` is any number of sequence-specific dimensions including none.
+        seq_lens (`torch.Tensor` of shape `(batch)`:
+            Each element represents the length of the sequence at the same index in `hidden_states`
+    Returns:
+        `torch.FloatTensor`: The float attention mask of shape `(batch, seq_len)`
+    """
+    batch_size, mask_seq_len = hidden_states.shape[:2]
+
+    indices = torch.arange(mask_seq_len, device=seq_lens.device).expand(batch_size, -1)
+
+    bool_mask = indices >= seq_lens.unsqueeze(1).expand(-1, mask_seq_len)
+
+    mask = hidden_states.new_ones((batch_size, mask_seq_len))
+
+    mask = mask.masked_fill(bool_mask, 0)
+
+    return mask
 
 
 class Wav2Vec2BertAdapterLayer(Wav2Vec2BertPreTrainedModel):
