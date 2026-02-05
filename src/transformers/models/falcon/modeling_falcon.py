@@ -349,16 +349,6 @@ class FalconAttention(nn.Module):
             key_layer, value_layer = layer_past.update(key_layer, value_layer, self.layer_idx, cache_kwargs)
 
         kv_length = key_layer.shape[-2]
-        if (
-            self.config._attn_implementation == "sdpa"
-            and query_layer.device.type == "cuda"
-            and attention_mask is not None
-        ):
-            # For torch<=2.1.2, SDPA with memory-efficient backend is bugged with non-contiguous inputs with custom attn_mask,
-            # Reference: https://github.com/pytorch/pytorch/issues/112577.
-            query_layer = query_layer.contiguous()
-            key_layer = key_layer.contiguous()
-            value_layer = value_layer.contiguous()
 
         if attention_mask is not None:
             attention_mask = attention_mask[:, :, :, : key_layer.shape[-2]]
