@@ -851,6 +851,25 @@ def can_return_tuple(func):
     return wrapper
 
 
+@dataclass
+@requires(backends=("torch",))
+class OutputRecorder:
+    """
+    Configuration for recording outputs from a model via hooks.
+
+    Attributes:
+        target_class (Type): The class (e.g., nn.Module) to which the hook will be attached.
+        index (Optional[int]): If the output is a tuple/list, optionally record only at a specific index.
+        layer_name (Optional[str]): Name of the submodule to target (if needed), e.g., "transformer.layer.3.attn".
+        class_name (Optional[str]): Name of the class to which the hook will be attached. Could be the suffix of class name in some cases.
+    """
+
+    target_class: type[torch.nn.Module]
+    index: int = 0
+    layer_name: str | None = None
+    class_name: str | None = None
+
+
 class CompileableContextVar:
     """
     Convenience wrapper around a ContextVar for usage with `torch.compile`.
@@ -967,25 +986,6 @@ def install_all_output_capturing_hooks(model: PreTrainedModel) -> None:
 
     # Install the hooks
     recursively_install_hooks(model, capture_tasks)
-
-
-@dataclass
-@requires(backends=("torch",))
-class OutputRecorder:
-    """
-    Configuration for recording outputs from a model via hooks.
-
-    Attributes:
-        target_class (Type): The class (e.g., nn.Module) to which the hook will be attached.
-        index (Optional[int]): If the output is a tuple/list, optionally record only at a specific index.
-        layer_name (Optional[str]): Name of the submodule to target (if needed), e.g., "transformer.layer.3.attn".
-        class_name (Optional[str]): Name of the class to which the hook will be attached. Could be the suffix of class name in some cases.
-    """
-
-    target_class: type[torch.nn.Module]
-    index: int = 0
-    layer_name: str | None = None
-    class_name: str | None = None
 
 
 def check_model_inputs(func=None, *, tie_last_hidden_states=True):

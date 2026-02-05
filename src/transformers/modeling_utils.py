@@ -1333,7 +1333,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
 
-        # Install output capturing hooks if needed
+        # Install output capturing hooks if needed, to be able to use the `output_xxx` kwargs together with `check_model_inputs`
         install_all_output_capturing_hooks(self)
 
     @property
