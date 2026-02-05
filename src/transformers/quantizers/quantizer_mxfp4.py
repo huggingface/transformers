@@ -246,10 +246,46 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self) -> bool:
-        logger.warning_once(
-            "MXFP4 quantization don't support training, please consider dequantizing the model first by passing quantization_config=Mxfp4Config(dequantize=True) to .from_pretrained()"
+        """
+        MXFP4 quantization now supports training for input activations (dX).
+
+        This enables:
+        - LoRA/adapter fine-tuning where base weights are frozen
+        - Gradient computation through MXFP4 layers
+
+        Limitations:
+        - Weight gradients (dW) are NOT supported
+        - Quantized weights must remain frozen (requires_grad=False)
+        - For full fine-tuning, use dequantize=True
+
+        To enable training mode, call model.enable_mxfp4_training() after loading.
+        """
+        return True
+
+    def enable_training_mode(self, model: "PreTrainedModel"):
+        """
+        Enable training mode for MXFP4 expert layers.
+
+        This enables backward pass computation for input activations,
+        allowing LoRA/adapter fine-tuning with MXFP4 quantized weights.
+
+        Args:
+            model: The model with MXFP4 quantized layers
+
+        Note:
+            Weight gradients are NOT supported. Ensure your training setup
+            only requires gradients for adapters/LoRA weights, not the
+            quantized base weights.
+        """
+        from ..integrations import Mxfp4GptOssExperts
+
+        for module in model.modules():
+            if isinstance(module, Mxfp4GptOssExperts):
+                module.enable_training_mode()
+        logger.info(
+            "MXFP4 training mode enabled. Backward pass will compute gradients for input activations (dX). "
+            "Weight gradients (dW) are NOT supported - ensure quantized weights have requires_grad=False."
         )
-        return False
 
     def get_quantize_ops(self):
         from ..integrations.mxfp4 import Mxfp4Quantize

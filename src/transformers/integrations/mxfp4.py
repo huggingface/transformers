@@ -294,12 +294,24 @@ def convert_moe_packed_tensors(
 
 
 class Mxfp4GptOssExperts(nn.Module):
-    def __init__(self, config):
+    """
+    MXFP4 quantized expert layer for GPT-OSS MoE models.
+
+    This module stores weights in MXFP4 format (4-bit floating point) and supports:
+    - Inference: Fast forward pass using Triton kernels
+    - Training: Backward pass for input activations (dX) to enable LoRA/adapter fine-tuning
+
+    Note: Weight gradients (dW) are NOT supported. The quantized weights must remain frozen.
+    For full fine-tuning, use dequantize=True in the quantization config.
+    """
+
+    def __init__(self, config, training_mode: bool = False):
         super().__init__()
 
         self.num_experts = config.num_local_experts
         self.intermediate_size = config.intermediate_size
         self.hidden_size = config.hidden_size
+        self.training_mode = training_mode  # Enable backward pass computation
 
         self.gate_up_proj = nn.Parameter(
             torch.zeros(self.num_experts, 2 * self.intermediate_size, self.hidden_size // 32, 16, dtype=torch.uint8),
@@ -324,7 +336,23 @@ class Mxfp4GptOssExperts(nn.Module):
         self.down_proj_precision_config = None
         self.limit = getattr(config, "swiglu_limit", 7.0)
 
+    def enable_training_mode(self):
+        """Enable training mode for backward pass computation."""
+        self.training_mode = True
+
+    def disable_training_mode(self):
+        """Disable training mode (inference only)."""
+        self.training_mode = False
+
     def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
+        # Use training-enabled path if training mode is on and gradients are needed
+        if self.training_mode and hidden_states.requires_grad:
+            return self._forward_with_backward(hidden_states, routing_data, gather_idx, scatter_idx)
+        else:
+            return self._forward_inference(hidden_states, routing_data, gather_idx, scatter_idx)
+
+    def _forward_inference(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
+        """Original forward pass optimized for inference (no backward support)."""
         FnSpecs, FusedActivation, matmul_ogs = (
             triton_kernels_hub.matmul_ogs.FnSpecs,
             triton_kernels_hub.matmul_ogs.FusedActivation,
@@ -354,6 +382,57 @@ class Mxfp4GptOssExperts(nn.Module):
                 scatter_indx=scatter_idx,
                 precision_config=self.down_proj_precision_config,
                 gammas=routing_data.gate_scal,
+            )
+        return intermediate_cache3
+
+    def _forward_with_backward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
+        """
+        Forward pass with backward support for training.
+
+        Uses separate matmul and activation steps to enable gradient computation.
+        This is slightly less efficient than the fused inference path but enables training.
+        """
+        from .mxfp4_backward import matmul_ogs_with_backward, swiglu_with_backward
+
+        matmul_ogs = triton_kernels_hub.matmul_ogs.matmul_ogs
+
+        with on_device(hidden_states.device):
+            # Step 1: Gate-up projection WITHOUT fused activation
+            # This allows us to capture the pre-activation output for SwiGLU backward
+            intermediate_pre_act = matmul_ogs(
+                hidden_states,
+                self.gate_up_proj,
+                self.gate_up_proj_bias.to(torch.float32),
+                routing_data,
+                gather_indx=gather_idx,
+                precision_config=self.gate_up_proj_precision_config,
+                gammas=None,
+                fused_activation=None,  # No fused activation
+            )
+
+            # Step 2: Apply SwiGLU with backward support
+            intermediate_cache1 = swiglu_with_backward(
+                intermediate_pre_act,
+                self.alpha,
+                self.limit,
+                triton_kernels_hub,
+                routing_data,
+            )
+
+            # Step 3: Down projection with backward support
+            intermediate_cache3 = matmul_ogs_with_backward(
+                intermediate_cache1,
+                self.down_proj,
+                self.down_proj_bias.to(torch.float32),
+                routing_data,
+                gather_indx=None,
+                scatter_indx=scatter_idx,
+                precision_config=self.down_proj_precision_config,
+                gammas=routing_data.gate_scal,
+                fused_activation=None,
+                triton_kernels_hub=triton_kernels_hub,
+                alpha=self.alpha,
+                limit=self.limit,
             )
         return intermediate_cache3
 
