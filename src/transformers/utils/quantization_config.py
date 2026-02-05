@@ -1258,7 +1258,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         from compressed_tensors.quantization import QuantizationStatus
 
         qc = self.quantization_config
-        return qc is not None and bool(qc.config_groups) and qc.quantization_status == QuantizationStatus.COMPRESSED
+        return self.is_quantized and (qc is not None and qc.quantization_status == QuantizationStatus.COMPRESSED)
 
     @property
     def is_sparsification_compressed(self):
