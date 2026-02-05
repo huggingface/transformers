@@ -630,9 +630,9 @@ class RotaryEmbeddingConfigMixin:
     default_theta = 10_000.0
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
-        # If `rope_scaling` was present, it will be written to `rope_parameters` automatically by `@rope_scaling.setter`
-        if self.rope_parameters is None:
-            self.rope_parameters = {}
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or self.rope_parameters
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
 
         # Standardize and validate the correctness of rotary position embeddings parameters. Priority for these parameters is:
         # 1. Values in `rope_parameters` dict (where they should be after standardization)
