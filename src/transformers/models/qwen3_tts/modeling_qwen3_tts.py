@@ -40,7 +40,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, can_return_tuple, logging
 from .configuration_qwen3_tts import (
     Qwen3TTSConfig,
-    Qwen3TtsDiTConfig,
+    Qwen3TTSDiTConfig,
     Qwen3TTSTalkerCodePredictorConfig,
     Qwen3TTSTalkerConfig,
 )
@@ -761,7 +761,7 @@ class SqueezeExcitationRes2NetBlock(nn.Module):
 class Qwen3TTSSpeakerEncoder(torch.nn.Module):
     """ECAPA-TDNN speaker encoder (inherited from qwen2_5_omni)."""
 
-    def __init__(self, config: Qwen3TtsDiTConfig):
+    def __init__(self, config: Qwen3TTSDiTConfig):
         super().__init__()
         if len(config.enc_channels) != len(config.enc_kernel_sizes) or len(config.enc_channels) != len(
             config.enc_dilations
