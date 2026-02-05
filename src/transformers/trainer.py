@@ -2146,7 +2146,10 @@ class Trainer:
                 self._load_from_checkpoint(resume_from_checkpoint)
             # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
             state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
-            if state.train_batch_size is not None:
+            # Only restore the checkpoint's train_batch_size when using auto_find_batch_size,
+            # as that feature needs to resume with the automatically-found batch size.
+            # Otherwise, use the current args batch size to allow users to change batch configuration.
+            if state.train_batch_size is not None and args.auto_find_batch_size:
                 self._train_batch_size = state.train_batch_size
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
@@ -2300,6 +2303,7 @@ class Trainer:
             ]
         )
         self.state.is_hyper_param_search = trial is not None
+        self.state.train_batch_size = self._train_batch_size
 
         # Compute absolute values for logging, eval, and save if given as ratio
         self.state.compute_steps(args, max_steps)
