@@ -24,8 +24,8 @@ from transformers.models.siglip.modeling_siglip import (
     BaseModelOutputWithPooling,
     ImageClassifierOutput,
     SiglipForImageClassification,
+    SiglipMLP,
     SiglipModel,
-    SiglipMultiheadAttentionPoolingHead,
     SiglipOutput,
     SiglipPreTrainedModel,
     SiglipTextModel,
@@ -279,10 +279,12 @@ class Siglip2VisionEmbeddings(nn.Module):
         return embeddings
 
 
+class Siglip2MLP(SiglipMLP):
+    pass
+
+
 class Siglip2PreTrainedModel(SiglipPreTrainedModel):
-    _supports_flash_attn = False
-    _supports_flex_attn = False
-    _supports_attention_backend = False
+    pass
 
 
 class Siglip2VisionTransformer(SiglipVisionTransformer):
@@ -340,11 +342,17 @@ class Siglip2TextModel(SiglipTextModel):
     pass
 
 
-class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
+class Siglip2MultiheadAttentionPoolingHead(Siglip2PreTrainedModel):
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__(config)
+
+        self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = Siglip2MLP(config)
         self.config = config
         self.num_heads = config.num_attention_heads
+        self.post_init()
 
     def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
         batch_size = hidden_state.shape[0]

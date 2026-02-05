@@ -625,7 +625,10 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class DetrDecoder(nn.Module):
+class DetrDecoder(PreTrainedModel):
+    config: DetrConfig
+    base_model_prefix = "model"
+
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`DetrDecoderLayer`].
 
@@ -641,8 +644,8 @@ class DetrDecoder(nn.Module):
     """
 
     def __init__(self, config: DetrConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
+
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
 
@@ -651,6 +654,8 @@ class DetrDecoder(nn.Module):
         self.layernorm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
+
+        self.post_init()
 
     def forward(
         self,

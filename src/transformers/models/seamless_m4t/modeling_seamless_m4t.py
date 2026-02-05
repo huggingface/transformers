@@ -104,6 +104,130 @@ class SeamlessM4TGenerationOutput(ModelOutput):
     unit_sequences: tuple[torch.FloatTensor] | None = None
 
 
+@auto_docstring
+class SeamlessM4TPreTrainedModel(PreTrainedModel):
+    config: SeamlessM4TConfig
+    base_model_prefix = "seamless_m4t"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["SeamlessM4TEncoderLayer", "SeamlessM4TDecoderLayer", "SeamlessM4TConformerEncoderLayer"]
+
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module):
+        """Initialize the weights"""
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, SeamlessM4TConformerSelfAttention):
+            if hasattr(module, "pos_bias_u"):
+                init.xavier_uniform_(module.pos_bias_u)
+            if hasattr(module, "pos_bias_v"):
+                init.xavier_uniform_(module.pos_bias_v)
+        elif isinstance(module, SeamlessM4TConformerPositionalConvEmbedding):
+            init.normal_(
+                module.conv.weight,
+                mean=0,
+                std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
+            )
+            init.constant_(module.conv.bias, 0)
+        elif isinstance(module, SeamlessM4TConformerFeatureProjection):
+            k = math.sqrt(1 / module.projection.in_features)
+            init.uniform_(module.projection.weight, a=-k, b=k)
+            init.uniform_(module.projection.bias, a=-k, b=k)
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
+        elif isinstance(module, nn.Conv1d):
+            init.kaiming_normal_(module.weight)
+            if module.bias is not None:
+                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
+                init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, SeamlessM4TSinusoidalPositionalEmbedding):
+            emb_weights = module.get_embedding(
+                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
+            )
+            init.copy_(module.weights, emb_weights)
+        elif isinstance(module, SeamlessM4TConformerRotaryPositionalEmbedding):
+            dim = self.config.hidden_size // self.config.speech_encoder_attention_heads
+            base = self.config.rotary_embedding_base
+            inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
+            init.copy_(module.inv_freq, inv_freq)
+        elif isinstance(module, SeamlessM4TConformerRelPositionalEmbedding):
+            init.copy_(module.pe, module.extend_pe(torch.tensor(0.0).expand(1, module.max_len)))
+
+    def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
+        kernel_size, stride = self.config.adaptor_kernel_size, self.config.adaptor_stride
+        pad = kernel_size // 2
+        seq_lens = attention_mask.size(1) - (1 - attention_mask.int()).sum(1)
+
+        seq_lens = ((seq_lens + 2 * pad - kernel_size) / stride) + 1
+
+        return seq_lens.floor()
+
+    def compute_last_hidden_states_per_sample(
+        self,
+        hidden_states: tuple[tuple[torch.Tensor]],
+        beam_indices: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """
+        Computes the last hidden states.
+
+        Parameters:
+            hidden_states (`tuple[tuple[torch.Tensor]]`):
+                The generated hidden states. Tuple (one element for each generated token) of tuples (one element for
+                each layer of the decoder) of torch.FloatTensor of shape (batch_size*num_beams*num_return_sequences,
+                generated_length, hidden_size).
+            beam_indices (`torch.LongTensor`, *optional*):
+                Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
+                `(batch_size*num_return_sequences, sequence_length)`. Only required if a `num_beams>1` at
+                generate-time.
+
+        Return:
+            `torch.Tensor`: A `torch.Tensor` of shape `(batch_size*num_return_sequences, sequence_length, hidden_size)`
+            containing
+                the last hidden states.
+        ```"""
+        # 1. First, let's compute last_hidden_states from hidden_states.
+        # For each generation step, takes the hidden state from the last layer.
+        # shape: (batch_size*vocab_size*num_return_sequences, # generation_steps, hidden_dim)
+        last_hidden_states = torch.concat([hidden_states[-1] for hidden_states in hidden_states], dim=1)
+
+        # 2. In absence of `beam_indices`, we can assume that we come from e.g. greedy search, which is equivalent
+        # to a beam search approach were the first (and only) beam is always selected
+        # in that case, return directly last_hidden_states
+        if beam_indices is None:
+            return last_hidden_states
+
+        # 3. cut beam_indices to longest beam length
+        beam_indices_mask = beam_indices < 0
+        max_beam_length = (1 - beam_indices_mask.long()).sum(-1).max()
+        beam_indices = beam_indices.clone()[:, :max_beam_length]
+        beam_indices_mask = beam_indices_mask[:, :max_beam_length]
+
+        # 4. Set indices of beams that finished early to 0; such indices will be masked correctly afterwards anyways
+        beam_indices[beam_indices_mask] = 0
+
+        # 5. expand beam_indices to last_hidden_states dim
+        beam_indices = beam_indices.unsqueeze(-1)
+        beam_indices = beam_indices.expand(-1, -1, last_hidden_states.shape[-1])
+
+        # 6. select the right candidate for each beam
+        # in other words, new_last_hidden_states[i,j,k] = last_hidden_states[beam_indices[i,j,k], j, k] for all i, j, k
+        last_hidden_states = torch.gather(last_hidden_states, 0, beam_indices)
+
+        return last_hidden_states
+
+
 ############ UTILS ################
 
 
@@ -748,10 +872,9 @@ class SeamlessM4TConformerEncoder(nn.Module):
         )
 
 
-class SeamlessM4TConformerAdapterLayer(nn.Module):
+class SeamlessM4TConformerAdapterLayer(SeamlessM4TPreTrainedModel):
     def __init__(self, config):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
 
         embed_dim = config.hidden_size
         dropout = config.adaptor_dropout
@@ -785,6 +908,8 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
         # Feed-forward
         self.ffn_layer_norm = nn.LayerNorm(embed_dim)
         self.ffn = SeamlessM4TConformerFeedForward(config, act_fn="relu", dropout=dropout)
+
+        self.post_init()
 
     def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
         pad = self.kernel_size // 2
@@ -1332,130 +1457,6 @@ class SeamlessM4TDecoderLayer(GradientCheckpointingLayer):
 
 
 ############ SUB-MODELS related code ################
-
-
-@auto_docstring
-class SeamlessM4TPreTrainedModel(PreTrainedModel):
-    config: SeamlessM4TConfig
-    base_model_prefix = "seamless_m4t"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["SeamlessM4TEncoderLayer", "SeamlessM4TDecoderLayer", "SeamlessM4TConformerEncoderLayer"]
-
-    @torch.no_grad()
-    def _init_weights(self, module: nn.Module):
-        """Initialize the weights"""
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, SeamlessM4TConformerSelfAttention):
-            if hasattr(module, "pos_bias_u"):
-                init.xavier_uniform_(module.pos_bias_u)
-            if hasattr(module, "pos_bias_v"):
-                init.xavier_uniform_(module.pos_bias_v)
-        elif isinstance(module, SeamlessM4TConformerPositionalConvEmbedding):
-            init.normal_(
-                module.conv.weight,
-                mean=0,
-                std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
-            )
-            init.constant_(module.conv.bias, 0)
-        elif isinstance(module, SeamlessM4TConformerFeatureProjection):
-            k = math.sqrt(1 / module.projection.in_features)
-            init.uniform_(module.projection.weight, a=-k, b=k)
-            init.uniform_(module.projection.bias, a=-k, b=k)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
-        elif isinstance(module, nn.Conv1d):
-            init.kaiming_normal_(module.weight)
-            if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                init.uniform_(module.bias, a=-k, b=k)
-        elif isinstance(module, SeamlessM4TSinusoidalPositionalEmbedding):
-            emb_weights = module.get_embedding(
-                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
-            )
-            init.copy_(module.weights, emb_weights)
-        elif isinstance(module, SeamlessM4TConformerRotaryPositionalEmbedding):
-            dim = self.config.hidden_size // self.config.speech_encoder_attention_heads
-            base = self.config.rotary_embedding_base
-            inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
-            init.copy_(module.inv_freq, inv_freq)
-        elif isinstance(module, SeamlessM4TConformerRelPositionalEmbedding):
-            init.copy_(module.pe, module.extend_pe(torch.tensor(0.0).expand(1, module.max_len)))
-
-    def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
-        kernel_size, stride = self.config.adaptor_kernel_size, self.config.adaptor_stride
-        pad = kernel_size // 2
-        seq_lens = attention_mask.size(1) - (1 - attention_mask.int()).sum(1)
-
-        seq_lens = ((seq_lens + 2 * pad - kernel_size) / stride) + 1
-
-        return seq_lens.floor()
-
-    def compute_last_hidden_states_per_sample(
-        self,
-        hidden_states: tuple[tuple[torch.Tensor]],
-        beam_indices: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        """
-        Computes the last hidden states.
-
-        Parameters:
-            hidden_states (`tuple[tuple[torch.Tensor]]`):
-                The generated hidden states. Tuple (one element for each generated token) of tuples (one element for
-                each layer of the decoder) of torch.FloatTensor of shape (batch_size*num_beams*num_return_sequences,
-                generated_length, hidden_size).
-            beam_indices (`torch.LongTensor`, *optional*):
-                Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
-                `(batch_size*num_return_sequences, sequence_length)`. Only required if a `num_beams>1` at
-                generate-time.
-
-        Return:
-            `torch.Tensor`: A `torch.Tensor` of shape `(batch_size*num_return_sequences, sequence_length, hidden_size)`
-            containing
-                the last hidden states.
-        ```"""
-        # 1. First, let's compute last_hidden_states from hidden_states.
-        # For each generation step, takes the hidden state from the last layer.
-        # shape: (batch_size*vocab_size*num_return_sequences, # generation_steps, hidden_dim)
-        last_hidden_states = torch.concat([hidden_states[-1] for hidden_states in hidden_states], dim=1)
-
-        # 2. In absence of `beam_indices`, we can assume that we come from e.g. greedy search, which is equivalent
-        # to a beam search approach were the first (and only) beam is always selected
-        # in that case, return directly last_hidden_states
-        if beam_indices is None:
-            return last_hidden_states
-
-        # 3. cut beam_indices to longest beam length
-        beam_indices_mask = beam_indices < 0
-        max_beam_length = (1 - beam_indices_mask.long()).sum(-1).max()
-        beam_indices = beam_indices.clone()[:, :max_beam_length]
-        beam_indices_mask = beam_indices_mask[:, :max_beam_length]
-
-        # 4. Set indices of beams that finished early to 0; such indices will be masked correctly afterwards anyways
-        beam_indices[beam_indices_mask] = 0
-
-        # 5. expand beam_indices to last_hidden_states dim
-        beam_indices = beam_indices.unsqueeze(-1)
-        beam_indices = beam_indices.expand(-1, -1, last_hidden_states.shape[-1])
-
-        # 6. select the right candidate for each beam
-        # in other words, new_last_hidden_states[i,j,k] = last_hidden_states[beam_indices[i,j,k], j, k] for all i, j, k
-        last_hidden_states = torch.gather(last_hidden_states, 0, beam_indices)
-
-        return last_hidden_states
 
 
 @auto_docstring(

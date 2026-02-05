@@ -116,6 +116,12 @@ PRIVATE_MODELS = [
     "OwlViTTextTransformer",
     "OwlViTVisionTransformer",
     "XCLIPTextTransformer",
+    "CLIPSegTextTransformer",
+    "DetrDecoder",
+    "SeamlessM4TConformerAdapterLayer",
+    "Siglip2MultiheadAttentionPoolingHead",
+    "VitsEncoder",
+    "Wav2Vec2BertAdapterLayer",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.

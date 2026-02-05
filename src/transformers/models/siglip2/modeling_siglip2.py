@@ -216,6 +216,21 @@ class Siglip2VisionEmbeddings(nn.Module):
         return embeddings
 
 
+class Siglip2MLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
 class Siglip2TextEmbeddings(nn.Module):
     def __init__(self, config: Siglip2TextConfig):
         super().__init__()
@@ -341,21 +356,6 @@ class Siglip2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Siglip2MLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
-
-
 class Siglip2EncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Siglip2VisionConfig | Siglip2TextConfig):
         super().__init__()
@@ -403,10 +403,10 @@ class Siglip2PreTrainedModel(PreTrainedModel):
         "Siglip2EncoderLayer",
         "Siglip2MultiheadAttentionPoolingHead",
     ]
-    _supports_flash_attn = False
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_flex_attn = False
-    _supports_attention_backend = False
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     _can_record_outputs = {
         "hidden_states": Siglip2EncoderLayer,
@@ -674,11 +674,9 @@ class Siglip2TextModel(Siglip2PreTrainedModel):
         )
 
 
-class Siglip2MultiheadAttentionPoolingHead(nn.Module):
-    """Multihead Attention Pooling."""
-
+class Siglip2MultiheadAttentionPoolingHead(Siglip2PreTrainedModel):
     def __init__(self, config: Siglip2VisionConfig):
-        super().__init__()
+        super().__init__(config)
 
         self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
@@ -686,6 +684,7 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
         self.mlp = Siglip2MLP(config)
         self.config = config
         self.num_heads = config.num_attention_heads
+        self.post_init()
 
     def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
         batch_size = hidden_state.shape[0]
