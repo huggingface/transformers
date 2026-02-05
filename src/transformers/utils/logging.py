@@ -33,6 +33,8 @@ from logging import captureWarnings as _captureWarnings
 import huggingface_hub.utils as hf_hub_utils
 from tqdm import auto as tqdm_lib
 
+from ._typing import TransformersLogger
+
 
 _lock = threading.Lock()
 _default_handler: logging.Handler | None = None
@@ -144,7 +146,7 @@ def captureWarnings(capture):
     _captureWarnings(capture)
 
 
-def get_logger(name: str | None = None) -> logging.Logger:
+def get_logger(name: str | None = None) -> TransformersLogger:
     """
     Return a logger with the specified name.
 
@@ -313,8 +315,6 @@ def warning_advice(self, *args, **kwargs):
     self.warning(*args, **kwargs)
 
 
-# TODO: ideally we should have a new logger class, e.g. TransformerLogger that adds these new methods
-# instead of monkey patching
 logging.Logger.warning_advice = warning_advice  # type: ignore[unresolved-attribute]
 
 
