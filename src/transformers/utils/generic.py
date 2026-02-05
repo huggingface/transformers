@@ -17,6 +17,7 @@ Generic utilities
 
 import inspect
 import json
+from contextvars import ContextVar
 import os
 import warnings
 from collections import OrderedDict, UserDict, defaultdict
@@ -30,7 +31,7 @@ from typing import Any, Optional, TypedDict
 import numpy as np
 
 from ..utils import logging
-from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, requires
+from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, requires, is_torchdynamo_compiling
 
 
 _CAN_RECORD_REGISTRY = {}
@@ -841,6 +842,103 @@ def can_return_tuple(func):
 
     return wrapper
 
+class CompileableContextVar:
+    """
+    Convenience wrapper around a ContextVar for usage with `torch.compile`.
+    This behaves exactly as a `ContextVar`, except when compilation is triggered in which case it behaves as a simple
+    global variable. This is useful as `torch.compile` cannot trace the `get` method of `ContextVar`. This however means
+    that the access to the underlying variable is not thread-safe when compilation is triggered."""
+    def __init__(self, name, default):
+        self.context_var = ContextVar(name, default=default)
+        self.global_var = default
+        self.compiling = False
+
+    def get(self):
+        # Set was called before and compilation was already detected
+        if self.compiling:
+            return self.global_var
+        else:
+            # Set was maybe never called, so still check it here
+            if is_torchdynamo_compiling():
+                self.is_compiling = True
+                return self.global_var
+            else:
+                return self.context_var.get()
+        
+    def set(self, value):
+        if is_torchdynamo_compiling():
+            self.global_var = value
+            self.compiling = True
+            return None
+        else:
+            return self.context_var.set(value)
+
+    def reset(self, token):
+        if self.compiling:
+            self.global_var = None
+            self.compiling = False
+        else:
+            self.context_var.reset(token)
+
+_active_collector = CompileableContextVar("output_collector", default=None)
+_active_keys = CompileableContextVar("keys_to_capture", default=None)
+
+
+def install_hook(module, key, index):
+
+    def output_capturing_hook(module, args, output):
+        keys_to_capture = _active_keys.get()
+        # If it's None or not a key we want to capture, simply return, the hook is inactive
+        if keys_to_capture is None or key not in keys_to_capture:
+            return
+        
+        # Get the current thread-local collector
+        collected_outputs = _active_collector.get()
+
+        if key == "hidden_states" and len(collected_outputs[key]) == 0:
+            collected_outputs[key] += (args[0],)
+        if not isinstance(output, tuple):
+            collected_outputs[key] += (output,)
+        elif output[index] is not None:
+            collected_outputs[key] += (output[index],)
+
+    module.register_forward_hook(output_capturing_hook)
+
+
+def install_all_output_capturing_hooks(model):
+    from ..modeling_utils import PreTrainedModel
+    # _can_record_outputs is None by default
+    capture_flags = _CAN_RECORD_REGISTRY.get(str(model.__class__)) or {}  # there is a weak ref for executorch
+
+    capture_tasks = []
+    for key, layer_specs in capture_flags.items():
+        if not isinstance(layer_specs, list):
+            layer_specs = [layer_specs]
+        for specs in layer_specs:
+            if not isinstance(specs, OutputRecorder):
+                index = 0 if "hidden_states" in key else 1
+                class_name = None if not isinstance(specs, str) else specs
+                target_class = specs if not isinstance(specs, str) else None
+                specs = OutputRecorder(target_class=target_class, index=index, class_name=class_name)
+            capture_tasks.append((key, specs))
+
+    # Install all hooks (we need to use this approach instead of only iterate over all modules so that composite models
+    # do not install them several time)
+    def install_all(parent_module):
+        for name, module in parent_module.named_children():
+            if not isinstance(module, PreTrainedModel):
+                install_all(module)
+            for key, specs in capture_tasks:
+                # The second check is for multimodals where only backbone layer suffix is available
+                if (specs.target_class is not None and isinstance(module, specs.target_class)) or (
+                    specs.class_name is not None and name.endswith(specs.class_name)
+                ):
+                    if specs.layer_name is not None and specs.layer_name not in name:
+                        continue
+                    install_hook(module, key, specs.index)
+    
+    install_all(model)
+
 
 @dataclass
 @requires(backends=("torch",))
@@ -958,54 +1056,12 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
             # when certain condtions are met. Let's output cross attention if attentions are requested (for BC)
             if "output_attentions" in recordable_keys:
                 recordable_keys["output_cross_attentions"] = recordable_keys["output_attentions"]
-
+            
+            keys_to_capture = {k.replace("output_", "") for k, v in recordable_keys.items() if v}
             collected_outputs = defaultdict(tuple)
-            monkey_patched_layers = []
-
-            def make_capture_wrapper(module, orig_forward, key, index):
-                @wraps(orig_forward)
-                def wrapped_forward(*args, **kwargs):
-                    if key == "hidden_states" and len(collected_outputs[key]) == 0:
-                        collected_outputs[key] += (args[0],)
-                    output = orig_forward(*args, **kwargs)
-                    if not isinstance(output, tuple):
-                        collected_outputs[key] += (output,)
-                    elif output[index] is not None:
-                        if key not in collected_outputs:
-                            collected_outputs[key] = (output[index],)
-                        else:
-                            collected_outputs[key] += (output[index],)
-                    return output
-
-                return wrapped_forward
-
-            if any(recordable_keys.values()):
-                capture_tasks = []
-                for key, layer_specs in capture_flags.items():
-                    if not recordable_keys.get(f"output_{key}", False):
-                        continue
-                    if not isinstance(layer_specs, list):
-                        layer_specs = [layer_specs]
-                    for specs in layer_specs:
-                        if not isinstance(specs, OutputRecorder):
-                            index = 0 if "hidden_states" in key else 1
-                            class_name = None if not isinstance(specs, str) else specs
-                            target_class = specs if not isinstance(specs, str) else None
-                            specs = OutputRecorder(target_class=target_class, index=index, class_name=class_name)
-                        capture_tasks.append((key, specs))
-
-                for name, module in self.named_modules():
-                    for key, specs in capture_tasks:
-                        # The second check is for multimodals where only backbone layer suffix is available
-                        if (specs.target_class is not None and isinstance(module, specs.target_class)) or (
-                            specs.class_name is not None and name.endswith(specs.class_name)
-                        ):
-                            if specs.layer_name is not None and specs.layer_name not in name:
-                                continue
-                            # Monkey patch forward
-                            original_forward = module.forward
-                            module.forward = make_capture_wrapper(module, original_forward, key, specs.index)
-                            monkey_patched_layers.append((module, original_forward))
+            # If we need to capture any output, let's activate the hooks!
+            output_token = _active_collector.set(collected_outputs)
+            keys_token = _active_keys.set(keys_to_capture)
 
             try:
                 if kwargs.get("debug_io", False):
@@ -1028,10 +1084,10 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
                     "Missing `**kwargs` in the signature of the `@check_model_inputs`-decorated function "
                     f"({func.__qualname__})"
                 )
-
-            # Restore original forward methods
-            for module, original_forward in monkey_patched_layers:
-                module.forward = original_forward
+            # Reset the collector
+            finally:
+                _active_collector.reset(output_token)
+                _active_keys.reset(keys_token)
 
             # Restore original config value
             if is_causal is not None:

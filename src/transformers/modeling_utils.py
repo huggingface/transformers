@@ -118,7 +118,7 @@ from .utils import (
     is_torch_xpu_available,
     logging,
 )
-from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder, is_flash_attention_requested
+from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder, is_flash_attention_requested, install_all_output_capturing_hooks
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     is_huggingface_hub_greater_or_equal,
@@ -1326,6 +1326,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Maybe initialize the weights and tie the keys
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
+
+        # Install output capturing hooks if needed
+        install_all_output_capturing_hooks(self)
 
     @property
     def tp_plan(self) -> dict[str, str]:
