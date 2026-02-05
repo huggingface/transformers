@@ -6,7 +6,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_qwen3_tts import *
-    from .modeling_qwen3_tts import *
+    from .modular_qwen3_tts import *
 else:
     import sys
 
