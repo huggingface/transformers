@@ -150,6 +150,7 @@ logger = logging.get_logger(__name__)
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
+_init_weights = False
 _is_quantized = False
 _is_ds_init_called = False
 
@@ -2311,6 +2312,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if getattr(module, "_is_hf_initialized", False):
             return
 
+        if (weight := getattr(module, "weight", None)) is not None and getattr(weight, "_is_hf_initialized", False):
+            return
+
         self._init_weights(module)
         module._is_hf_initialized = True
 
@@ -2456,11 +2460,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return expanded_tied_weights
 
-    def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
+    def tie_weights(self, missing_keys: set[str] | None = None):
         """
-        Tie the model weights. If `recompute_mapping=False` (default when called internally), it will rely on the
-        `model.all_tied_weights_keys` attribute, containing the `{target: source}` mapping for the tied params.
-        If `recompute_mapping=True`, it will re-check all internal submodels and their config to determine the params
+        Tie the model weights. If `model.all_tied_weights_keys` attribute exists, it will rely on the that mapping
+        containing the `{target: source}` for the tied params. This attribute is created by default when model is init.
+        Otehrwise if attribute doesn't exist, it will re-check all internal submodels and their config to determine the params
         that need to be tied. This is the default when `model.tie_weights()` is called on its own, outside of
         `__init__`, and `from_pretrained`, in case the config values were changed somewhere.
 
@@ -2469,7 +2473,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         tie everything to the parameter that actually exists.
         """
         # In this case, the keys stored in `all_tied_weights_keys` are already correct
-        if not recompute_mapping:
+        if hasattr(self, "all_tied_weights_keys"):
             tied_keys = self.all_tied_weights_keys
         else:
             tied_keys = self.get_expanded_tied_weights_keys(all_submodels=True)
@@ -3020,7 +3024,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Initialize weights
             self.initialize_weights()
         # Tie weights needs to be called here, but it can use the pre-computed `all_tied_weights_keys`
-        self.tie_weights(recompute_mapping=False)
+        self.tie_weights()
 
     def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
         """
@@ -4204,6 +4208,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
         model.mark_tied_weights_as_initialized()
 
+        model._adjust_missing_keys_with_tied_pointers(loading_info)
+
         # Move missing (and potentially mismatched) keys and non-persistent buffers back to their expected device from
         # meta device (because they were not moved when loading the weights as they were not in the loaded state dict)
         model._move_missing_keys_from_meta_to_device(
@@ -4212,12 +4218,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             load_config.device_mesh,
             load_config.hf_quantizer,
         )
-
         # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialized` flag)
         model._initialize_missing_keys(load_config.is_quantized)
 
         # Tie the weights
-        model.tie_weights(missing_keys=loading_info.missing_keys, recompute_mapping=False)
+        model.tie_weights(missing_keys=loading_info.missing_keys)
 
         # Adjust missing and unexpected keys
         model._adjust_missing_and_unexpected_keys(loading_info)
@@ -4415,6 +4420,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     @classmethod
     def is_backend_compatible(cls):
         return cls._supports_attention_backend
+
+    def _adjust_missing_keys_with_tied_pointers(self, loading_info: LoadStateDictInfo) -> None:
+        # Remove tied param names by pointers because remote code might tie that way
+        # Otherwise we'll end up re-init those "tied" weights as the are missing in ckpt
+        param_pointers = defaultdict(list)
+        for param_name, param_value in self.state_dict().items():
+            param_pointers[param_value.data_ptr()].append(param_name)
+        tied_param_names = {name for names in param_pointers.values() if len(names) > 1 for name in names}
+        loading_info.missing_keys = loading_info.missing_keys - tied_param_names
 
     def _move_missing_keys_from_meta_to_device(
         self,
