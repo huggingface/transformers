@@ -80,14 +80,14 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         from compressed_tensors import __version__ as ct_version
         from packaging import version
 
-        if version.parse(ct_version) > version.parse("0.13"):
+        if version.parse(ct_version) >= version.parse("0.14"):
             self.compressor.decompress_model(model=model)
         elif (
             self.quantization_config.is_quantization_compressed and not self.run_compressed
         ) or self.quantization_config.is_sparsification_compressed:
             self.compressor.decompress_model(model=model)
 
-    def _dequantize(self, model):
+    def _dequantize(self, model, dtype=None):
         from compressed_tensors.quantization import QuantizationStatus
 
         self.compressor.decompress_model(model=model)
