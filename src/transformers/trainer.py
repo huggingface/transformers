@@ -24,7 +24,6 @@ import json
 import math
 import os
 import random
-import re
 import shutil
 import sys
 import tempfile
@@ -124,8 +123,10 @@ from .trainer_utils import (
     load_sharded_checkpoint,
     neftune_post_forward_hook,
     number_of_arguments,
+    rotate_checkpoints,
     seed_worker,
     set_seed,
+    sort_checkpoints,
     speed_metrics,
 )
 from .training_args import OptimizerNames, ParallelMode, TrainingArguments
@@ -2681,7 +2682,9 @@ class Trainer:
         self.log(metrics)
 
         run_dir = self._get_output_dir(trial)
-        checkpoints_sorted = self._sorted_checkpoints(use_mtime=False, output_dir=run_dir)
+        checkpoints_sorted = sort_checkpoints(
+            output_dir=run_dir, best_model_checkpoint=self.state.best_model_checkpoint
+        )
 
         # Delete the last checkpoint when save_total_limit=1 if it's different from the best checkpoint and process allowed to save.
         if self.args.should_save and self.state.best_model_checkpoint is not None and self.args.save_total_limit == 1:
@@ -3167,8 +3170,13 @@ class Trainer:
 
         # Maybe delete some older checkpoints.
         if self.args.should_save:
-            # we use mtime as default, filesystems without mtime support will be detected in `_sorted_checkpoints`
-            self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
+            # we use mtime as default, filesystems without mtime support will be detected in `sort_checkpoints`
+            rotate_checkpoints(
+                output_dir=run_dir,
+                save_total_limit=self.args.save_total_limit,
+                best_model_checkpoint=self.state.best_model_checkpoint,
+                use_mtime=True,
+            )
 
     def _save_rng_state(self, output_dir):
         # Save RNG state in non-distributed training
@@ -4157,68 +4165,6 @@ class Trainer:
         else:
             self.state.total_flos += self.current_flos
             self.current_flos = 0
-
-    def _sorted_checkpoints(
-        self, output_dir=None, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False
-    ) -> list[str]:
-        ordering_and_checkpoint_path = []
-
-        glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{checkpoint_prefix}-*") if os.path.isdir(x)]
-
-        for path in glob_checkpoints:
-            if use_mtime:
-                ordering_and_checkpoint_path.append((os.path.getmtime(path), path))
-            else:
-                regex_match = re.match(f".*{checkpoint_prefix}-([0-9]+)", path)
-                if regex_match is not None and regex_match.groups() is not None:
-                    ordering_and_checkpoint_path.append((int(regex_match.groups()[0]), path))
-
-        checkpoints_sorted = sorted(ordering_and_checkpoint_path)
-        # mtime is not reliable on all filesystems, especially on some fuse fs in cloud environments
-        # so we check if the mtime is fake and fallback to numerical ordering if needed
-        if use_mtime and len(ordering_and_checkpoint_path) > 1:
-            mtime_diff = checkpoints_sorted[-1][0] - checkpoints_sorted[0][0]
-            if mtime_diff < 1.0:  # less than 1 second, which is almost impossible when mtime works fine
-                warnings.warn("mtime may not be reliable on this filesystem, falling back to numerical ordering")
-                return self._sorted_checkpoints(
-                    use_mtime=False, output_dir=output_dir, checkpoint_prefix=checkpoint_prefix
-                )
-        checkpoints_sorted = [checkpoint[1] for checkpoint in checkpoints_sorted]
-
-        # Make sure we don't delete the best model.
-        if (
-            self.state.best_model_checkpoint is not None
-            and str(Path(self.state.best_model_checkpoint)) in checkpoints_sorted
-        ):
-            best_model_index = checkpoints_sorted.index(str(Path(self.state.best_model_checkpoint)))
-            for i in range(best_model_index, len(checkpoints_sorted) - 2):
-                checkpoints_sorted[i], checkpoints_sorted[i + 1] = checkpoints_sorted[i + 1], checkpoints_sorted[i]
-        return checkpoints_sorted
-
-    def _rotate_checkpoints(self, use_mtime=False, output_dir=None) -> None:
-        if self.args.save_total_limit is None or self.args.save_total_limit <= 0:
-            return
-
-        # Check if we should delete older checkpoint(s)
-        checkpoints_sorted = self._sorted_checkpoints(use_mtime=use_mtime, output_dir=output_dir)
-        if len(checkpoints_sorted) <= self.args.save_total_limit:
-            return
-
-        # If save_total_limit=1 with load_best_model_at_end=True, we could end up deleting the last checkpoint, which
-        # we don't do to allow resuming.
-        save_total_limit = self.args.save_total_limit
-        if (
-            self.state.best_model_checkpoint is not None
-            and self.args.save_total_limit == 1
-            and checkpoints_sorted[-1] != self.state.best_model_checkpoint
-        ):
-            save_total_limit = 2
-
-        number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - save_total_limit)
-        checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
-        for checkpoint in checkpoints_to_be_deleted:
-            logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
-            shutil.rmtree(checkpoint, ignore_errors=True)
 
     def evaluate(
         self,
