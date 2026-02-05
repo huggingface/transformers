@@ -15,29 +15,26 @@
 Generic utilities
 """
 
+from __future__ import annotations
+
 import inspect
 import json
-from contextvars import ContextVar
 import os
 import warnings
 from collections import OrderedDict, UserDict, defaultdict
 from collections.abc import Callable, Iterable, MutableMapping
 from contextlib import AbstractContextManager, ExitStack, nullcontext
+from contextvars import ContextVar
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, Optional, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import numpy as np
 
 from ..utils import logging
-from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, requires, is_torchdynamo_compiling
+from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, is_torchdynamo_compiling, requires
 
-
-_CAN_RECORD_REGISTRY = {}
-
-
-logger = logging.get_logger(__name__)
 
 _is_torch_available = False
 if is_torch_available():
@@ -48,6 +45,17 @@ if is_torch_available():
     from ..model_debugging_utils import model_addition_debugger_context
 
     _is_torch_available = True
+
+
+if TYPE_CHECKING:
+    from torch import nn
+
+    from ..modeling_utils import PreTrainedModel
+
+_CAN_RECORD_REGISTRY = {}
+
+
+logger = logging.get_logger(__name__)
 
 
 # required for @can_return_tuple decorator to work with torchdynamo
@@ -178,7 +186,7 @@ def _is_tensor_or_array_like(value):
 
 def maybe_autocast(
     device_type: str,
-    dtype: Optional["_dtype"] = None,
+    dtype: _dtype | None = None,
     enabled: bool = True,
     cache_enabled: bool | None = None,
 ):
@@ -452,12 +460,12 @@ class ModelOutput(OrderedDict):
 if _is_torch_available:
     import torch.utils._pytree as _torch_pytree
 
-    def _model_output_flatten(output: ModelOutput) -> tuple[list[Any], "_torch_pytree.Context"]:
+    def _model_output_flatten(output: ModelOutput) -> tuple[list[Any], _torch_pytree.Context]:
         return list(output.values()), list(output.keys())
 
     def _model_output_unflatten(
         values: Iterable[Any],
-        context: "_torch_pytree.Context",
+        context: _torch_pytree.Context,
         output_type=None,
     ) -> ModelOutput:
         return output_type(**dict(zip(context, values)))
@@ -754,15 +762,15 @@ class TransformersKwargs(TypedDict, total=False):
             Can be set to False to enable bi-directional attention, i.e. use decoder Attention modules as encoders.
     """
 
-    num_items_in_batch: Optional["torch.Tensor"]
+    num_items_in_batch: torch.Tensor | None
     output_hidden_states: bool | None
     output_attentions: bool | None
     output_router_logits: bool | None
-    cu_seq_lens_q: Optional["torch.LongTensor"]
-    cu_seq_lens_k: Optional["torch.LongTensor"]
+    cu_seq_lens_q: torch.LongTensor | None
+    cu_seq_lens_k: torch.LongTensor | None
     max_length_q: int | None
     max_length_k: int | None
-    position_ids: Optional["torch.LongTensor"]
+    position_ids: torch.LongTensor | None
     is_causal: bool | None
 
 
@@ -799,7 +807,7 @@ def is_timm_local_checkpoint(pretrained_model_path: str) -> bool:
     return False
 
 
-def set_attribute_for_modules(module: "torch.nn.Module", key: str, value: Any):
+def set_attribute_for_modules(module: torch.nn.Module, key: str, value: Any):
     """
     Set a value to a module and all submodules.
     """
@@ -808,7 +816,7 @@ def set_attribute_for_modules(module: "torch.nn.Module", key: str, value: Any):
         set_attribute_for_modules(submodule, key, value)
 
 
-def del_attribute_from_modules(module: "torch.nn.Module", key: str):
+def del_attribute_from_modules(module: torch.nn.Module, key: str):
     """
     Delete a value from a module and all submodules.
     """
@@ -842,12 +850,15 @@ def can_return_tuple(func):
 
     return wrapper
 
+
 class CompileableContextVar:
     """
     Convenience wrapper around a ContextVar for usage with `torch.compile`.
     This behaves exactly as a `ContextVar`, except when compilation is triggered in which case it behaves as a simple
     global variable. This is useful as `torch.compile` cannot trace the `get` method of `ContextVar`. This however means
-    that the access to the underlying variable is not thread-safe when compilation is triggered."""
+    that the access to the underlying variable is not thread-safe when compilation is triggered.
+    """
+
     def __init__(self, name, default):
         self.context_var = ContextVar(name, default=default)
         self.global_var = default
@@ -864,7 +875,7 @@ class CompileableContextVar:
                 return self.global_var
             else:
                 return self.context_var.get()
-        
+
     def set(self, value):
         if is_torchdynamo_compiling():
             self.global_var = value
@@ -880,18 +891,21 @@ class CompileableContextVar:
         else:
             self.context_var.reset(token)
 
+
+# Thread-safe global variables
 _active_collector = CompileableContextVar("output_collector", default=None)
 _active_keys = CompileableContextVar("keys_to_capture", default=None)
 
 
-def install_hook(module, key, index):
+def install_output_capuring_hook(module: nn.Module, key: str, index: int) -> None:
+    """Install the forward hook needed to capture the output described by `key` and `index` in `module`."""
 
     def output_capturing_hook(module, args, output):
         keys_to_capture = _active_keys.get()
         # If it's None or not a key we want to capture, simply return, the hook is inactive
         if keys_to_capture is None or key not in keys_to_capture:
             return
-        
+
         # Get the current thread-local collector
         collected_outputs = _active_collector.get()
 
@@ -905,8 +919,37 @@ def install_hook(module, key, index):
     module.register_forward_hook(output_capturing_hook)
 
 
-def install_all_output_capturing_hooks(model):
+def recursively_install_hooks(parent_module: nn.Module, capture_tasks: list[tuple[str, OutputRecorder]]) -> None:
+    """
+    Recursively install all output capturing hooks on all submodules of `parent_module`.
+    Note that we need to use this recursive approach instead of simply iteratating over all modules, because we want
+    to skip installing them on all parts of the graph that are submodels (`PreTrainedModel` instances), to avoid installing
+    then twice in case of composite models (we cannot skip the submodel module itself, as we also need to skip all its
+    children).
+    """
     from ..modeling_utils import PreTrainedModel
+
+    # First dispatch to children if needed
+    for name, module in parent_module.named_children():
+        if not isinstance(module, PreTrainedModel):
+            recursively_install_hooks(module, capture_tasks)
+
+    # Potentially install the hook on current `parent_module`
+    for key, specs in capture_tasks:
+        # The second check is for multimodals where only backbone layer suffix is available
+        if (specs.target_class is not None and isinstance(parent_module, specs.target_class)) or (
+            specs.class_name is not None and name.endswith(specs.class_name)
+        ):
+            if specs.layer_name is not None and specs.layer_name not in name:
+                continue
+            install_output_capuring_hook(parent_module, key, specs.index)
+
+
+def install_all_output_capturing_hooks(model: PreTrainedModel) -> None:
+    """
+    Install the output recording hooks on all the modules in `model`. This is designed to be called in
+    `post_init` for every `PreTrainedModel`, and will take care of only installing them once for composite models.
+    """
     # _can_record_outputs is None by default
     capture_flags = _CAN_RECORD_REGISTRY.get(str(model.__class__)) or {}  # there is a weak ref for executorch
 
@@ -922,22 +965,8 @@ def install_all_output_capturing_hooks(model):
                 specs = OutputRecorder(target_class=target_class, index=index, class_name=class_name)
             capture_tasks.append((key, specs))
 
-    # Install all hooks (we need to use this approach instead of only iterate over all modules so that composite models
-    # do not install them several time)
-    def install_all(parent_module):
-        for name, module in parent_module.named_children():
-            if not isinstance(module, PreTrainedModel):
-                install_all(module)
-            for key, specs in capture_tasks:
-                # The second check is for multimodals where only backbone layer suffix is available
-                if (specs.target_class is not None and isinstance(module, specs.target_class)) or (
-                    specs.class_name is not None and name.endswith(specs.class_name)
-                ):
-                    if specs.layer_name is not None and specs.layer_name not in name:
-                        continue
-                    install_hook(module, key, specs.index)
-    
-    install_all(model)
+    # Install the hooks
+    recursively_install_hooks(model, capture_tasks)
 
 
 @dataclass
@@ -953,7 +982,7 @@ class OutputRecorder:
         class_name (Optional[str]): Name of the class to which the hook will be attached. Could be the suffix of class name in some cases.
     """
 
-    target_class: "type[torch.nn.Module]"
+    target_class: type[torch.nn.Module]
     index: int = 0
     layer_name: str | None = None
     class_name: str | None = None
@@ -1056,10 +1085,10 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
             # when certain condtions are met. Let's output cross attention if attentions are requested (for BC)
             if "output_attentions" in recordable_keys:
                 recordable_keys["output_cross_attentions"] = recordable_keys["output_attentions"]
-            
+
             keys_to_capture = {k.replace("output_", "") for k, v in recordable_keys.items() if v}
             collected_outputs = defaultdict(tuple)
-            # If we need to capture any output, let's activate the hooks!
+            # Let's activate the output collector hooks if needed!
             output_token = _active_collector.set(collected_outputs)
             keys_token = _active_keys.set(keys_to_capture)
 
@@ -1084,8 +1113,8 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
                     "Missing `**kwargs` in the signature of the `@check_model_inputs`-decorated function "
                     f"({func.__qualname__})"
                 )
-            # Reset the collector
             finally:
+                # Reset the states
                 _active_collector.reset(output_token)
                 _active_keys.reset(keys_token)
 
