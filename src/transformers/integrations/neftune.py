@@ -27,7 +27,7 @@ def neftune_post_forward_hook(module, input, output):
     """
     Implements the NEFTune forward pass for the model using forward hooks. Note this works only for torch.nn.Embedding
     layers. This method is slightly adapted from the original source code that can be found here:
-    https://github.com/neelsjain/NEFTune Simply add it to your model as follows:
+    https://github.com/neelsjain/NEFTune. Simply add it to your model as follows:
     ```python
     model = ...
     model.embed_tokens.neftune_noise_alpha = 0.1
