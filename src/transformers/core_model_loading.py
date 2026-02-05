@@ -18,6 +18,7 @@ from __future__ import annotations
 import math
 import os
 import re
+import traceback
 from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
@@ -846,7 +847,6 @@ def log_conversion_errors(
             return curr_op.__class__.__name__
 
         op_name = _format_op_name(op)
-        import traceback
 
         tb_str = "".join(traceback.format_exception(type(e), e, e.__traceback__))
         if isinstance(extras, tuple) and len(extras) == 2:

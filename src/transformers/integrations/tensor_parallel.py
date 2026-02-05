@@ -723,6 +723,7 @@ class ColwiseParallel(TensorParallelLayer):
         shape[dim] = end - start
         return tuple(shape)
 
+
 class RowwiseParallel(TensorParallelLayer):
     """
     Row-wise parallel: weight is sharded on dim -1 (input features).
