@@ -117,6 +117,16 @@ class GroundingDinoProcessorKwargs(ProcessingKwargs, total=False):
 class GroundingDinoProcessor(ProcessorMixin):
     valid_processor_kwargs = GroundingDinoProcessorKwargs
 
+    valid_processor_kwargs = GroundingDinoProcessorKwargs
+
+    model_input_names = [
+        "input_ids",
+        "attention_mask",
+        "token_type_ids",
+        "pixel_values",
+        "pixel_mask",
+    ]
+
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
