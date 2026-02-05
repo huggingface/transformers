@@ -479,7 +479,7 @@ def render_jinja_template(
     **kwargs,
 ) -> str:
     if return_assistant_tokens_mask and not re.search(r"\{\%-?\s*generation\s*-?\%\}", chat_template):
-        logger.warning_once(  # type: ignore[attr-defined]
+        logger.warning_once(
             "return_assistant_tokens_mask==True but chat template does not contain `{% generation %}` keyword."
         )
 
