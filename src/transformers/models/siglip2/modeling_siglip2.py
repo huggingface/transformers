@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -27,7 +26,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.init import _calculate_fan_in_and_fan_out
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -36,7 +34,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import check_model_inputs, is_flash_attention_requested
 from .configuration_siglip2 import Siglip2Config, Siglip2TextConfig, Siglip2VisionConfig
 
@@ -169,7 +167,10 @@ class Siglip2VisionEmbeddings(nn.Module):
 
         for i in range(batch_size):
             # (1, dim, height, width) -> (1, dim, target_height, target_width)
-            height, width = spatial_shapes[i]
+            height, width = spatial_shapes[i].tolist()  # will be itemized in F.interpolate either way
+            torch_compilable_check((width > 0), "Width of resized positional embeddings must be positive.")
+            torch_compilable_check((height > 0), "Height of resized positional embeddings must be positive.")
+            torch_compilable_check((height * width) <= max_length, "Resized positional embeddings exceed max_length.")
             resized_embeddings = F.interpolate(
                 positional_embeddings,
                 size=(height, width),
@@ -389,36 +390,6 @@ class Siglip2EncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-def variance_scaling_(tensor, mode="fan_in", distribution="normal"):
-    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
-    if mode == "fan_in":
-        denom = fan_in
-    elif mode == "fan_out":
-        denom = fan_out
-    elif mode == "fan_avg":
-        denom = (fan_in + fan_out) / 2
-
-    variance = 1.0 / denom
-
-    if distribution == "truncated_normal":
-        init.trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
-    elif distribution == "normal":
-        init.normal_(tensor, std=math.sqrt(variance))
-    elif distribution == "uniform":
-        bound = math.sqrt(3 * variance)
-        init.uniform_(tensor, -bound, bound)
-    else:
-        raise ValueError(f"invalid distribution {distribution}")
-
-
-def lecun_normal_(tensor):
-    variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
-
-
-def default_flax_embed_init(tensor):
-    variance_scaling_(tensor, mode="fan_in", distribution="normal")
-
-
 @auto_docstring
 class Siglip2PreTrainedModel(PreTrainedModel):
     config: Siglip2Config
@@ -455,7 +426,7 @@ class Siglip2PreTrainedModel(PreTrainedModel):
             if hasattr(module, "position_ids"):
                 init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, nn.Embedding):
-            default_flax_embed_init(module.weight)
+            init.default_flax_embed_init_(module.weight)
         elif isinstance(module, Siglip2Attention):
             init.xavier_uniform_(module.q_proj.weight)
             init.xavier_uniform_(module.k_proj.weight)
@@ -483,7 +454,7 @@ class Siglip2PreTrainedModel(PreTrainedModel):
                 std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
             )
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            lecun_normal_(module.weight)
+            init.lecun_normal_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):

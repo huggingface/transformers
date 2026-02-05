@@ -155,7 +155,7 @@ class ModernBertConfig(PreTrainedConfig):
         max_position_embeddings: int | None = 8192,
         initializer_range: float | None = 0.02,
         initializer_cutoff_factor: float | None = 2.0,
-        norm_eps: int | None = 1e-5,
+        norm_eps: float | None = 1e-5,
         norm_bias: bool | None = False,
         pad_token_id: int | None = 50283,
         eos_token_id: int | None = 50282,

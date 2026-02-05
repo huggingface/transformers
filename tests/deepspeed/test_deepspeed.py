@@ -476,6 +476,9 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                         loaded_model = Qwen3MoeModel.from_pretrained(old_checkpoint_dir)
 
             self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+
+            # Without weight conversion, gate_up_proj and down_proj would be MISSING
+            # This regex fails the test if expert fusion weights are missing from checkpoint
             self.assertNotRegex(cl.out, r"mlp\.experts\.(gate_up_proj|down_proj)\s*\|\s*MISSING")
 
             # Verify the model structure is correct (fused experts in v5 format)
@@ -488,6 +491,14 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                     expert_params_to_check.append((name, param))
                 self.assertNotRegex(name, r"mlp\.experts\.\d+\.(gate_proj|up_proj|down_proj)\.weight")
 
+            # Without the fix, expert_params_to_check would be empty (all MISSING)
+            self.assertGreater(
+                len(expert_params_to_check),
+                0,
+                "No expert weights found - weight conversion failed! "
+                "Expected fused gate_up_proj and down_proj but found none.",
+            )
+
             with deepspeed.zero.GatheredParameters([param for _, param in expert_params_to_check], modifier_rank=0):
                 for name, param in expert_params_to_check:
                     if "mlp.experts.gate_up_proj" in name:
@@ -499,6 +510,67 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                     ):
                         self.assertEqual(len(param.shape), 3, f"down_proj should be 3D, got {param.shape}")
                         self.assertEqual(param.shape[0], 8, f"Should have 8 experts, got {param.shape[0]}")
+
+    def test_init_zero3_variance_scaling(self):
+        """
+        Tests whether variance scaling initializations (`lecun_normal_`, `default_flax_embed_init_`) work correctly
+        with DeepSpeed ZeRO-3, e.g. as in SigLIP models. It indirectly checks for the `_is_hf_initialized` flag to
+        prevent re-initialization in ZeRO-3 environments. See #43574
+        """
+        import tempfile
+
+        from transformers import (
+            SiglipConfig,
+            SiglipModel,
+            SiglipTextConfig,
+            SiglipVisionConfig,
+        )
+
+        text_cfg = SiglipTextConfig(
+            vocab_size=64,
+            hidden_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            intermediate_size=32,
+            max_position_embeddings=16,
+        )
+
+        vision_cfg = SiglipVisionConfig(
+            image_size=4,
+            patch_size=2,
+            num_channels=3,
+            hidden_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            intermediate_size=32,
+        )
+
+        cfg = SiglipConfig(text_config=text_cfg.to_dict(), vision_config=vision_cfg.to_dict())
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model = SiglipModel(cfg).eval()
+            model.save_pretrained(tmpdirname)
+
+            ds_config = {
+                "train_batch_size": 1,
+                "zero_optimization": {
+                    "stage": 3,
+                },
+            }
+
+            dschf = HfDeepSpeedConfig(ds_config)
+
+            self.assertTrue(dschf.is_zero3())
+            self.assertTrue(is_deepspeed_zero3_enabled())
+
+            with LoggingLevel(logging.INFO):
+                with mockenv_context(**self.dist_env_1_gpu):
+                    logger = logging.get_logger("transformers.modeling_utils")
+                    with CaptureLogger(logger) as cl:
+                        model = SiglipModel.from_pretrained(tmpdirname)
+
+        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+        self.assertIsNotNone(model)
 
 
 class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):

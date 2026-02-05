@@ -20,6 +20,7 @@
 
 import math
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -29,13 +30,21 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
+from ...backbone_utils import load_backbone
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, auto_docstring, torch_compilable_check, torch_int
-from ...utils.backbone_utils import load_backbone
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    torch_compilable_check,
+    torch_int,
+)
+from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_pp_doclayout_v3 import PPDocLayoutV3Config
 
 
@@ -57,9 +66,6 @@ class PPDocLayoutV3GlobalPointer(nn.Module):
         logits = logits.masked_fill(mask.unsqueeze(0), -1e4)
 
         return logits
-
-
-# TODO: Replace all occurrences of the checkpoint with the final one
 
 
 @use_kernel_forward_from_hub("MultiScaleDeformableAttention")
@@ -154,9 +160,6 @@ class PPDocLayoutV3MultiscaleDeformableAttention(nn.Module):
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
-        return tensor if position_embeddings is None else tensor + position_embeddings
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -168,11 +171,11 @@ class PPDocLayoutV3MultiscaleDeformableAttention(nn.Module):
         spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
-        output_attentions: bool = False,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = hidden_states + position_embeddings
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
@@ -234,6 +237,10 @@ class PPDocLayoutV3PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"PPDocLayoutV3HybridEncoder", r"PPDocLayoutV3DecoderLayer"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_attention_backend = True
+    _supports_flex_attn = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -390,21 +397,17 @@ class PPDocLayoutV3ModelOutput(ModelOutput):
     out_masks: torch.FloatTensor | None = None
 
 
-# taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 class PPDocLayoutV3MLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
     height and width of a bounding box w.r.t. an image.
 
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-    Origin from https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/PPDocLayoutV3_paddle/ppdet/modeling/transformers/utils.py#L453
-
     """
 
-    def __init__(self, config, input_dim, d_model, output_dim, num_layers):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
         super().__init__()
         self.num_layers = num_layers
-        h = [d_model] * (num_layers - 1)
+        h = [hidden_dim] * (num_layers - 1)
         self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
 
     def forward(self, x):
@@ -511,6 +514,120 @@ class PPDocLayoutV3EncoderMaskOutput(nn.Module):
         return x
 
 
+class PPDocLayoutV3MLP(nn.Module):
+    def __init__(
+        self, config: PPDocLayoutV3Config, hidden_size: int, intermediate_size: int, activation_function: str
+    ):
+        super().__init__()
+        self.fc1 = nn.Linear(hidden_size, intermediate_size)
+        self.fc2 = nn.Linear(intermediate_size, hidden_size)
+        self.activation_fn = ACT2FN[activation_function]
+        self.activation_dropout = config.activation_dropout
+        self.dropout = config.dropout
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        return hidden_states
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class PPDocLayoutV3SelfAttention(nn.Module):
+    """
+    Multi-headed self-attention from 'Attention Is All You Need' paper.
+
+    In PP_DOCLAYOUT_V3, position embeddings are added to both queries and keys (but not values) in self-attention.
+    """
+
+    def __init__(
+        self,
+        config: PPDocLayoutV3Config,
+        hidden_size: int,
+        num_attention_heads: int,
+        dropout: float = 0.0,
+        bias: bool = True,
+    ):
+        super().__init__()
+        self.config = config
+        self.head_dim = hidden_size // num_attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = dropout
+        self.is_causal = False
+
+        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.o_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Position embeddings are added to both queries and keys (but not values).
+        """
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_key_input = hidden_states + position_embeddings if position_embeddings is not None else hidden_states
+
+        query_states = self.q_proj(query_key_input).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(query_key_input).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
 class PPDocLayoutV3ConvNormLayer(nn.Module):
     def __init__(self, config, in_channels, out_channels, kernel_size, stride, padding=None, activation=None):
         super().__init__()
@@ -532,175 +649,52 @@ class PPDocLayoutV3ConvNormLayer(nn.Module):
         return hidden_state
 
 
-class PPDocLayoutV3MultiheadAttention(nn.Module):
-    """
-    Multi-headed attention from 'Attention Is All You Need' paper.
-
-    Here, we add position embeddings to the queries and keys (as explained in the Deformable DETR paper).
-    """
-
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        bias: bool = True,
-    ):
-        super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
-        if self.head_dim * num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {num_heads})."
-            )
-        self.scaling = self.head_dim**-0.5
-
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-
-    def _reshape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
-        return tensor if position_embeddings is None else tensor + position_embeddings
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_embeddings: torch.Tensor | None = None,
-        output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        """Input shape: Batch x Time x Channel"""
-
-        batch_size, target_len, embed_dim = hidden_states.size()
-        # add position embeddings to the hidden states before projecting to queries and keys
-        if position_embeddings is not None:
-            hidden_states_original = hidden_states
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
-
-        # get queries, keys and values
-        query_states = self.q_proj(hidden_states) * self.scaling
-        key_states = self._reshape(self.k_proj(hidden_states), -1, batch_size)
-        value_states = self._reshape(self.v_proj(hidden_states_original), -1, batch_size)
-
-        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
-        query_states = self._reshape(query_states, target_len, batch_size).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
-
-        source_len = key_states.size(1)
-
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (batch_size * self.num_heads, target_len, source_len):
-            raise ValueError(
-                f"Attention weights should be of size {(batch_size * self.num_heads, target_len, source_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        # expand attention_mask
-        if attention_mask is not None:
-            # [seq_len, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = attention_mask.expand(batch_size, 1, *attention_mask.size())
-
-        if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, target_len, source_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
-                    f" {attention_mask.size()}"
-                )
-            if attention_mask.dtype == torch.bool:
-                attention_mask = torch.zeros_like(attention_mask, dtype=attn_weights.dtype).masked_fill_(
-                    attention_mask, -torch.inf
-                )
-            attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
-            attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, target_len, source_len)
-            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, target_len, source_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (batch_size * self.num_heads, target_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, target_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(batch_size, target_len, embed_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights_reshaped
-
-
 class PPDocLayoutV3EncoderLayer(nn.Module):
     def __init__(self, config: PPDocLayoutV3Config):
         super().__init__()
         self.normalize_before = config.normalize_before
+        self.hidden_size = config.encoder_hidden_dim
 
         # self-attention
-        self.self_attn = PPDocLayoutV3MultiheadAttention(
-            embed_dim=config.encoder_hidden_dim,
-            num_heads=config.num_attention_heads,
+        self.self_attn = PPDocLayoutV3SelfAttention(
+            config=config,
+            hidden_size=self.hidden_size,
+            num_attention_heads=config.num_attention_heads,
             dropout=config.dropout,
         )
-        self.self_attn_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
+        self.self_attn_layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.encoder_activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(config.encoder_hidden_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, config.encoder_hidden_dim)
-        self.final_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
+        self.mlp = PPDocLayoutV3MLP(
+            config, self.hidden_size, config.encoder_ffn_dim, config.encoder_activation_function
+        )
+        self.final_layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor | None = None,
-        output_attentions: bool = False,
-        **kwargs,
-    ):
+        spatial_position_embeddings: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, hidden_size)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                Object queries (also called content embeddings), to be added to the hidden states.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
+            spatial_position_embeddings (`torch.FloatTensor`, *optional*):
+                Spatial position embeddings (2D positional encodings of image locations), to be added to both
+                the queries and keys in self-attention (but not to values).
         """
         residual = hidden_states
         if self.normalize_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            position_embeddings=position_embeddings,
-            output_attentions=output_attentions,
+            position_embeddings=spatial_position_embeddings,
+            **kwargs,
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -712,12 +706,7 @@ class PPDocLayoutV3EncoderLayer(nn.Module):
             hidden_states = self.final_layer_norm(hidden_states)
         residual = hidden_states
 
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-
-        hidden_states = self.fc2(hidden_states)
-
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.mlp(hidden_states)
 
         hidden_states = residual + hidden_states
         if not self.normalize_before:
@@ -728,12 +717,7 @@ class PPDocLayoutV3EncoderLayer(nn.Module):
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 class PPDocLayoutV3RepVggBlock(nn.Module):
@@ -784,33 +768,116 @@ class PPDocLayoutV3CSPRepLayer(nn.Module):
         return self.conv3(hidden_state_1 + hidden_state_2)
 
 
-class PPDocLayoutV3Encoder(nn.Module):
+class PPDocLayoutV3SinePositionEmbedding(nn.Module):
+    """
+    2D sinusoidal position embedding used in RT-DETR hybrid encoder.
+    """
+
+    def __init__(self, embed_dim: int = 256, temperature: int = 10000):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.temperature = temperature
+
+    @compile_compatible_method_lru_cache(maxsize=32)
+    def forward(
+        self,
+        width: int,
+        height: int,
+        device: torch.device | str,
+        dtype: torch.dtype,
+    ) -> torch.Tensor:
+        """
+        Generate 2D sinusoidal position embeddings.
+
+        Returns:
+            Position embeddings of shape (1, height*width, embed_dim)
+        """
+        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
+        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
+        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="xy")
+        if self.embed_dim % 4 != 0:
+            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
+        pos_dim = self.embed_dim // 4
+        omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
+        omega = 1.0 / (self.temperature**omega)
+
+        out_w = grid_w.flatten()[..., None] @ omega[None]
+        out_h = grid_h.flatten()[..., None] @ omega[None]
+
+        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
+
+
+class PPDocLayoutV3AIFILayer(nn.Module):
+    """
+    AIFI (Attention-based Intra-scale Feature Interaction) layer used in RT-DETR hybrid encoder.
+    """
+
     def __init__(self, config: PPDocLayoutV3Config):
         super().__init__()
+        self.config = config
+        self.encoder_hidden_dim = config.encoder_hidden_dim
+        self.eval_size = config.eval_size
 
+        self.position_embedding = PPDocLayoutV3SinePositionEmbedding(
+            embed_dim=self.encoder_hidden_dim,
+            temperature=config.positional_encoding_temperature,
+        )
         self.layers = nn.ModuleList([PPDocLayoutV3EncoderLayer(config) for _ in range(config.encoder_layers)])
 
-    def forward(self, src, src_mask=None, pos_embed=None, output_attentions: bool = False) -> torch.Tensor:
-        hidden_states = src
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`):
+                Feature map to process.
+        """
+        batch_size = hidden_states.shape[0]
+        height, width = hidden_states.shape[2:]
+
+        hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
+
+        if self.training or self.eval_size is None:
+            pos_embed = self.position_embedding(
+                width=width,
+                height=height,
+                device=hidden_states.device,
+                dtype=hidden_states.dtype,
+            )
+        else:
+            pos_embed = None
+
         for layer in self.layers:
             hidden_states = layer(
                 hidden_states,
-                attention_mask=src_mask,
-                position_embeddings=pos_embed,
-                output_attentions=output_attentions,
+                attention_mask=None,
+                spatial_position_embeddings=pos_embed,
+                **kwargs,
             )
+
+        hidden_states = (
+            hidden_states.permute(0, 2, 1).reshape(batch_size, self.encoder_hidden_dim, height, width).contiguous()
+        )
+
         return hidden_states
 
 
-class PPDocLayoutV3HybridEncoder(nn.Module):
+class PPDocLayoutV3HybridEncoder(PPDocLayoutV3PreTrainedModel):
     """
     Main difference to `RTDetrHybridEncoder`:
         1. Mask Feature Head: Added `PPDocLayoutV3MaskFeatFPN` module (`self.mask_feature_head`) for document - specific mask feature generation.
         2. Extra Conv Layers: Introduced `self.encoder_mask_lateral` and `self.encoder_mask_output` for mask feature processing and output.
     """
 
+    _can_record_outputs = {
+        "hidden_states": PPDocLayoutV3AIFILayer,
+        "attentions": PPDocLayoutV3SelfAttention,
+    }
+
     def __init__(self, config: PPDocLayoutV3Config):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.in_channels = config.encoder_in_channels
         self.feat_strides = config.feat_strides
@@ -822,10 +889,9 @@ class PPDocLayoutV3HybridEncoder(nn.Module):
         self.out_strides = self.feat_strides
         self.num_fpn_stages = len(self.in_channels) - 1
         self.num_pan_stages = len(self.in_channels) - 1
-        activation = config.activation_function
 
-        # encoder transformer
-        self.encoder = nn.ModuleList([PPDocLayoutV3Encoder(config) for _ in range(len(self.encode_proj_layers))])
+        # AIFI (Attention-based Intra-scale Feature Interaction) layers
+        self.aifi = nn.ModuleList([PPDocLayoutV3AIFILayer(config) for _ in range(len(self.encode_proj_layers))])
 
         # top-down FPN
         self.lateral_convs = nn.ModuleList()
@@ -837,7 +903,7 @@ class PPDocLayoutV3HybridEncoder(nn.Module):
                 out_channels=self.encoder_hidden_dim,
                 kernel_size=1,
                 stride=1,
-                activation=activation,
+                activation=config.activation_function,
             )
             fpn_block = PPDocLayoutV3CSPRepLayer(config)
             self.lateral_convs.append(lateral_conv)
@@ -853,7 +919,7 @@ class PPDocLayoutV3HybridEncoder(nn.Module):
                 out_channels=self.encoder_hidden_dim,
                 kernel_size=3,
                 stride=2,
-                activation=activation,
+                activation=config.activation_function,
             )
             pan_block = PPDocLayoutV3CSPRepLayer(config)
             self.downsample_convs.append(downsample_conv)
@@ -872,105 +938,31 @@ class PPDocLayoutV3HybridEncoder(nn.Module):
             in_channels=mask_feature_channels[1], num_prototypes=config.num_prototypes
         )
 
-    @staticmethod
-    def build_2d_sincos_position_embedding(
-        width, height, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
-    ):
-        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
-        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="xy")
-        if embed_dim % 4 != 0:
-            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
-        pos_dim = embed_dim // 4
-        omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
-        omega = 1.0 / (temperature**omega)
+        self.post_init()
 
-        out_w = grid_w.flatten()[..., None] @ omega[None]
-        out_h = grid_h.flatten()[..., None] @ omega[None]
-
-        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
-
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self,
         inputs_embeds=None,
         x4_feat=None,
-        attention_mask=None,
-        position_embeddings=None,
-        spatial_shapes=None,
-        level_start_index=None,
-        valid_ratios=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
-                - 1 for pixel features that are real (i.e. **not masked**),
-                - 0 for pixel features that are padding (i.e. **masked**).
-                [What are attention masks?](../glossary#attention-mask)
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of each feature map.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
-                Starting index of each feature map.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
-                Ratio of valid area in each feature level.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        feature_maps = inputs_embeds
 
-        hidden_states = inputs_embeds
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        # encoder
+        # AIFI: Apply transformer encoder to specified feature levels
         if self.config.encoder_layers > 0:
             for i, enc_ind in enumerate(self.encode_proj_layers):
-                if output_hidden_states:
-                    encoder_states = encoder_states + (hidden_states[enc_ind],)
-                height, width = hidden_states[enc_ind].shape[2:]
-                # flatten [batch, channel, height, width] to [batch, height*width, channel]
-                src_flatten = hidden_states[enc_ind].flatten(2).permute(0, 2, 1)
-                if self.training or self.eval_size is None:
-                    pos_embed = self.build_2d_sincos_position_embedding(
-                        width,
-                        height,
-                        self.encoder_hidden_dim,
-                        self.positional_encoding_temperature,
-                        device=src_flatten.device,
-                        dtype=src_flatten.dtype,
-                    )
-                else:
-                    pos_embed = None
-
-                layer_outputs = self.encoder[i](
-                    src_flatten,
-                    pos_embed=pos_embed,
-                    output_attentions=output_attentions,
-                )
-                hidden_states[enc_ind] = (
-                    layer_outputs[0].permute(0, 2, 1).reshape(-1, self.encoder_hidden_dim, height, width).contiguous()
-                )
-
-                if output_attentions:
-                    all_attentions = all_attentions + (layer_outputs[1],)
-
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states[enc_ind],)
+                feature_maps[enc_ind] = self.aifi[i](feature_maps[enc_ind], **kwargs)
 
         # top-down FPN
-        fpn_feature_maps = [hidden_states[-1]]
+        fpn_feature_maps = [feature_maps[-1]]
         for idx, (lateral_conv, fpn_block) in enumerate(zip(self.lateral_convs, self.fpn_blocks)):
-            backbone_feature_map = hidden_states[self.num_fpn_stages - idx - 1]
+            backbone_feature_map = feature_maps[self.num_fpn_stages - idx - 1]
             top_fpn_feature_map = fpn_feature_maps[-1]
             # apply lateral block
             top_fpn_feature_map = lateral_conv(top_fpn_feature_map)
@@ -998,13 +990,8 @@ class PPDocLayoutV3HybridEncoder(nn.Module):
         mask_feat += self.encoder_mask_lateral(x4_feat[0])
         mask_feat = self.encoder_mask_output(mask_feat)
 
-        if not return_dict:
-            return tuple(v for v in [pan_feature_maps, encoder_states, all_attentions, mask_feat] if v is not None)
-
         return PPDocLayoutV3HybridEncoderOutput(
             last_hidden_state=pan_feature_maps,
-            hidden_states=encoder_states,
-            attentions=all_attentions,
             mask_feat=mask_feat,
         )
 
@@ -1012,47 +999,50 @@ class PPDocLayoutV3HybridEncoder(nn.Module):
 class PPDocLayoutV3DecoderLayer(nn.Module):
     def __init__(self, config: PPDocLayoutV3Config):
         super().__init__()
+        self.hidden_size = config.d_model
+
         # self-attention
-        self.self_attn = PPDocLayoutV3MultiheadAttention(
-            embed_dim=config.d_model,
-            num_heads=config.decoder_attention_heads,
+        self.self_attn = PPDocLayoutV3SelfAttention(
+            config=config,
+            hidden_size=self.hidden_size,
+            num_attention_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
         )
         self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.decoder_activation_function]
-        self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.self_attn_layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         # cross-attention
         self.encoder_attn = PPDocLayoutV3MultiscaleDeformableAttention(
             config,
             num_heads=config.decoder_attention_heads,
             n_points=config.decoder_n_points,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.encoder_attn_layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         # feedforward neural networks
-        self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
-        self.final_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.mlp = PPDocLayoutV3MLP(
+            config, self.hidden_size, config.decoder_ffn_dim, config.decoder_activation_function
+        )
+        self.final_layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: torch.Tensor | None = None,
+        object_queries_position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = False,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(seq_len, batch, embed_dim)`.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                Position embeddings that are added to the queries and keys in the self-attention layer.
+                Input to the layer of shape `(batch, seq_len, hidden_size)`.
+            object_queries_position_embeddings (`torch.FloatTensor`, *optional*):
+                Position embeddings for the object query slots. These are added to both queries and keys
+                in the self-attention layer (not values).
             reference_points (`torch.FloatTensor`, *optional*):
                 Reference points.
             spatial_shapes (`torch.LongTensor`, *optional*):
@@ -1060,63 +1050,51 @@ class PPDocLayoutV3DecoderLayer(nn.Module):
             level_start_index (`torch.LongTensor`, *optional*):
                 Level start index.
             encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
+                cross attention input to the layer of shape `(batch, seq_len, hidden_size)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
         """
         residual = hidden_states
 
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=encoder_attention_mask,
-            position_embeddings=position_embeddings,
-            output_attentions=output_attentions,
+            position_embeddings=object_queries_position_embeddings,
+            **kwargs,
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        second_residual = hidden_states
+        residual = hidden_states
 
         # Cross-Attention
-        cross_attn_weights = None
-        hidden_states, cross_attn_weights = self.encoder_attn(
+        hidden_states, _ = self.encoder_attn(
             hidden_states=hidden_states,
             encoder_hidden_states=encoder_hidden_states,
-            position_embeddings=position_embeddings,
+            position_embeddings=object_queries_position_embeddings,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
             level_start_index=level_start_index,
-            output_attentions=output_attentions,
+            **kwargs,
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = second_residual + hidden_states
+        hidden_states = residual + hidden_states
 
         hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
-
-        return outputs
+        return hidden_states
 
 
 def inverse_sigmoid(x, eps=1e-5):
@@ -1132,14 +1110,18 @@ class PPDocLayoutV3Decoder(PPDocLayoutV3PreTrainedModel):
         A new mask generation process is introduced at each decoder layer.
     """
 
+    _can_record_outputs = {
+        "hidden_states": PPDocLayoutV3DecoderLayer,
+        "attentions": PPDocLayoutV3SelfAttention,
+        "cross_attentions": PPDocLayoutV3MultiscaleDeformableAttention,
+    }
+
     def __init__(self, config: PPDocLayoutV3Config):
         super().__init__(config)
 
         self.dropout = config.dropout
         self.layers = nn.ModuleList([PPDocLayoutV3DecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.query_pos_head = PPDocLayoutV3MLPPredictionHead(
-            config, 4, 2 * config.d_model, config.d_model, num_layers=2
-        )
+        self.query_pos_head = PPDocLayoutV3MLPPredictionHead(4, 2 * config.d_model, config.d_model, num_layers=2)
 
         # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
         self.bbox_embed = None
@@ -1150,26 +1132,22 @@ class PPDocLayoutV3Decoder(PPDocLayoutV3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @check_model_inputs()
     def forward(
         self,
         inputs_embeds=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        position_embeddings=None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
-        valid_ratios=None,
         order_head=None,
         global_pointer=None,
         mask_query_head=None,
         norm=None,
         mask_feat=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Args:
@@ -1183,30 +1161,17 @@ class PPDocLayoutV3Decoder(PPDocLayoutV3PreTrainedModel):
                 in `[0, 1]`:
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
             reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
                 Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
             spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
                 Spatial shapes of the feature maps.
             level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
                 Indexes for the start of each feature level. In range `[0, sequence_length]`.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
-                Ratio of valid area in each feature level.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
 
         # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
         intermediate = ()
         intermediate_reference_points = ()
         intermediate_logits = ()
@@ -1218,24 +1183,19 @@ class PPDocLayoutV3Decoder(PPDocLayoutV3PreTrainedModel):
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L252
         for idx, decoder_layer in enumerate(self.layers):
             reference_points_input = reference_points.unsqueeze(2)
-            position_embeddings = self.query_pos_head(reference_points)
+            object_queries_position_embeddings = self.query_pos_head(reference_points)
 
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
+                object_queries_position_embeddings=object_queries_position_embeddings,
                 encoder_hidden_states=encoder_hidden_states,
                 reference_points=reference_points_input,
                 spatial_shapes=spatial_shapes,
                 spatial_shapes_list=spatial_shapes_list,
                 level_start_index=level_start_index,
                 encoder_attention_mask=encoder_attention_mask,
-                output_attentions=output_attentions,
+                **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
 
             # hack implementation for iterative bounding box refinement
             if self.bbox_embed is not None:
@@ -1267,12 +1227,6 @@ class PPDocLayoutV3Decoder(PPDocLayoutV3PreTrainedModel):
                 order_logits = global_pointer(order_head[idx](valid_query))
                 decoder_out_order_logits += (order_logits,)
 
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
-
         # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate, dim=1)
         intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
@@ -1282,26 +1236,6 @@ class PPDocLayoutV3Decoder(PPDocLayoutV3PreTrainedModel):
             decoder_out_order_logits = torch.stack(decoder_out_order_logits, dim=1)
         decoder_out_masks = torch.stack(decoder_out_masks, dim=1)
 
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    intermediate,
-                    intermediate_logits,
-                    intermediate_reference_points,
-                    decoder_out_order_logits,
-                    decoder_out_masks,
-                    all_hidden_states,
-                    all_self_attns,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return PPDocLayoutV3DecoderOutput(
             last_hidden_state=hidden_states,
             intermediate_hidden_states=intermediate,
@@ -1309,9 +1243,6 @@ class PPDocLayoutV3Decoder(PPDocLayoutV3PreTrainedModel):
             intermediate_reference_points=intermediate_reference_points,
             decoder_out_order_logits=decoder_out_order_logits,
             decoder_out_masks=decoder_out_masks,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -1547,7 +1478,7 @@ def mask_to_box_coordinate(mask, dtype):
     x_coords_masked = x_coords * mask
     x_max = x_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
     x_min = (
-        torch.where(mask, x_coords_masked, torch.tensor(1e8, device=mask.device, dtype=dtype))
+        torch.where(mask, x_coords_masked, torch.tensor(torch.finfo(dtype).max))
         .flatten(start_dim=-2)
         .min(dim=-1)
         .values
@@ -1556,7 +1487,7 @@ def mask_to_box_coordinate(mask, dtype):
     y_coords_masked = y_coords * mask
     y_max = y_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
     y_min = (
-        torch.where(mask, y_coords_masked, torch.tensor(1e8, device=mask.device, dtype=dtype))
+        torch.where(mask, y_coords_masked, torch.tensor(torch.finfo(dtype).max))
         .flatten(start_dim=-2)
         .min(dim=-1)
         .values
@@ -1603,8 +1534,8 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
         num_backbone_outs = len(intermediate_channel_sizes)
 
         encoder_input_proj_list = []
-        for _ in range(num_backbone_outs):
-            in_channels = intermediate_channel_sizes[_]
+        for i in range(num_backbone_outs):
+            in_channels = intermediate_channel_sizes[i]
             encoder_input_proj_list.append(
                 nn.Sequential(
                     nn.Conv2d(in_channels, config.encoder_hidden_dim, kernel_size=1, bias=False),
@@ -1632,7 +1563,7 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
             nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
         self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
-        self.enc_bbox_head = PPDocLayoutV3MLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
+        self.enc_bbox_head = PPDocLayoutV3MLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
 
         # init encoder output anchors and valid_mask
         if config.anchor_image_size:
@@ -1642,8 +1573,8 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/PPDocLayoutV3_pytorch/src/zoo/PPDocLayoutV3/PPDocLayoutV3_decoder.py#L412
         num_backbone_outs = len(config.decoder_in_channels)
         decoder_input_proj_list = []
-        for _ in range(num_backbone_outs):
-            in_channels = config.decoder_in_channels[_]
+        for i in range(num_backbone_outs):
+            in_channels = config.decoder_in_channels[i]
             decoder_input_proj_list.append(
                 nn.Sequential(
                     nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False),
@@ -1667,13 +1598,11 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
         self.decoder_global_pointer = PPDocLayoutV3GlobalPointer(config)
         self.decoder_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.decoder.class_embed = nn.Linear(config.d_model, config.num_labels)
-        self.decoder.bbox_embed = PPDocLayoutV3MLPPredictionHead(
-            config, config.d_model, config.d_model, 4, num_layers=3
-        )
+        self.decoder.bbox_embed = PPDocLayoutV3MLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
 
         self.mask_enhanced = config.mask_enhanced
         self.mask_query_head = PPDocLayoutV3MLPPredictionHead(
-            config, config.d_model, config.d_model, config.num_prototypes, num_layers=3
+            config.d_model, config.d_model, config.num_prototypes, num_layers=3
         )
 
         self.post_init()
@@ -1716,16 +1645,14 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
         return anchors, valid_mask
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.LongTensor | None = None,
         encoder_outputs: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | PPDocLayoutV3ModelOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -1761,12 +1688,6 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 300, 256]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
 
@@ -1781,41 +1702,29 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
             encoder_outputs = self.encoder(
                 proj_feats,
                 x4_feat,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                **kwargs,
             )
         # If the user passed a tuple for encoder_outputs, we wrap it in a PPDocLayoutV3HybridEncoderOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, PPDocLayoutV3HybridEncoderOutput):
+        elif not isinstance(encoder_outputs, PPDocLayoutV3HybridEncoderOutput):
             encoder_outputs = PPDocLayoutV3HybridEncoderOutput(
                 last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if output_hidden_states else None,
-                attentions=encoder_outputs[2]
-                if len(encoder_outputs) > 2
-                else encoder_outputs[1]
-                if output_attentions
-                else None,
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
                 mask_feat=encoder_outputs[-1],
             )
-
-        mask_feat = (
-            encoder_outputs.mask_feat
-            if isinstance(encoder_outputs, PPDocLayoutV3HybridEncoderOutput)
-            else encoder_outputs[-1]
-        )
 
         # Equivalent to def _get_encoder_input
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
         sources = []
-        for level, source in enumerate(encoder_outputs[0]):
+        for level, source in enumerate(encoder_outputs.last_hidden_state):
             sources.append(self.decoder_input_proj[level](source))
 
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
             _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs[0][-1]))
+            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state[-1]))
             for i in range(_len_sources + 1, self.config.num_feature_levels):
-                sources.append(self.decoder_input_proj[i](encoder_outputs[0][-1]))
+                sources.append(self.decoder_input_proj[i](encoder_outputs.last_hidden_state[-1]))
 
         # Prepare encoder inputs (by flattening)
         source_flatten = []
@@ -1884,10 +1793,6 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
         out_query = self.decoder_norm(target)
         mask_query_embed = self.mask_query_head(out_query)
         batch_size, mask_dim, _ = mask_query_embed.shape
-        _, _, mask_h, mask_w = mask_feat.shape
-        enc_out_masks = torch.bmm(mask_query_embed, mask_feat.flatten(start_dim=2)).reshape(
-            batch_size, mask_dim, mask_h, mask_w
-        )
 
         enc_topk_bboxes = F.sigmoid(reference_points_unact)
 
@@ -1906,6 +1811,10 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
             target = torch.concat([denoising_class, target], 1)
 
         if self.mask_enhanced:
+            _, _, mask_h, mask_w = encoder_outputs.mask_feat.shape
+            enc_out_masks = torch.bmm(mask_query_embed, encoder_outputs.mask_feat.flatten(start_dim=2)).reshape(
+                batch_size, mask_dim, mask_h, mask_w
+            )
             reference_points = mask_to_box_coordinate(enc_out_masks > 0, dtype=reference_points_unact.dtype)
             reference_points_unact = inverse_sigmoid(reference_points)
 
@@ -1923,28 +1832,13 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
             level_start_index=level_start_index,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             order_head=self.decoder_order_head,
             global_pointer=self.decoder_global_pointer,
             mask_query_head=self.mask_query_head,
             norm=self.decoder_norm,
-            mask_feat=mask_feat,
+            mask_feat=encoder_outputs.mask_feat,
+            **kwargs,
         )
-
-        if not return_dict:
-            enc_outputs = tuple(
-                value
-                for value in [enc_topk_logits, enc_topk_bboxes, enc_outputs_class, enc_outputs_coord_logits]
-                if value is not None
-            )
-            dn_outputs = tuple(value if value is not None else None for value in [denoising_meta_values])
-            tuple_outputs = (
-                decoder_outputs + encoder_outputs[:-1] + (init_reference_points,) + enc_outputs + dn_outputs
-            )
-
-            return tuple_outputs
 
         return PPDocLayoutV3ModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1987,15 +1881,15 @@ class PPDocLayoutV3ForObjectDetectionOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
         Classification logits (including no-object) for all queries.
-    order_logits (`tuple` of `torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
-        Order logits of the final layer of the decoder.
-    out_masks (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, height, width)`):
-        Masks of the final layer of the decoder.
     pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
         possible padding). You can use [`~PPDocLayoutV3ImageProcessorFast.post_process_object_detection`] to retrieve the
         unnormalized (absolute) bounding boxes.
+    order_logits (`tuple` of `torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
+        Order logits of the final layer of the decoder.
+    out_masks (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, height, width)`):
+        Masks of the final layer of the decoder.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -2073,16 +1967,14 @@ class PPDocLayoutV3ForObjectDetection(PPDocLayoutV3PreTrainedModel):
         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.LongTensor | None = None,
         encoder_outputs: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | PPDocLayoutV3ForObjectDetectionOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -2141,26 +2033,18 @@ class PPDocLayoutV3ForObjectDetection(PPDocLayoutV3PreTrainedModel):
         Order 12: number: 0.88 [106.0, 2257.5, 135.84, 2282.18]
         Order 13: footer: 0.93 [338.4, 2255.52, 986.15, 2284.37]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.model(
             pixel_values,
             pixel_mask=pixel_mask,
             encoder_outputs=encoder_outputs,
             labels=labels,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        intermediate_logits = outputs.intermediate_logits if return_dict else outputs[2]
-        intermediate_reference_points = outputs.intermediate_reference_points if return_dict else outputs[3]
-        order_logits = outputs.out_order_logits if return_dict else outputs[4]
-        out_masks = outputs.out_masks if return_dict else outputs[5]
+        intermediate_logits = outputs.intermediate_logits
+        intermediate_reference_points = outputs.intermediate_reference_points
+        order_logits = outputs.out_order_logits
+        out_masks = outputs.out_masks
 
         pred_boxes = intermediate_reference_points[:, -1]
         logits = intermediate_logits[:, -1]
@@ -2169,9 +2053,6 @@ class PPDocLayoutV3ForObjectDetection(PPDocLayoutV3PreTrainedModel):
 
         if labels is not None:
             raise ValueError("PPDocLayoutV3ForObjectDetection does not support training")
-
-        if not return_dict:
-            return (logits, pred_boxes, order_logits, out_masks) + outputs[:4] + outputs[6:]
 
         return PPDocLayoutV3ForObjectDetectionOutput(
             logits=logits,

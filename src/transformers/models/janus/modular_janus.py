@@ -1255,7 +1255,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         if model_kwargs.get("past_key_values", None) is None:
             # Prepare cache if not provided.
-            model_kwargs["past_key_values"] = self._get_cache(
+            model_kwargs["past_key_values"] = self._prepare_static_cache(
                 cache_implementation=generation_config.cache_implementation or "static",
                 # batch_size should account for both conditional/unconditional input; hence multiplied by 2.
                 batch_size=batch_size * 2,
@@ -1540,8 +1540,8 @@ class JanusImageProcessor(BlipImageProcessor):
         delta = size / max_size
         # Largest side becomes `size` and the other side is scaled according to the aspect ratio.
         output_size_nonpadded = [
-            max(int(height * delta), self.min_size),
-            max(int(width * delta), self.min_size),
+            max(round(height * delta), self.min_size),
+            max(round(width * delta), self.min_size),
         ]
 
         image = resize(

@@ -137,7 +137,6 @@ if is_torch_available():
         _find_identical,
         get_total_byte_count,
     )
-    from transformers.pytorch_utils import isin_mps_friendly
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -292,6 +291,51 @@ if is_torch_available():
 
         def forward(self, x):
             return self.decoder(self.base(x))
+
+    class VerySimpleLayer(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.simple = nn.Linear(2, 2)
+
+        def forward(self, x):
+            return self.simple(x)
+
+    class DummyLanguageModel(PreTrainedModel):
+        _keep_in_fp32_modules = ["linear"]
+        _no_split_modules = ["VerySimpleLayer"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(2, 2)
+            self.layers = nn.ModuleList((VerySimpleLayer(), VerySimpleLayer()))
+            self.post_init()
+
+        def forward(self, x):
+            return self.linear(self.layers[1](self.layers[0](x)))
+
+    class DummyVisionModel(PreTrainedModel):
+        _keep_in_fp32_modules_strict = ["simple"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.simple = nn.Linear(2, 2)
+            self.post_init()
+
+        def forward(self, x):
+            return self.simple(x)
+
+    class MultimodalModel(PreTrainedModel):
+        _keep_in_fp32_modules = ["head"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.language_model = DummyLanguageModel(config)
+            self.vision_model = DummyVisionModel(config)
+            self.head = nn.Linear(2, 2)
+            self.post_init()
+
+        def forward(self, x):
+            return self.head(self.language_model(self.vision_model(x)))
 
     class Prepare4dCausalAttentionMaskModel(nn.Module):
         def forward(self, inputs_embeds):
@@ -1568,7 +1612,9 @@ class ModelUtilsTest(TestCasePlus):
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
                     _, loading_info = ModelWithHead.from_pretrained(tmp_dir, output_loading_info=True)
-            self.assertIn("added_key | UNEXPECTED", cl.out)
+            # Will be colored if terminal is interactive
+            expected_output = "added_key | [38;5;208mUNEXPECTED" if sys.stdout.isatty() else "added_key | UNEXPECTED"
+            self.assertIn(expected_output, cl.out)
             self.assertEqual(loading_info["unexpected_keys"], {"added_key"})
 
     def test_warn_if_padding_and_no_attention_mask(self):
@@ -1763,27 +1809,6 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIn("LayerNorm.weight", unexpected_keys)
         self.assertIn("LayerNorm.beta", missing_keys)
         self.assertIn("LayerNorm.bias", unexpected_keys)
-
-    def test_isin_mps_friendly(self):
-        """tests that our custom `isin_mps_friendly` matches `torch.isin`"""
-        random_ids = torch.randint(0, 100, (100,))
-        # We can match against an integer
-        random_test_integer = torch.randint(0, 100, (1,)).item()
-        self.assertTrue(
-            torch.equal(
-                torch.isin(random_ids, random_test_integer), isin_mps_friendly(random_ids, random_test_integer)
-            )
-        )
-        # We can match against an 0D tensor
-        random_test_tensor = torch.randint(0, 100, (1,)).squeeze()
-        self.assertTrue(
-            torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
-        )
-        # We can match against an 1D tensor (with many items)
-        random_test_tensor = torch.randint(0, 100, (10,))
-        self.assertTrue(
-            torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
-        )
 
     def test_can_generate(self):
         """Tests the behavior of `PreTrainedModel.can_generate` method."""
@@ -2271,6 +2296,88 @@ class ModelUtilsTest(TestCasePlus):
                     RuntimeError, "We encountered some issues during automatic conversion of the weights."
                 ):
                     _ = MixtralModel.from_pretrained(tmpdirname)
+
+    def test_composite_model_inherit_properties(self):
+        model = MultimodalModel(PreTrainedConfig())
+        # Make sure the top level inherited properties from its child language and vision models
+        self.assertEqual(model._no_split_modules, {"VerySimpleLayer"})  # language model
+        self.assertEqual(model._keep_in_fp32_modules, {"linear", "head"})  # language model + composite model
+        self.assertEqual(model._keep_in_fp32_modules_strict, {"simple"})  # vision model
+
+    @parameterized.expand([("sdpa",), ("flash_attention_2",)])
+    def test_decoder_only_model_can_be_used_as_encoder(self, attn_implementation: str):
+        """Test that most well-behaved decoder models can be used as encoders through the `is_causal` kwarg/config.
+        Note that it's enough to test it on Llama, as the entry points are all through general code
+        (masking_utils.py + `check_model_inputs` decorator). This makes it easier as the model need to use both the
+        mask API from masking_utils.py and the decorator as mentionned above, and we don't know what models follow that
+        standard exactly (so we cannot make it easily a common model test)."""
+        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+            self.skipTest("FA2 not available")
+
+        from transformers import LlamaConfig, LlamaModel
+        from transformers.masking_utils import create_bidirectional_mask
+
+        config = LlamaConfig(
+            num_hidden_layers=2,
+            hidden_size=32,
+            intermediate_size=64,
+            vocab_size=100,
+            attn_implementation=attn_implementation,
+        )
+        model = LlamaModel(copy.deepcopy(config)).to(device=torch_device, dtype=torch.bfloat16)
+
+        # Create inputs, making sure we use padding to verify that mask creation accounts for it correctly
+        input_ids = torch.randint(5, 95, (2, 17), device=torch_device)
+        attention_mask = torch.ones_like(input_ids, device=torch_device)
+        attention_mask[1, 0:3] = 0
+
+        # The original `create_causal_mask` used in modeling_llama forward more kwargs than `create_bidirectional_mask`,
+        # so we need this one instead to absorb them
+        def create_bidirectional_mask_with_kwargs(
+            config,
+            input_embeds,
+            attention_mask,
+            encoder_hidden_states=None,
+            or_mask_function=None,
+            and_mask_function=None,
+            **kwargs,
+        ):
+            return create_bidirectional_mask(
+                config, input_embeds, attention_mask, encoder_hidden_states, or_mask_function, and_mask_function
+            )
+
+        # Explicitly monkey patch the mask creation function + forward the is_causal kwarg to get the expected result
+        # from the model behaving as encoder instead of decoder
+        with patch(
+            "transformers.models.llama.modeling_llama.create_causal_mask", new=create_bidirectional_mask_with_kwargs
+        ):
+            reference = model(input_ids, attention_mask=attention_mask, is_causal=False).last_hidden_state
+            without_kwarg = model(input_ids, attention_mask=attention_mask).last_hidden_state
+
+        # Here, since we have padding, the mask created should never be None. Since the mask is never None, the sdpa
+        # backend will always use `is_causal=False`, so both should be strictly equivalent
+        if attn_implementation == "sdpa":
+            torch.testing.assert_close(reference, without_kwarg)
+        # But FA2 relies solely on the `is_causal` kwarg to decide how to dispatch, as it will use varlen since we
+        # have padding, so both won't be equivalent at all
+        else:
+            # Everything should be different (we only test the maximum of the diff to avoid flakyness)
+            self.assertTrue(torch.abs(reference - without_kwarg).max() >= 1e-1)
+
+        # Now if we simply forward the kwarg with the usual mask function, it should still work the exact same
+        with_kwarg_only = model(input_ids, attention_mask=attention_mask, is_causal=False).last_hidden_state
+        torch.testing.assert_close(reference, with_kwarg_only)
+
+        # Now, if we use the usual forward, the model should behave normally as a decoder, and output should be
+        # completely different
+        as_decoder = model(input_ids, attention_mask=attention_mask).last_hidden_state
+        # Everything should be different (we only test the maximum of the diff to avoid flakyness)
+        self.assertTrue(torch.abs(reference - as_decoder).max() >= 1e-1)
+
+        # It should also work with it in the config
+        model.config.is_causal = False
+        with_config_only = model(input_ids, attention_mask=attention_mask).last_hidden_state
+        torch.testing.assert_close(reference, with_config_only)
 
 
 @slow
