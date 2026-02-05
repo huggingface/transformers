@@ -957,7 +957,7 @@ def maybe_load_adapters(
             adapter_config = json.load(f)
             _adapter_model_path = pretrained_model_name_or_path
             base_model_name_or_path = adapter_config.get("base_model_name_or_path")
-            
+
             # Use centralized path resolution logic
             local_files_only = bool(download_kwargs.get("local_files_only", False))
             pretrained_model_name_or_path, _ = resolve_peft_base_model_path(

@@ -145,7 +145,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         Test that verifies loading a PEFT model from a local directory preserves the local path
         instead of downloading from the hub. This addresses issue #43746 where adapter configs
         with hub paths would override local paths.
-        
+
         The scenario: User downloads a model with PEFT adapters locally. The adapter_config.json
         contains a hub path for base_model_name_or_path, but the user wants to use the local copy
         instead of downloading from hub.
@@ -556,14 +556,12 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         Test that pipelines work with local_files_only=True for local PEFT models.
         """
-        import json
-
         from transformers import pipeline
 
         for peft_model_id, base_model_id in zip(self.peft_test_model_ids, self.transformers_test_model_ids):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 # Download all files locally
-                adapter_config_path = hf_hub_download(
+                hf_hub_download(
                     peft_model_id, "adapter_config.json", local_dir=tmpdirname, local_dir_use_symlinks=False
                 )
                 hf_hub_download(

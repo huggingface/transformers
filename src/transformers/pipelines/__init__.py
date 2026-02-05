@@ -731,7 +731,7 @@ def pipeline(
                     adapter_config = json.load(f)
                     adapter_path = model
                     base_model_name_or_path = adapter_config.get("base_model_name_or_path")
-                    
+
                     # Use centralized path resolution logic
                     local_files_only = bool(hub_kwargs.get("local_files_only", False))
                     model, _ = resolve_peft_base_model_path(
