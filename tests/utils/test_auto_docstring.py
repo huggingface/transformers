@@ -392,6 +392,7 @@ class TestFullDocstringGeneration(unittest.TestCase):
     """
 
     def test_dummy_model_complete_docstring(self):
+        self.maxDiff = None
         """Test complete class and forward method docstrings for PreTrainedModel with ModelArgs and custom parameters."""
         actual_class_docstring = DummyForTestModel.__doc__
         expected_class_docstring = """
@@ -501,6 +502,7 @@ Parameters:
         self.assertEqual(actual_docstring, expected_docstring)
 
     def test_dummy_processor_complete_docstring(self):
+        self.maxDiff = None
         """Test complete class and __call__ docstrings for ProcessorMixin with complex TypedDict kwargs unrolling."""
 
         actual_docstring = DummyProcessorForTest.__call__.__doc__
@@ -567,6 +569,7 @@ Parameters:
         self.assertEqual(actual_class_docstring, expected_class_docstring)
 
     def test_dummy_image_processor_complete_docstring(self):
+        self.maxDiff = None
         """Test complete class and preprocess docstrings for BaseImageProcessorFast with custom ImagesKwargs and custom_intro."""
 
         actual_preprocess_docstring = DummyForTestImageProcessorFast.preprocess.__doc__
