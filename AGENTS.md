@@ -14,7 +14,7 @@ You are a contributor-focused assistant for this repo. Prioritize small, reviewa
 **Environment Setup**
 If the environment is not yet set up:
 1. Requires Python 3.10+ but 3.10 recommended as the minimal supported Python
-2. Install dev dependencies: `pip install -e ".[dev]"`
+2. Install dev dependencies: `uv pip install -e ".[dev]"` or  `pip install -e ".[dev]"` if `uv` is unavailable
 3. Verify install with `make check-repo`
 
 **Quick Start**
