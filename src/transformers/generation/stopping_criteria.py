@@ -8,7 +8,6 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
-from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import add_start_docstrings, logging
 
@@ -468,7 +467,7 @@ class EosTokenCriteria(StoppingCriteria):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
         self.eos_token_id = self.eos_token_id.to(input_ids.device)
-        is_done = isin_mps_friendly(input_ids[:, -1], self.eos_token_id)
+        is_done = torch.isin(input_ids[:, -1], self.eos_token_id)
         return is_done
 
 

@@ -108,8 +108,8 @@ def check_details(
     print(f"Spm: {[fast.decode([spm_ids[i]]) for i in range(first, last)]}")
     try:
         print(f"Tok: {[fast.decode([tok_ids[i]]) for i in range(first, last)]}")
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Could not decode tok_ids: {e}")
 
     fast.decode(spm_ids[:first])
     fast.decode(spm_ids[last:])
