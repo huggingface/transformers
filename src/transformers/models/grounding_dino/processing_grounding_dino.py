@@ -117,8 +117,6 @@ class GroundingDinoProcessorKwargs(ProcessingKwargs, total=False):
 class GroundingDinoProcessor(ProcessorMixin):
     valid_processor_kwargs = GroundingDinoProcessorKwargs
 
-    valid_processor_kwargs = GroundingDinoProcessorKwargs
-
     model_input_names = [
         "input_ids",
         "attention_mask",
