@@ -418,9 +418,6 @@ class PythonBackend(PreTrainedTokenizerBase):
         # Initialize total_vocab_size early to avoid issues if get_vocab() is called early (custom tokenizers)
         self.total_vocab_size = 0
 
-        # Initialize total_vocab_size early to avoid issues if get_vocab() is called early (custom tokenizers)
-        self.total_vocab_size = 0
-
         # 2. init `_added_tokens_decoder` if child class did not
         if not hasattr(self, "_added_tokens_decoder"):
             self._added_tokens_decoder: dict[int, AddedToken] = {}
