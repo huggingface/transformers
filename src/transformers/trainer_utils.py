@@ -26,7 +26,6 @@ import re
 import shutil
 import threading
 import time
-import warnings
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
