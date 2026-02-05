@@ -247,8 +247,7 @@ class Mamba2Mixer(nn.Module):
 
         # time step projection (discretization)
         dt = torch.exp(
-            torch.rand(self.num_heads)
-            * (math.log(self.time_step_max) - math.log(self.time_step_min))
+            torch.rand(self.num_heads) * (math.log(self.time_step_max) - math.log(self.time_step_min))
             + math.log(self.time_step_min)
         ).clamp(min=self.time_step_floor)
         # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759

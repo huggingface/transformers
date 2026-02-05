@@ -188,8 +188,7 @@ class MambaMixer(nn.Module):
         self.dt_proj = nn.Linear(self.time_step_rank, self.intermediate_size, bias=True)
 
         dt = torch.exp(
-            torch.rand(self.intermediate_size)
-            * (math.log(config.time_step_max) - math.log(config.time_step_min))
+            torch.rand(self.intermediate_size) * (math.log(config.time_step_max) - math.log(config.time_step_min))
             + math.log(config.time_step_min)
         ).clamp(min=config.time_step_floor)
         # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
