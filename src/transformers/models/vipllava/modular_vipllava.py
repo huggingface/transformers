@@ -28,7 +28,7 @@ from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import can_return_tuple
 from .configuration_vipllava import VipLlavaConfig
 
 
@@ -73,7 +73,6 @@ class VipLlavaPreTrainedModel(LlavaPreTrainedModel):
 
 class VipLlavaModel(LlavaModel):
     @can_return_tuple
-    @merge_with_config_defaults
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )

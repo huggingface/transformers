@@ -1011,6 +1011,14 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
 
 
 class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
+    config: PaddleOCRVisionConfig
+    main_input_name = "pixel_values"
+    input_modalities = "image"
+    _can_record_outputs = {
+        "hidden_states": PaddleOCRVisionEncoderLayer,
+        "attentions": PaddleOCRVisionAttention,
+    }
+
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__(config)
         self.config = config
@@ -1022,6 +1030,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
 
         self.post_init()
 
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1056,8 +1065,6 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=None,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -1065,10 +1072,6 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
     config: PaddleOCRVisionConfig
     main_input_name = "pixel_values"
     input_modalities = "image"
-    _can_record_outputs = {
-        "hidden_states": PaddleOCRVisionEncoderLayer,
-        "attentions": PaddleOCRVisionAttention,
-    }
 
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__(config)
@@ -1078,7 +1081,6 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values: torch.FloatTensor,

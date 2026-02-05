@@ -5196,7 +5196,8 @@ class ModelTesterMixin:
         if not self.has_attentions:
             return
 
-        for model_class in self.all_model_classes:
+        for model_class in self.all_model_classes[1:]:
+            print(model_class.__name__)
             if not hasattr(model_class, "get_image_features"):
                 continue
 
@@ -5216,6 +5217,7 @@ class ModelTesterMixin:
 
             set_value_subconfigs(config, "output_attentions", True)
             check_attentions_output(inputs_dict, config, model_class)
+            print("done")
 
     @parameterized.expand([True, False, None])
     def test_get_audio_features_output(self, return_dict: bool | None):

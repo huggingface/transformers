@@ -1172,6 +1172,7 @@ class LwDetrModelOutput(ModelOutput):
     enc_outputs_coord_logits: torch.FloatTensor | None = None
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
+    cross_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring(
@@ -1411,6 +1412,7 @@ class LwDetrModel(DeformableDetrModel):
             enc_outputs_coord_logits=enc_outputs_coord_logits,
             hidden_states=decoder_outputs.hidden_states,
             attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
         )
 
 
@@ -1470,6 +1472,7 @@ class LwDetrObjectDetectionOutput(ModelOutput):
     enc_outputs_coord_logits: torch.FloatTensor | None = None
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
+    cross_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring(
@@ -1604,6 +1607,7 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
             enc_outputs_coord_logits=enc_outputs_boxes_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
         )
 
 
