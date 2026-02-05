@@ -724,6 +724,22 @@ class Mamba2PreTrainedModel(PreTrainedModel):
         """Initialize the weights."""
         std = self.config.initializer_range
         if isinstance(module, Mamba2Mixer):
+            # S4D real initialization. These are not discretized!
+            # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
+            A = torch.arange(1, self.config.num_heads + 1)
+            init.copy_(module.A_log, torch.log(A))
+            init.ones_(module.D)
+
+            dt = torch.exp(
+                torch.rand(self.config.num_heads)
+                * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
+                + math.log(self.config.time_step_min)
+            ).clamp(min=self.config.time_step_floor)
+
+            # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
+            inv_dt = dt + torch.log(-torch.expm1(-dt))
+            init.copy_(module.dt_bias, inv_dt)
+
             init.kaiming_uniform_(module.conv1d.weight, a=math.sqrt(5))
             if module.conv1d.bias is not None:
                 init.zeros_(module.conv1d.bias)
