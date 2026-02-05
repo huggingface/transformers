@@ -2300,7 +2300,6 @@ class Trainer:
             ]
         )
         self.state.is_hyper_param_search = trial is not None
-        self.state.train_batch_size = self._train_batch_size
 
         # Compute absolute values for logging, eval, and save if given as ratio
         self.state.compute_steps(args, max_steps)
