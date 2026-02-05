@@ -187,6 +187,15 @@ class MambaMixer(nn.Module):
         # time step projection (discretization)
         self.dt_proj = nn.Linear(self.time_step_rank, self.intermediate_size, bias=True)
 
+        dt = torch.exp(
+            torch.rand(self.intermediate_size)
+            * (math.log(config.time_step_max) - math.log(config.time_step_min))
+            + math.log(config.time_step_min)
+        ).clamp(min=config.time_step_floor)
+        # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
+        inv_dt = dt + torch.log(-torch.expm1(-dt))
+        init.copy_(self.dt_proj.bias, inv_dt)
+
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
         A = torch.arange(1, self.ssm_state_size + 1, dtype=torch.float32)[None, :]
