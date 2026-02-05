@@ -26,13 +26,12 @@ If the environment is not yet set up:
 **Example Flows**
 - Small code change: edit -> `make style` -> targeted `pytest ...`
 - Modular/copies change: edit source/modular -> `make fix-repo` -> targeted `pytest ...`
-- Docs change: edit -> update `_toctree.yml` if new file -> (optional) doc build
+- Docs change: edit -> `make fix-repo` -> (optional) doc build
 
 **Repo Map**
 - `src/transformers`: core library code.
 - `src/transformers/models`: per-model implementations.
 - `tests`: core tests and model tests.
-- `examples`: example scripts and example tests.
 - `docs/source/en`: documentation sources (MDX-like Markdown).
 
 **Boundaries**
@@ -48,9 +47,12 @@ If the environment is not yet set up:
 **Copies and Modular Models**
 - If a file has `# Copied from ...`, change the source and run `make fix-repo` to propagate.
 - If a model has `modular_<name>.py`, do not edit generated `modeling_*.py` files directly. Edit modular and run `make fix-repo` (or `python utils/modular_model_converter.py <name>`).
+- Files with `This file was automatically generated from` in second line are generated.
+- Protobuf files, ending with `_pb2.py` are also generated.
 
 **Adding Models the Modular Way**
 Modular Transformers lets you add models by inheriting from existing models, significantly reducing code:
+- pick a CamelCase unique name for model and use it everywhere. All modules should be prefixed with that name following PEP8 convention.
 - Create a `modular_<name>.py` file in `src/transformers/models/<name>/`
 - Import and inherit from similar models (e.g., `class MyModelConfig(LlamaConfig)`)
 - Only define what changes: new attributes, modified layers, different behavior
