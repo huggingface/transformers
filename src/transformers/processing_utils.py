@@ -508,22 +508,7 @@ class TokenizerChatTemplateKwargs(TypedDict, total=False):
     return_assistant_tokens_mask: bool | None = False
 
 
-class ChatTemplateLoadKwargs(TypedDict, total=False):
-    """
-    Keyword arguments used to load multimodal data in processor chat templates.
-
-    num_frames (`int`, *optional*):
-        Number of frames to sample uniformly. If not passed, the whole video is loaded.
-    load_audio_from_video (`bool`, *optional*):
-            Whether to use the audio track of input video. If `True` the audio track will be loaded and passed to the
-            processor. This flag has no effect if the model doesn't support audio modality.
-    """
-
-    sampling_rate: int | None = 16_000
-    load_audio_from_video: bool | None = False
-
-
-class ProcessorChatTemplateKwargs(ChatTemplateLoadKwargs, TokenizerChatTemplateKwargs, total=False):
+class ProcessorChatTemplateKwargs(TokenizerChatTemplateKwargs, total=False):
     """
     Keyword arguments for processor's `apply_chat_template`.
 
@@ -531,15 +516,18 @@ class ProcessorChatTemplateKwargs(ChatTemplateLoadKwargs, TokenizerChatTemplateK
         Whether to tokenize the output or not.
     return_dict (`bool`, defaults to `False`):
         Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
+    load_audio_from_video (`bool`, *optional*, defaults to `False`):
+        Whether to use the audio track of input video. If `True` the audio track will be loaded and passed to the
+        processor. This flag has no effect if the model doesn't support audio modality.
     """
 
     tokenize: bool | None = False
     return_dict: bool | None = False
+    load_audio_from_video: bool | None = False
 
 
 class AllKwargsForChatTemplate(TypedDict, total=False):
     processor_kwargs: ProcessingKwargs
-    mm_load_kwargs: ChatTemplateLoadKwargs
     template_kwargs: ProcessorChatTemplateKwargs
 
 
@@ -1711,22 +1699,25 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 kwargs["return_offsets_mapping"] = True  # force offset mapping so we can infer token boundaries
 
-        # Fill sets of kwargs that should be used by different parts of template
-        processed_kwargs = {
-            "mm_load_kwargs": {},
-            "template_kwargs": {},
-        }
-
-        for kwarg_type in processed_kwargs:
-            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__:
-                kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
-                default_value = getattr(kwarg_type_defaults, key, None)
-                value = kwargs.pop(key, default_value)
-                if value is not None and not isinstance(value, dict):
-                    processed_kwargs[kwarg_type][key] = value
+        # Fill sets of kwargs that should be used by jinja template, filtering out kwargs used in `processor.__call__`
+        # NOTE: we don't only filter but also set the default values here. Without default values, we can remove it
+        template_kwargs = {}
+        for key in AllKwargsForChatTemplate.__annotations__["template_kwargs"].__annotations__:
+            kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__["template_kwargs"]
+            default_value = getattr(kwarg_type_defaults, key, None)
+            value = kwargs.pop(key, default_value)
+            if value is not None and not isinstance(value, dict):
+                template_kwargs[key] = value
 
         # Pass unprocessed custom kwargs
-        processed_kwargs["template_kwargs"].update(kwargs)
+        template_kwargs.update(kwargs)
+
+        # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`
+        if "sampling_rate" not in template_kwargs:
+            if hasattr(self, "feature_extractor") and hasattr(self.feature_extractor, "sampling_rate"):
+                template_kwargs["sampling_rate"] = self.feature_extractor.sampling_rate
+            else:
+                template_kwargs["sampling_rate"] = 16_000
 
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
@@ -1737,9 +1728,8 @@ class ProcessorMixin(PushToHubMixin):
             is_batched = False
             conversations = [conversation]
 
-        tokenize = processed_kwargs["template_kwargs"].pop("tokenize", False)
-        return_dict = processed_kwargs["template_kwargs"].pop("return_dict", True)
-        mm_load_kwargs = processed_kwargs["mm_load_kwargs"]
+        tokenize = template_kwargs.pop("tokenize", False)
+        return_dict = template_kwargs.pop("return_dict", True)
 
         if tokenize:
             batch_images, batch_videos = [], []
@@ -1770,12 +1760,12 @@ class ProcessorMixin(PushToHubMixin):
                     videos.extend(video_fnames)
 
                     # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
-                    if not mm_load_kwargs["load_audio_from_video"]:
+                    if not template_kwargs["load_audio_from_video"]:
                         for fname in audio_fnames:
-                            batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
+                            batch_audios.append(load_audio(fname, sampling_rate=template_kwargs["sampling_rate"]))
                     else:
                         for fname in video_fnames:
-                            batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
+                            batch_audios.append(load_audio(fname, sampling_rate=template_kwargs["sampling_rate"]))
 
                 # Currently all processors can accept nested list of batches, but not flat list of visuals
                 # So we'll make a batched list of images and let the processor handle it
@@ -1786,14 +1776,12 @@ class ProcessorMixin(PushToHubMixin):
         if hasattr(self, "tokenizer") and hasattr(self.tokenizer, "special_tokens_map"):
             special_tokens = self.tokenizer.special_tokens_map
             # Filter out tokens that conflict with template kwargs
-            special_tokens_map = {
-                k: v for k, v in special_tokens.items() if k not in processed_kwargs["template_kwargs"]
-            }
+            special_tokens_map = {k: v for k, v in special_tokens.items() if k not in template_kwargs}
 
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
             chat_template=chat_template,
-            **processed_kwargs["template_kwargs"],  # different flags such as `return_assistant_mask`
+            **template_kwargs,  # different flags such as `return_assistant_mask`
             **special_tokens_map,  # tokenizer special tokens are used by some templates
         )
 
@@ -1829,7 +1817,7 @@ class ProcessorMixin(PushToHubMixin):
             )
 
             if return_dict:
-                if processed_kwargs["template_kwargs"].get("return_assistant_tokens_mask", False):
+                if template_kwargs.get("return_assistant_tokens_mask", False):
                     assistant_masks = []
                     offset_mapping = out.pop("offset_mapping")
                     input_ids = out["input_ids"]

@@ -19,10 +19,10 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class MoonshineConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class MoonshineConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MoonshineModel`]. It is used to instantiate a Moonshine
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -118,9 +118,10 @@ class MoonshineConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     model_type = "moonshine"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
-        "num_key_value_heads": "encoder_num_key_value_heads",
-        "num_attention_heads": "encoder_num_attention_heads",
-        "num_hidden_layers": "encoder_num_hidden_layers",
+        "num_key_value_heads": "decoder_num_key_value_heads",
+        "num_attention_heads": "decoder_num_attention_heads",
+        "num_hidden_layers": "decoder_num_hidden_layers",
+        "hidden_act": "decoder_hidden_act",
     }
 
     def __init__(

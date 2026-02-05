@@ -265,9 +265,9 @@ class ZambaAttention(nn.Module):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -844,7 +844,7 @@ class ZambaModel(ZambaPreTrainedModel):
                 layers.append(ZambaHybridLayer(ZambaAttentionDecoderLayer(config), linear, mamba))
                 if self._tied_weights_keys is None:
                     self._tied_weights_keys = {
-                        rf"layers.(?![{layer_id}])\d+.shared_transf": f"layers.{layer_id}.shared_transf"
+                        rf"layers.(?!{layer_id}\.)\d+.shared_transf": f"layers.{layer_id}.shared_transf"
                     }
             else:
                 layers.append(mamba)

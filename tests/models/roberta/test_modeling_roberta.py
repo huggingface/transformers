@@ -41,7 +41,6 @@ if is_torch_available():
         RobertaModel,
     )
     from transformers.models.roberta.modeling_roberta import RobertaEmbeddings
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 
 ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
 
@@ -687,9 +686,6 @@ class RobertaModelIntegrationTest(TestCasePlus):
     @pytest.mark.torch_export_test
     @slow
     def test_export(self):
-        if not is_torch_greater_or_equal_than_2_4:
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         roberta_model = "FacebookAI/roberta-base"
         device = "cpu"
         attn_implementation = "sdpa"
