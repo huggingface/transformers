@@ -258,6 +258,7 @@ if TYPE_CHECKING:
     from .modernbert import *
     from .modernbert_decoder import *
     from .moonshine import *
+    from .moonshine_streaming import *
     from .moshi import *
     from .mpnet import *
     from .mpt import *
