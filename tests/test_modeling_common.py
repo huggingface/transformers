@@ -3113,6 +3113,10 @@ class ModelTesterMixin:
     def test_can_load_ignoring_mismatched_shapes(self):
         if not self.test_mismatched_shapes:
             self.skipTest(reason="test_mismatched_shapes is set to False")
+
+        # Set seed for deterministic weight initialization
+        set_seed(0)
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         configs_no_init = _config_zero_init(config)
