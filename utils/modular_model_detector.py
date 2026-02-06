@@ -266,6 +266,8 @@ class CodeSimilarityAnalyzer:
         self.model = AutoModel.from_pretrained(EMBEDDING_MODEL, torch_dtype="auto", device_map="auto").eval()
 
         self.device = self.model.device
+        # Get dtype from model parameters
+        self.dtype = next(self.model.parameters()).dtype if hasattr(self.model, 'parameters') and len(list(self.model.parameters())) > 0 else torch.float32
         self.index_dir: Path | None = None
 
     # ---------- HUB IO ----------
@@ -710,10 +712,13 @@ def main():
     """CLI entry point for the modular model detector."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(prog="hf-code-sim")
-    parser.add_argument("--build", action="store_true")
+    parser.add_argument("--build", default=False, action="store_true")
     parser.add_argument("--modeling-file", type=str, help='You can just specify "vits" if you are lazy like me.')
     parser.add_argument(
         "--push-new-index", action="store_true", help="After --build, push index files to a Hub dataset."
+    )
+    parser.add_argument(
+        "--push-only", action="store_true", help="Push existing index files to Hub without rebuilding."
     )
     parser.add_argument(
         "--hub-dataset", type=str, default=HUB_DATASET_DEFAULT, help="Hub dataset repo id to pull/push the index."
@@ -722,6 +727,10 @@ def main():
     args = parser.parse_args()
 
     analyzer = CodeSimilarityAnalyzer(hub_dataset=args.hub_dataset)
+
+    if args.push_only:
+        analyzer.push_index_to_hub()
+        return
 
     if args.build:
         analyzer.build_index()
