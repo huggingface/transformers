@@ -3348,7 +3348,8 @@ def find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
             ):
                 return candidate
         except Exception:
-            pass
+            # TODO: tighten to OSError / ProxyError
+            continue
 
     subfolder = kwargs.get("subfolder", "")
     local_files_only = kwargs.get("local_files_only", False)
@@ -3378,8 +3379,9 @@ def find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
             for entry in entries:
                 if entry.path.endswith(".model"):
                     return entry.path if not subfolder else entry.path.removeprefix(f"{subfolder}/")
-        except Exception:
-            pass
+        except Exception as e:
+            # TODO: tighten exception class
+            logger.debug(f"Could not list Hub repository files: {e}")
 
     return None
 

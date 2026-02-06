@@ -132,7 +132,7 @@ model = DetrForObjectDetection(config)
 - Option 3: Instantiate DETR with randomly initialized weights for backbone + Transformer
 
 ```python
-config = DetrConfig(use_pretrained_backbone=False)
+config = DetrConfig()
 model = DetrForObjectDetection(config)
 ```
 

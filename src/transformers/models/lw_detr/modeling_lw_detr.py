@@ -30,6 +30,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithCrossAttentions
@@ -37,7 +38,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import meshgrid
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
-from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import check_model_inputs
 from .configuration_lw_detr import LwDetrConfig, LwDetrViTConfig
 
@@ -367,10 +367,9 @@ class LwDetrViTPreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring()
-class LwDetrViTBackbone(LwDetrViTPreTrainedModel, BackboneMixin):
+class LwDetrViTBackbone(BackboneMixin, LwDetrViTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.embeddings = LwDetrViTEmbeddings(config)
         self.encoder = LwDetrViTEncoder(config)

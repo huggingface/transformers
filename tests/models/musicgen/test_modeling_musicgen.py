@@ -697,9 +697,11 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 decoder_attention_mask=decoder_attention_mask,
                 **kwargs,
             )
-        self.assertTrue(
-            all(key not in outputs for key in ["encoder_attentions", "decoder_attentions", "cross_attentions"])
-        )
+
+        # in #43702, we introduced output_attentions/ hidden_states propagation to sub-configs
+        # self.assertTrue(
+        #     all(key not in outputs for key in ["encoder_attentions", "decoder_attentions", "cross_attentions"])
+        # )
         config.text_encoder.output_attentions = True  # inner model config -> will work
         config.audio_encoder.output_attentions = True
         config.decoder.output_attentions = True
