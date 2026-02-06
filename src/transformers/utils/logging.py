@@ -51,6 +51,46 @@ _default_log_level = logging.WARNING
 _tqdm_active = not hf_hub_utils.are_progress_bars_disabled()
 
 
+class Logger(logging.Logger):
+    def __init__(self, name, level=NOTSET):
+        super().__init__(name, level=level)
+
+    def warning_advice(self, *args, **kwargs):
+        """
+        This method is identical to `logger.warning()`, but if env var TRANSFORMERS_NO_ADVISORY_WARNINGS=1 is set, this
+        warning will not be printed
+        """
+        no_advisory_warnings = os.getenv("TRANSFORMERS_NO_ADVISORY_WARNINGS")
+        if no_advisory_warnings:
+            return
+        self.warning(*args, **kwargs)
+
+    @functools.lru_cache(None)
+    def warning_once(self, *args, **kwargs):
+        """
+        This method is identical to `logger.warning()`, but will emit the warning with the same message only once
+
+        Note: The cache is for the function arguments, so 2 different callers using the same arguments will hit the cache.
+        The assumption here is that all warning messages are unique across the code. If they aren't then need to switch to
+        another type of cache that includes the caller frame information in the hashing function.
+        """
+        self.warning(*args, **kwargs)
+
+    @functools.lru_cache(None)
+    def info_once(self, *args, **kwargs):
+        """
+        This method is identical to `logger.info()`, but will emit the info with the same message only once
+
+        Note: The cache is for the function arguments, so 2 different callers using the same arguments will hit the cache.
+        The assumption here is that all warning messages are unique across the code. If they aren't then need to switch to
+        another type of cache that includes the caller frame information in the hashing function.
+        """
+        self.info(*args, **kwargs)
+
+
+logging.setLoggerClass(Logger)
+
+
 def _get_default_logging_level():
     """
     If TRANSFORMERS_VERBOSITY env var is set to one of the valid choices return that as the new default level. If it is
@@ -72,7 +112,7 @@ def _get_library_name() -> str:
     return __name__.split(".")[0]
 
 
-def _get_library_root_logger() -> logging.Logger:
+def _get_library_root_logger() -> Logger:
     return logging.getLogger(_get_library_name())
 
 
@@ -143,7 +183,7 @@ def captureWarnings(capture):
     _captureWarnings(capture)
 
 
-def get_logger(name: str | None = None) -> logging.Logger:
+def get_logger(name: str | None = None) -> Logger:
     """
     Return a logger with the specified name.
 
@@ -299,50 +339,6 @@ def reset_format() -> None:
 
     for handler in handlers:
         handler.setFormatter(None)
-
-
-def warning_advice(self, *args, **kwargs):
-    """
-    This method is identical to `logger.warning()`, but if env var TRANSFORMERS_NO_ADVISORY_WARNINGS=1 is set, this
-    warning will not be printed
-    """
-    no_advisory_warnings = os.getenv("TRANSFORMERS_NO_ADVISORY_WARNINGS")
-    if no_advisory_warnings:
-        return
-    self.warning(*args, **kwargs)
-
-
-logging.Logger.warning_advice = warning_advice
-
-
-@functools.lru_cache(None)
-def warning_once(self, *args, **kwargs):
-    """
-    This method is identical to `logger.warning()`, but will emit the warning with the same message only once
-
-    Note: The cache is for the function arguments, so 2 different callers using the same arguments will hit the cache.
-    The assumption here is that all warning messages are unique across the code. If they aren't then need to switch to
-    another type of cache that includes the caller frame information in the hashing function.
-    """
-    self.warning(*args, **kwargs)
-
-
-logging.Logger.warning_once = warning_once
-
-
-@functools.lru_cache(None)
-def info_once(self, *args, **kwargs):
-    """
-    This method is identical to `logger.info()`, but will emit the info with the same message only once
-
-    Note: The cache is for the function arguments, so 2 different callers using the same arguments will hit the cache.
-    The assumption here is that all warning messages are unique across the code. If they aren't then need to switch to
-    another type of cache that includes the caller frame information in the hashing function.
-    """
-    self.info(*args, **kwargs)
-
-
-logging.Logger.info_once = info_once
 
 
 class EmptyTqdm:
