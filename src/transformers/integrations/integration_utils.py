@@ -2278,6 +2278,16 @@ class SwanLabCallback(TrainerCallback):
         - **SWANLAB_API_HOST** (`str`, *optional*, defaults to `None`):
             API address for the SwanLab cloud environment for private version (its free)
 
+        - **SWANLAB_RUN_ID** (`str`, *optional*, defaults to `None`):
+            Unique identifier for the experiment. If specified, SwanLab will use this ID to identify and resume
+            the experiment.
+
+        - **SWANLAB_RESUME** (`str`, *optional*, defaults to `None`):
+            Controls run resumption behavior. Can be `"must"`, `"allow"`, or `"never"`.
+            - `"must"`: The run must resume from an existing run with the specified ID.
+            - `"allow"`: If a run with the specified ID exists, resume it; otherwise, create a new run.
+            - `"never"`: Always create a new run.
+
         """
         self._initialized = True
 
@@ -2300,6 +2310,14 @@ class SwanLabCallback(TrainerCallback):
             elif trial_name is not None:
                 init_args["experiment_name"] = trial_name
             init_args["project"] = os.getenv("SWANLAB_PROJECT", None)
+
+            # Handle run id and resume for experiment continuation
+            run_id = os.getenv("SWANLAB_RUN_ID", None)
+            if run_id is not None:
+                init_args["id"] = run_id
+            resume = os.getenv("SWANLAB_RESUME", None)
+            if resume is not None:
+                init_args["resume"] = resume
 
             if self._swanlab.get_run() is None:
                 self._swanlab.init(
