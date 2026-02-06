@@ -41,7 +41,8 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import check_model_inputs
+from ...utils.output_capturing import OutputRecorder
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,

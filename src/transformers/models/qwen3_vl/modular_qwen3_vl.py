@@ -1005,7 +1005,7 @@ class Qwen3VLModel(Qwen2_5_VLModel):
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @auto_docstring
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1120,6 +1120,8 @@ class Qwen3VLModel(Qwen2_5_VLModel):
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             rope_deltas=self.rope_deltas,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

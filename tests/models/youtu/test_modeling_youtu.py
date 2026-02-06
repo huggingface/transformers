@@ -20,6 +20,7 @@ import pytest
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -93,6 +94,7 @@ class YoutuIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=False)
 
+    @require_deterministic_for_xpu
     @require_torch_accelerator
     def test_dynamic_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
@@ -116,6 +118,7 @@ class YoutuIntegrationTest(unittest.TestCase):
         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
 
+    @require_deterministic_for_xpu
     @require_torch_accelerator
     def test_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
@@ -141,6 +144,7 @@ class YoutuIntegrationTest(unittest.TestCase):
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
+    @require_deterministic_for_xpu
     @slow
     @require_torch_accelerator
     @pytest.mark.torch_compile_test

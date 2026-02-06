@@ -130,6 +130,11 @@ _import_structure = {
         "replace_with_mxfp4_linear",
         "swizzle_mxfp4",
     ],
+    "neftune": [
+        "activate_neftune",
+        "deactivate_neftune",
+        "neftune_post_forward_hook",
+    ],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
     "spqr": ["replace_with_spqr_linear"],
@@ -270,6 +275,7 @@ if TYPE_CHECKING:
         replace_with_mxfp4_linear,
         swizzle_mxfp4,
     )
+    from .neftune import activate_neftune, deactivate_neftune, neftune_post_forward_hook
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers
     from .spqr import replace_with_spqr_linear

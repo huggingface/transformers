@@ -29,7 +29,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
+from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.output_capturing import OutputRecorder
 from ..cohere2.modeling_cohere2 import rotate_half  # noqa: F401
 from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..mllama.modeling_mllama import (
@@ -355,8 +356,8 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
     _supports_flex_attn = False
     _no_split_modules = ["BltTransformerLayer"]
     _can_record_outputs = {
-        "hidden_states": OutputRecorder(BltTransformerLayer, index=0, layer_name="local_decoder"),
-        "attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_decoder"),
+        "hidden_states": OutputRecorder(BltTransformerLayer, index=0),
+        "attentions": OutputRecorder(BltSelfAttention, index=1),
     }
 
     # Weight initialization is adapted from:
@@ -673,7 +674,6 @@ class BltLocalDecoder(BltPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

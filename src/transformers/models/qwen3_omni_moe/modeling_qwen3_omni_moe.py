@@ -54,13 +54,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_grouped_mm_available, torch_compilable_check
-from ...utils.generic import (
-    OutputRecorder,
-    TransformersKwargs,
-    check_model_inputs,
-    is_flash_attention_requested,
-    maybe_autocast,
-)
+from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested, maybe_autocast
+from ...utils.output_capturing import OutputRecorder
 from .configuration_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoderConfig,
     Qwen3OmniMoeCode2WavConfig,
@@ -1470,7 +1465,7 @@ class Qwen3OmniMoeThinkerTextSparseMoeBlock(nn.Module):
 
 @use_kernel_forward_from_hub("RMSNorm")
 class Qwen3OmniMoeThinkerTextRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         Qwen3OmniMoeThinkerTextRMSNorm is equivalent to T5LayerNorm
         """
@@ -1478,7 +1473,7 @@ class Qwen3OmniMoeThinkerTextRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -1692,7 +1687,7 @@ class Qwen3OmniMoeThinkerTextPreTrainedModel(PreTrainedModel):
 
 @use_kernel_forward_from_hub("RMSNorm")
 class Qwen3OmniMoeTextRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         Qwen3OmniMoeTextRMSNorm is equivalent to T5LayerNorm
         """
@@ -1700,7 +1695,7 @@ class Qwen3OmniMoeTextRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)

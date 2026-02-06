@@ -745,7 +745,9 @@ class PeAudioModel(PeAudioPreTrainedModel):
         text_audio_embeds = self.text_audio_head(text_audio_embeds)
 
         logits_audio_text = audio_embeds @ text_audio_embeds.T
-        logits_audio_text = logits_audio_text * self.text_audio_logit_scale + self.text_audio_logit_bias
+        logits_audio_text = logits_audio_text * self.text_audio_logit_scale.to(
+            logits_audio_text.device
+        ) + self.text_audio_logit_bias.to(logits_audio_text.device)
 
         loss = None
         if return_loss:

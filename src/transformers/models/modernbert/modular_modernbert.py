@@ -573,24 +573,6 @@ class ModernBertPreTrainedModel(PreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
-    def _check_and_adjust_attn_implementation(
-        self, attn_implementation: str | None, is_init_check: bool = False
-    ) -> str:
-        """
-        Checks and dispatches to hhe requested attention implementation.
-        """
-        # If the user didn't specify anything, try to use flash_attention_2.
-        # Otherwise we fall back to the default SDPA -> Eager from the super() method.
-        try:
-            requested_attn_implementation = "flash_attention_2" if attn_implementation is None else attn_implementation
-            return super()._check_and_adjust_attn_implementation(
-                attn_implementation=requested_attn_implementation, is_init_check=is_init_check
-            )
-        except (ValueError, ImportError):
-            return super()._check_and_adjust_attn_implementation(
-                attn_implementation=attn_implementation, is_init_check=is_init_check
-            )
-
 
 @auto_docstring
 class ModernBertModel(ModernBertPreTrainedModel):
