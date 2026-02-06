@@ -497,9 +497,6 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
-    def _check_and_adjust_attn_implementation(self, attn_implementation, is_init_check):
-        raise AttributeError("No need to inherit!")
-
 
 @auto_docstring
 class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):

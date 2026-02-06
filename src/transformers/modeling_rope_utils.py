@@ -634,11 +634,17 @@ class RotaryEmbeddingConfigMixin:
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
 
-        # Standardize and validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
+        # Standardize and validate the correctness of rotary position embeddings parameters. Priority for these parameters is:
+        # 1. Values in `rope_parameters` dict (where they should be after standardization)
+        # 2. Values in `kwargs` (i.e. it's in config.json but not MyConfig.__init__'s args)
+        # 3. Values in the config's attributes (i.e. it's in MyConfig.__init__'s args)
+        # 4. Default values (i.e. not present at all but other RoPE parameters are present)
+        rope_theta = kwargs.pop("rope_theta", getattr(self, "rope_theta", self.default_theta))
+        self.rope_parameters.setdefault("rope_theta", rope_theta)
 
-        if "partial_rotary_factor" in kwargs:
-            self.rope_parameters.setdefault("partial_rotary_factor", kwargs["partial_rotary_factor"])
+        partial_rotary_factor = kwargs.get("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
+        if partial_rotary_factor is not None:
+            self.rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
             ignore_keys_at_rope_validation = {"partial_rotary_factor"}
 
         self.standardize_rope_params()
