@@ -140,7 +140,6 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 "layers.*.self_attn.v_proj.weight": "colwise",
                 "layers.*.self_attn.v_proj.weight_scale": "colwise",
                 "layers.*.self_attn.o_proj.weight": "rowwise",
-                "layers.*.self_attn": "gather",
                 # We keep the same sequence_parallel plan for layernorms
                 "layers.*.input_layernorm.weight": "sequence_parallel",
                 "layers.*.post_attention_layernorm.weight": "sequence_parallel",
