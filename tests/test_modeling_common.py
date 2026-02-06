@@ -1948,7 +1948,7 @@ class ModelTesterMixin:
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_retain_grad_hidden_states_attentions(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self._prepare_config_and_inputs_for_retain_grad_hidden_states_attentions()
         for k in config.sub_configs:
             if getattr(config, k) is not None:
                 getattr(config, k).output_hidden_states = True
@@ -2021,6 +2021,9 @@ class ModelTesterMixin:
 
             if self.has_attentions:
                 self.assertIsNotNone(attentions.grad)
+
+    def _prepare_config_and_inputs_for_retain_grad_hidden_states_attentions(self):
+        return self.model_tester.prepare_config_and_inputs_for_common()
 
     def test_feed_forward_chunking(self):
         (

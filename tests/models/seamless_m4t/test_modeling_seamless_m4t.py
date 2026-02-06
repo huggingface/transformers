@@ -514,61 +514,13 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
-    def test_retain_grad_hidden_states_attentions(self):
-        # When training the model, speech encoder layerdrop can skip layers and return None attentions.
-        # Disable layerdrop for this test to ensure retain_grad targets are present.
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    def _prepare_config_and_inputs_for_retain_grad_hidden_states_attentions(self):
+        # Layerdrop can skip layers and return None attentions. Disable it for this test.
+        config, inputs_dict = super()._prepare_config_and_inputs_for_retain_grad_hidden_states_attentions()
         config.speech_encoder_layerdrop = 0.0
         config.encoder_layerdrop = 0.0
         config.decoder_layerdrop = 0.0
-
-        for k in config.sub_configs:
-            if getattr(config, k) is not None:
-                getattr(config, k).output_hidden_states = True
-
-        config.output_hidden_states = True
-        config.output_attentions = self.has_attentions
-
-        for k in config.sub_configs:
-            if getattr(config, k) is not None:
-                getattr(config, k).output_attentions = self.has_attentions
-
-        if self.has_attentions:
-            config._attn_implementation = "eager"
-
-        model_class = self.all_model_classes[0]
-        model = model_class._from_config(config, attn_implementation="eager")
-        model.to(torch_device)
-
-        inputs = self._prepare_for_class(inputs_dict, model_class)
-        outputs = model(**inputs)
-        output = outputs[0]
-
-        encoder_hidden_states = outputs.encoder_hidden_states[0]
-        encoder_hidden_states.retain_grad()
-
-        decoder_hidden_states = outputs.decoder_hidden_states[0]
-        decoder_hidden_states.retain_grad()
-
-        if self.has_attentions:
-            encoder_attentions = outputs.encoder_attentions[0]
-            encoder_attentions.retain_grad()
-
-            decoder_attentions = outputs.decoder_attentions[0]
-            decoder_attentions.retain_grad()
-
-            cross_attentions = outputs.cross_attentions[0]
-            cross_attentions.retain_grad()
-
-        output.flatten()[0].backward(retain_graph=True)
-
-        self.assertIsNotNone(encoder_hidden_states.grad)
-        self.assertIsNotNone(decoder_hidden_states.grad)
-
-        if self.has_attentions:
-            self.assertIsNotNone(encoder_attentions.grad)
-            self.assertIsNotNone(decoder_attentions.grad)
-            self.assertIsNotNone(cross_attentions.grad)
+        return config, inputs_dict
 
 
 @require_torch
