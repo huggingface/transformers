@@ -22,7 +22,7 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from pytest import mark
 
-from transformers import VideoMAEConfig
+from transformers import VideoMAEConfig, set_seed
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     Expectations,
@@ -361,7 +361,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             # Set seed for deterministic test - ensures reproducible model initialization and inputs
-            torch.manual_seed(0)
+            set_seed(0)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             inputs_dict["pixel_values"] = inputs_dict["pixel_values"].to(torch.bfloat16)

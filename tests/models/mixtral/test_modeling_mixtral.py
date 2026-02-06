@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers import is_torch_available
+from transformers import is_torch_available, set_seed
 from transformers.testing_utils import (
     Expectations,
     is_flaky,
@@ -75,7 +75,7 @@ class MixtralModelTest(CausalLMModelTest, unittest.TestCase):
         Let's make sure we can actually compute the loss and do a backward on it.
         """
         # Set seed for deterministic test - ensures reproducible model initialization and inputs
-        torch.manual_seed(0)
+        set_seed(0)
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.num_local_experts = 3

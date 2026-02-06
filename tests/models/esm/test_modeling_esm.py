@@ -18,7 +18,7 @@ import unittest
 
 import pytest
 
-from transformers import BitsAndBytesConfig, EsmConfig, is_torch_available
+from transformers import BitsAndBytesConfig, EsmConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     TestCasePlus,
     is_flaky,
@@ -316,7 +316,7 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 self.skipTest(reason="Model does not support Flash Attention 2")
 
             # Set seed for deterministic test - ensures reproducible model initialization and inputs
-            torch.manual_seed(0)
+            set_seed(0)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
