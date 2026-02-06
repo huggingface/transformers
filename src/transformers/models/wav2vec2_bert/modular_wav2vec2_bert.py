@@ -487,6 +487,97 @@ class Wav2Vec2BertAdapter(nn.Module):
         return hidden_states
 
 
+class Wav2Vec2BertAdapterLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+        embed_dim = config.output_hidden_size
+        dropout = config.conformer_conv_dropout
+
+        self.kernel_size = config.adapter_kernel_size
+        self.stride = config.adapter_stride
+
+        # 1. residual convolution
+        self.residual_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.residual_conv = nn.Conv1d(
+            embed_dim,
+            2 * embed_dim,
+            self.kernel_size,
+            stride=self.stride,
+            padding=self.stride // 2,
+        )
+        self.activation = nn.GLU(dim=1)
+
+        # Self-Attention
+        self.self_attn_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.self_attn_conv = nn.Conv1d(
+            embed_dim,
+            2 * embed_dim,
+            self.kernel_size,
+            stride=self.stride,
+            padding=self.stride // 2,
+        )
+        self.self_attn = Wav2Vec2BertSelfAttention(config, is_adapter_attention=True)
+        self.self_attn_dropout = nn.Dropout(dropout)
+
+        # Feed-forward
+        self.ffn_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.ffn = Wav2Vec2BertFeedForward(config, act_fn=config.adapter_act, hidden_size=embed_dim)
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool = False,
+        sub_sampled_lengths: torch.Tensor | None = None,
+    ):
+        residual = self.residual_layer_norm(hidden_states)
+
+        # Apply pooling to the residual to match the sequence length of the
+        # multi-head attention output.
+        # (batch, seq_len, feature_dim) -> (batch, feature_dim, seq_len)
+        residual = residual.transpose(1, 2)
+        residual = self.residual_conv(residual)
+        residual = self.activation(residual)
+        # (batch, feature_dim, seq_len) -> (batch, seq_len, feature_dim)
+        residual = residual.transpose(1, 2)
+
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+        # Apply pooling before feeding to the multihead-attention layer.
+        # (batch, seq_len, feature_dim) -> (batch, feature_dim, seq_len)
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = self.self_attn_conv(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        # (batch, feature_dim, seq_len) -> (batch, seq_len, feature_dim)
+        hidden_states = hidden_states.transpose(1, 2)
+
+        if attention_mask is not None:
+            attention_mask = _compute_new_attention_mask(hidden_states=hidden_states, seq_lens=sub_sampled_lengths)
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=hidden_states,
+                attention_mask=attention_mask,
+            )
+
+        # The rest of the computation is identical to a vanilla Transformer
+        # encoder layer.
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+        )
+        hidden_states = self.self_attn_dropout(hidden_states)
+        hidden_states = hidden_states + residual
+
+        residual = hidden_states
+
+        hidden_states = self.ffn_layer_norm(hidden_states)
+        hidden_states = self.ffn(hidden_states) + residual
+
+        return hidden_states
+
+
 @auto_docstring
 class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
     config: Wav2Vec2BertConfig
@@ -581,98 +672,6 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
         attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
-
-
-class Wav2Vec2BertAdapterLayer(Wav2Vec2BertPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        embed_dim = config.output_hidden_size
-        dropout = config.conformer_conv_dropout
-
-        self.kernel_size = config.adapter_kernel_size
-        self.stride = config.adapter_stride
-
-        # 1. residual convolution
-        self.residual_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.residual_conv = nn.Conv1d(
-            embed_dim,
-            2 * embed_dim,
-            self.kernel_size,
-            stride=self.stride,
-            padding=self.stride // 2,
-        )
-        self.activation = nn.GLU(dim=1)
-
-        # Self-Attention
-        self.self_attn_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.self_attn_conv = nn.Conv1d(
-            embed_dim,
-            2 * embed_dim,
-            self.kernel_size,
-            stride=self.stride,
-            padding=self.stride // 2,
-        )
-        self.self_attn = Wav2Vec2BertSelfAttention(config, is_adapter_attention=True)
-        self.self_attn_dropout = nn.Dropout(dropout)
-
-        # Feed-forward
-        self.ffn_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.ffn = Wav2Vec2BertFeedForward(config, act_fn=config.adapter_act, hidden_size=embed_dim)
-
-        self.post_init()
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask: torch.Tensor | None = None,
-        output_attentions: bool = False,
-        sub_sampled_lengths: torch.Tensor | None = None,
-    ):
-        residual = self.residual_layer_norm(hidden_states)
-
-        # Apply pooling to the residual to match the sequence length of the
-        # multi-head attention output.
-        # (batch, seq_len, feature_dim) -> (batch, feature_dim, seq_len)
-        residual = residual.transpose(1, 2)
-        residual = self.residual_conv(residual)
-        residual = self.activation(residual)
-        # (batch, feature_dim, seq_len) -> (batch, seq_len, feature_dim)
-        residual = residual.transpose(1, 2)
-
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-        # Apply pooling before feeding to the multihead-attention layer.
-        # (batch, seq_len, feature_dim) -> (batch, feature_dim, seq_len)
-        hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = self.self_attn_conv(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        # (batch, feature_dim, seq_len) -> (batch, seq_len, feature_dim)
-        hidden_states = hidden_states.transpose(1, 2)
-
-        if attention_mask is not None:
-            attention_mask = _compute_new_attention_mask(hidden_states=hidden_states, seq_lens=sub_sampled_lengths)
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                input_embeds=hidden_states,
-                attention_mask=attention_mask,
-            )
-
-        # The rest of the computation is identical to a vanilla Transformer
-        # encoder layer.
-        hidden_states, attn_weights = self.self_attn(
-            hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-        )
-        hidden_states = self.self_attn_dropout(hidden_states)
-        hidden_states = hidden_states + residual
-
-        residual = hidden_states
-
-        hidden_states = self.ffn_layer_norm(hidden_states)
-        hidden_states = self.ffn(hidden_states) + residual
-
-        return hidden_states
 
 
 Wav2Vec2BertBaseModelOutput = Wav2Vec2BaseModelOutput

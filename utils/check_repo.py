@@ -118,11 +118,6 @@ PRIVATE_MODELS = [
     "XCLIPTextTransformer",
     "CLIPSegTextTransformer",
     "DetrDecoder",
-    "SeamlessM4TConformerAdapterLayer",
-    "SeamlessM4Tv2ConformerAdapterLayer",
-    "Siglip2MultiheadAttentionPoolingHead",
-    "VitsEncoder",
-    "Wav2Vec2BertAdapterLayer",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.

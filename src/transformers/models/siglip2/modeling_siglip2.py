@@ -216,21 +216,6 @@ class Siglip2VisionEmbeddings(nn.Module):
         return embeddings
 
 
-class Siglip2MLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
-
-
 class Siglip2TextEmbeddings(nn.Module):
     def __init__(self, config: Siglip2TextConfig):
         super().__init__()
@@ -354,6 +339,21 @@ class Siglip2Attention(nn.Module):
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
+
+
+class Siglip2MLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 class Siglip2EncoderLayer(GradientCheckpointingLayer):
@@ -675,19 +675,19 @@ class Siglip2TextModel(Siglip2PreTrainedModel):
         )
 
 
-class Siglip2MultiheadAttentionPoolingHead(Siglip2PreTrainedModel):
-    supports_gradient_checkpointing = False  # we need pretrained due to the mask creation
+class Siglip2MultiheadAttentionPoolingHead(nn.Module):
+    """Multihead Attention Pooling."""
 
     def __init__(self, config: Siglip2VisionConfig):
-        super().__init__(config)
+        super().__init__()
 
         self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = Siglip2MLP(config)
+
         self.config = config
         self.num_heads = config.num_attention_heads
-        self.post_init()
 
     def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
         batch_size = hidden_state.shape[0]
