@@ -621,14 +621,16 @@ class NopConfig(PreTrainedConfig):
             tok2 = AutoTokenizer.from_pretrained(tmp_dir)
             self.assertTrue(tok2.__class__ == HerbertTokenizer)
 
+        # SmolLM2 has tokenizer_class=GPT2Tokenizer explicitly saved, so we should use that
+        # instead of falling back to TokenizersBackend
         tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
-        self.assertTrue(tok.__class__ == TokenizersBackend)
+        self.assertTrue(tok.__class__ == GPT2Tokenizer)
 
         tok = AutoProcessor.from_pretrained("mistralai/Ministral-3-8B-Instruct-2512-BF16").tokenizer
         self.assertTrue(tok.__class__ == TokenizersBackend)
 
         tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
-        self.assertTrue(tok.__class__ == TokenizersBackend)
+        self.assertTrue(tok.__class__ == GPT2Tokenizer)
 
     def test_custom_tokenizer_with_mismatched_tokenizer_class(self):
         nop_tokenizer_code = """
@@ -696,3 +698,95 @@ class NopConfig(PreTrainedConfig):
                 self.assertTrue(tokenizer.special_attribute_present)
             finally:
                 os.chdir(prev_dir)
+
+    def test_tokenizer_save_load_with_substring_patterns(self):
+        """
+        Test that saving and reloading a tokenizer works correctly regardless of directory names
+        that contain model type substrings. This is a regression test for:
+        https://github.com/huggingface/transformers/issues/XXXXX
+
+        Previously, AutoConfig would use substring matching on local paths, causing directories
+        like "dumptruck" (contains "mpt") or "gpt2-test" (contains "gpt2") to be misidentified
+        as those model types, leading to incorrect tokenizer classes being loaded.
+        """
+        # Load a BERT tokenizer
+        original_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
+        original_class = type(original_tokenizer)
+
+        # Test cases: directory names that contain model type substrings
+        test_cases = [
+            ("dumptruck", "Contains 'mpt' substring"),
+            ("gpt2-test", "Contains 'gpt2' substring"),
+            ("roberta_v2", "Contains 'roberta' substring"),
+            ("llama-checkpoint", "Contains 'llama' substring"),
+            ("my-mpt-folder", "Contains 'mpt' substring"),
+            ("bart-outputs", "Contains 'bart' substring"),
+        ]
+
+        for dir_name, description in test_cases:
+            with self.subTest(dir_name=dir_name, description=description):
+                with tempfile.TemporaryDirectory() as base_tmp_dir:
+                    # Create the test directory
+                    save_path = os.path.join(base_tmp_dir, dir_name)
+                    os.makedirs(save_path)
+
+                    # Save the tokenizer
+                    original_tokenizer.save_pretrained(save_path)
+
+                    # Verify that no config.json was saved (only tokenizer files)
+                    saved_files = os.listdir(save_path)
+                    self.assertNotIn("config.json", saved_files, f"config.json should not be saved by tokenizer")
+                    self.assertIn(
+                        "tokenizer_config.json", saved_files, f"tokenizer_config.json should be saved by tokenizer"
+                    )
+
+                    # Load the tokenizer back
+                    reloaded_tokenizer = AutoTokenizer.from_pretrained(save_path)
+
+                    # Verify the tokenizer class is preserved
+                    self.assertEqual(
+                        type(reloaded_tokenizer),
+                        original_class,
+                        f"Tokenizer type changed when loading from '{dir_name}': "
+                        f"expected {original_class.__name__}, got {type(reloaded_tokenizer).__name__}",
+                    )
+
+                    # Verify it's not the generic TokenizersBackend
+                    self.assertNotEqual(
+                        type(reloaded_tokenizer).__name__,
+                        "TokenizersBackend",
+                        f"Tokenizer should not fall back to generic TokenizersBackend when loading from '{dir_name}'",
+                    )
+
+                    # Verify the tokenizer still works correctly
+                    test_text = "Hello, world!"
+                    original_tokens = original_tokenizer.encode(test_text)
+                    reloaded_tokens = reloaded_tokenizer.encode(test_text)
+                    self.assertEqual(
+                        original_tokens, reloaded_tokens, f"Tokenization results differ for '{dir_name}'"
+                    )
+
+    def test_tokenizer_save_load_preserves_class_for_clean_names(self):
+        """
+        Test that tokenizer save/load works correctly for directory names without model type substrings.
+        This is the baseline test to ensure our fix doesn't break normal cases.
+        """
+        original_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
+        original_class = type(original_tokenizer)
+
+        clean_names = ["my-tokenizer", "checkpoint-1000", "final-model", "tokenizer_v2"]
+
+        for dir_name in clean_names:
+            with self.subTest(dir_name=dir_name):
+                with tempfile.TemporaryDirectory() as base_tmp_dir:
+                    save_path = os.path.join(base_tmp_dir, dir_name)
+                    os.makedirs(save_path)
+
+                    original_tokenizer.save_pretrained(save_path)
+                    reloaded_tokenizer = AutoTokenizer.from_pretrained(save_path)
+
+                    self.assertEqual(
+                        type(reloaded_tokenizer),
+                        original_class,
+                        f"Tokenizer type changed when loading from clean name '{dir_name}'",
+                    )

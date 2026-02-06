@@ -1423,10 +1423,18 @@ class AutoConfig:
             return config_class.from_dict(config_dict, **unused_kwargs)
         else:
             # Fallback: use pattern matching on the string.
-            # We go from longer names to shorter names to catch roberta before bert (for instance)
-            for pattern in sorted(CONFIG_MAPPING.keys(), key=len, reverse=True):
-                if pattern in str(pretrained_model_name_or_path):
-                    return CONFIG_MAPPING[pattern].from_dict(config_dict, **unused_kwargs)
+            # Only apply this to remote repository identifiers (containing '/') to avoid false matches
+            # on local directory names like "dumptruck" containing "mpt" or "gpt2-test" containing "gpt2"
+            pretrained_str = str(pretrained_model_name_or_path)
+            # Check if this looks like a remote repo identifier (e.g., "org/model-name")
+            # We don't apply pattern matching to local paths as it can cause false positives
+            is_likely_remote = "/" in pretrained_str and not os.path.exists(pretrained_str)
+
+            if is_likely_remote:
+                # We go from longer names to shorter names to catch roberta before bert (for instance)
+                for pattern in sorted(CONFIG_MAPPING.keys(), key=len, reverse=True):
+                    if pattern in pretrained_str:
+                        return CONFIG_MAPPING[pattern].from_dict(config_dict, **unused_kwargs)
 
         raise ValueError(
             f"Unrecognized model in {pretrained_model_name_or_path}. "

@@ -644,13 +644,15 @@ class AutoTokenizer:
             and TOKENIZER_MAPPING_NAMES.get(config_model_type, "").replace("Fast", "")
             != tokenizer_config_class.replace("Fast", "")
         ):
-            # new model, but we ignore it unless the model type is the same
+            # Mismatch between config model_type and saved tokenizer_class
+            # Prioritize the explicitly saved tokenizer_class over the inferred model_type
+            # Only fall back to TokenizersBackend if loading the saved class fails
             try:
-                return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-            except Exception:
                 return tokenizer_class_from_name(tokenizer_config_class).from_pretrained(
                     pretrained_model_name_or_path, *inputs, **kwargs
                 )
+            except Exception:
+                return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         if "_commit_hash" in tokenizer_config:
             kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
