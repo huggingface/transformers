@@ -148,8 +148,10 @@ class Qwen3TTSTalkerCodePredictorConfig(PreTrainedConfig):
         layer_types: list[str] | None = None,
         attention_dropout: float | None = 0.0,
         num_code_groups: int | None = 32,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
         self.vocab_size = vocab_size
@@ -275,8 +277,12 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
         spk_id: int | None = None,
         spk_is_dialect: bool | None = None,
         codec_language_id: int | None = None,
+        text_vocab_size: int | None = 152064,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.text_vocab_size = text_vocab_size
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
         self.vocab_size = vocab_size
