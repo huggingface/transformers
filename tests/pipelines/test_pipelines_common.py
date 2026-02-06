@@ -46,6 +46,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_staging_test,
     nested_simplify,
+    require_peft,
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
@@ -238,6 +239,51 @@ class CommonPipelineTest(unittest.TestCase):
         pipe("Hugging Face doesn't sell hugs.", num_return_sequences=4)
         with self.assertRaises(ValueError):
             pipe("Hugging Face doesn't sell hugs.", num_return_sequences=4, num_beams=1)
+
+    @require_peft
+    @require_torch
+    def test_pipeline_from_local_with_embedded_adapter(self):
+        """
+        Test for issue #43746: Only overwrite the pretrained_model_name_or_path if needed with adapter.
+
+        This test ensures that when a pipeline loads from a local directory that contains a complete model
+        with an embedded adapter (i.e., it has a config.json file), the path should NOT be overwritten
+        with the base_model_name_or_path from the adapter config. The fix is applied in
+        src/transformers/pipelines/__init__.py in the pipeline function.
+        """
+        peft_test_model = "peft-internal-testing/tiny-OPTForCausalLM-lora"
+        transformers_test_model = "hf-internal-testing/tiny-random-OPTForCausalLM"
+
+        # Create a temporary directory with a complete adapter model structure
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
+
+            # Save the model and adapter locally
+            from transformers import AutoConfig, AutoModel
+
+            config = AutoConfig.from_pretrained(transformers_test_model)
+            model = AutoModel.from_pretrained(transformers_test_model)
+            adapter_model = AutoModel.from_pretrained(peft_test_model)
+            config.save_pretrained(tmp_dir)
+            model.save_pretrained(tmp_dir)
+            adapter_model.save_pretrained(tmp_dir)
+
+            # Overwrite the base_model_name_or_path to an invalid value that
+            # would cause the pipeline load to fail later
+            import json
+
+            from transformers.utils import ADAPTER_CONFIG_NAME
+
+            adapter_config_path = tmp_dir / ADAPTER_CONFIG_NAME
+            with open(adapter_config_path, "r") as handle:
+                adapter_config = json.load(handle)
+            adapter_config["base_model_name_or_path"] = "some/model/that/does/not/exist"
+            with open(adapter_config_path, "w") as handle:
+                json.dump(adapter_config, handle)
+
+            # Load from the saved path and make sure it actually loads despite
+            # the invalid adapter config path
+            pipeline("text-generation", tmp_dir)
 
 
 @is_pipeline_test
