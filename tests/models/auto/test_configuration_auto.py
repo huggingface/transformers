@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import importlib
+import json
 import os
 import sys
 import tempfile
@@ -146,7 +147,7 @@ class AutoConfigTest(unittest.TestCase):
                 "num_hidden_layers": 12,
             }
             config_path = os.path.join(tmp_dir, "config.json")
-            import json
+
             with open(config_path, "w") as f:
                 json.dump(config_dict, f)
 
