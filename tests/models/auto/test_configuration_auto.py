@@ -137,3 +137,18 @@ class AutoConfigTest(unittest.TestCase):
         finally:
             if "new-model" in CONFIG_MAPPING._extra_content:
                 del CONFIG_MAPPING._extra_content["new-model"]
+
+    def test_config_missing_model_type(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_dict = {
+                "hidden_size": 768,
+                "num_attention_heads": 12,
+                "num_hidden_layers": 12,
+            }
+            config_path = os.path.join(tmp_dir, "config.json")
+            import json
+            with open(config_path, "w") as f:
+                json.dump(config_dict, f)
+
+            with self.assertRaisesRegex(ValueError, "Should have a `model_type` key"):
+                AutoConfig.from_pretrained(tmp_dir)
