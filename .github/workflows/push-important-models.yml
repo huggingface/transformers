@@ -100,6 +100,7 @@ jobs:
               'modeling_utils.py',
               'modeling_rope_utils.py', 
               'modeling_flash_attention_utils.py',
+              'modeling_attn_mask_utils.py',
               'cache_utils.py',
               'masking_utils.py',
               'pytorch_utils.py'
