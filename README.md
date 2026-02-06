@@ -238,6 +238,14 @@ pipeline(
     <img alt="Hugging Face Enterprise Hub" src="https://github.com/user-attachments/assets/247fb16d-d251-4583-96c4-d3d76dda4925">
 </a><br>
 
+## Measuring Latency Metrics (TTFT & TPOT)
+- To enable per-token latency tracking (including TTFT and TOPT), enable the `token_latency` flag in the model configuration before calling `generate()`.  
+
+    ```bash
+    model.config.token_latency = True 
+    ```
+- <b>Usage:</b> When `token_latency` is enabled, the `.generate()` method returns a tuple containing the generated output and a list of latencies (in seconds) for every generation step. For a full benchmarking implementation, refer to the sample script:  [check_ttft.py](./scripts/check_ttft.py)
+
 ## Why shouldn't I use Transformers?
 
 - This library is not a modular toolbox of building blocks for neural nets. The code in the model files is not refactored with additional abstractions on purpose, so that researchers can quickly iterate on each of the models without diving into additional abstractions/files.

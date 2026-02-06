@@ -16,6 +16,7 @@ import copy
 import functools
 import inspect
 import os
+import time
 import warnings
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -423,7 +424,9 @@ class GenerationMixin(ContinuousMixin):
             if hasattr(self, "load_custom_generate") and trust_remote_code:
                 try:
                     custom_generate = self.load_custom_generate(
-                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **repo_loading_kwargs
+                        pretrained_model_name_or_path,
+                        trust_remote_code=trust_remote_code,
+                        **repo_loading_kwargs,
                     )
                     self.generate = functools.partial(custom_generate, model=self)
                 except OSError:  # there is no custom generate function
@@ -461,7 +464,9 @@ class GenerationMixin(ContinuousMixin):
         # is created (preventing future hub requests), and an OSError is raised.
         try:
             module = get_cached_module_file(
-                pretrained_model_name_or_path, module_file="custom_generate/generate.py", **kwargs
+                pretrained_model_name_or_path,
+                module_file="custom_generate/generate.py",
+                **kwargs,
             )
         except OSError:
             raise OSError(
@@ -485,7 +490,9 @@ class GenerationMixin(ContinuousMixin):
 
         # Load the custom generate function
         check_python_requirements(
-            pretrained_model_name_or_path, requirements_file="custom_generate/requirements.txt", **kwargs
+            pretrained_model_name_or_path,
+            requirements_file="custom_generate/requirements.txt",
+            **kwargs,
         )
         custom_generate_function = get_class_in_module("generate", module)
         return custom_generate_function
@@ -515,10 +522,9 @@ class GenerationMixin(ContinuousMixin):
             return self._cache_dependant_input_preparation_exporting(input_ids, inputs_embeds, cache_position)
         if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
             inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
-        elif (
-            inputs_embeds is not None  # Exception 1
-            or (cache_position[-1] >= input_ids.shape[1])  # Exception 3
-        ):
+        elif inputs_embeds is not None or (  # Exception 1
+            cache_position[-1] >= input_ids.shape[1]
+        ):  # Exception 3
             input_ids = input_ids[:, -cache_position.shape[0] :]
         elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
             input_ids = input_ids[:, cache_position]
@@ -571,13 +577,11 @@ class GenerationMixin(ContinuousMixin):
                         torch.cond(
                             cache_position[-1] >= input_ids.shape[1],
                             branch_2,
-                            lambda input_ids, cache_position: (
-                                torch.cond(
-                                    input_ids.shape[1] != cache_position.shape[0],
-                                    branch_3,
-                                    (lambda input_ids, cache_position: input_ids.clone()),
-                                    [input_ids, cache_position],
-                                )
+                            lambda input_ids, cache_position: torch.cond(
+                                input_ids.shape[1] != cache_position.shape[0],
+                                branch_3,
+                                (lambda input_ids, cache_position: input_ids.clone()),
+                                [input_ids, cache_position],
                             ),
                             [input_ids, cache_position],
                         ),
@@ -657,7 +661,11 @@ class GenerationMixin(ContinuousMixin):
             kwargs[position_ids_key] = position_ids  # placed in kwargs for further processing (see below)
 
         # 5. Slice model inputs if it's an input that should have the same length as `input_ids`
-        for model_input_name in ["position_ids", "token_type_ids", "decoder_position_ids"]:
+        for model_input_name in [
+            "position_ids",
+            "token_type_ids",
+            "decoder_position_ids",
+        ]:
             model_input = kwargs.get(model_input_name)
             if model_input is not None:
                 if past_key_values is not None or use_cache:
@@ -688,11 +696,15 @@ class GenerationMixin(ContinuousMixin):
             base_model = getattr(self, self.base_model_prefix, self)
             decoder = base_model.get_decoder() if hasattr(base_model, "get_decoder") else None
             causal_mask_creation_function = getattr(
-                base_model, "_prepare_4d_causal_attention_mask_with_cache_position", None
+                base_model,
+                "_prepare_4d_causal_attention_mask_with_cache_position",
+                None,
             )
             if causal_mask_creation_function is None and decoder is not None:  # it may be in the decoder
                 causal_mask_creation_function = getattr(
-                    decoder, "_prepare_4d_causal_attention_mask_with_cache_position", None
+                    decoder,
+                    "_prepare_4d_causal_attention_mask_with_cache_position",
+                    None,
                 )
 
             # If it's not defined, it means the model uses the new general mask API
@@ -855,7 +867,10 @@ class GenerationMixin(ContinuousMixin):
         if pad_token_id is None:
             return default_attention_mask
 
-        is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
+        is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [
+            torch.int,
+            torch.long,
+        ]
         if not is_input_ids:
             return default_attention_mask
 
@@ -964,7 +979,10 @@ class GenerationMixin(ContinuousMixin):
             if "decoder_attention_mask" in model_kwargs:
                 decoder_attention_mask = model_kwargs["decoder_attention_mask"]
                 decoder_attention_mask = torch.cat(
-                    (torch.ones_like(decoder_attention_mask)[:, :1], decoder_attention_mask),
+                    (
+                        torch.ones_like(decoder_attention_mask)[:, :1],
+                        decoder_attention_mask,
+                    ),
                     dim=-1,
                 )
                 model_kwargs["decoder_attention_mask"] = decoder_attention_mask
@@ -1034,14 +1052,21 @@ class GenerationMixin(ContinuousMixin):
             if "attention_mask" in model_kwargs:
                 attention_mask = model_kwargs["attention_mask"]
                 model_kwargs["attention_mask"] = torch.cat(
-                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
+                    [
+                        attention_mask,
+                        attention_mask.new_ones((attention_mask.shape[0], 1)),
+                    ],
+                    dim=-1,
                 )
         else:
             # update decoder attention mask
             if "decoder_attention_mask" in model_kwargs:
                 decoder_attention_mask = model_kwargs["decoder_attention_mask"]
                 model_kwargs["decoder_attention_mask"] = torch.cat(
-                    [decoder_attention_mask, decoder_attention_mask.new_ones((decoder_attention_mask.shape[0], 1))],
+                    [
+                        decoder_attention_mask,
+                        decoder_attention_mask.new_ones((decoder_attention_mask.shape[0], 1)),
+                    ],
                     dim=-1,
                 )
 
@@ -1050,7 +1075,9 @@ class GenerationMixin(ContinuousMixin):
         else:
             past_positions = model_kwargs.pop("cache_position")
             new_positions = torch.arange(
-                past_positions[-1] + 1, past_positions[-1] + num_new_tokens + 1, dtype=past_positions.dtype
+                past_positions[-1] + 1,
+                past_positions[-1] + num_new_tokens + 1,
+                dtype=past_positions.dtype,
             ).to(past_positions.device)
             model_kwargs["cache_position"] = torch.cat((past_positions, new_positions))
         return model_kwargs
@@ -1142,7 +1169,7 @@ class GenerationMixin(ContinuousMixin):
         generation_config: GenerationConfig,
         input_ids_seq_length: int | None = None,
         encoder_input_ids: torch.LongTensor | None = None,
-        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], list[int]] | None = None,
+        prefix_allowed_tokens_fn: (Callable[[int, torch.Tensor], list[int]] | None) = None,
         logits_processor: LogitsProcessorList | None = None,
         device: str | None = None,
         model_kwargs: dict[str, Any] | None = None,
@@ -1319,31 +1346,46 @@ class GenerationMixin(ContinuousMixin):
                 processors.append(TopHLogitsWarper(top_h=generation_config.top_h))
             if generation_config.top_k is not None and generation_config.top_k != 0:
                 processors.append(
-                    TopKLogitsWarper(top_k=generation_config.top_k, min_tokens_to_keep=min_tokens_to_keep)
+                    TopKLogitsWarper(
+                        top_k=generation_config.top_k,
+                        min_tokens_to_keep=min_tokens_to_keep,
+                    )
                 )
             if generation_config.top_p is not None and generation_config.top_p < 1.0:
                 processors.append(
-                    TopPLogitsWarper(top_p=generation_config.top_p, min_tokens_to_keep=min_tokens_to_keep)
+                    TopPLogitsWarper(
+                        top_p=generation_config.top_p,
+                        min_tokens_to_keep=min_tokens_to_keep,
+                    )
                 )
             if generation_config.min_p is not None:
                 # Applied after temperature scaling (see https://github.com/ggerganov/llama.cpp/pull/3841#issuecomment-2073826084)
                 processors.append(
-                    MinPLogitsWarper(min_p=generation_config.min_p, min_tokens_to_keep=min_tokens_to_keep)
+                    MinPLogitsWarper(
+                        min_p=generation_config.min_p,
+                        min_tokens_to_keep=min_tokens_to_keep,
+                    )
                 )
             if generation_config.typical_p is not None and generation_config.typical_p < 1.0:
                 processors.append(
-                    TypicalLogitsWarper(mass=generation_config.typical_p, min_tokens_to_keep=min_tokens_to_keep)
+                    TypicalLogitsWarper(
+                        mass=generation_config.typical_p,
+                        min_tokens_to_keep=min_tokens_to_keep,
+                    )
                 )
             if generation_config.epsilon_cutoff is not None and 0.0 < generation_config.epsilon_cutoff < 1.0:
                 processors.append(
                     EpsilonLogitsWarper(
-                        epsilon=generation_config.epsilon_cutoff, min_tokens_to_keep=min_tokens_to_keep
+                        epsilon=generation_config.epsilon_cutoff,
+                        min_tokens_to_keep=min_tokens_to_keep,
                     )
                 )
             if generation_config.eta_cutoff is not None and 0.0 < generation_config.eta_cutoff < 1.0:
                 processors.append(
                     EtaLogitsWarper(
-                        epsilon=generation_config.eta_cutoff, min_tokens_to_keep=min_tokens_to_keep, device=device
+                        epsilon=generation_config.eta_cutoff,
+                        min_tokens_to_keep=min_tokens_to_keep,
+                        device=device,
                     )
                 )
 
@@ -1578,7 +1620,11 @@ class GenerationMixin(ContinuousMixin):
 
         if (assistant_model := generation_mode_kwargs.get("assistant_model")) is not None:
             if self.config.is_encoder_decoder and not assistant_model.config.is_encoder_decoder:
-                attributes_to_check = ["encoder_attention_heads", "encoder_ffn_dim", "encoder_layers"]
+                attributes_to_check = [
+                    "encoder_attention_heads",
+                    "encoder_ffn_dim",
+                    "encoder_layers",
+                ]
                 attributes_to_check = [attr for attr in dir(assistant_model.config) if attr in attributes_to_check]
                 are_equal = all(
                     getattr(self.config, attr) == getattr(assistant_model.config, attr) for attr in attributes_to_check
@@ -1793,7 +1839,11 @@ class GenerationMixin(ContinuousMixin):
         # Thus we use the specific kwargs `defaults_only=True` (`None` values only) and `allow_custom_entries=True`
         # (custom entries are carried over).
         global_defaults = self.generation_config._get_default_generation_params()
-        generation_config.update(**self.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True)
+        generation_config.update(
+            **self.generation_config.to_dict(),
+            defaults_only=True,
+            allow_custom_entries=True,
+        )
         generation_config.update(**global_defaults, defaults_only=True)
 
         # Finally, if there are any kwargs, update config with it -> highest priority at the end
@@ -1854,7 +1904,11 @@ class GenerationMixin(ContinuousMixin):
         return model_kwargs
 
     def _prepare_static_cache(
-        self, cache_implementation: str, batch_size: int, max_cache_len: int, model_kwargs
+        self,
+        cache_implementation: str,
+        batch_size: int,
+        max_cache_len: int,
+        model_kwargs,
     ) -> Cache:
         """
         Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
@@ -1967,7 +2021,10 @@ class GenerationMixin(ContinuousMixin):
         # Assisted decoding and contrastive search require cache rollback, which is incompatible with sliding layers.
         # To handle this, we skip passing the model config to DynamicCache (forcing a full-layer cache).
         # The "dynamic_full" option is a shortcut for generate() users to avoid sliding layers on their own.
-        if generation_mode in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH):
+        if generation_mode in (
+            GenerationMode.ASSISTED_GENERATION,
+            GenerationMode.CONTRASTIVE_SEARCH,
+        ):
             if generation_config.cache_implementation is not None:
                 logger.warning_once(
                     "An assistant model is provided, using a dynamic cache instead of a cache of type="
@@ -2243,7 +2300,7 @@ class GenerationMixin(ContinuousMixin):
         generation_config: GenerationConfig | None = None,
         logits_processor: LogitsProcessorList | None = None,
         stopping_criteria: StoppingCriteriaList | None = None,
-        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], list[int]] | None = None,
+        prefix_allowed_tokens_fn: (Callable[[int, torch.Tensor], list[int]] | None) = None,
         synced_gpus: bool | None = None,
         assistant_model: Optional["PreTrainedModel"] = None,
         streamer: Optional["BaseStreamer"] = None,
@@ -2599,7 +2656,11 @@ class GenerationMixin(ContinuousMixin):
         ):
             max_cache_length += inputs_tensor.shape[1]
         self._prepare_cache_for_generation(
-            generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
+            generation_config,
+            model_kwargs,
+            generation_mode,
+            batch_size,
+            max_cache_length,
         )
 
         if self.device.type != input_ids.device.type:
@@ -2666,7 +2727,9 @@ class GenerationMixin(ContinuousMixin):
         return True
 
     def heal_tokens(
-        self, input_ids: torch.LongTensor, tokenizer: Optional["PreTrainedTokenizerBase"] = None
+        self,
+        input_ids: torch.LongTensor,
+        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
     ) -> torch.LongTensor:
         r"""
         Generates sequences of token ids for models with a language modeling head.
@@ -2836,7 +2899,10 @@ class GenerationMixin(ContinuousMixin):
             model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
             prefill_consumed = True
 
+        token_latency = getattr(generation_config, "token_latency", False)
+        latency_list = []
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
+            tic = time.time()
             if prefill_consumed:
                 model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
                 with self._optimize_model_for_decode():
@@ -2894,6 +2960,8 @@ class GenerationMixin(ContinuousMixin):
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
 
+            toc = time.time()
+            latency_list.append(toc - tic)
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
             cur_len += 1
@@ -2932,7 +3000,12 @@ class GenerationMixin(ContinuousMixin):
                     past_key_values=cache,
                 )
         else:
-            return input_ids
+            output_result = input_ids
+
+        if token_latency:
+            return (output_result, latency_list)
+        else:
+            return output_result
 
     @staticmethod
     def _flatten_beam_dim(tensor: torch.Tensor) -> torch.Tensor:
@@ -3068,7 +3141,8 @@ class GenerationMixin(ContinuousMixin):
         # Gather the top K scores from _all_ beams.
         if do_sample:
             topk_indices = torch.multinomial(
-                nn.functional.softmax(accumulated_log_probs, dim=-1), num_samples=beams_to_keep
+                nn.functional.softmax(accumulated_log_probs, dim=-1),
+                num_samples=beams_to_keep,
             )
             topk_log_probs = torch.gather(input=accumulated_log_probs, dim=1, index=topk_indices)
         else:
@@ -3247,7 +3321,10 @@ class GenerationMixin(ContinuousMixin):
         n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
         beams_to_keep = max(2, 1 + n_eos_tokens) * num_beams
         top_num_beam_mask = torch.cat(
-            (torch.ones((num_beams), dtype=torch.bool), torch.zeros((beams_to_keep - num_beams), dtype=torch.bool)),
+            (
+                torch.ones((num_beams), dtype=torch.bool),
+                torch.zeros((beams_to_keep - num_beams), dtype=torch.bool),
+            ),
             dim=0,
         ).to(input_ids.device)
 
@@ -3293,7 +3370,12 @@ class GenerationMixin(ContinuousMixin):
         # of the first beam are considered to avoid sampling the exact same tokens across all beams.
         running_beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         running_beam_scores[:, 1:] = -1e9
-        beam_scores = torch.full((batch_size, num_beams), fill_value=-1e9, dtype=torch.float, device=input_ids.device)
+        beam_scores = torch.full(
+            (batch_size, num_beams),
+            fill_value=-1e9,
+            dtype=torch.float,
+            device=input_ids.device,
+        )
 
         # per batch, beam-item state bit indicating if sentence has finished.
         is_sent_finished = torch.zeros((batch_size, num_beams), dtype=torch.bool, device=input_ids.device)
@@ -3308,7 +3390,10 @@ class GenerationMixin(ContinuousMixin):
 
         # per batch selected beam indices
         running_beam_indices = torch.full(
-            (batch_size, num_beams, max_length - cur_len), fill_value=-1, dtype=torch.int32, device=input_ids.device
+            (batch_size, num_beams, max_length - cur_len),
+            fill_value=-1,
+            dtype=torch.int32,
+            device=input_ids.device,
         )
         beam_indices = running_beam_indices.detach().clone()
 
@@ -3322,8 +3407,11 @@ class GenerationMixin(ContinuousMixin):
             model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
             prefill_consumed = True
 
+        token_latency = getattr(generation_config, "token_latency", False)
+        latency_list = []
         # 4. run the generation loop
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
+            tic = time.time()
             if prefill_consumed:
                 # a. Forward current tokens, obtain the logits
                 flat_running_sequences = self._flatten_beam_dim(running_sequences[:, :, :cur_len])
@@ -3371,6 +3459,8 @@ class GenerationMixin(ContinuousMixin):
                         else (model_outputs.hidden_states,)
                     )
 
+            toc = time.time()
+            latency_list.append(toc - tic)
             # This is needed to properly delete logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
             del model_outputs
@@ -3512,7 +3602,12 @@ class GenerationMixin(ContinuousMixin):
                     past_key_values=cache,
                 )
         else:
-            return sequences
+            output_result = sequences
+
+        if token_latency:
+            return (output_result, latency_list)
+        else:
+            return output_result
 
     def _assisted_decoding(
         self,
@@ -3574,7 +3669,11 @@ class GenerationMixin(ContinuousMixin):
         # The cache must be dynamic for assisted generation, and the check must happen AFTER preparing cache
         if not model_kwargs["use_cache"]:
             raise ValueError("assisted generate requires `use_cache=True`")
-        if generation_config.cache_implementation in ["static", "hybrid", "sliding_window"] or (
+        if generation_config.cache_implementation in [
+            "static",
+            "hybrid",
+            "sliding_window",
+        ] or (
             "past_key_values" in model_kwargs
             and hasattr(model_kwargs["past_key_values"], "layers")
             and any(getattr(l, "is_compileable", False) for l in model_kwargs["past_key_values"].layers)
@@ -3622,7 +3721,11 @@ class GenerationMixin(ContinuousMixin):
 
         this_peer_finished = False
         is_first_iteration = True  # to preserve the same API in the output as other generation methods
+
+        token_latency = getattr(generation_config, "token_latency", False)
+        latency_list = []
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
+            tic = time.time()
             cur_len = input_ids.shape[1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator` and move to the correct device
@@ -3641,20 +3744,29 @@ class GenerationMixin(ContinuousMixin):
             # 2.1. Prepare the model inputs
             candidate_kwargs = copy.copy(model_kwargs)
             candidate_kwargs = _prepare_attention_mask(
-                candidate_kwargs, candidate_input_ids.shape[1], self.config.is_encoder_decoder
+                candidate_kwargs,
+                candidate_input_ids.shape[1],
+                self.config.is_encoder_decoder,
             )
             candidate_kwargs = _prepare_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
             if "cache_position" in candidate_kwargs:
                 candidate_kwargs["cache_position"] = torch.cat(
                     (
                         candidate_kwargs["cache_position"],
-                        torch.arange(cur_len, cur_len + candidate_length, device=input_ids.device, dtype=torch.long),
+                        torch.arange(
+                            cur_len,
+                            cur_len + candidate_length,
+                            device=input_ids.device,
+                            dtype=torch.long,
+                        ),
                     ),
                     dim=0,
                 )
 
             model_inputs = self.prepare_inputs_for_generation(
-                candidate_input_ids, is_first_iteration=is_first_iteration, **candidate_kwargs
+                candidate_input_ids,
+                is_first_iteration=is_first_iteration,
+                **candidate_kwargs,
             )
             if "logits_to_keep" in model_inputs:
                 model_inputs["logits_to_keep"] = candidate_length + 1
@@ -3743,7 +3855,10 @@ class GenerationMixin(ContinuousMixin):
                 if output_attentions:
                     if self.config.is_encoder_decoder:
                         cross_attentions = _split_model_outputs(
-                            cross_attentions, outputs.cross_attentions, cur_len, newly_added_length
+                            cross_attentions,
+                            outputs.cross_attentions,
+                            cur_len,
+                            newly_added_length,
                         )
                         decoder_attentions = _split_model_outputs(
                             decoder_attentions,
@@ -3764,13 +3879,21 @@ class GenerationMixin(ContinuousMixin):
                 if output_hidden_states:
                     if self.config.is_encoder_decoder:
                         decoder_hidden_states = _split_model_outputs(
-                            decoder_hidden_states, outputs.decoder_hidden_states, cur_len, newly_added_length
+                            decoder_hidden_states,
+                            outputs.decoder_hidden_states,
+                            cur_len,
+                            newly_added_length,
                         )
                     else:
                         decoder_hidden_states = _split_model_outputs(
-                            decoder_hidden_states, outputs.hidden_states, cur_len, newly_added_length
+                            decoder_hidden_states,
+                            outputs.hidden_states,
+                            cur_len,
+                            newly_added_length,
                         )
 
+            toc = time.time()
+            latency_list.append(toc - tic)
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
             is_first_iteration = False
@@ -3812,10 +3935,20 @@ class GenerationMixin(ContinuousMixin):
                     past_key_values=cache,
                 )
         else:
-            return input_ids
+            output_result = input_ids
+
+        if token_latency:
+            return (output_result, latency_list)
+        else:
+            return output_result
 
     # TODO: v5.1: make public once API stabilized
-    def _prefill(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, model_kwargs):
+    def _prefill(
+        self,
+        input_ids: torch.LongTensor,
+        generation_config: GenerationConfig,
+        model_kwargs,
+    ):
         if generation_config.prefill_chunk_size is None:
             model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
             model_inputs = self.prepare_inputs_for_generation(input_ids, is_first_iteration=True, **model_kwargs)
@@ -3844,7 +3977,10 @@ class GenerationMixin(ContinuousMixin):
                 if attention_mask is not None:
                     model_kwargs["attention_mask"] = attention_mask[:, :current_length]
                 model_kwargs["cache_position"] = torch.arange(
-                    past_length, current_length, dtype=torch.long, device=input_chunk.device
+                    past_length,
+                    current_length,
+                    dtype=torch.long,
+                    device=input_chunk.device,
                 )
                 model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
 
