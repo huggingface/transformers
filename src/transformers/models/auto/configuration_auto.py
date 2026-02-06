@@ -1282,8 +1282,6 @@ def _infer_model_type_from_tags(model_id: str) -> str | None:
     Returns:
         The inferred model type if found in tags, None otherwise
     """
-    sorted_types = sorted(CONFIG_MAPPING, key=len, reverse=True)
-
     try:
         model = model_info(model_id)
         tags = model.tags or []
@@ -1291,6 +1289,7 @@ def _infer_model_type_from_tags(model_id: str) -> str | None:
         logger.debug(f"Can't fetch model info for {model_id}: {e}")
         return None
 
+    sorted_types = sorted(CONFIG_MAPPING, key=len, reverse=True)
     config_keys = CONFIG_MAPPING.keys()
 
     for tag in tags:
