@@ -3953,15 +3953,20 @@ class Trainer:
         outputs = model(**inputs)
         loss = outputs.loss
 
-        # Use torch device mesh when available; fallback to DeepSpeed SP groups otherwise
+        # Use torch device mesh when available; fallback to DeepSpeed SP groups only for Ulysses SP
         if self.accelerator.torch_device_mesh is not None:
             sp_group = self.accelerator.torch_device_mesh["sp"].get_group()
             sp_world_size = pc.sp_size
-        else:
+        elif pc.sp_backend == "deepspeed" and pc.sp_size > 1:
             from deepspeed.utils import groups
 
             sp_group = groups._get_sequence_parallel_group()
             sp_world_size = groups._get_sequence_parallel_world_size()
+        else:
+            raise ValueError(
+                "Sequence parallelism is enabled but no SP process group is available. "
+                "Ensure torch_device_mesh is initialized or sp_backend='deepspeed' with sp_size > 1."
+            )
         # differentiable weighted per-shard-loss aggregation across ranks
         losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
         # special dealing with SFT that has prompt tokens that aren't used in loss computation
