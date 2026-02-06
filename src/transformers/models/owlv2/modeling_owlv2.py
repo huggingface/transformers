@@ -699,6 +699,7 @@ class Owlv2TextTransformer(Owlv2PreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
+        **kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
@@ -724,12 +725,15 @@ class Owlv2TextTransformer(Owlv2PreTrainedModel):
             past_key_values=None,
         )
 
+        kwargs.pop("is_causal", None)
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            is_causal=True,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs[0]
@@ -831,6 +835,7 @@ class Owlv2VisionTransformer(Owlv2PreTrainedModel):
         output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool | None = False,
         return_dict: bool | None = None,
+        **kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -850,6 +855,7 @@ class Owlv2VisionTransformer(Owlv2PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs[0]

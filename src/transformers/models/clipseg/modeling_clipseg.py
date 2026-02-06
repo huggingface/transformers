@@ -568,6 +568,7 @@ class CLIPSegTextTransformer(CLIPSegPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
+        **kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -591,6 +592,7 @@ class CLIPSegTextTransformer(CLIPSegPreTrainedModel):
             past_key_values=None,
         )
 
+        kwargs.pop("is_causal", None)
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
@@ -598,6 +600,7 @@ class CLIPSegTextTransformer(CLIPSegPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             is_causal=True,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs[0]
