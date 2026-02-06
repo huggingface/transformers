@@ -499,3 +499,28 @@ class MambaIntegrationTests(unittest.TestCase):
         output = model.generate(input_ids, max_new_tokens=20)
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)
+
+    @pytest.mark.torch_compile_test
+    def test_compile_associative_scan_no_cache(self):
+        from transformers.models.mamba.modeling_mamba import associative_scan
+
+        if associative_scan is None:
+            self.skipTest("associative_scan is not available in this PyTorch version.")
+        if torch_device == "cpu":
+            self.skipTest("Associative scan compile test requires a torch accelerator.")
+
+        expected_output = "Hey how are you doing?\n\nI'm doing great.\n\nI"
+
+        input_ids = self.tokenizer("Hey how are you doing?", return_tensors="pt").input_ids.to(torch_device)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-1.4b-hf", dtype=torch.float16).to(torch_device)
+        model.eval()
+
+        output = model.generate(input_ids, do_sample=False, use_cache=False, max_new_tokens=10)
+        output_sentence = self.tokenizer.decode(output[0].tolist())
+
+        self.assertEqual(output_sentence, expected_output)
+
+        model.forward = torch.compile(model.forward)
+        output = model.generate(input_ids, do_sample=False, use_cache=False, max_new_tokens=10)
+        output_sentence = self.tokenizer.decode(output[0].tolist())
+        self.assertEqual(output_sentence, expected_output)

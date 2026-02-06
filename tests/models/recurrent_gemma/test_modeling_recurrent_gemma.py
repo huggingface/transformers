@@ -231,3 +231,26 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         output_text = tokenizer.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_GENERATION)
+
+    @pytest.mark.torch_compile_test
+    def test_compile_associative_scan_no_cache(self):
+        from transformers.models.recurrent_gemma.modeling_recurrent_gemma import associative_scan
+
+        if associative_scan is None:
+            self.skipTest("associative_scan is not available.")
+        if torch_device == "cpu":
+            self.skipTest("Associative scan compile test requires a torch accelerator.")
+
+        model_id = "alpindale/recurrentgemma-9b-it"
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16).to(torch_device)
+        model.eval()
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False, use_cache=False)
+        expected_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        model.forward = torch.compile(model.forward)
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False, use_cache=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(output_text, expected_text)
