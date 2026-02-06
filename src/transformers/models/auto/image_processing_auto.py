@@ -171,6 +171,7 @@ else:
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("poolformer", ("PoolFormerImageProcessor", "PoolFormerImageProcessorFast")),
             ("pp_doclayout_v3", (None, "PPDocLayoutV3ImageProcessorFast")),
+            ("pp_ocrv5_mobile_rec", ("PPOCRV5MobileRecImageProcessor", "PPOCRV5MobileRecImageProcessorFast")),
             ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor", "PromptDepthAnythingImageProcessorFast")),
             ("pvt", ("PvtImageProcessor", "PvtImageProcessorFast")),
             ("pvt_v2", ("PvtImageProcessor", "PvtImageProcessorFast")),
