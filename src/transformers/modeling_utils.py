@@ -2311,7 +2311,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if getattr(module, "_is_hf_initialized", False):
             return
 
-        if (weight := getattr(module, "weight", None)) is not None and getattr(weight, "_is_hf_initialized", False):
+        if (
+            (weight := getattr(module, "weight", None)) is not None
+            and getattr(weight, "_is_hf_initialized", False)
+            and not list(module.named_buffers())
+        ):
+            module._is_hf_initialized = True
             return
 
         self._init_weights(module)
@@ -2327,6 +2332,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model would have to recurse a second time on all sub-models explicitly in the outer-most `_init_weights`, which
         is extremely error prone and inefficient.
         """
+        # print('BEFORE', self.state_dict()['layers.3.self_attn.v_proj.weight'])
         if not hasattr(torch.nn.Module, "smart_apply"):
             # This function is equivalent to `torch.nn.Module.apply`, except that it dynamically adjust the function
             # to apply as we go down the graph
@@ -2344,6 +2350,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Let the magic happen with this simple call
         self.smart_apply(self._initialize_weights)
+        # print('AFTER', self.state_dict()['layers.3.self_attn.v_proj.weight'])
 
     def get_expanded_tied_weights_keys(self, all_submodels: bool = False) -> dict:
         r"""
