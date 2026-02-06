@@ -981,11 +981,11 @@ def install_output_capuring_hook(module: nn.Module, key: str, index: int) -> Non
             return
 
         if key == "hidden_states" and len(collected_outputs[key]) == 0:
-            collected_outputs[key] += (args[0],)
+            collected_outputs[key].append(args[0])
         if not isinstance(output, tuple):
-            collected_outputs[key] += (output,)
+            collected_outputs[key].append(output)
         elif output[index] is not None:
-            collected_outputs[key] += (output[index],)
+            collected_outputs[key].append(output[index])
 
     module.register_forward_hook(output_capturing_hook)
 
@@ -1171,7 +1171,7 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
             if "output_attentions" in recordable_keys:
                 recordable_keys["output_cross_attentions"] = recordable_keys["output_attentions"]
 
-            collected_outputs = {k.replace("output_", ""): () for k, v in recordable_keys.items() if v}
+            collected_outputs = {k.replace("output_", ""): [] for k, v in recordable_keys.items() if v}
             # Make sure hooks are installed if we need to collect outputs
             if len(collected_outputs) > 0:
                 maybe_install_capturing_hooks(self)
@@ -1217,20 +1217,21 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
                         pass
                     elif hasattr(outputs, "vision_hidden_states"):
                         collected_outputs[key] = collected_outputs[key][:-1]
-                        collected_outputs[key] += (outputs.vision_hidden_states,)
+                        collected_outputs[key].append(outputs.vision_hidden_states)
                     elif hasattr(outputs, "last_hidden_state"):
                         collected_outputs[key] = collected_outputs[key][:-1]
-                        collected_outputs[key] += (outputs.last_hidden_state,)
+                        collected_outputs[key].append(outputs.last_hidden_state)
 
-                    outputs[key] = collected_outputs[key]
+                    outputs[key] = tuple(collected_outputs[key])
                 elif key == "attentions":
                     if isinstance(capture_flags[key], list) and len(capture_flags[key]) == 2:
-                        outputs[key] = collected_outputs[key][0::2]
-                        outputs["cross_" + key] = collected_outputs[key][1::2]
+                        outputs[key] = tuple(collected_outputs[key][0::2])
+                        outputs["cross_" + key] = tuple(collected_outputs[key][1::2])
                     else:
-                        outputs[key] = collected_outputs[key]
+                        outputs[key] = tuple(collected_outputs[key])
                 else:
-                    outputs[key] = collected_outputs[key]
+                    outputs[key] = tuple(collected_outputs[key])
+
             if return_dict is False:
                 outputs = outputs.to_tuple()
             return outputs
