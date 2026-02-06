@@ -33,7 +33,8 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import check_model_inputs
+from ...utils.output_capturing import OutputRecorder
 from ..esm.modeling_esm import (
     EsmAttention,
     EsmEmbeddings,

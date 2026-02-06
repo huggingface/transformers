@@ -401,7 +401,7 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
         model.to(torch_device)
         # Set self.training manually to keep deterministic but run the training path
         model.training = True
-        set_seed(0)
+        set_seed(42)
 
         tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
         text = "Test that this generates speech"

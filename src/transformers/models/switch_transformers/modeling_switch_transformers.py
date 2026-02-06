@@ -47,7 +47,8 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs, is_flash_attention_requested
+from ...utils.generic import can_return_tuple, check_model_inputs, is_flash_attention_requested
+from ...utils.output_capturing import OutputRecorder
 from .configuration_switch_transformers import SwitchTransformersConfig
 
 
@@ -1210,11 +1211,6 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     _tied_weights_keys = {
         "encoder.embed_tokens.weight": "shared.weight",
     }
-    _can_record_outputs = {
-        "hidden_states": SwitchTransformersBlock,
-        "attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.0"),
-        "router_logits": SwitchTransformersTop1Router,
-    }
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
@@ -1234,7 +1230,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
 
     @auto_docstring
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

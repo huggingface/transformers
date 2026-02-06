@@ -788,6 +788,11 @@ class Sam3PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Sam3ViTModel(Sam3PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": Sam3ViTLayer,
+        "attentions": Sam3ViTRoPEAttention,
+    }
+
     def __init__(self, config: Sam3ViTConfig):
         super().__init__(config)
         self.config = config
@@ -1010,10 +1015,6 @@ class Sam3VisionNeck(nn.Module):
 class Sam3VisionModel(Sam3PreTrainedModel):
     config_class = Sam3VisionConfig
     main_input_name = "pixel_values"
-    _can_record_outputs = {
-        "hidden_states": Sam3ViTLayer,
-        "attentions": Sam3ViTRoPEAttention,
-    }
 
     def __init__(self, config: Sam3VisionConfig):
         super().__init__(config)
@@ -1026,7 +1027,7 @@ class Sam3VisionModel(Sam3PreTrainedModel):
     def get_input_embeddings(self):
         return self.backbone.get_input_embeddings()
 
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -1049,6 +1050,8 @@ class Sam3VisionModel(Sam3PreTrainedModel):
             last_hidden_state=hidden_states,
             fpn_hidden_states=fpn_hidden_states,
             fpn_position_encoding=fpn_position_encoding,
+            hidden_states=backbone_output.hidden_states,
+            attentions=backbone_output.attentions,
         )
 
 
@@ -2213,7 +2216,7 @@ class Sam3Model(Sam3PreTrainedModel):
         vision_outputs = self.vision_encoder(pixel_values, **kwargs)
         return vision_outputs
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

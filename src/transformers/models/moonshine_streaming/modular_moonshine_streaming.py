@@ -19,8 +19,6 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from transformers.utils.generic import OutputRecorder, check_model_inputs
-
 from ...cache_utils import Cache
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
@@ -30,6 +28,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import check_model_inputs
+from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import LlamaMLP, eager_attention_forward
 from ..moonshine.modeling_moonshine import (
     MoonshineDecoder,
