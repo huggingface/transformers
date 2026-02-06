@@ -38,6 +38,7 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     ExplicitEnum,
     check_torch_load_is_safe,
+    is_peft_available,
     is_psutil_available,
     is_torch_available,
     is_torch_cuda_available,
@@ -59,6 +60,15 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
     from safetensors.torch import load_file as safe_load_file
+
+if is_peft_available():
+    from peft import PeftMixedModel, PeftModel
+
+
+def _is_peft_model(model):
+    if is_peft_available():
+        return isinstance(model, (PeftModel, PeftMixedModel))
+    return False
 
 
 def seed_worker(worker_id: int, num_workers: int, rank: int):
@@ -124,32 +134,6 @@ def set_seed(seed: int, deterministic: bool = False):
         torch.hpu.manual_seed_all(seed)
     if is_torch_xpu_available():
         torch.xpu.manual_seed_all(seed)
-
-
-def neftune_post_forward_hook(module, input, output):
-    """
-    Implements the NEFTune forward pass for the model using forward hooks. Note this works only for torch.nn.Embedding
-    layers. This method is slightly adapted from the original source code that can be found here:
-    https://github.com/neelsjain/NEFTune Simply add it to your model as follows:
-    ```python
-    model = ...
-    model.embed_tokens.neftune_noise_alpha = 0.1
-    model.embed_tokens.register_forward_hook(neftune_post_forward_hook)
-    ```
-    Args:
-        module (`torch.nn.Module`):
-            The embedding module where the hook is attached. Note that you need to set `module.neftune_noise_alpha` to
-            the desired noise alpha value.
-        input (`torch.Tensor`):
-            The input tensor to the model.
-        output (`torch.Tensor`):
-            The output tensor of the model (i.e. the embeddings).
-    """
-    if module.training:
-        dims = torch.tensor(output.size(1) * output.size(2))
-        mag_norm = module.neftune_noise_alpha / torch.sqrt(dims)
-        output = output + torch.zeros_like(output).uniform_(-mag_norm, mag_norm)
-    return output
 
 
 class EvalPrediction:

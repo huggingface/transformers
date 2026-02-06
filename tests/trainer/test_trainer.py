@@ -52,6 +52,7 @@ from transformers import (
     set_seed,
 )
 from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
+from transformers.integrations.neftune import activate_neftune
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     TOKEN,
@@ -1689,7 +1690,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
-        trainer.model = trainer._activate_neftune(trainer.model)
+        activate_neftune(trainer.model, trainer.args.neftune_noise_alpha)
 
         dummy_input = torch.LongTensor([[1, 0, 1]]).to(torch_device)
 

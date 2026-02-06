@@ -62,6 +62,7 @@ from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
 from .image_processing_utils import BaseImageProcessor
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
+from .integrations.neftune import activate_neftune, deactivate_neftune
 from .integrations.peft import MIN_PEFT_VERSION
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
@@ -113,6 +114,7 @@ from .trainer_utils import (
     SaveStrategy,
     TrainerMemoryTracker,
     TrainOutput,
+    _is_peft_model,
     check_target_module_exists,
     default_compute_objective,
     denumpify_detensorize,
@@ -121,7 +123,6 @@ from .trainer_utils import (
     get_last_checkpoint,
     has_length,
     load_sharded_checkpoint,
-    neftune_post_forward_hook,
     number_of_arguments,
     rotate_checkpoints,
     seed_worker,
@@ -204,7 +205,7 @@ if is_sagemaker_mp_enabled():
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
 
 if is_peft_available():
-    from peft import PeftMixedModel, PeftModel
+    from peft import PeftModel
 
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
@@ -223,13 +224,6 @@ if is_accelerate_available():
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
-
-
-def _is_peft_model(model):
-    if is_peft_available():
-        classes_to_check = (PeftModel, PeftMixedModel)
-        return isinstance(model, classes_to_check)
-    return False
 
 
 def _get_fsdp_ckpt_kwargs():
@@ -762,42 +756,6 @@ class Trainer:
             num_devices = xr.global_runtime_device_count()
             xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
         self.is_fsdp_xla_v1_enabled = self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled
-
-    def _activate_neftune(self, model):
-        r"""
-        Activates the neftune as presented in this code: https://github.com/neelsjain/NEFTune and paper:
-        https://huggingface.co/papers/2310.05914
-        """
-        unwrapped_model = self.accelerator.unwrap_model(model)
-
-        if _is_peft_model(unwrapped_model):
-            embeddings = unwrapped_model.base_model.model.get_input_embeddings()
-        else:
-            embeddings = unwrapped_model.get_input_embeddings()
-
-        del unwrapped_model
-
-        embeddings.neftune_noise_alpha = self.neftune_noise_alpha
-        hook_handle = embeddings.register_forward_hook(neftune_post_forward_hook)
-        self.neftune_hook_handle = hook_handle
-        return model
-
-    def _deactivate_neftune(self, model):
-        """
-        Deactivates the neftune method. Make sure to call `_activate_neftune` first.
-        """
-        if not hasattr(self, "neftune_hook_handle"):
-            raise ValueError("Neftune is not activated make sure to call `trainer._activate_neftune()` first")
-
-        unwrapped_model = self.accelerator.unwrap_model(model)
-
-        if _is_peft_model(unwrapped_model):
-            embeddings = unwrapped_model.base_model.model.get_input_embeddings()
-        else:
-            embeddings = unwrapped_model.get_input_embeddings()
-
-        self.neftune_hook_handle.remove()
-        del embeddings.neftune_noise_alpha, unwrapped_model
 
     def add_callback(self, callback):
         """
@@ -2106,7 +2064,7 @@ class Trainer:
 
         # Attach NEFTune hooks if necessary
         if self.neftune_noise_alpha is not None:
-            self.model = self._activate_neftune(self.model)
+            self.neftune_hook_handle = activate_neftune(self.model, self.neftune_noise_alpha, self.accelerator)
 
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
         # the following is a workaround:
@@ -2701,7 +2659,7 @@ class Trainer:
         # After training we make sure to retrieve back the original forward pass method
         # for the embedding layer by removing the forward post hook.
         if self.neftune_noise_alpha is not None:
-            self._deactivate_neftune(self.model)
+            deactivate_neftune(self.model, self.neftune_hook_handle, self.accelerator)
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
