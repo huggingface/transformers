@@ -89,6 +89,8 @@ class Qwen3Config(PreTrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*):
             End of stream token id.
+        use_bidirectional_attention (`bool`, *optional*):
+            If True, the model will attend to all text tokens instead of using a causal mask.
 
     ```python
     >>> from transformers import Qwen3Model, Qwen3Config
@@ -147,6 +149,7 @@ class Qwen3Config(PreTrainedConfig):
         pad_token_id: int | None = None,
         bos_token_id: int | None = None,
         eos_token_id: int | None = None,
+        use_bidirectional_attention: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -166,6 +169,7 @@ class Qwen3Config(PreTrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.head_dim = head_dim
         self.hidden_act = hidden_act
+        self.use_bidirectional_attention = use_bidirectional_attention
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache

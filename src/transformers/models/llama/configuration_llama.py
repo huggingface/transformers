@@ -90,7 +90,8 @@ class LlamaConfig(PreTrainedConfig):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         head_dim (`int`, *optional*):
             The attention head dimension. If None, it will default to hidden_size // num_attention_heads
-
+        use_bidirectional_attention (`bool`, *optional*):
+            If True, the model will attend to all text tokens instead of using a causal mask.
     ```python
     >>> from transformers import LlamaModel, LlamaConfig
 
@@ -145,6 +146,7 @@ class LlamaConfig(PreTrainedConfig):
         attention_dropout: float | None = 0.0,
         mlp_bias: bool | None = False,
         head_dim: int | None = None,
+        use_bidirectional_attention: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -174,6 +176,7 @@ class LlamaConfig(PreTrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.use_bidirectional_attention = use_bidirectional_attention
         super().__init__(**kwargs)
 
 
