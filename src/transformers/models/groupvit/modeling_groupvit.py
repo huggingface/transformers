@@ -612,6 +612,7 @@ class GroupViTAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.FloatTensor | None = None,
         output_attentions: bool | None = False,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
