@@ -35,6 +35,43 @@ args = TrainingArguments(
     run_name="optimizer-name",
 )
 ```
+## Adafactor
+
+### Memory Usage During Training
+
+A common misconception is that GPU memory usage during training is close to the model's parameter size or model weights.
+In practice, training typically requires significantly more memory than the model weights alone.
+During training, several other components consume additional memory, such as:
+- Intermediate activations needed for the backward pass (backpropagation)
+- Optimizer states (used to update parameters based on past gradients)
+- Framework-level allocations and buffers
+
+Because of this, switching to a memory-efficient optimizer does not guarantee lower peak memory usage, especially when used with distributed training frameworks such as DeepSpeed.
+
+### Why Adafactor May Still Cause OOM Errors with DeepSpeed
+
+Adafactor reduces optimizer state memory compared to AdamW, but this does not eliminate other major sources of GPU memory consumption. In particular:
+1. Memory spikes can still occur during backward passes.
+2. DeepSpeed stages and configuration choices influence memory behavior.
+3. Peak memory usage may appear after several steps, rather than immediately at step 1.
+
+Consequently, OOM (Out-of-Memory) errors can occur even when using Adafactor, and they do not necessarily indicate a bug in the optimizer.
+
+### What Users Should Expect
+
+Optimizers involve trade-offs between memory usage, computation speed, and numerical stability.
+Users should not assume that:
+1. Optimizer choice alone determines the memory usage of the GPU.
+2. Fewer optimizer states always lead to lower memory usage in practice.
+
+When training large models, overall memory behavior depends on the combined effect of model size, optimizer, precision settings, and distributed configuration.
+
+### Practical Guidance
+
+If memory usage is a concern:
+1. Consider reducing the batch size or sequence length.
+2. Review DeepSpeed stage and configuration options.
+3. Treat optimizer choice as one factor among many, rather than relying on a single solution.
 
 ## APOLLO
 
