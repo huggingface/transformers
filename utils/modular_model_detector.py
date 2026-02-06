@@ -210,6 +210,55 @@ def _leading_symbol_prefix(name: str) -> str:
     return match.group(1) if match else ""
 
 
+def _strip_type_hints(code: str) -> str:
+    """
+    Strip type hints from Python code to improve embedding similarity.
+
+    Removes:
+    - Function parameter type hints: `def foo(x: int)` -> `def foo(x)`
+    - Return type hints: `def foo() -> int:` -> `def foo():`
+    - Variable annotations: `x: int = 5` -> `x = 5`
+
+    Args:
+        code (`str`): The source code to strip type hints from.
+
+    Returns:
+        `str`: The code with type hints removed.
+    """
+    # Remove return type hints first: `-> Type:` -> `:`
+    # Match: -> followed by optional whitespace, type expression, then colon
+    # The type can contain brackets, dots, spaces, etc.
+    # Remove any whitespace before the colon
+    code = re.sub(r"->\s*[^:\n]+:\s*", ": ", code)
+    
+    # Remove function parameter type hints: `param: Type` -> `param`
+    # Match identifier followed by colon and type, ending at comma, ), =, or newline
+    # Use lookahead to ensure we're in a function parameter context
+    # Pattern: word boundary, identifier, colon, type (not containing = or :), then comma/paren/equals
+    code = re.sub(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*[^=,):\n]+(?=\s*[,)=])", r"\1", code)
+    
+    # Remove variable annotations: `var: Type = value` -> `var = value`
+    # Match identifier, colon, type, equals sign
+    # Preserve spacing around equals
+    code = re.sub(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*[^=\n]+\s*=", r"\1 =", code)
+    
+    # Clean up any extra spaces that might have been created
+    code = re.sub(r"  +", " ", code)
+    # Clean up spaces around commas
+    code = re.sub(r"\s*,\s*", ", ", code)
+    # Clean up spaces before colons (from return type removal)
+    code = re.sub(r"\s+:", ":", code)
+    # Clean up spaces around parentheses
+    code = re.sub(r"\(\s+", "(", code)
+    code = re.sub(r"\s+\)", ")", code)
+    # Clean up spaces around equals
+    code = re.sub(r"\s*=\s*", " = ", code)
+    # Remove double spaces again after all replacements
+    code = re.sub(r"  +", " ", code)
+    
+    return code
+
+
 def _sanitize_for_embedding(code: str, model_hint: str | None, symbol_hint: str | None) -> str:
     """
     Sanitize code for embedding by replacing model-specific identifiers with generic placeholder.
@@ -223,6 +272,7 @@ def _sanitize_for_embedding(code: str, model_hint: str | None, symbol_hint: str 
         `str`: The sanitized code with model-specific identifiers replaced by 'Model'.
     """
     base = _strip_source_for_tokens(code)
+    base = _strip_type_hints(base)
     variants = set()
     if model_hint:
         variants.add(model_hint)
