@@ -536,6 +536,21 @@ class TestDataCollatorForSeq2Seq(DataCollatorTestMixin, unittest.TestCase):
 
         self.assertEqual(batch["labels"][0].tolist(), [0, 1, 2, -1, -1, -1])
 
+    def test_do_not_pad(self):
+        """Test DO_NOT_PAD raises on unequal lengths, works on equal."""
+        tokenizer = BertTokenizer(self.vocab_file)
+        collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.DO_NOT_PAD)
+
+        # Unequal lengths should raise
+        with self.assertRaises(ValueError):
+            collator(self._get_features())
+
+        # Equal lengths should work
+        features = [{"input_ids": list(range(3)), "labels": list(range(3))}] * 2
+        batch = collator(features)
+        self.assertEqual(batch["input_ids"][0].tolist(), list(range(3)))
+        self.assertEqual(batch["labels"][0].tolist(), list(range(3)))
+
     def test_without_labels(self):
         """Test collator works without labels."""
         tokenizer = BertTokenizer(self.vocab_file)
@@ -625,9 +640,53 @@ class TestDataCollatorForLanguageModeling(DataCollatorTestMixin, unittest.TestCa
         self.assertEqual(batch["input_ids"].shape, torch.Size([2, 10]))
         self.assertEqual(batch["labels"].shape, torch.Size([2, 10]))
 
-        # Check that masking occurred
+        # Check that masking occurred and non-masked tokens have -100 labels
         masked_tokens = batch["input_ids"] == tokenizer.mask_token_id
         self.assertTrue(torch.any(masked_tokens))
+        self.assertTrue(all(x == -100 for x in batch["labels"][~masked_tokens].tolist()))
+
+    def test_mlm_with_padding(self):
+        """Test MLM mode with different-length sequences requiring padding."""
+        set_seed(42)
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
+
+        collator = DataCollatorForLanguageModeling(tokenizer, mlm=True)
+        batch = collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, torch.Size([2, 10]))
+        masked_tokens = batch["input_ids"] == tokenizer.mask_token_id
+        self.assertTrue(torch.any(masked_tokens))
+        self.assertTrue(all(x == -100 for x in batch["labels"][~masked_tokens].tolist()))
+
+    def test_mlm_pad_to_multiple_of(self):
+        """Test MLM mode with pad_to_multiple_of."""
+        set_seed(42)
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
+
+        collator = DataCollatorForLanguageModeling(tokenizer, mlm=True, pad_to_multiple_of=8)
+        batch = collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, torch.Size([2, 16]))
+        masked_tokens = batch["input_ids"] == tokenizer.mask_token_id
+        self.assertTrue(torch.any(masked_tokens))
+        self.assertTrue(all(x == -100 for x in batch["labels"][~masked_tokens].tolist()))
+
+    def test_with_raw_list_features(self):
+        """Test LM collator with raw list features (not dicts)."""
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        # CLM with raw lists
+        collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
+        features = [list(range(10)), list(range(10))]
+        batch = collator(features)
+        self.assertEqual(batch["input_ids"].shape, torch.Size([2, 10]))
+
+        # CLM with raw lists requiring padding
+        features = [list(range(5)), list(range(10))]
+        batch = collator(features)
+        self.assertEqual(batch["input_ids"].shape, torch.Size([2, 10]))
 
     def test_mlm_seed_reproducibility(self):
         """Test that masking is reproducible with seed."""
@@ -880,6 +939,42 @@ class TestDataCollatorForWholeWordMask(DataCollatorTestMixin, unittest.TestCase)
         collator3 = DataCollatorForWholeWordMask(tokenizer, seed=43, return_tensors="np")
         batch3 = collator3(features)
         self.assertFalse(np.all(batch1["input_ids"] == batch3["input_ids"]))
+
+    def test_seed_multiworker_dataloader(self):
+        """Test seed reproducibility with multi-worker DataLoader."""
+        tokenizer = BertTokenizerFast(self.vocab_file)
+        input_tokens = [f"token_{i}" for i in range(998)]
+        tokenizer.add_tokens(input_tokens)
+        features = [tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(10)]
+
+        dataloader1 = torch.utils.data.DataLoader(
+            features,
+            batch_size=2,
+            num_workers=2,
+            generator=torch.Generator().manual_seed(42),
+            collate_fn=DataCollatorForWholeWordMask(tokenizer, seed=42),
+        )
+        batches1 = torch.stack([batch["input_ids"] for batch in dataloader1])
+
+        dataloader2 = torch.utils.data.DataLoader(
+            features,
+            batch_size=2,
+            num_workers=2,
+            collate_fn=DataCollatorForWholeWordMask(tokenizer, seed=42),
+        )
+        batches2 = torch.stack([batch["input_ids"] for batch in dataloader2])
+
+        self.assertTrue(torch.all(batches1 == batches2))
+
+        # Different seed -> different results
+        dataloader3 = torch.utils.data.DataLoader(
+            features,
+            batch_size=2,
+            num_workers=2,
+            collate_fn=DataCollatorForWholeWordMask(tokenizer, seed=43),
+        )
+        batches3 = torch.stack([batch["input_ids"] for batch in dataloader3])
+        self.assertFalse(torch.all(batches1 == batches3))
 
     def test_numpy_output(self):
         """Test with NumPy output."""

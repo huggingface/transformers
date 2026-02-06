@@ -32,6 +32,7 @@ from unittest.mock import patch
 from transformers import (
     DefaultFlowCallback,
     EarlyStoppingCallback,
+    IntervalStrategy,
     PrinterCallback,
     ProgressCallback,
     Trainer,
@@ -319,135 +320,76 @@ class TrainerCallbackTest(unittest.TestCase):
     # Event Flow Tests
     # -------------------------------------------------------------------------
 
-    def test_basic_training_events(self):
-        """Basic training should fire events in the correct order."""
+    def _get_expected_events(self, trainer):
+        """Compute the exact expected event sequence for a training run."""
+        expected_events = ["on_init_end", "on_train_begin"]
+        step = 0
+        train_dl_len = len(trainer.get_eval_dataloader())
+        evaluation_events = ["on_prediction_step"] * len(trainer.get_eval_dataloader()) + ["on_log", "on_evaluate"]
+        for _ in range(trainer.state.num_train_epochs):
+            expected_events.append("on_epoch_begin")
+            for _ in range(train_dl_len):
+                step += 1
+                expected_events += ["on_step_begin", "on_pre_optimizer_step", "on_optimizer_step", "on_step_end"]
+                if step % trainer.args.logging_steps == 0:
+                    expected_events.append("on_log")
+                if trainer.args.eval_strategy == IntervalStrategy.STEPS and step % trainer.args.eval_steps == 0:
+                    expected_events += evaluation_events.copy()
+                if step % trainer.args.save_steps == 0 or step == trainer.state.max_steps:
+                    expected_events.append("on_save")
+            expected_events.append("on_epoch_end")
+            if trainer.args.eval_strategy == IntervalStrategy.EPOCH:
+                expected_events += evaluation_events.copy()
+        expected_events += ["on_log", "on_train_end"]
+        return expected_events
+
+    def test_event_flow(self):
+        """Test exact event sequence across multiple training configurations."""
         import warnings
 
         with warnings.catch_warnings():
             warnings.simplefilter(action="ignore", category=UserWarning)
 
+            # Default configuration
+            trainer = self._create_trainer(callbacks=[EventRecorderCallback])
+            trainer.train()
+            events = self._get_callback(trainer, EventRecorderCallback).events
+            self.assertEqual(events, self._get_expected_events(trainer))
+
+            # Independent log/save/eval steps
+            trainer = self._create_trainer(callbacks=[EventRecorderCallback], logging_steps=5)
+            trainer.train()
+            events = self._get_callback(trainer, EventRecorderCallback).events
+            self.assertEqual(events, self._get_expected_events(trainer))
+
+            trainer = self._create_trainer(callbacks=[EventRecorderCallback], save_steps=5)
+            trainer.train()
+            events = self._get_callback(trainer, EventRecorderCallback).events
+            self.assertEqual(events, self._get_expected_events(trainer))
+
             trainer = self._create_trainer(
-                callbacks=[EventRecorderCallback],
-                max_steps=2,
-                logging_steps=1,
-                save_strategy="no",
+                callbacks=[EventRecorderCallback], eval_steps=5, eval_strategy="steps"
             )
             trainer.train()
+            events = self._get_callback(trainer, EventRecorderCallback).events
+            self.assertEqual(events, self._get_expected_events(trainer))
 
-        callback = self._get_callback(trainer, EventRecorderCallback)
-        events = callback.events
+            trainer = self._create_trainer(callbacks=[EventRecorderCallback], eval_strategy="epoch")
+            trainer.train()
+            events = self._get_callback(trainer, EventRecorderCallback).events
+            self.assertEqual(events, self._get_expected_events(trainer))
 
-        # Check essential events are present and in order
-        self.assertEqual(events[0], "on_init_end")
-        self.assertEqual(events[1], "on_train_begin")
-        self.assertIn("on_epoch_begin", events)
-        self.assertIn("on_step_begin", events)
-        self.assertIn("on_step_end", events)
-        self.assertIn("on_epoch_end", events)
-        self.assertEqual(events[-1], "on_train_end")
-
-    def test_evaluation_events_with_steps_strategy(self):
-        """Evaluation events should fire when using steps strategy."""
-        import warnings
-
-        with warnings.catch_warnings():
-            warnings.simplefilter(action="ignore", category=UserWarning)
-
+            # A bit of everything
             trainer = self._create_trainer(
                 callbacks=[EventRecorderCallback],
-                max_steps=2,
+                logging_steps=3,
+                save_steps=10,
+                eval_steps=5,
                 eval_strategy="steps",
-                eval_steps=2,
-                logging_steps=1,
-                save_strategy="no",
             )
             trainer.train()
-
-        callback = self._get_callback(trainer, EventRecorderCallback)
-
-        self.assertIn("on_evaluate", callback.events)
-        self.assertIn("on_prediction_step", callback.events)
-
-    def test_evaluation_events_with_epoch_strategy(self):
-        """Evaluation events should fire when using epoch strategy."""
-        import warnings
-
-        with warnings.catch_warnings():
-            warnings.simplefilter(action="ignore", category=UserWarning)
-
-            trainer = self._create_trainer(
-                callbacks=[EventRecorderCallback],
-                num_train_epochs=1,
-                eval_strategy="epoch",
-                logging_steps=1,
-                save_strategy="no",
-            )
-            trainer.train()
-
-        callback = self._get_callback(trainer, EventRecorderCallback)
-
-        self.assertIn("on_evaluate", callback.events)
-
-    def test_save_events(self):
-        """Save events should fire according to save strategy."""
-        import warnings
-
-        with warnings.catch_warnings():
-            warnings.simplefilter(action="ignore", category=UserWarning)
-
-            trainer = self._create_trainer(
-                callbacks=[EventRecorderCallback],
-                max_steps=2,
-                save_strategy="steps",
-                save_steps=2,
-                logging_steps=1,
-            )
-            trainer.train()
-
-        callback = self._get_callback(trainer, EventRecorderCallback)
-
-        self.assertIn("on_save", callback.events)
-
-    def test_log_events(self):
-        """Log events should fire according to logging steps."""
-        import warnings
-
-        with warnings.catch_warnings():
-            warnings.simplefilter(action="ignore", category=UserWarning)
-
-            trainer = self._create_trainer(
-                callbacks=[EventRecorderCallback],
-                max_steps=4,
-                logging_steps=2,
-                save_strategy="no",
-            )
-            trainer.train()
-
-        callback = self._get_callback(trainer, EventRecorderCallback)
-
-        # Should have multiple log events (at step 2 and 4)
-        log_count = callback.events.count("on_log")
-        self.assertGreaterEqual(log_count, 2)
-
-    def test_optimizer_step_events(self):
-        """Optimizer events should fire on each training step."""
-        import warnings
-
-        with warnings.catch_warnings():
-            warnings.simplefilter(action="ignore", category=UserWarning)
-
-            trainer = self._create_trainer(
-                callbacks=[EventRecorderCallback],
-                max_steps=2,
-                logging_steps=1,
-                save_strategy="no",
-            )
-            trainer.train()
-
-        callback = self._get_callback(trainer, EventRecorderCallback)
-
-        self.assertIn("on_pre_optimizer_step", callback.events)
-        self.assertIn("on_optimizer_step", callback.events)
+            events = self._get_callback(trainer, EventRecorderCallback).events
+            self.assertEqual(events, self._get_expected_events(trainer))
 
     def test_on_push_begin_event(self):
         """on_push_begin should be callable and fire correctly."""
