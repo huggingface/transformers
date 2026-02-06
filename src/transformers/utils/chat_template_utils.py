@@ -337,10 +337,10 @@ def get_json_schema(func: Callable) -> dict:
     }
     """
     doc = inspect.getdoc(func)
+    func_name = getattr(func, "__name__", "operation")
+
     if not doc:
-        raise DocstringParsingException(
-            f"Cannot generate JSON schema for {func.__name__} because it has no docstring!"  # type: ignore[attr-defined]
-        )
+        raise DocstringParsingException(f"Cannot generate JSON schema for {func_name} because it has no docstring!")
     doc = doc.strip()
     main_doc, param_descriptions, return_doc = parse_google_format_docstring(doc)
 
@@ -351,7 +351,7 @@ def get_json_schema(func: Callable) -> dict:
     for arg, schema in json_schema["properties"].items():
         if arg not in param_descriptions:
             raise DocstringParsingException(
-                f"Cannot generate JSON schema for {func.__name__} because the docstring has no description for the argument '{arg}'"  # type: ignore[attr-defined]
+                f"Cannot generate JSON schema for {func_name} because the docstring has no description for the argument '{arg}'"
             )
         desc = param_descriptions[arg]
         enum_choices = re.search(r"\(choices:\s*(.*?)\)\s*$", desc, flags=re.IGNORECASE)
@@ -360,7 +360,7 @@ def get_json_schema(func: Callable) -> dict:
             desc = enum_choices.string[: enum_choices.start()].strip()
         schema["description"] = desc
 
-    output = {"name": func.__name__, "description": main_doc, "parameters": json_schema}  # type: ignore[attr-defined]
+    output = {"name": func_name, "description": main_doc, "parameters": json_schema}
     if return_dict is not None:
         output["return"] = return_dict
     return {"type": "function", "function": output}
