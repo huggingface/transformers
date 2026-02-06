@@ -700,15 +700,6 @@ class NopConfig(PreTrainedConfig):
                 os.chdir(prev_dir)
 
     def test_tokenizer_save_load_with_substring_patterns(self):
-        """
-        Test that saving and reloading a tokenizer works correctly regardless of directory names
-        that contain model type substrings. This is a regression test for:
-        https://github.com/huggingface/transformers/issues/XXXXX
-
-        Previously, AutoConfig would use substring matching on local paths, causing directories
-        like "dumptruck" (contains "mpt") or "gpt2-test" (contains "gpt2") to be misidentified
-        as those model types, leading to incorrect tokenizer classes being loaded.
-        """
         # Load a BERT tokenizer
         original_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
         original_class = type(original_tokenizer)
@@ -765,10 +756,6 @@ class NopConfig(PreTrainedConfig):
                     self.assertEqual(original_tokens, reloaded_tokens, f"Tokenization results differ for '{dir_name}'")
 
     def test_tokenizer_save_load_preserves_class_for_clean_names(self):
-        """
-        Test that tokenizer save/load works correctly for directory names without model type substrings.
-        This is the baseline test to ensure our fix doesn't break normal cases.
-        """
         original_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
         original_class = type(original_tokenizer)
 
