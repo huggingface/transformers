@@ -367,9 +367,7 @@ class TrainerCallbackTest(unittest.TestCase):
             events = self._get_callback(trainer, EventRecorderCallback).events
             self.assertEqual(events, self._get_expected_events(trainer))
 
-            trainer = self._create_trainer(
-                callbacks=[EventRecorderCallback], eval_steps=5, eval_strategy="steps"
-            )
+            trainer = self._create_trainer(callbacks=[EventRecorderCallback], eval_steps=5, eval_strategy="steps")
             trainer.train()
             events = self._get_callback(trainer, EventRecorderCallback).events
             self.assertEqual(events, self._get_expected_events(trainer))
