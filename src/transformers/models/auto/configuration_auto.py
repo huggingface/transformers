@@ -1282,25 +1282,28 @@ def _infer_model_type_from_tags(model_id: str) -> str | None:
     Returns:
         The inferred model type if found in tags, None otherwise
     """
+    sorted_types = sorted(CONFIG_MAPPING, key=len, reverse=True)
+
     try:
         model = model_info(model_id)
-        if model.tags is not None:
-            # Check for base_model tag pattern (e.g., "base_model:mistralai/Mistral-7B")
-            for tag in model.tags:
-                if tag.startswith("base_model:"):
-                    # Extract the base model and try to infer type from it
-                    base_model = tag.split(":", 1)[1]
-                    # Check if any model type appears in the base model tag
-                    for model_type in sorted(CONFIG_MAPPING.keys(), key=len, reverse=True):
-                        if model_type in base_model.lower():
-                            return model_type
-
-                # Also check for direct model type tags
-                if tag in CONFIG_MAPPING.keys():
-                    return tag
+        tags = model.tags or []
     except Exception as e:
-        # If we can't fetch model info (offline, network error, etc.), return None
         logger.debug(f"Can't fetch model info for {model_id}: {e}")
+        return None
+
+    config_keys = CONFIG_MAPPING.keys()
+
+    for tag in tags:
+        # direct model type tag
+        if tag in config_keys:
+            return tag
+
+        # base_model tag: base_model:org/name
+        if tag.startswith("base_model:"):
+            base_model = tag.split(":", 1)[1].lower()
+            for model_type in sorted_types:
+                if model_type in base_model:
+                    return model_type
 
     return None
 
