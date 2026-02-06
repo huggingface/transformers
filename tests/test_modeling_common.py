@@ -234,6 +234,8 @@ def _test_eager_matches_sdpa_inference(
         return False
 
     for model_class in self.all_model_classes:
+        # Set seed for deterministic test - ensures reproducible model initialization and inputs
+        torch.manual_seed(0)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
 
@@ -556,6 +558,8 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
         )
 
     for model_class in self.all_model_classes:
+        # Set seed for deterministic test - ensures reproducible model initialization and inputs
+        torch.manual_seed(0)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
         model = model_class(config).eval().to(torch_device).to(dtype)
@@ -1531,6 +1535,8 @@ class ModelTesterMixin:
                     msg += str(e)
                     raise AssertionError(msg)
 
+        # Set seed for deterministic test - ensures reproducible model initialization and inputs
+        torch.manual_seed(0)
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
 
@@ -3220,6 +3226,8 @@ class ModelTesterMixin:
             if not model_class._supports_attention_backend and not attn_implementation.startswith("flash_attention"):
                 continue
 
+            # Set seed for deterministic test - ensures reproducible model initialization and inputs
+            torch.manual_seed(0)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
             # flash attention variants does not always support arbitrary headim

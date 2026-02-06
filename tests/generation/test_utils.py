@@ -662,6 +662,8 @@ class GenerationTesterMixin:
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
 
+            # Set seed for deterministic test - ensures reproducible model initialization and inputs
+            torch.manual_seed(0)
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
             set_config_for_less_flaky_test(config)
@@ -760,6 +762,8 @@ class GenerationTesterMixin:
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
 
+            # Set seed for deterministic test - ensures reproducible model initialization and inputs
+            torch.manual_seed(0)
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
 
@@ -1118,6 +1122,8 @@ class GenerationTesterMixin:
         # When supported, tests that the decoder model can generate from `inputs_embeds` instead of `input_ids`
         # if fails, you should probably update the `prepare_inputs_for_generation` function
         for model_class in self.all_generative_model_classes:
+            # Set seed for deterministic test - ensures reproducible model initialization and inputs
+            torch.manual_seed(0)
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
             # This test is for decoder-only models (encoder-decoder models have native input embeddings support in the
@@ -1250,6 +1256,8 @@ class GenerationTesterMixin:
             if any(model_name in model_class.__name__.lower() for model_name in ["umt5"]):
                 self.skipTest(reason="TODO: needs modeling or test input preparation fixes for compatibility")
 
+            # Set seed for deterministic test - ensures reproducible model initialization and inputs
+            torch.manual_seed(0)
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
             if not hasattr(config.get_text_config(), "use_cache"):
@@ -1416,6 +1424,8 @@ class GenerationTesterMixin:
             if not model_class._can_compile_fullgraph:
                 self.skipTest(reason="This model does not support the static cache format")
 
+            # Set seed for deterministic test - ensures reproducible model initialization and inputs
+            torch.manual_seed(0)
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             set_config_for_less_flaky_test(config)
             main_input = inputs_dict[model_class.main_input_name]
