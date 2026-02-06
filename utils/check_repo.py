@@ -110,6 +110,11 @@ PRIVATE_MODELS = [
     "PeAudioPreTrainedModel",
     "PeAudioVideoPreTrainedModel",
     "PeVideoPreTrainedModel",
+    "CLIPTextTransformer",  # was not a PreTrainedModel originally but needs to be
+    "CLIPVisionTransformer",  # was not a PreTrainedModel originally but needs to be
+    "MetaClip2TextTransformer",  # was not a PreTrainedModel originally but needs to be
+    "MetaClip2VisionTransformer",  # was not a PreTrainedModel originally but needs to be
+    "MLCDVisionTransformer",  # was not a PreTrainedModel originally but needs to be
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -160,6 +165,7 @@ IGNORE_NON_TESTED = (
         "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
+        "PPDocLayoutV3Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV3ForObjectDetection.
         "PaddleOCRVLModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "PaddleOCRVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "PaddleOCRVisionTransformer",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
@@ -201,6 +207,7 @@ IGNORE_NON_TESTED = (
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
         "InternVLVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
+        "PPDocLayoutV3Model",  # Building part of bigger (tested) model
         "TimesFmModel",  # Building part of bigger (tested) model
         "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
         "CsmDepthDecoderModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.

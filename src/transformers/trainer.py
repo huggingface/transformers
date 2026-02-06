@@ -24,7 +24,6 @@ import json
 import math
 import os
 import random
-import re
 import shutil
 import sys
 import tempfile
@@ -63,6 +62,7 @@ from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
 from .image_processing_utils import BaseImageProcessor
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
+from .integrations.neftune import activate_neftune, deactivate_neftune
 from .integrations.peft import MIN_PEFT_VERSION
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
@@ -73,9 +73,6 @@ from .models.auto.modeling_auto import (
 )
 from .optimization import Adafactor, get_scheduler
 from .processing_utils import ProcessorMixin
-from .pytorch_utils import (
-    is_torch_greater_or_equal_than_2_3,
-)
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -117,6 +114,7 @@ from .trainer_utils import (
     SaveStrategy,
     TrainerMemoryTracker,
     TrainOutput,
+    _is_peft_model,
     check_target_module_exists,
     default_compute_objective,
     denumpify_detensorize,
@@ -125,10 +123,11 @@ from .trainer_utils import (
     get_last_checkpoint,
     has_length,
     load_sharded_checkpoint,
-    neftune_post_forward_hook,
     number_of_arguments,
+    rotate_checkpoints,
     seed_worker,
     set_seed,
+    sort_checkpoints,
     speed_metrics,
 )
 from .training_args import OptimizerNames, ParallelMode, TrainingArguments
@@ -206,7 +205,7 @@ if is_sagemaker_mp_enabled():
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
 
 if is_peft_available():
-    from peft import PeftMixedModel, PeftModel
+    from peft import PeftModel
 
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
@@ -225,13 +224,6 @@ if is_accelerate_available():
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
-
-
-def _is_peft_model(model):
-    if is_peft_available():
-        classes_to_check = (PeftModel, PeftMixedModel)
-        return isinstance(model, classes_to_check)
-    return False
 
 
 def _get_fsdp_ckpt_kwargs():
@@ -701,8 +693,6 @@ class Trainer:
                     f"setting to {smp.state.cfg.fp16}"
                 )
                 args.fp16 = smp.state.cfg.fp16
-        if args.fp16 and args.device == torch.device("cpu") and not is_torch_greater_or_equal_than_2_3:
-            raise ValueError("Tried to use `fp16` but it is not supported on cpu. You need to have torch>=2.3")
 
         # Label smoothing
         if self.args.label_smoothing_factor != 0:
@@ -766,42 +756,6 @@ class Trainer:
             num_devices = xr.global_runtime_device_count()
             xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
         self.is_fsdp_xla_v1_enabled = self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled
-
-    def _activate_neftune(self, model):
-        r"""
-        Activates the neftune as presented in this code: https://github.com/neelsjain/NEFTune and paper:
-        https://huggingface.co/papers/2310.05914
-        """
-        unwrapped_model = self.accelerator.unwrap_model(model)
-
-        if _is_peft_model(unwrapped_model):
-            embeddings = unwrapped_model.base_model.model.get_input_embeddings()
-        else:
-            embeddings = unwrapped_model.get_input_embeddings()
-
-        del unwrapped_model
-
-        embeddings.neftune_noise_alpha = self.neftune_noise_alpha
-        hook_handle = embeddings.register_forward_hook(neftune_post_forward_hook)
-        self.neftune_hook_handle = hook_handle
-        return model
-
-    def _deactivate_neftune(self, model):
-        """
-        Deactivates the neftune method. Make sure to call `_activate_neftune` first.
-        """
-        if not hasattr(self, "neftune_hook_handle"):
-            raise ValueError("Neftune is not activated make sure to call `trainer._activate_neftune()` first")
-
-        unwrapped_model = self.accelerator.unwrap_model(model)
-
-        if _is_peft_model(unwrapped_model):
-            embeddings = unwrapped_model.base_model.model.get_input_embeddings()
-        else:
-            embeddings = unwrapped_model.get_input_embeddings()
-
-        self.neftune_hook_handle.remove()
-        del embeddings.neftune_noise_alpha, unwrapped_model
 
     def add_callback(self, callback):
         """
@@ -1181,12 +1135,7 @@ class Trainer:
         `create_scheduler`) in a subclass.
         """
         self.create_optimizer()
-        if is_sagemaker_mp_enabled() and smp.state.cfg.fp16:
-            # If fp16 is enabled, we unwrap the optimizer
-            optimizer = self.optimizer.optimizer
-        else:
-            optimizer = self.optimizer
-        self.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
+        self.create_scheduler(num_training_steps=num_training_steps)
 
     def get_decay_parameter_names(self, model) -> list[str]:
         """
@@ -1761,9 +1710,15 @@ class Trainer:
             num_training_steps (int): The number of training steps to do.
         """
         if self.lr_scheduler is None:
+            if optimizer is None:
+                if is_sagemaker_mp_enabled() and smp.state.cfg.fp16:
+                    # If fp16 is enabled, we unwrap the optimizer
+                    optimizer = self.optimizer.optimizer
+                else:
+                    optimizer = self.optimizer
             self.lr_scheduler = get_scheduler(
                 self.args.lr_scheduler_type,
-                optimizer=self.optimizer if optimizer is None else optimizer,
+                optimizer=optimizer,
                 num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
                 num_training_steps=num_training_steps,
                 scheduler_specific_kwargs=self.args.lr_scheduler_kwargs,
@@ -2109,7 +2064,7 @@ class Trainer:
 
         # Attach NEFTune hooks if necessary
         if self.neftune_noise_alpha is not None:
-            self.model = self._activate_neftune(self.model)
+            self.neftune_hook_handle = activate_neftune(self.model, self.neftune_noise_alpha, self.accelerator)
 
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
         # the following is a workaround:
@@ -2146,7 +2101,10 @@ class Trainer:
                 self._load_from_checkpoint(resume_from_checkpoint)
             # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
             state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
-            if state.train_batch_size is not None:
+            # Only restore the checkpoint's train_batch_size when using auto_find_batch_size,
+            # as that feature needs to resume with the automatically-found batch size.
+            # Otherwise, use the current args batch size to allow users to change batch configuration.
+            if state.train_batch_size is not None and args.auto_find_batch_size:
                 self._train_batch_size = state.train_batch_size
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
@@ -2292,7 +2250,7 @@ class Trainer:
             self.optimizer, self.lr_scheduler = deepspeed_init(self, num_training_steps=max_steps)
 
         if not delay_optimizer_creation:
-            self.create_optimizer_and_scheduler(num_training_steps=max_steps)
+            self.create_optimizer()
 
         self.state = TrainerState(
             stateful_callbacks=[
@@ -2313,7 +2271,7 @@ class Trainer:
 
         # as the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases such as
-        # FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
+        # FSDP-XLA, SageMaker MP/DP, DataParallel
         use_accelerator_prepare = model is self.model
 
         if use_accelerator_prepare and self.is_fsdp_enabled:
@@ -2327,20 +2285,25 @@ class Trainer:
                 self._fsdp_qlora_plugin_updates()
                 if self.accelerator.mixed_precision != "fp8":
                     self.model = self.accelerator.prepare(self.model)
-            self.create_optimizer_and_scheduler(num_training_steps=max_steps)
+            self.create_optimizer()
 
         # prepare using `accelerator` prepare
         if use_accelerator_prepare:
             self.model.train()
-            if hasattr(self.lr_scheduler, "step"):
-                model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
+            if self.is_deepspeed_enabled:
+                from accelerate.utils import DummyScheduler
+
+                if isinstance(self.lr_scheduler, DummyScheduler):
+                    model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
+                        self.model, self.optimizer, self.lr_scheduler
+                    )
             else:
-                # to handle cases wherein we pass "DummyScheduler" such as when it is specified in DeepSpeed config.
-                model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
-                    self.model, self.optimizer, self.lr_scheduler
-                )
+                model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
         else:
             self.optimizer = self.accelerator.prepare(self.optimizer)
+
+        # Create scheduler now that the optimizer won't change anymore
+        self.create_scheduler(num_training_steps=max_steps)
 
         # since DataLoader was Accelerate prepared w/o a model arg in the same call, we now have to complete the DL wrapping for ALST/UlyssesSP, after model has been prepared
         pc = getattr(self.accelerator, "parallelism_config", None)
@@ -2680,7 +2643,9 @@ class Trainer:
         self.log(metrics)
 
         run_dir = self._get_output_dir(trial)
-        checkpoints_sorted = self._sorted_checkpoints(use_mtime=False, output_dir=run_dir)
+        checkpoints_sorted = sort_checkpoints(
+            output_dir=run_dir, best_model_checkpoint=self.state.best_model_checkpoint
+        )
 
         # Delete the last checkpoint when save_total_limit=1 if it's different from the best checkpoint and process allowed to save.
         if self.args.should_save and self.state.best_model_checkpoint is not None and self.args.save_total_limit == 1:
@@ -2697,7 +2662,7 @@ class Trainer:
         # After training we make sure to retrieve back the original forward pass method
         # for the embedding layer by removing the forward post hook.
         if self.neftune_noise_alpha is not None:
-            self._deactivate_neftune(self.model)
+            deactivate_neftune(self.model, self.neftune_hook_handle, self.accelerator)
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
@@ -3166,8 +3131,13 @@ class Trainer:
 
         # Maybe delete some older checkpoints.
         if self.args.should_save:
-            # we use mtime as default, filesystems without mtime support will be detected in `_sorted_checkpoints`
-            self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
+            # we use mtime as default, filesystems without mtime support will be detected in `sort_checkpoints`
+            rotate_checkpoints(
+                output_dir=run_dir,
+                save_total_limit=self.args.save_total_limit,
+                best_model_checkpoint=self.state.best_model_checkpoint,
+                use_mtime=True,
+            )
 
     def _save_rng_state(self, output_dir):
         # Save RNG state in non-distributed training
@@ -3952,8 +3922,20 @@ class Trainer:
         outputs = model(**inputs)
         loss = outputs.loss
 
-        sp_group = self.accelerator.torch_device_mesh["sp"].get_group()
-        sp_world_size = pc.sp_size
+        # Prefer DeepSpeed SP groups when using Ulysses; otherwise fall back to torch device mesh.
+        if pc.sp_backend == "deepspeed" and pc.sp_size > 1:
+            from deepspeed.utils import groups
+
+            sp_group = groups._get_sequence_parallel_group()
+            sp_world_size = groups._get_sequence_parallel_world_size()
+        elif self.accelerator.torch_device_mesh is not None:
+            sp_group = self.accelerator.torch_device_mesh["sp"].get_group()
+            sp_world_size = pc.sp_size
+        else:
+            raise ValueError(
+                "Sequence parallelism is enabled but no SP process group is available. "
+                "Ensure torch_device_mesh is initialized or sp_backend='deepspeed' with sp_size > 1."
+            )
         # differentiable weighted per-shard-loss aggregation across ranks
         losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
         # special dealing with SFT that has prompt tokens that aren't used in loss computation
@@ -4156,68 +4138,6 @@ class Trainer:
         else:
             self.state.total_flos += self.current_flos
             self.current_flos = 0
-
-    def _sorted_checkpoints(
-        self, output_dir=None, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False
-    ) -> list[str]:
-        ordering_and_checkpoint_path = []
-
-        glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{checkpoint_prefix}-*") if os.path.isdir(x)]
-
-        for path in glob_checkpoints:
-            if use_mtime:
-                ordering_and_checkpoint_path.append((os.path.getmtime(path), path))
-            else:
-                regex_match = re.match(f".*{checkpoint_prefix}-([0-9]+)", path)
-                if regex_match is not None and regex_match.groups() is not None:
-                    ordering_and_checkpoint_path.append((int(regex_match.groups()[0]), path))
-
-        checkpoints_sorted = sorted(ordering_and_checkpoint_path)
-        # mtime is not reliable on all filesystems, especially on some fuse fs in cloud environments
-        # so we check if the mtime is fake and fallback to numerical ordering if needed
-        if use_mtime and len(ordering_and_checkpoint_path) > 1:
-            mtime_diff = checkpoints_sorted[-1][0] - checkpoints_sorted[0][0]
-            if mtime_diff < 1.0:  # less than 1 second, which is almost impossible when mtime works fine
-                warnings.warn("mtime may not be reliable on this filesystem, falling back to numerical ordering")
-                return self._sorted_checkpoints(
-                    use_mtime=False, output_dir=output_dir, checkpoint_prefix=checkpoint_prefix
-                )
-        checkpoints_sorted = [checkpoint[1] for checkpoint in checkpoints_sorted]
-
-        # Make sure we don't delete the best model.
-        if (
-            self.state.best_model_checkpoint is not None
-            and str(Path(self.state.best_model_checkpoint)) in checkpoints_sorted
-        ):
-            best_model_index = checkpoints_sorted.index(str(Path(self.state.best_model_checkpoint)))
-            for i in range(best_model_index, len(checkpoints_sorted) - 2):
-                checkpoints_sorted[i], checkpoints_sorted[i + 1] = checkpoints_sorted[i + 1], checkpoints_sorted[i]
-        return checkpoints_sorted
-
-    def _rotate_checkpoints(self, use_mtime=False, output_dir=None) -> None:
-        if self.args.save_total_limit is None or self.args.save_total_limit <= 0:
-            return
-
-        # Check if we should delete older checkpoint(s)
-        checkpoints_sorted = self._sorted_checkpoints(use_mtime=use_mtime, output_dir=output_dir)
-        if len(checkpoints_sorted) <= self.args.save_total_limit:
-            return
-
-        # If save_total_limit=1 with load_best_model_at_end=True, we could end up deleting the last checkpoint, which
-        # we don't do to allow resuming.
-        save_total_limit = self.args.save_total_limit
-        if (
-            self.state.best_model_checkpoint is not None
-            and self.args.save_total_limit == 1
-            and checkpoints_sorted[-1] != self.state.best_model_checkpoint
-        ):
-            save_total_limit = 2
-
-        number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - save_total_limit)
-        checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
-        for checkpoint in checkpoints_to_be_deleted:
-            logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
-            shutil.rmtree(checkpoint, ignore_errors=True)
 
     def evaluate(
         self,

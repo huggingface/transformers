@@ -312,9 +312,9 @@ class VideoLlama3VisionAttention(SiglipAttention):
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         if is_flash_attention_requested(self.config):
             # Flash Attention 2: Use cu_seqlens for variable length attention
@@ -1624,7 +1624,9 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)
         pixel_values_videos = torch.cat(processed_videos, dim=0)
         video_grid_thw = torch.tensor(processed_grids)
-        video_merge_sizes = torch.tensor([merge_size] * video_grid_thw.size(0)).to(video_grid_thw)
+        video_merge_sizes = torch.full(
+            (video_grid_thw.size(0),), merge_size, dtype=video_grid_thw.dtype, device=video_grid_thw.device
+        )
 
         if use_token_compression:
             video_compression_mask = self._get_compression_mask(

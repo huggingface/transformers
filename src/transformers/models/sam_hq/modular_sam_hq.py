@@ -17,11 +17,9 @@ from dataclasses import dataclass
 import torch
 from torch import nn
 
-from transformers.modeling_outputs import ModelOutput
-from transformers.utils.generic import TransformersKwargs, check_model_inputs
-
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.generic import ModelOutput, TransformersKwargs, check_model_inputs
 from ..sam.configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 from ..sam.modeling_sam import (
     SamFeedForward,

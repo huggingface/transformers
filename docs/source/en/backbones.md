@@ -36,8 +36,8 @@ This guide describes the backbone class, backbones from the [timm](https://hf.co
 
 There are two backbone classes.
 
-- [`~transformers.utils.BackboneMixin`] allows you to load a backbone and includes functions for extracting the feature maps and indices.
-- [`~transformers.utils.BackboneConfigMixin`] allows you to set the feature map and indices of a backbone configuration.
+- [`~transformers.utils.BackboneMixin`] allows you to load a backbone and includes functions for extracting the feature maps and indices from config.
+- [`~transformers.utils.BackboneConfigMixin`] allows you to set, align and verify the feature map and indices of a backbone configuration.
 
 Refer to the [Backbone](./main_classes/backbones) API documentation to check which models support a backbone.
 
@@ -69,12 +69,13 @@ When you know a model supports a backbone, you can load the backbone and neck di
 
 The example below loads a [ResNet](./model_doc/resnet) backbone and neck for use in a [MaskFormer](./model_doc/maskformer) instance segmentation head.
 
-Set `backbone` to a pretrained model and  `use_pretrained_backbone=True` to use pretrained weights instead of randomly initialized weights.
+Note that initializing from config will create the model with random weights. If you want to load a pretrained model, use `from_pretrained` API.
 
 ```py
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
 
-config = MaskFormerConfig(backbone="microsoft/resnet-50", use_pretrained_backbone=True)
+backbone_config = AutoConfig.from_pretrained("microsoft/resnet-50")
+config = MaskFormerConfig(backbone_config=backbone_config)
 model = MaskFormerForInstanceSegmentation(config)
 ```
 
@@ -96,14 +97,13 @@ model = MaskFormerForInstanceSegmentation(config)
 
 ## timm backbones
 
-[timm](https://hf.co/docs/timm/index) is a collection of vision models for training and inference. Transformers supports timm models as backbones with the [`TimmBackbone`] and [`TimmBackboneConfig`] classes.
-
-Set `use_timm_backbone=True` to load pretrained timm weights, and `use_pretrained_backbone` to use pretrained or randomly initialized weights.
+[timm](https://hf.co/docs/timm/index) is a collection of vision models for training and inference. Transformers supports timm models as backbones with the [`TimmBackbone`] and [`TimmBackboneConfig`] classes. Set the neccessary backbone checkpoint in `backbone` to create a model with Timm backbone with randomly initialized weights.
 
 ```py
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
 
-config = MaskFormerConfig(backbone="resnet50", use_timm_backbone=True, use_pretrained_backbone=True)
+backbone_config = TimmBackboneConfig(backbone="resnet50", out_indices=[-1])
+config = MaskFormerConfig(backbone_config=backbone_config)
 model = MaskFormerForInstanceSegmentation(config)
 ```
 
@@ -112,7 +112,7 @@ You could also explicitly call the [`TimmBackboneConfig`] class to load and crea
 ```py
 from transformers import TimmBackboneConfig
 
-backbone_config = TimmBackboneConfig("resnet50", use_pretrained_backbone=True)
+backbone_config = TimmBackboneConfig("resnet50")
 ```
 
 Pass the backbone configuration to the model configuration and instantiate the model head, [`MaskFormerForInstanceSegmentation`], with the backbone.

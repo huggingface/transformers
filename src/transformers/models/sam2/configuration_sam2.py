@@ -368,6 +368,14 @@ class Sam2Config(PreTrainedConfig):
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
+    <Tip>
+
+    SAM2 checkpoints with `model_type="sam2_video"` are compatible with `Sam2Model` since the video variant weights
+    are a superset of the image-only model weights. You may see a warning about model type mismatch when loading
+    such checkpoints, which can be safely ignored in this case.
+
+    </Tip>
+
     Args:
         vision_config (Union[`dict`, `Sam2VisionConfig`], *optional*):
             Dictionary of configuration options used to initialize [`Sam2VisionConfig`].
