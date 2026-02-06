@@ -652,6 +652,8 @@ class AutoTokenizer:
                     pretrained_model_name_or_path, *inputs, **kwargs
                 )
             except Exception:
+                if TokenizersBackend is None:
+                    raise
                 return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         if "_commit_hash" in tokenizer_config:
