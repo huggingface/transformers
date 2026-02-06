@@ -62,6 +62,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "hunyuan_v1_moe": "qwen2_moe",
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
+    "exaone_moe": "qwen2_moe",
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
 }
@@ -69,6 +70,16 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "t5gemma2": [
+            WeightRenaming(r"(?<!vision_model\.)encoder.embed_tokens.", "encoder.text_model.embed_tokens."),
+            WeightRenaming(r"(?<!vision_model\.)encoder.norm.", "encoder.text_model.norm."),
+            WeightRenaming(r"(?<!vision_model\.)encoder.layers.", "encoder.text_model.layers."),
+        ],
+        "t5gemma2_encoder": [
+            WeightRenaming("^embed_tokens.", "text_model.embed_tokens."),
+            WeightRenaming("^norm.", "text_model.norm."),
+            WeightRenaming("^layers.", "text_model.layers."),
+        ],
         "gpt_oss": [
             # NOTE: These converters are only applied if the model is being loaded from pre-dequantized checkpoint.
             # If you are dequantizing the model on the fly, these converters will be ignored because the tensors
@@ -337,6 +348,8 @@ def _build_checkpoint_conversion_mapping():
     mapping["minimax_m2"] += [
         WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),
     ]
+    mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
+    mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:

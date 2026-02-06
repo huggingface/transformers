@@ -27,13 +27,13 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
@@ -516,10 +516,9 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
 
 
 @auto_docstring
-class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
+class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.embeddings = DINOv3ViTEmbeddings(config)
         self.rope_embeddings = DINOv3ViTRopePositionEmbedding(config)

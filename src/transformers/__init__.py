@@ -439,6 +439,7 @@ else:
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
+    _import_structure["backbone_utils"] = ["BackboneConfigMixin", "BackboneMixin"]
     _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update", "RopeParameters"]
     _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
     _import_structure["masking_utils"] = ["AttentionMaskInterface"]
@@ -467,6 +468,8 @@ else:
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # All modeling imports
+    # Models
+    from .backbone_utils import BackboneConfigMixin, BackboneMixin
     from .cache_utils import Cache as Cache
     from .cache_utils import DynamicCache as DynamicCache
     from .cache_utils import DynamicLayer as DynamicLayer
@@ -609,8 +612,6 @@ if TYPE_CHECKING:
     from .integrations.executorch import convert_and_export_with_cache as convert_and_export_with_cache
     from .masking_utils import AttentionMaskInterface as AttentionMaskInterface
     from .model_debugging_utils import model_addition_debugger_context as model_addition_debugger_context
-
-    # Models
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
     from .modeling_rope_utils import ROPE_INIT_FUNCTIONS as ROPE_INIT_FUNCTIONS
     from .modeling_rope_utils import RopeParameters as RopeParameters

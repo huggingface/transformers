@@ -493,7 +493,8 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             image_sizes = [(height, width)] * batch_size
 
         # pass images through initial convolution independently
-        patch_embeds = self.patch_conv(pixel_values)
+        target_dtype = self.patch_conv.weight.dtype
+        patch_embeds = self.patch_conv(pixel_values.to(dtype=target_dtype))
         patch_embeds_list = [
             embed[..., : (size[0] // self.patch_size), : (size[1] // self.patch_size)]
             for embed, size in zip(patch_embeds, image_sizes)

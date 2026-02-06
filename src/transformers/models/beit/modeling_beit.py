@@ -23,6 +23,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
@@ -35,7 +36,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring, logging, torch_int
-from ...utils.backbone_utils import BackboneMixin
 from .configuration_beit import BeitConfig
 
 
@@ -1336,10 +1336,9 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
     BEiT backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
+class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = BeitEmbeddings(config)
