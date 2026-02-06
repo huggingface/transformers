@@ -554,6 +554,7 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
+        **kwargs,
     ):
         """
         Args:

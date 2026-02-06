@@ -856,6 +856,7 @@ class GroupViTTextEncoder(nn.Module):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
+        **kwargs,
     ) -> tuple | BaseModelOutput:
         r"""
         Args:
@@ -896,6 +897,7 @@ class GroupViTTextEncoder(nn.Module):
                 hidden_states,
                 attention_mask,
                 output_attentions=output_attentions,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
