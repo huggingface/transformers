@@ -21,7 +21,7 @@ import inspect
 import json
 import os
 import warnings
-from collections import OrderedDict, UserDict, defaultdict
+from collections import OrderedDict, UserDict
 from collections.abc import Callable, Iterable, MutableMapping
 from contextlib import AbstractContextManager, ExitStack, nullcontext
 from contextvars import ContextVar
@@ -967,20 +967,17 @@ class CompileableContextVar:
 
 # Thread-safe global variables
 _active_collector = CompileableContextVar("output_collector", default=None)
-_active_keys = CompileableContextVar("keys_to_capture", default=None)
 
 
 def install_output_capuring_hook(module: nn.Module, key: str, index: int) -> None:
     """Install the forward hook needed to capture the output described by `key` and `index` in `module`."""
 
     def output_capturing_hook(module, args, output):
-        keys_to_capture = _active_keys.get()
-        # If it's None or not a key we want to capture, simply return, the hook is inactive
-        if keys_to_capture is None or key not in keys_to_capture:
-            return
-
         # Get the current thread-local collector
         collected_outputs = _active_collector.get()
+        # If it's None or not a key we want to capture, simply return, the hook is inactive
+        if collected_outputs is None or key not in collected_outputs.keys():
+            return
 
         if key == "hidden_states" and len(collected_outputs[key]) == 0:
             collected_outputs[key] += (args[0],)
@@ -1142,11 +1139,9 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
             if "output_attentions" in recordable_keys:
                 recordable_keys["output_cross_attentions"] = recordable_keys["output_attentions"]
 
-            keys_to_capture = {k.replace("output_", "") for k, v in recordable_keys.items() if v}
-            collected_outputs = defaultdict(tuple)
+            collected_outputs = {k.replace("output_", ""): () for k, v in recordable_keys.items() if v}
             # Let's activate the output collector hooks if needed!
             output_token = _active_collector.set(collected_outputs)
-            keys_token = _active_keys.set(keys_to_capture)
 
             try:
                 if kwargs.get("debug_io", False):
@@ -1172,7 +1167,6 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
             finally:
                 # Reset the states
                 _active_collector.reset(output_token)
-                _active_keys.reset(keys_token)
 
             # Restore original config value
             if is_causal is not None:
