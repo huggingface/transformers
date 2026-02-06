@@ -1421,17 +1421,10 @@ class AutoConfig:
                     "`pip install git+https://github.com/huggingface/transformers.git`"
                 )
             return config_class.from_dict(config_dict, **unused_kwargs)
-        else:
-            # Fallback: use pattern matching on the string.
-            # We go from longer names to shorter names to catch roberta before bert (for instance)
-            for pattern in sorted(CONFIG_MAPPING.keys(), key=len, reverse=True):
-                if pattern in str(pretrained_model_name_or_path):
-                    return CONFIG_MAPPING[pattern].from_dict(config_dict, **unused_kwargs)
 
         raise ValueError(
             f"Unrecognized model in {pretrained_model_name_or_path}. "
-            f"Should have a `model_type` key in its {CONFIG_NAME}, or contain one of the following strings "
-            f"in its name: {', '.join(CONFIG_MAPPING.keys())}"
+            f"Should have a `model_type` key in its {CONFIG_NAME}."
         )
 
     @staticmethod
