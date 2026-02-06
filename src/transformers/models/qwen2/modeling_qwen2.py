@@ -517,7 +517,6 @@ __all__ = [
     "Qwen2PreTrainedModel",
     "Qwen2Model",
     "Qwen2ForCausalLM",
-    "Qwen2RMSNorm",
     "Qwen2ForSequenceClassification",
     "Qwen2ForTokenClassification",
     "Qwen2ForQuestionAnswering",
