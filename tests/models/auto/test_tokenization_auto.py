@@ -621,16 +621,16 @@ class NopConfig(PreTrainedConfig):
             tok2 = AutoTokenizer.from_pretrained(tmp_dir)
             self.assertTrue(tok2.__class__ == HerbertTokenizer)
 
-        # SmolLM2 has tokenizer_class=GPT2Tokenizer explicitly saved, so we should use that
-        # instead of falling back to TokenizersBackend
+        # SmolLM2 has tokenizer_class=GPT2Tokenizer saved, but model_type=llama creates a mismatch.
+        # We prefer TokenizersBackend for mismatches (models often save the "wrong" class).
         tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
-        self.assertTrue(tok.__class__ == GPT2Tokenizer)
+        self.assertTrue(tok.__class__ == TokenizersBackend)
 
         tok = AutoProcessor.from_pretrained("mistralai/Ministral-3-8B-Instruct-2512-BF16").tokenizer
         self.assertTrue(tok.__class__ == TokenizersBackend)
 
         tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
-        self.assertTrue(tok.__class__ == GPT2Tokenizer)
+        self.assertTrue(tok.__class__ == TokenizersBackend)
 
     def test_custom_tokenizer_with_mismatched_tokenizer_class(self):
         nop_tokenizer_code = """
