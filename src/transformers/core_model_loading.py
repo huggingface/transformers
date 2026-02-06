@@ -1105,6 +1105,13 @@ def convert_and_load_state_dict_in_model(
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
+
+    from .integrations import is_fsdp_enabled
+    from .modeling_utils import is_local_dist_rank_0
+
+    if is_fsdp_enabled() and not is_local_dist_rank_0() and hf_quantizer is None:
+        state_dict = []
+
     for original_key, tensor in state_dict:
         # 1. Rename the key according to all renaming pattern and optional weight converter patterns
         renamed_key, source_pattern = rename_source_key(
