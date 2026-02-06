@@ -1294,18 +1294,23 @@ def _infer_model_type_from_tags(model_id: str) -> str | None:
 
     sorted_types = sorted(CONFIG_MAPPING, key=len, reverse=True)
     config_keys = CONFIG_MAPPING.keys()
+    prefix = "base_model:"
 
     for tag in tags:
         # direct model type tag
         if tag in config_keys:
             return tag
+
         # base_model tag: base_model:org/name
-        if tag.startswith("base_model:"):
-            base_model = tag.split(":", 1)[1].lower()
+        if isinstance(tag, str) and tag.startswith(prefix):
+            value = tag[len(prefix) :].strip()
+            if not value:
+                continue
+
+            base_model = value.lower()
             for model_type in sorted_types:
                 if model_type in base_model:
                     return model_type
-
     return None
 
 
