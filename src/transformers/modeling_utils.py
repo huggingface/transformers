@@ -2308,6 +2308,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         Initialize the weights if they are not already initialized.
         """
+        if getattr(module, "_is_hf_initialized", False):
+            return
+
         if (weight := getattr(module, "weight", None)) is not None and getattr(weight, "_is_hf_initialized", False):
             return
 
@@ -4202,7 +4205,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         distributions, tying the weights and logging the loading report."""
         try:
             # Adjust `all_tied_weights_keys` before marking them as initialized
-            model._adjust_tied_keys_with_tied_pointers(loading_info.missing_keys)
+            model._adjust_tied_keys_with_tied_pointers(loading_info.missing_and_mismatched())
 
             # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
             model.mark_tied_weights_as_initialized()
