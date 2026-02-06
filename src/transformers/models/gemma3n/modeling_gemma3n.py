@@ -1142,7 +1142,7 @@ class Gemma3nTextAltUp(nn.Module):
         innovation = activated - predictions[self.config.altup_active_idx]  # (batch, num_tokens, hidden_size)
         innovation = innovation.repeat(self.config.altup_num_inputs, 1, 1, 1)  # Repeat on dim0 to match predictions
 
-        if self.config.altup_coef_clip is not None:
+        if self.training and self.config.altup_coef_clip is not None:
             weight = self.correction_coefs.weight.clamp(-self.config.altup_coef_clip, self.config.altup_coef_clip)
             all_coefs = torch.nn.functional.linear(modalities, weight, bias=None) + 1.0
         else:
