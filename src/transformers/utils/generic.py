@@ -1210,6 +1210,11 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
                 else:
                     del self.config.is_causal
 
+            # Need to drop it if empty as it will be set using the `attentions` key - otherwise it resets it when
+            # re-iterating over it
+            if (cross := collected_outputs.get("cross_attentions")) is not None and len(cross) == 0:
+                del collected_outputs["cross_attentions"]
+
             # Inject collected outputs into model output
             for key in collected_outputs:
                 if key == "hidden_states":

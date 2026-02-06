@@ -1469,7 +1469,6 @@ class MllamaModel(MllamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    @check_model_inputs
     @can_return_tuple
     @auto_docstring
     def forward(
