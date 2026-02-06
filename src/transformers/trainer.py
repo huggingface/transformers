@@ -2094,7 +2094,7 @@ class Trainer:
         if isinstance(resume_from_checkpoint, bool) and resume_from_checkpoint:
             resume_from_checkpoint = get_last_checkpoint(args.output_dir)
             if resume_from_checkpoint is None:
-                raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
+                logger.warning(f"No valid checkpoint found in output directory ({args.output_dir})")
 
         if resume_from_checkpoint is not None:
             if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
@@ -3071,7 +3071,7 @@ class Trainer:
 
         return is_new_best_metric
 
-    def _save_checkpoint(self, model, trial):
+    def _save_checkpoint(self, model, trial, save_latest=True):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
         # want to save except FullyShardedDDP.
         # assert unwrap_model(model) is self.model, "internal model should be a reference to self.model"
@@ -3135,6 +3135,10 @@ class Trainer:
                 best_model_checkpoint=self.state.best_model_checkpoint,
                 use_mtime=True,
             )
+
+        if save_latest and self.is_world_process_zero():
+            with open(os.path.join(run_dir, "latest"), "w") as fd:
+                fd.write(checkpoint_folder)
 
     def _save_rng_state(self, output_dir):
         # Save RNG state in non-distributed training
