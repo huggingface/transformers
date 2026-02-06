@@ -13,6 +13,7 @@
 # limitations under the License.
 """
 Contains the logic for automatic additional output capture with our forward decorators.
+This mostly describe the hooks used and the logic to make capture thread/context safe.
 """
 
 from __future__ import annotations
@@ -186,7 +187,7 @@ def maybe_install_capturing_hooks(model: PreTrainedModel) -> None:
     """
     Check if the model already has output capturing hooks installed, and install them if it is not already the
     case.
-    Note that this is thread-safe, in case 2 (ore more) threads want to install them concurrently.
+    Note that this is thread-safe, in case 2 (or more) threads want to install them concurrently.
     """
     # First check
     if getattr(model, "_output_capturing_hooks_installed", False):
