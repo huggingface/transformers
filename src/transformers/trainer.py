@@ -3953,15 +3953,15 @@ class Trainer:
         outputs = model(**inputs)
         loss = outputs.loss
 
-        # Use torch device mesh when available; fallback to DeepSpeed SP groups only for Ulysses SP
-        if self.accelerator.torch_device_mesh is not None:
-            sp_group = self.accelerator.torch_device_mesh["sp"].get_group()
-            sp_world_size = pc.sp_size
-        elif pc.sp_backend == "deepspeed" and pc.sp_size > 1:
+        # Prefer DeepSpeed SP groups when using Ulysses; otherwise fall back to torch device mesh.
+        if pc.sp_backend == "deepspeed" and pc.sp_size > 1:
             from deepspeed.utils import groups
 
             sp_group = groups._get_sequence_parallel_group()
             sp_world_size = groups._get_sequence_parallel_world_size()
+        elif self.accelerator.torch_device_mesh is not None:
+            sp_group = self.accelerator.torch_device_mesh["sp"].get_group()
+            sp_world_size = pc.sp_size
         else:
             raise ValueError(
                 "Sequence parallelism is enabled but no SP process group is available. "
