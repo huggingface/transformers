@@ -4200,35 +4200,35 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """Perform all post processing operations after having loaded some checkpoints into a model, such as moving
         missing keys from meta device to their expected device, reinitializing missing weights according to proper
         distributions, tying the weights and logging the loading report."""
+        try:
+            # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
+            model.mark_tied_weights_as_initialized()
 
-        # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
-        model.mark_tied_weights_as_initialized()
+            # Move missing (and potentially mismatched) keys and non-persistent buffers back to their expected device from
+            # meta device (because they were not moved when loading the weights as they were not in the loaded state dict)
+            model._move_missing_keys_from_meta_to_device(
+                loading_info.missing_and_mismatched(),
+                load_config.device_map,
+                load_config.device_mesh,
+                load_config.hf_quantizer,
+            )
 
-        # Move missing (and potentially mismatched) keys and non-persistent buffers back to their expected device from
-        # meta device (because they were not moved when loading the weights as they were not in the loaded state dict)
-        model._move_missing_keys_from_meta_to_device(
-            loading_info.missing_and_mismatched(),
-            load_config.device_map,
-            load_config.device_mesh,
-            load_config.hf_quantizer,
-        )
+            # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialized` flag)
+            model._initialize_missing_keys(load_config.is_quantized)
 
-        # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialized` flag)
-        model._initialize_missing_keys(load_config.is_quantized)
+            # Tie the weights
+            model.tie_weights(missing_keys=loading_info.missing_keys, recompute_mapping=False)
 
-        # Tie the weights
-        model.tie_weights(missing_keys=loading_info.missing_keys, recompute_mapping=False)
-
-        # Adjust missing and unexpected keys
-        model._adjust_missing_and_unexpected_keys(loading_info)
-
-        log_state_dict_report(
-            model=model,
-            pretrained_model_name_or_path=load_config.pretrained_model_name_or_path,
-            ignore_mismatched_sizes=load_config.ignore_mismatched_sizes,
-            loading_info=loading_info,
-            logger=logger,
-        )
+            # Adjust missing and unexpected keys
+            model._adjust_missing_and_unexpected_keys(loading_info)
+        finally:
+            log_state_dict_report(
+                model=model,
+                pretrained_model_name_or_path=load_config.pretrained_model_name_or_path,
+                ignore_mismatched_sizes=load_config.ignore_mismatched_sizes,
+                loading_info=loading_info,
+                logger=logger,
+            )
 
         return loading_info
 
