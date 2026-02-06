@@ -23,10 +23,12 @@ import json
 import os
 import random
 import re
+import shutil
 import threading
 import time
 from collections.abc import Callable
 from functools import partial
+from pathlib import Path
 from typing import Any, NamedTuple
 
 import numpy as np
@@ -36,6 +38,7 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     ExplicitEnum,
     check_torch_load_is_safe,
+    is_peft_available,
     is_psutil_available,
     is_torch_available,
     is_torch_cuda_available,
@@ -46,13 +49,26 @@ from .utils import (
     is_torch_npu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
+    logging,
     requires_backends,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 if is_torch_available():
     import torch
     from safetensors.torch import load_file as safe_load_file
+
+if is_peft_available():
+    from peft import PeftMixedModel, PeftModel
+
+
+def _is_peft_model(model):
+    if is_peft_available():
+        return isinstance(model, (PeftModel, PeftMixedModel))
+    return False
 
 
 def seed_worker(worker_id: int, num_workers: int, rank: int):
@@ -118,32 +134,6 @@ def set_seed(seed: int, deterministic: bool = False):
         torch.hpu.manual_seed_all(seed)
     if is_torch_xpu_available():
         torch.xpu.manual_seed_all(seed)
-
-
-def neftune_post_forward_hook(module, input, output):
-    """
-    Implements the NEFTune forward pass for the model using forward hooks. Note this works only for torch.nn.Embedding
-    layers. This method is slightly adapted from the original source code that can be found here:
-    https://github.com/neelsjain/NEFTune Simply add it to your model as follows:
-    ```python
-    model = ...
-    model.embed_tokens.neftune_noise_alpha = 0.1
-    model.embed_tokens.register_forward_hook(neftune_post_forward_hook)
-    ```
-    Args:
-        module (`torch.nn.Module`):
-            The embedding module where the hook is attached. Note that you need to set `module.neftune_noise_alpha` to
-            the desired noise alpha value.
-        input (`torch.Tensor`):
-            The input tensor to the model.
-        output (`torch.Tensor`):
-            The output tensor of the model (i.e. the embeddings).
-    """
-    if module.training:
-        dims = torch.tensor(output.size(1) * output.size(2))
-        mag_norm = module.neftune_noise_alpha / torch.sqrt(dims)
-        output = output + torch.zeros_like(output).uniform_(-mag_norm, mag_norm)
-    return output
 
 
 class EvalPrediction:
@@ -216,6 +206,113 @@ def get_last_checkpoint(folder):
     if len(checkpoints) == 0:
         return
     return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
+
+
+def sort_checkpoints(
+    output_dir: str,
+    checkpoint_prefix: str = PREFIX_CHECKPOINT_DIR,
+    use_mtime: bool = False,
+    best_model_checkpoint: str | None = None,
+) -> list[str]:
+    """
+    Return checkpoint directories sorted by step number (oldest first).
+
+    Args:
+        output_dir (`str`):
+            The directory containing the checkpoints.
+        checkpoint_prefix (`str`, *optional*, defaults to `"checkpoint"`):
+            The prefix used for checkpoint directory names.
+        use_mtime (`bool`, *optional*, defaults to `False`):
+            Whether to sort by modification time instead of step number.
+        best_model_checkpoint (`str`, *optional*):
+            If provided, this checkpoint is moved to second-to-last position to protect
+            it from deletion while keeping the most recent checkpoint last for resuming.
+
+    Returns:
+        `list[str]`: Sorted list of checkpoint directory paths (oldest first).
+    """
+    glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{checkpoint_prefix}-*") if os.path.isdir(x)]
+
+    ordering_and_checkpoint_path = []
+    for path in glob_checkpoints:
+        if use_mtime:
+            ordering_and_checkpoint_path.append((os.path.getmtime(path), path))
+        else:
+            regex_match = re.match(f".*{checkpoint_prefix}-([0-9]+)", path)
+            if regex_match is not None and regex_match.groups() is not None:
+                ordering_and_checkpoint_path.append((int(regex_match.groups()[0]), path))
+
+    checkpoints_sorted = sorted(ordering_and_checkpoint_path)
+
+    # mtime is not reliable on some filesystems (e.g., cloud fuse filesystems)
+    # so we check if the mtime is fake and fall back to numerical ordering
+    if use_mtime and len(checkpoints_sorted) > 1:
+        mtime_diff = checkpoints_sorted[-1][0] - checkpoints_sorted[0][0]
+        if mtime_diff < 1.0:
+            logger.warning("mtime may not be reliable on this filesystem, falling back to numerical ordering")
+            return sort_checkpoints(
+                output_dir, checkpoint_prefix, use_mtime=False, best_model_checkpoint=best_model_checkpoint
+            )
+
+    checkpoints_sorted = [path for _, path in checkpoints_sorted]
+
+    # Move best_model_checkpoint to second-to-last position to protect it from deletion
+    # while keeping the most recent checkpoint at the end for resuming training.
+    if best_model_checkpoint is not None:
+        best_model_checkpoint = str(Path(best_model_checkpoint))
+        if best_model_checkpoint in checkpoints_sorted and checkpoints_sorted[-1] != best_model_checkpoint:
+            most_recent = checkpoints_sorted[-1]
+            checkpoints_sorted = [c for c in checkpoints_sorted if c not in {best_model_checkpoint, most_recent}]
+            checkpoints_sorted += [best_model_checkpoint, most_recent]
+
+    return checkpoints_sorted
+
+
+def rotate_checkpoints(
+    output_dir: str,
+    save_total_limit: int | None = None,
+    best_model_checkpoint: str | None = None,
+    use_mtime: bool = False,
+    checkpoint_prefix: str = PREFIX_CHECKPOINT_DIR,
+) -> None:
+    """
+    Delete older checkpoints, keeping at most `save_total_limit`.
+
+    Always preserves the most recent checkpoint and the best model checkpoint (if provided).
+
+    Args:
+        output_dir (`str`):
+            The directory containing the checkpoints.
+        save_total_limit (`int`, *optional*):
+            Maximum number of checkpoints to keep. No deletion if `None` or <= 0.
+        best_model_checkpoint (`str`, *optional*):
+            Path to best checkpoint (will always be preserved).
+        use_mtime (`bool`, *optional*, defaults to `False`):
+            Whether to sort by modification time instead of step number.
+        checkpoint_prefix (`str`, *optional*, defaults to `"checkpoint"`):
+            The prefix used for checkpoint directory names.
+    """
+    if save_total_limit is None or save_total_limit <= 0:
+        return
+
+    checkpoints = sort_checkpoints(output_dir, checkpoint_prefix, use_mtime)
+    if len(checkpoints) <= save_total_limit:
+        return
+
+    # Checkpoints that must not be deleted
+    protected = {checkpoints[-1]}  # most recent, for resuming
+    if best_model_checkpoint is not None:
+        protected.add(str(Path(best_model_checkpoint)))
+
+    # Delete oldest non-protected checkpoints until we have save_total_limit left
+    num_to_keep = max(save_total_limit, len(protected))
+    remaining = len(checkpoints)
+    for checkpoint in checkpoints:
+        if remaining <= num_to_keep:
+            break
+        if checkpoint not in protected:
+            shutil.rmtree(checkpoint, ignore_errors=True)
+            remaining -= 1
 
 
 class IntervalStrategy(ExplicitEnum):

@@ -18,7 +18,14 @@ import unittest
 import requests
 
 from transformers import AutoImageProcessor, EomtDinov3Config, EomtDinov3ForUniversalSegmentation, pipeline
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    require_deterministic_for_xpu,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -247,6 +254,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         )
 
     @require_torch_accelerator
+    @require_deterministic_for_xpu
     def test_inference_bf16(self):
         # NOTE: fp16 leads to overflows aka NaNs, since it's not important just checking bf16 instead
         model = EomtDinov3ForUniversalSegmentation.from_pretrained(
@@ -258,6 +266,8 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
 
+        torch.manual_seed(42)
+
         with torch.inference_mode():
             outputs = model(**inputs)
 
@@ -265,16 +275,36 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(outputs.masks_queries_logits.shape == (1, 200, 160, 160))
 
         # fmt: off
-        expected_class_logits_slice = torch.tensor([
-            [-0.3262, -5.6875, -0.7539],
-            [ 0.0474, -6.8438, -2.1406],
-            [-1.4219, -6.0312, -5.4688]
-        ], device=model.device)
-        expected_masks_logits_slice = torch.tensor([
-            [-1.5859, -1.1250, -0.9883],
-            [ 2.5781,  5.3438,  6.2188],
-            [ 3.7656,  7.1562,  8.1875]
-        ], device=model.device)
+        class_expectations = Expectations(
+            {
+                ("xpu", 3): [
+                    [-0.3125, -5.6562, -0.7148],
+                    [ 0.0693, -6.8125, -2.1562],
+                    [-1.4141, -6.0000, -5.4688]
+                ],
+                ("cuda", 8): [
+                    [-0.3145, -5.6562, -0.7422],
+                    [ 0.0542, -6.8438, -2.1875],
+                    [-1.4062, -6.0000, -5.4688]
+                ],
+            }
+        )
+        masks_expectations = Expectations(
+            {
+                ("xpu", 3): [
+                    [-1.5859, -1.1406, -1.0156],
+                    [ 2.5938,  5.3125,  6.1875],
+                    [ 3.7812,  7.1250,  8.1250]
+                ],
+                ("cuda", 8): [
+                    [-1.5859, -1.1406, -1.0234],
+                    [ 2.5625,  5.3438,  6.2188],
+                    [ 3.7500,  7.1562,  8.1875]
+                ],
+            }
+        )
+        expected_class_logits_slice = torch.tensor(class_expectations.get_expectation(), device=model.device)
+        expected_masks_logits_slice = torch.tensor(masks_expectations.get_expectation(), device=model.device)
         # fmt: on
 
         torch.testing.assert_close(
