@@ -18,13 +18,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
 
 
-class NomicBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class NomicBertConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NomicBertModel`]. It is used to instantiate an NomicBERT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -82,8 +83,6 @@ class NomicBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             The token ID used for padding.
         head_dim (`int`, *optional*):
             The dimension of the attention heads.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in the attention layer.
 
     ```python
     >>> from transformers import NomicBertModel, NomicBertConfig
@@ -119,50 +118,35 @@ class NomicBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         bos_token_id=None,
         eos_token_id=None,
         tie_word_embeddings=True,
-        rope_parameters=None,
+        rope_parameters: RopeParameters | None = None,
         max_position_embeddings=2048,
         pad_token_id=0,
         head_dim=None,
-        attention_bias=False,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        if rope_parameters is None:
-            rope_parameters = {
-                "rope_type": "default",
-                "rope_theta": 500_000,
-            }
-
-        kwargs["is_decoder"] = kwargs.get("is_decoder", False)
-        kwargs["add_cross_attention"] = kwargs.get("add_cross_attention", False)
-        kwargs["use_cache"] = kwargs.get("use_cache", False)
-
-        super().__init__(
-            rope_parameters=rope_parameters,
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            intermediate_size=intermediate_size,
-            hidden_act=hidden_act,
-            hidden_dropout_prob=hidden_dropout_prob,
-            attention_probs_dropout_prob=attention_probs_dropout_prob,
-            initializer_range=initializer_range,
-            layer_norm_eps=layer_norm_eps,
-            classifier_dropout=classifier_dropout,
-            type_vocab_size=type_vocab_size,
-            max_position_embeddings=max_position_embeddings,
-            pad_token_id=pad_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.classifier_dropout = classifier_dropout
+        self.type_vocab_size = type_vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.attention_bias = attention_bias
         self.num_key_value_heads = num_key_value_heads
-
         self.rope_parameters = rope_parameters
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["NomicBertConfig"]

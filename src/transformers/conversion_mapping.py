@@ -62,7 +62,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "hunyuan_v1_moe": "qwen2_moe",
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
-    "nomic_bert": "nomic_bert",
     "exaone_moe": "qwen2_moe",
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
@@ -340,16 +339,11 @@ def _build_checkpoint_conversion_mapping():
                 r"encoder.layers.(\d+).mlp.fc12.weight",
                 r"encoder.layer.\1.intermediate.up_proj.weight",
             ),
-            WeightRenaming(r"encoder.layers.(\d+).mlp.fc2.weight", r"encoder.layer.\1.output.dense.weight"),
+            WeightRenaming(r"encoder.layers.(\d+).mlp.fc2.weight", r"encoder.layer.\1.intermediate.down_proj.weight"),
             WeightRenaming(
                 r"encoder.layers.(\d+).norm1",
                 r"encoder.layer.\1.attention.output.LayerNorm",
             ),
-            WeightRenaming(
-                r"encoder.layers.(\d+).norm2",
-                r"encoder.layer.\1.output.LayerNorm",
-            ),
-            # QKV Splits (currently not passed)
         ],
     }
     if hasattr(torch.nn.utils.parametrizations, "weight_norm"):

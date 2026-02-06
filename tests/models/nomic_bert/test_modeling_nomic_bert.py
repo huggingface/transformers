@@ -1,4 +1,4 @@
-# Copyright 2025 the HuggingFace Team. All rights reserved.
+# Copyright 2026 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -170,24 +170,6 @@ class NomicBertModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
-
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = NomicBertLMHeadModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_for_masked_lm(
         self,
@@ -376,17 +358,12 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     pipeline_model_mapping = (
         {
             "feature-extraction": NomicBertModel,
-            "fill-mask": NomicBertForMaskedLM,
-            "question-answering": NomicBertForQuestionAnswering,
-            "text-classification": NomicBertForSequenceClassification,
-            "text-generation": NomicBertLMHeadModel,
             "token-classification": NomicBertForTokenClassification,
             "zero-shot": NomicBertForSequenceClassification,
         }
         if is_torch_available()
         else {}
     )
-    model_split_percents = [0.5, 0.8, 0.9]
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

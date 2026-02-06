@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-04-20 and added to Hugging Face Transformers on 2026-02-03.*
+*This model was released on 2021-04-20 and added to Hugging Face Transformers on 2026-02-06.*
 
 
 # NomicBERT
@@ -66,7 +66,7 @@ import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained(
-    "google-bert/bert-base-uncased",
+    "bert-base-uncased",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "nomic-ai/nomic-embed-text-v1.5",
@@ -98,8 +98,8 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 ## Notes
 
-- For extremely long sequences, consider batching (gradient checkpointing is currently not supported) to save memory.
-- NomicBERT uses Rotary Positional Embeddings (RoPE). For correct positional encoding **right padding** must be used
+- For extremely long sequences, consider batching to save memory.
+- NomicBERT uses Rotary Positional Embeddings (RoPE). For correct positional encoding either **right padding** should be used or `position_ids` should be properly prepared
 
 ## NomicBertConfig
 
