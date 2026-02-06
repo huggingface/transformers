@@ -179,7 +179,9 @@ class BatchFeature(UserDict):
             return self
 
         is_tensor, as_tensor = self._get_is_as_tensor_fns(tensor_type)
-        skip_tensor_conversion = skip_tensor_conversion if skip_tensor_conversion is not None else self.skip_tensor_conversion
+        skip_tensor_conversion = (
+            skip_tensor_conversion if skip_tensor_conversion is not None else self.skip_tensor_conversion
+        )
 
         # Do the tensor conversion in batch
         for key, value in self.items():

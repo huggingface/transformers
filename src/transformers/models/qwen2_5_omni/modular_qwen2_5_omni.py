@@ -370,8 +370,7 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         pad_token_id: int | None = None,
         bos_token_id: int | None = None,
         eos_token_id: int | None = None,
-        tie_word_embeddings: bool | None = True, 
-        
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size

@@ -150,7 +150,6 @@ logger = logging.get_logger(__name__)
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
-_init_weights = False
 _is_quantized = False
 _is_ds_init_called = False
 
@@ -2309,9 +2308,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         Initialize the weights if they are not already initialized.
         """
-        if getattr(module, "_is_hf_initialized", False):
-            return
-
         if (weight := getattr(module, "weight", None)) is not None and getattr(weight, "_is_hf_initialized", False):
             return
 
@@ -2460,11 +2456,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return expanded_tied_weights
 
-    def tie_weights(self, missing_keys: set[str] | None = None):
+    def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
         """
-        Tie the model weights. If `model.all_tied_weights_keys` attribute exists, it will rely on the that mapping
-        containing the `{target: source}` for the tied params. This attribute is created by default when model is init.
-        Otehrwise if attribute doesn't exist, it will re-check all internal submodels and their config to determine the params
+        Tie the model weights. If `recompute_mapping=False` (default when called internally), it will rely on the
+        `model.all_tied_weights_keys` attribute, containing the `{target: source}` mapping for the tied params.
+        If `recompute_mapping=True`, it will re-check all internal submodels and their config to determine the params
         that need to be tied. This is the default when `model.tie_weights()` is called on its own, outside of
         `__init__`, and `from_pretrained`, in case the config values were changed somewhere.
 
@@ -2473,7 +2469,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         tie everything to the parameter that actually exists.
         """
         # In this case, the keys stored in `all_tied_weights_keys` are already correct
-        if hasattr(self, "all_tied_weights_keys"):
+        if not recompute_mapping:
             tied_keys = self.all_tied_weights_keys
         else:
             tied_keys = self.get_expanded_tied_weights_keys(all_submodels=True)
@@ -3024,7 +3020,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Initialize weights
             self.initialize_weights()
         # Tie weights needs to be called here, but it can use the pre-computed `all_tied_weights_keys`
-        self.tie_weights()
+        self.tie_weights(recompute_mapping=False)
 
     def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
         """
@@ -4205,10 +4201,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         missing keys from meta device to their expected device, reinitializing missing weights according to proper
         distributions, tying the weights and logging the loading report."""
 
+        # Adjust `all_tied_weights_keys` before marking them as initialized
+        model._adjust_tied_keys_with_tied_pointers(loading_info.missing_keys)
+
         # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
         model.mark_tied_weights_as_initialized()
-
-        model._adjust_missing_keys_with_tied_pointers(loading_info)
 
         # Move missing (and potentially mismatched) keys and non-persistent buffers back to their expected device from
         # meta device (because they were not moved when loading the weights as they were not in the loaded state dict)
@@ -4222,7 +4219,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model._initialize_missing_keys(load_config.is_quantized)
 
         # Tie the weights
-        model.tie_weights(missing_keys=loading_info.missing_keys)
+        model.tie_weights(missing_keys=loading_info.missing_keys, recompute_mapping=False)
 
         # Adjust missing and unexpected keys
         model._adjust_missing_and_unexpected_keys(loading_info)
@@ -4421,14 +4418,34 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def is_backend_compatible(cls):
         return cls._supports_attention_backend
 
-    def _adjust_missing_keys_with_tied_pointers(self, loading_info: LoadStateDictInfo) -> None:
-        # Remove tied param names by pointers because remote code might tie that way
-        # Otherwise we'll end up re-init those "tied" weights as the are missing in ckpt
+    def _adjust_tied_keys_with_tied_pointers(self, missing_keys: list[str]) -> None:
+        """
+        Adds keys to `self.all_tied_weights_keys` by checking if any group of params
+        share the same data ptr. It helps us support remote code where the weight tying is
+        done in old-T5 style, by manually assigning the same module to different param names.
+        If we don't add them back in `self.all_tied_weights_keys`, they will be re-initialized
+        and all params in tied group get random weights.
+        """
         param_pointers = defaultdict(list)
         for param_name, param_value in self.state_dict().items():
             param_pointers[param_value.data_ptr()].append(param_name)
-        tied_param_names = {name for names in param_pointers.values() if len(names) > 1 for name in names}
-        loading_info.missing_keys = loading_info.missing_keys - tied_param_names
+
+        # Filter out params that are already in `self.all_tied_weights_keys` or if all
+        # are missing params. Missing param groups share the same data ptr by being on `meta`
+        tied_param_names = [
+            names
+            for names in param_pointers.values()
+            if len(names) > 1
+            and not any(name in self.all_tied_weights_keys.keys() for name in names)
+            and not all(name in missing_keys for name in names)
+        ]
+
+        # Create a dummy mapping, it doesn't matter which one is source/target
+        # because they are already tied
+        tied_weights_keys_by_pointers = {
+            param_name: group[0] for group in tied_param_names for param_name in group[1:]
+        }
+        self.all_tied_weights_keys.update(tied_weights_keys_by_pointers)
 
     def _move_missing_keys_from_meta_to_device(
         self,
