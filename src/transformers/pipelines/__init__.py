@@ -729,7 +729,10 @@ def pipeline(
                 with open(maybe_adapter_path, "r", encoding="utf-8") as f:
                     adapter_config = json.load(f)
                     adapter_path = model
-                    model = adapter_config["base_model_name_or_path"]
+                    # Only override the model name/path if the current value doesn't point to a
+                    # complete model with an embedded adapter
+                    if not os.path.exists(model) or not os.path.exists(os.path.join(model, CONFIG_NAME)):
+                        model = adapter_config["base_model_name_or_path"]
 
         config = AutoConfig.from_pretrained(
             model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs

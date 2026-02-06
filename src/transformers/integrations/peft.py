@@ -954,7 +954,12 @@ def maybe_load_adapters(
     if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
         with open(_adapter_model_path, "r", encoding="utf-8") as f:
             _adapter_model_path = pretrained_model_name_or_path
-            pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
+            # Only override the model name/path if the current value doesn't point to a
+            # complete model with an embedded adapter
+            if not os.path.exists(pretrained_model_name_or_path) or not os.path.exists(
+                os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
+            ):
+                pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
 
     return _adapter_model_path, pretrained_model_name_or_path, adapter_kwargs
 
