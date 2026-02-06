@@ -20,6 +20,8 @@ from collections import OrderedDict
 from collections.abc import Callable, Iterator, KeysView, ValuesView
 from typing import Any, TypeVar
 
+from huggingface_hub import is_offline_mode, model_info
+
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
@@ -1270,6 +1272,39 @@ def replace_list_option_in_docstrings(
     return docstring_decorator
 
 
+def _infer_model_type_from_tags(model_id: str) -> str | None:
+    """
+    Infer model type from repository tags on the Hub.
+
+    Args:
+        model_id: The model repository ID (e.g., "org/model-name")
+
+    Returns:
+        The inferred model type if found in tags, None otherwise
+    """
+    try:
+        model = model_info(model_id)
+        if model.tags is not None:
+            # Check for base_model tag pattern (e.g., "base_model:mistralai/Mistral-7B")
+            for tag in model.tags:
+                if tag.startswith("base_model:"):
+                    # Extract the base model and try to infer type from it
+                    base_model = tag.split(":", 1)[1]
+                    # Check if any model type appears in the base model tag
+                    for model_type in sorted(CONFIG_MAPPING.keys(), key=len, reverse=True):
+                        if model_type in base_model.lower():
+                            return model_type
+
+                # Also check for direct model type tags
+                if tag in CONFIG_MAPPING.keys():
+                    return tag
+    except Exception as e:
+        # If we can't fetch model info (offline, network error, etc.), return None
+        logger.debug(f"Can't fetch model info for {model_id}: {e}")
+
+    return None
+
+
 class AutoConfig:
     r"""
     This is a generic configuration class that will be instantiated as one of the configuration classes of the library
@@ -1422,24 +1457,21 @@ class AutoConfig:
                 )
             return config_class.from_dict(config_dict, **unused_kwargs)
         else:
-            # Fallback: use pattern matching on the string.
-            # Only apply this to remote repository identifiers (containing '/') to avoid false matches
-            # on local directory names like "dumptruck" containing "mpt" or "gpt2-test" containing "gpt2"
+            # Fallback: infer model type from repository tags on the Hub
+            # This avoids false positives from substring matching on paths (e.g., "dumptruck" containing "mpt")
             pretrained_str = str(pretrained_model_name_or_path)
             # Check if this looks like a remote repo identifier (e.g., "org/model-name")
-            # We don't apply pattern matching to local paths as it can cause false positives
             is_likely_remote = "/" in pretrained_str and not os.path.exists(pretrained_str)
 
-            if is_likely_remote:
-                # We go from longer names to shorter names to catch roberta before bert (for instance)
-                for pattern in sorted(CONFIG_MAPPING.keys(), key=len, reverse=True):
-                    if pattern in pretrained_str:
-                        return CONFIG_MAPPING[pattern].from_dict(config_dict, **unused_kwargs)
+            if is_likely_remote and not is_offline_mode():
+                inferred_type = _infer_model_type_from_tags(pretrained_str)
+                if inferred_type is not None:
+                    logger.info(f"Inferred model type '{inferred_type}' from repository tags for {pretrained_str}")
+                    return CONFIG_MAPPING[inferred_type].from_dict(config_dict, **unused_kwargs)
 
         raise ValueError(
             f"Unrecognized model in {pretrained_model_name_or_path}. "
-            f"Should have a `model_type` key in its {CONFIG_NAME}, or contain one of the following strings "
-            f"in its name: {', '.join(CONFIG_MAPPING.keys())}"
+            f"Should have a `model_type` key in its {CONFIG_NAME}."
         )
 
     @staticmethod

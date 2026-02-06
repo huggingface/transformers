@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import importlib
-import json
 import os
 import sys
 import tempfile
@@ -59,16 +58,6 @@ class AutoConfigTest(unittest.TestCase):
     def test_config_for_model_str(self):
         config = AutoConfig.for_model("roberta")
         self.assertIsInstance(config, RobertaConfig)
-
-    def test_pattern_matching_fallback(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # This model name contains bert and roberta, but roberta ends up being picked.
-            folder = os.path.join(tmp_dir, "fake-roberta")
-            os.makedirs(folder, exist_ok=True)
-            with open(os.path.join(folder, "config.json"), "w") as f:
-                f.write(json.dumps({}))
-            config = AutoConfig.from_pretrained(folder)
-            self.assertEqual(type(config), RobertaConfig)
 
     def test_new_config_registration(self):
         try:

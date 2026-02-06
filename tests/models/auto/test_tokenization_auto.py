@@ -735,9 +735,9 @@ class NopConfig(PreTrainedConfig):
 
                     # Verify that no config.json was saved (only tokenizer files)
                     saved_files = os.listdir(save_path)
-                    self.assertNotIn("config.json", saved_files, f"config.json should not be saved by tokenizer")
+                    self.assertNotIn("config.json", saved_files, "config.json should not be saved by tokenizer")
                     self.assertIn(
-                        "tokenizer_config.json", saved_files, f"tokenizer_config.json should be saved by tokenizer"
+                        "tokenizer_config.json", saved_files, "tokenizer_config.json should be saved by tokenizer"
                     )
 
                     # Load the tokenizer back
@@ -762,9 +762,7 @@ class NopConfig(PreTrainedConfig):
                     test_text = "Hello, world!"
                     original_tokens = original_tokenizer.encode(test_text)
                     reloaded_tokens = reloaded_tokenizer.encode(test_text)
-                    self.assertEqual(
-                        original_tokens, reloaded_tokens, f"Tokenization results differ for '{dir_name}'"
-                    )
+                    self.assertEqual(original_tokens, reloaded_tokens, f"Tokenization results differ for '{dir_name}'")
 
     def test_tokenizer_save_load_preserves_class_for_clean_names(self):
         """
