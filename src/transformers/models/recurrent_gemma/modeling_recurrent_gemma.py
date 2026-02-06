@@ -706,7 +706,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             hidden_states=all_hidden_states,
         )
 
-    # Ignore copy
     def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
