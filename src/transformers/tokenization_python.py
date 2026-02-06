@@ -920,8 +920,7 @@ class PythonBackend(PreTrainedTokenizerBase):
         elif self.special_tokens_pattern == "bos_eos":
             # [BOS] seq0 [EOS] or [BOS] seq0 [EOS] seq1 [EOS]
             if self.bos_token_id is None and self.eos_token_id is None:
-                # don't raise error because it is a default pattern
-                logger.warning(
+                raise ValueError(
                     "Cannot add special tokens following 'bos_eos' pattern because one or several special tokens "
                     f"are not defined (bos_token_id={self.bos_token_id}; eos_token_id={self.eos_token_id})"
                     "Set the required special tokens in tokenizer or update `tokenizer.special_tokens_pattern`"
