@@ -321,6 +321,7 @@ class ClvpModelForConditionalGenerationTester:
     def __init__(self, parent, is_training=False):
         self.parent = parent
         self.clvp_encoder_tester = ClvpEncoderTester(parent)
+        self.text_model_tester = self.clvp_encoder_tester
         self.is_training = is_training
         self.batch_size = self.clvp_encoder_tester.batch_size  # need bs for batching_equivalence test
 

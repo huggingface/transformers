@@ -80,7 +80,7 @@ class Aimv2Output(ModelOutput):
 
 @use_kernel_forward_from_hub("RMSNorm")
 class Aimv2RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         Aimv2RMSNorm is equivalent to T5LayerNorm
         """
@@ -88,7 +88,7 @@ class Aimv2RMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)

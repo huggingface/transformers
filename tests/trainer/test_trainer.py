@@ -52,6 +52,7 @@ from transformers import (
     set_seed,
 )
 from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
+from transformers.integrations.neftune import activate_neftune
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     TOKEN,
@@ -108,6 +109,8 @@ from transformers.trainer_utils import (
     HPSearchBackend,
     check_target_module_exists,
     get_last_checkpoint,
+    rotate_checkpoints,
+    sort_checkpoints,
 )
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
@@ -1687,7 +1690,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
-        trainer.model = trainer._activate_neftune(trainer.model)
+        activate_neftune(trainer.model, trainer.args.neftune_noise_alpha)
 
         dummy_input = torch.LongTensor([[1, 0, 1]]).to(torch_device)
 
@@ -3945,11 +3948,38 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.assertTrue(isinstance(trainer.state.total_flos, float))
 
+    def test_checkpoint_sorting(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Create fake checkpoints in non-sorted order
+            for n in [20, 5, 15, 25, 10]:
+                os.makedirs(os.path.join(tmp_dir, f"{PREFIX_CHECKPOINT_DIR}-{n}"))
+
+            # Test sorting by step number (oldest first)
+            sorted_cps = sort_checkpoints(tmp_dir)
+            values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in sorted_cps]
+            self.assertEqual(values, [5, 10, 15, 20, 25])
+
+            # Test with best_model_checkpoint - moved to second-to-last to protect from deletion
+            best = os.path.join(tmp_dir, f"{PREFIX_CHECKPOINT_DIR}-5")
+            sorted_cps = sort_checkpoints(tmp_dir, best_model_checkpoint=best)
+            values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in sorted_cps]
+            self.assertEqual(values, [10, 15, 20, 5, 25])
+
+            # Test with best_model_checkpoint already at end (stays at end)
+            best = os.path.join(tmp_dir, f"{PREFIX_CHECKPOINT_DIR}-25")
+            sorted_cps = sort_checkpoints(tmp_dir, best_model_checkpoint=best)
+            values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in sorted_cps]
+            self.assertEqual(values, [5, 10, 15, 20, 25])
+
     def check_checkpoint_deletion(self, trainer, output_dir, expected):
         # Make fake checkpoints
         for n in [5, 10, 15, 20, 25]:
             os.makedirs(os.path.join(output_dir, f"{PREFIX_CHECKPOINT_DIR}-{n}"), exist_ok=True)
-        trainer._rotate_checkpoints(output_dir=output_dir)
+        rotate_checkpoints(
+            output_dir=output_dir,
+            save_total_limit=trainer.args.save_total_limit,
+            best_model_checkpoint=trainer.state.best_model_checkpoint,
+        )
         glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{PREFIX_CHECKPOINT_DIR}-*")]
         values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in glob_checkpoints]
         self.assertSetEqual(set(values), set(expected))
