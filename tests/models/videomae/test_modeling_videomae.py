@@ -361,7 +361,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             # Set seed for deterministic test - ensures reproducible model initialization and inputs
-            set_seed(0)
+            set_seed(42)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             inputs_dict["pixel_values"] = inputs_dict["pixel_values"].to(torch.bfloat16)

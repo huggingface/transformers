@@ -515,10 +515,60 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
             )
 
     def test_retain_grad_hidden_states_attentions(self):
-        # When training the model, the first speech encoder layer is sometimes skipped.
-        # Setting the seed to always have the first layer.
-        set_seed(0)
-        super().test_retain_grad_hidden_states_attentions()
+        # When training the model, speech encoder layerdrop can skip layers and return None attentions.
+        # Disable layerdrop for this test to ensure retain_grad targets are present.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.speech_encoder_layerdrop = 0.0
+        config.encoder_layerdrop = 0.0
+        config.decoder_layerdrop = 0.0
+
+        for k in config.sub_configs:
+            if getattr(config, k) is not None:
+                getattr(config, k).output_hidden_states = True
+
+        config.output_hidden_states = True
+        config.output_attentions = self.has_attentions
+
+        for k in config.sub_configs:
+            if getattr(config, k) is not None:
+                getattr(config, k).output_attentions = self.has_attentions
+
+        if self.has_attentions:
+            config._attn_implementation = "eager"
+
+        model_class = self.all_model_classes[0]
+        model = model_class._from_config(config, attn_implementation="eager")
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+        outputs = model(**inputs)
+        output = outputs[0]
+
+        encoder_hidden_states = outputs.encoder_hidden_states[0]
+        encoder_hidden_states.retain_grad()
+
+        decoder_hidden_states = outputs.decoder_hidden_states[0]
+        decoder_hidden_states.retain_grad()
+
+        if self.has_attentions:
+            encoder_attentions = outputs.encoder_attentions[0]
+            encoder_attentions.retain_grad()
+
+            decoder_attentions = outputs.decoder_attentions[0]
+            decoder_attentions.retain_grad()
+
+            cross_attentions = outputs.cross_attentions[0]
+            cross_attentions.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(encoder_hidden_states.grad)
+        self.assertIsNotNone(decoder_hidden_states.grad)
+
+        if self.has_attentions:
+            self.assertIsNotNone(encoder_attentions.grad)
+            self.assertIsNotNone(decoder_attentions.grad)
+            self.assertIsNotNone(cross_attentions.grad)
 
 
 @require_torch
@@ -683,7 +733,7 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
         return config, input_speech, input_text
 
     def factory_generation_speech_test(self, model, inputs):
-        set_seed(0)
+        set_seed(42)
         output = model.generate(**inputs)
         return output
 
@@ -852,7 +902,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def input_audio(self):
-        set_seed(0)
+        set_seed(42)
         seq_len = 20000
         sampling_rate = 16000
         input_features = torch.rand((2, seq_len))
@@ -865,9 +915,9 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         model1 = class1.from_pretrained(self.repo_id).to(torch_device)
         model2 = class2.from_pretrained(self.repo_id).to(torch_device)
 
-        set_seed(0)
+        set_seed(42)
         output_1 = model1.generate(**inputs, **class1_kwargs)
-        set_seed(0)
+        set_seed(42)
         output_2 = model2.generate(**inputs, **class2_kwargs)
 
         for key in output_1:
@@ -896,7 +946,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         expected_wav_slice = [-3e-05, -0.0004, -0.00037, -0.00013, -6e-05, 0.00012, -0.00016, 0.00025, 7e-05, -3e-05]  # fmt: skip
 
-        set_seed(0)
+        set_seed(42)
         output = model.generate(**self.input_text, num_beams=1, tgt_lang="eng", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
@@ -923,7 +973,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         expected_wav_slice = [1e-05, -7e-05, -4e-05, -4e-05, -6e-05, -9e-05, -0.0001, -2e-05, -7e-05, -2e-05]  # fmt: skip
 
-        set_seed(0)
+        set_seed(42)
         output = model.generate(**self.input_text, num_beams=1, tgt_lang="swh", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
@@ -951,7 +1001,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         expected_wav_slice = [0.00013, 0.00012, 0.00014, 3e-05, 0.0, -6e-05, -0.00018, -0.00016, -0.00021, -0.00018]  # fmt: skip
 
-        set_seed(0)
+        set_seed(42)
         output = model.generate(**self.input_audio, num_beams=1, tgt_lang="rus", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())

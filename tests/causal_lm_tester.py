@@ -605,7 +605,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 self.skipTest(reason="Model does not support Flash Attention 2")
 
             # Set seed for deterministic test - ensures reproducible model initialization and inputs
-            set_seed(0)
+            set_seed(42)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 

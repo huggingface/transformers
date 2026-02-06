@@ -235,7 +235,7 @@ def _test_eager_matches_sdpa_inference(
 
     for model_class in self.all_model_classes:
         # Set seed for deterministic test - ensures reproducible model initialization and inputs
-        set_seed(0)
+        set_seed(42)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
 
@@ -559,7 +559,7 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
 
     for model_class in self.all_model_classes:
         # Set seed for deterministic test - ensures reproducible model initialization and inputs
-        set_seed(0)
+        set_seed(42)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
         model = model_class(config).eval().to(torch_device).to(dtype)
@@ -724,7 +724,7 @@ class ModelTesterMixin:
                 i // s // ms for i, s, ms in zip(config.image_size, config.patch_stride, config.masked_unit_size)
             ]
             num_windows = math.prod(mask_spatial_shape)
-            set_seed(0)
+            set_seed(42)
             inputs_dict["noise"] = torch.rand(self.model_tester.batch_size, num_windows)
 
         if return_labels:
@@ -1158,7 +1158,7 @@ class ModelTesterMixin:
             model.to(torch_device)
             model.train()
 
-            set_seed(0)
+            set_seed(42)
             outputs = model(**inputs)
             loss_tensor = outputs.loss if getattr(outputs, "loss", None) is not None else outputs[0]
             if isinstance(loss_tensor, (tuple, list)):
@@ -1182,7 +1182,7 @@ class ModelTesterMixin:
             model.gradient_checkpointing_enable()
             model.enable_input_require_grads()
 
-            set_seed(0)
+            set_seed(42)
             outputs = model(**inputs)
             loss_tensor = outputs.loss if getattr(outputs, "loss", None) is not None else outputs[0]
             if isinstance(loss_tensor, (tuple, list)):
@@ -1370,6 +1370,8 @@ class ModelTesterMixin:
         as `self.x = torch.tensor(...)` in a Module (as we cannot correctly recover from meta device if it's not
         registered as parameter/buffer). To test this, we initialize the model on a meta device and then move it onto
         the torch_device and perform a forward pass."""
+        # Set seed to ensure stable model initialization - avoids numerical issues (NaN) with some models
+        set_seed(42)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -1536,7 +1538,7 @@ class ModelTesterMixin:
                     raise AssertionError(msg)
 
         # Set seed for deterministic test - ensures reproducible model initialization and inputs
-        set_seed(0)
+        set_seed(42)
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
 
@@ -1665,7 +1667,7 @@ class ModelTesterMixin:
 
                 inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 
-                set_seed(0)
+                set_seed(42)
                 model = model_class(config)
                 model.to(torch_device)
                 model.train()
@@ -1678,7 +1680,7 @@ class ModelTesterMixin:
                 # grads here to collect a reference set of modules that have non-zero gradients (to filter layers like
                 # MoE that drop out parts of the model).
                 optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
-                set_seed(0)
+                set_seed(42)
                 loss = model(**inputs).loss
                 loss.backward()
                 grad_expected_params = [(n, p) for n, p in model.named_parameters() if p.grad is not None]
@@ -1696,7 +1698,7 @@ class ModelTesterMixin:
                 with unittest.mock.patch.object(
                     checkpointing_layer, "forward", wraps=checkpointing_layer.forward
                 ) as forward_mock:
-                    set_seed(0)
+                    set_seed(42)
                     loss = model(**inputs).loss
                     loss.backward()
                     optimizer.step()
@@ -2026,14 +2028,14 @@ class ModelTesterMixin:
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            set_seed(0)
+            set_seed(42)
             model = model_class(copy.deepcopy(original_config))
             model.to(torch_device)
             model.eval()
 
             hidden_states_no_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
-            set_seed(0)
+            set_seed(42)
             original_config.chunk_size_feed_forward = 1
             model = model_class(copy.deepcopy(original_config))
             model.to(torch_device)
@@ -2861,7 +2863,7 @@ class ModelTesterMixin:
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(copy.deepcopy(config)).eval()
             model = model.to(torch_device)
-            set_seed(0)
+            set_seed(42)
             base_output = model(**inputs_dict_class)
 
             model_size = compute_module_sizes(model)[0][""]
@@ -2886,7 +2888,7 @@ class ModelTesterMixin:
                 )
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
-                set_seed(0)
+                set_seed(42)
                 new_output = new_model(**inputs_dict_class)
 
                 if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
@@ -2910,7 +2912,7 @@ class ModelTesterMixin:
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(copy.deepcopy(config)).eval()
             model = model.to(torch_device)
-            set_seed(0)
+            set_seed(42)
             base_output = model(**inputs_dict_class)
 
             model_size = compute_module_sizes(model)[0][""]
@@ -2926,7 +2928,7 @@ class ModelTesterMixin:
                 )
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
-                set_seed(0)
+                set_seed(42)
                 new_output = new_model(**inputs_dict_class)
 
                 if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
@@ -2951,7 +2953,7 @@ class ModelTesterMixin:
             model = model_class(copy.deepcopy(config)).eval()
             model = model.to(torch_device)
 
-            set_seed(0)
+            set_seed(42)
             base_output = model(**inputs_dict_class)
 
             model_size = compute_module_sizes(model)[0][""]
@@ -2968,7 +2970,7 @@ class ModelTesterMixin:
 
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
 
-                    set_seed(0)
+                    set_seed(42)
                     new_output = new_model(**inputs_dict_class)
 
                     if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
@@ -2994,7 +2996,7 @@ class ModelTesterMixin:
             model = model_class(config).eval()
             model = model.to(torch_device)
 
-            set_seed(0)
+            set_seed(42)
             base_output = model(**inputs_dict_class)
 
             model_size = compute_module_sizes(model)[0][""]
@@ -3010,7 +3012,7 @@ class ModelTesterMixin:
                     self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
 
-                    set_seed(0)
+                    set_seed(42)
                     new_output = new_model(**inputs_dict_class)
 
                     if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
@@ -3115,7 +3117,7 @@ class ModelTesterMixin:
             self.skipTest(reason="test_mismatched_shapes is set to False")
 
         # Set seed for deterministic weight initialization
-        set_seed(0)
+        set_seed(42)
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3231,7 +3233,7 @@ class ModelTesterMixin:
                 continue
 
             # Set seed for deterministic test - ensures reproducible model initialization and inputs
-            set_seed(0)
+            set_seed(42)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
             # flash attention variants does not always support arbitrary headim
@@ -4963,7 +4965,7 @@ class ModelTesterMixin:
             model = model_class(config).eval()
             model = model.to(torch_device)
 
-            set_seed(0)
+            set_seed(42)
             with torch.no_grad():
                 outputs = model.get_text_features(**inputs_dict)
 
@@ -5081,7 +5083,7 @@ class ModelTesterMixin:
             model = model_class(config).eval()
             model = model.to(torch_device)
 
-            set_seed(0)
+            set_seed(42)
             with torch.no_grad():
                 outputs = model.get_image_features(**inputs_dict)
 
@@ -5242,7 +5244,7 @@ class ModelTesterMixin:
             model = model_class(config).eval()
             model = model.to(torch_device)
 
-            set_seed(0)
+            set_seed(42)
             with torch.no_grad():
                 outputs = model.get_audio_features(**inputs_dict)
 
@@ -5374,7 +5376,7 @@ class ModelTesterMixin:
             model = model_class(config).eval()
             model = model.to(torch_device)
 
-            set_seed(0)
+            set_seed(42)
             with torch.no_grad():
                 outputs = model.get_video_features(**inputs_dict)
 
@@ -5524,7 +5526,7 @@ def seeded_weight_init():
         original_initialize_weights = PreTrainedModel._initialize_weights
 
         def seeded_initialize_weights(self, module):
-            set_seed(0)
+            set_seed(42)
             original_initialize_weights(self, module)
 
         PreTrainedModel._initialize_weights = seeded_initialize_weights
