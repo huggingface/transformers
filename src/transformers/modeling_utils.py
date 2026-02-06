@@ -122,7 +122,6 @@ from .utils.generic import (
     _CAN_RECORD_REGISTRY,
     GeneralInterface,
     OutputRecorder,
-    install_all_output_capturing_hooks,
     is_flash_attention_requested,
 )
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
@@ -1332,9 +1331,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Maybe initialize the weights and tie the keys
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
-
-        # Install output capturing hooks if needed, to be able to use the `output_xxx` kwargs together with `check_model_inputs`
-        install_all_output_capturing_hooks(self)
 
     @property
     def tp_plan(self) -> dict[str, str]:

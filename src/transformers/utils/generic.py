@@ -20,6 +20,7 @@ from __future__ import annotations
 import inspect
 import json
 import os
+import threading
 import warnings
 from collections import OrderedDict, UserDict
 from collections.abc import Callable, Iterable, MutableMapping
@@ -994,17 +995,21 @@ def recursively_install_hooks(
 ) -> None:
     """
     Recursively install all output capturing hooks on all submodules of `parent_module`.
-    Note that we need to use this recursive approach instead of simply iteratating over all modules, because we want
-    to skip installing them on all parts of the graph that are submodels (`PreTrainedModel` instances), to avoid installing
-    then twice in case of composite models (we cannot skip the submodel module itself, as we also need to skip all its
-    children).
+    Note that we need to use this recursive approach instead of simply iterating over all modules, because we want
+    to respect the `capture_tasks` of all individual submodels (`PreTrainedModel` instances) in the graph. That is, once
+    we reach a submodel in the graph, its children should use this submodel's `capture_tasks`, but other parts of the graph
+    should not.
     """
     from ..modeling_utils import PreTrainedModel
 
     # First dispatch to children if needed
     for name, module in parent_module.named_children():
+        # Keep dispatching the same `capture_tasks`
         if not isinstance(module, PreTrainedModel):
             recursively_install_hooks(module, f"{module_name}.{name}", capture_tasks)
+        # New Submodel: we need to dispatch its own `capture_tasks`
+        else:
+            install_all_output_capturing_hooks(module, prefix=f"{module_name}.{name}")
 
     # Potentially install the hook on current `parent_module`
     for key, specs in capture_tasks:
@@ -1017,10 +1022,10 @@ def recursively_install_hooks(
             install_output_capuring_hook(parent_module, key, specs.index)
 
 
-def install_all_output_capturing_hooks(model: PreTrainedModel) -> None:
+def install_all_output_capturing_hooks(model: PreTrainedModel, prefix: str | None = None) -> None:
     """
-    Install the output recording hooks on all the modules in `model`. This is designed to be called in
-    `post_init` for every `PreTrainedModel`, and will take care of only installing them once for composite models.
+    Install the output recording hooks on all the modules in `model`. Tis will take care of correctly dispatching
+    the `_can_record_outputs` property of each individual submodels in case of composite models.
     """
     # _can_record_outputs is None by default
     capture_flags = _CAN_RECORD_REGISTRY.get(str(model.__class__)) or {}  # there is a weak ref for executorch
@@ -1038,7 +1043,34 @@ def install_all_output_capturing_hooks(model: PreTrainedModel) -> None:
             capture_tasks.append((key, specs))
 
     # Install the hooks
-    recursively_install_hooks(model, "", capture_tasks)
+    prefix = prefix if prefix is not None else ""
+    recursively_install_hooks(model, prefix, capture_tasks)
+    # Mark the model as already hooked
+    model._output_capturing_hooks_installed = True
+
+
+# We need this to make sure we don't have race conditions when installing hooks, resulting in them being installed
+# several times
+_hook_installation_lock = threading.Lock()
+
+
+def maybe_install_capturing_hooks(model: PreTrainedModel) -> None:
+    """
+    Check if the model already has output capturing hooks installed, and install them if it is not already the
+    case.
+    Note that this is thread-safe, in case 2 (ore more) threads want to install them concurrently.
+    """
+    # First check
+    if getattr(model, "_output_capturing_hooks_installed", False):
+        return
+
+    with _hook_installation_lock:
+        # Second check, in case several threads entered this function concurrently and did not return on the
+        # previous check
+        if getattr(model, "_output_capturing_hooks_installed", False):
+            return
+        # This will install the hooks and mark the model as hooked
+        install_all_output_capturing_hooks(model)
 
 
 def check_model_inputs(func=None, *, tie_last_hidden_states=True):
@@ -1140,6 +1172,9 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
                 recordable_keys["output_cross_attentions"] = recordable_keys["output_attentions"]
 
             collected_outputs = {k.replace("output_", ""): () for k, v in recordable_keys.items() if v}
+            # Make sure hooks are installed if we need to collect outputs
+            if len(collected_outputs) > 0:
+                maybe_install_capturing_hooks(self)
             # Let's activate the output collector hooks if needed!
             output_token = _active_collector.set(collected_outputs)
 
