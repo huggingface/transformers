@@ -50,7 +50,8 @@ from ...utils import (
     is_grouped_mm_available,
     torch_compilable_check,
 )
-from ...utils.generic import OutputRecorder, check_model_inputs, is_flash_attention_requested, maybe_autocast
+from ...utils.generic import check_model_inputs, is_flash_attention_requested, maybe_autocast
+from ...utils.output_capturing import OutputRecorder
 from .configuration_qwen3_vl_moe import Qwen3VLMoeConfig, Qwen3VLMoeTextConfig, Qwen3VLMoeVisionConfig
 
 

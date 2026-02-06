@@ -26,8 +26,6 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from transformers.utils.generic import OutputRecorder, check_model_inputs
-
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -46,7 +44,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast
+from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.output_capturing import OutputRecorder
 from .configuration_moonshine_streaming import MoonshineStreamingConfig, MoonshineStreamingEncoderConfig
 
 

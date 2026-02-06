@@ -54,13 +54,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_grouped_mm_available, torch_compilable_check
-from ...utils.generic import (
-    OutputRecorder,
-    TransformersKwargs,
-    check_model_inputs,
-    is_flash_attention_requested,
-    maybe_autocast,
-)
+from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested, maybe_autocast
+from ...utils.output_capturing import OutputRecorder
 from .configuration_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoderConfig,
     Qwen3OmniMoeCode2WavConfig,

@@ -46,13 +46,8 @@ from ...utils import (
     is_torchdynamo_compiling,
     torch_compilable_check,
 )
-from ...utils.generic import (
-    OutputRecorder,
-    can_return_tuple,
-    check_model_inputs,
-    is_flash_attention_requested,
-    maybe_autocast,
-)
+from ...utils.generic import can_return_tuple, check_model_inputs, is_flash_attention_requested, maybe_autocast
+from ...utils.output_capturing import OutputRecorder
 from .configuration_glm4v_moe import Glm4vMoeConfig, Glm4vMoeTextConfig, Glm4vMoeVisionConfig
 
 
