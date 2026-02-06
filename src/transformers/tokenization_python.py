@@ -433,7 +433,7 @@ class PythonBackend(PreTrainedTokenizerBase):
 
         # 5. Special tokens mask configuration
         # Patterns: "none", "cls_sep", "eos", "bos", "bos_eos", "cls_double_sep", "prefix_suffix"
-        self.special_tokens_pattern = kwargs.pop("special_tokens_pattern", "bos_eos")
+        self.special_tokens_pattern = kwargs.pop("special_tokens_pattern", None)
 
         # 6. Set backend to "custom" if not already set (for direct PreTrainedTokenizer subclasses)
         if "backend" not in kwargs:
