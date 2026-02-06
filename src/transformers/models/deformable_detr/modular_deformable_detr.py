@@ -36,7 +36,8 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.output_capturing import OutputRecorder
 from ..detr.image_processing_detr_fast import DetrImageProcessorFast
 from ..detr.modeling_detr import (
     DetrConvEncoder,

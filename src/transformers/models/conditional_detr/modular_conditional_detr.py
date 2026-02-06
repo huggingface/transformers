@@ -32,7 +32,8 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.output_capturing import OutputRecorder
 from ..deformable_detr.modeling_deformable_detr import inverse_sigmoid
 from ..detr.image_processing_detr_fast import DetrImageProcessorFast
 from ..detr.modeling_detr import (
