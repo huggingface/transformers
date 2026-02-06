@@ -19,22 +19,16 @@ import torch
 from torch import nn
 
 from ... import initialization as init
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-)
-from ...image_utils import (
-    PILImageResampling,
-)
 from ...utils import (
     ModelOutput,
     auto_docstring,
     can_return_tuple,
     logging,
 )
-from ...utils.backbone_utils import verify_backbone_config_arguments
 from ...utils.generic import TensorType, check_model_inputs
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..layoutlmv3.modeling_layoutlmv3 import (
     LayoutLMv3Attention,
     LayoutLMv3Encoder,
@@ -45,6 +39,8 @@ from ..layoutlmv3.modeling_layoutlmv3 import (
     LayoutLMv3SelfOutput,
     LayoutLMv3TextEmbeddings,
 )
+from ..pp_doclayout_v3.image_processing_pp_doclayout_v3_fast import PPDocLayoutV3ImageProcessorFast
+from ..pp_doclayout_v3.modeling_pp_doclayout_v3 import PPDocLayoutV3GlobalPointer
 from ..rt_detr.modeling_rt_detr import (
     RTDetrForObjectDetection,
     RTDetrMLPPredictionHead,
@@ -56,7 +52,7 @@ from ..rt_detr.modeling_rt_detr import (
 logger = logging.get_logger(__name__)
 
 
-class ReadingOrderConfig(PreTrainedConfig):
+class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
     def __init__(
         self,
         hidden_size=512,
@@ -88,8 +84,8 @@ class ReadingOrderConfig(PreTrainedConfig):
         rel_bias_embed_dim=16,
         rel_bias_temperature=10000,
         rel_bias_scale=100,
-        relative_head_num=1,
-        relative_head_size=64,
+        global_pointer_head_size=64,
+        gp_dropout_value=0.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -123,8 +119,8 @@ class ReadingOrderConfig(PreTrainedConfig):
         self.rel_bias_embed_dim = rel_bias_embed_dim
         self.rel_bias_temperature = rel_bias_temperature
         self.rel_bias_scale = rel_bias_scale
-        self.relative_head_num = relative_head_num
-        self.relative_head_size = relative_head_size
+        self.global_pointer_head_size = global_pointer_head_size
+        self.gp_dropout_value = gp_dropout_value
 
 
 class PPDocLayoutV2Config(PreTrainedConfig):
@@ -237,7 +233,7 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         order_map (`dict[str, float]`, *optional*):
             Mapping from class name to class threshold.
         reading_order_config (`dict`, *optional*):
-            The configuration of a `ReadingOrder`.
+            The configuration of a `PPDocLayoutV2ReadingOrder`.
 
     Examples:
 
@@ -255,7 +251,7 @@ class PPDocLayoutV2Config(PreTrainedConfig):
     ```"""
 
     model_type = "pp_doclayout_v2"
-    sub_configs = {"backbone_config": AutoConfig, "reading_order_config": ReadingOrderConfig}
+    sub_configs = {"backbone_config": AutoConfig, "reading_order_config": PPDocLayoutV2ReadingOrderConfig}
 
     layer_types = ("basic", "bottleneck")
     attribute_map = {
@@ -326,12 +322,10 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         elif reading_order_config is None:
             self.reading_order_config = self.sub_configs["reading_order_config"]()
 
-        if backbone_config is None and backbone is None:
-            logger.info(
-                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `HGNetV2` backbone."
-            )
-            backbone_config = {
-                "model_type": "hgnet_v2",
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=backbone_config,
+            default_config_type="hgnet_v2",
+            default_config_kwargs={
                 "arch": "L",
                 "return_idx": [1, 2, 3],
                 "freeze_stem_only": True,
@@ -339,23 +333,10 @@ class PPDocLayoutV2Config(PreTrainedConfig):
                 "freeze_norm": True,
                 "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
                 "out_features": ["stage2", "stage3", "stage4"],
-            }
-            config_class = CONFIG_MAPPING["hgnet_v2"]
-            backbone_config = config_class.from_dict(backbone_config)
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
-            if backbone_model_type is None:
-                raise ValueError("`backbone_config` dict must contain key `model_type`.")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
-            backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            },
+            **kwargs,
         )
+
         self.backbone_config = backbone_config
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
@@ -404,65 +385,15 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         self.order_map = order_map
 
 
-def get_order_seqs(order_logits):
-    # order_logits: (B, N, N) upper-triangular meaningful
-    order_scores = torch.sigmoid(order_logits)
-    B, N, _ = order_scores.shape
+class PPDocLayoutV2ImageProcessorFast(PPDocLayoutV3ImageProcessorFast):
+    def extract_custom_vertices(self):
+        raise AttributeError("Not needed for PPDocLayoutV2")
 
-    one = torch.ones((N, N), dtype=order_scores.dtype, device=order_scores.device)
-    upper = torch.triu(one, 1)
-    lower = torch.tril(one, -1)
+    def _mask2polygon(self):
+        raise AttributeError("Not needed for PPDocLayoutV2")
 
-    Q = order_scores * upper + (1.0 - order_scores.transpose(1, 2)) * lower
-    order_votes = Q.sum(dim=1)  # (B, N)
-
-    order_pointers = torch.argsort(order_votes, dim=1)  # (B, N)
-    order_seq = torch.full_like(order_pointers, -1)
-    batch = torch.arange(B, device=order_pointers.device)[:, None]
-    order_seq[batch, order_pointers] = torch.arange(N, device=order_pointers.device)[None, :]
-
-    return order_seq
-
-
-class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.BICUBIC
-    image_mean = [0, 0, 0]
-    image_std = [1, 1, 1]
-    size = {"height": 800, "width": 800}
-    do_resize = True
-    do_rescale = True
-    do_normalize = True
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-
-    def _get_order_seqs(self, order_logits):
-        """
-        Computes the order sequences for a batch of inputs based on logits.
-        This function takes in the order logits, calculates order scores using a sigmoid activation,
-        and determines the order sequences by ranking the votes derived from the scores.
-        Args:
-            order_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
-                Stacked order logits.
-        Returns:
-            torch.Tensor: A tensor of shape `(batch_size, num_queries)`:
-                Containing the computed order sequences for each input in the batch. Each row represents the ranked order of elements for the corresponding input in the batch.
-        """
-        order_scores = torch.sigmoid(order_logits)
-        batch_size, sequence_length, _ = order_scores.shape
-
-        order_votes = order_scores.triu(diagonal=1).sum(dim=1) + (1.0 - order_scores.transpose(1, 2)).tril(
-            diagonal=-1
-        ).sum(dim=1)
-
-        order_pointers = torch.argsort(order_votes, dim=1)
-        order_seq = torch.empty_like(order_pointers)
-        ranks = torch.arange(sequence_length, device=order_pointers.device, dtype=order_pointers.dtype).expand(
-            batch_size, -1
-        )
-        order_seq.scatter_(1, order_pointers, ranks)
-
-        return order_seq
+    def _extract_polygon_points_by_masks(self):
+        raise AttributeError("Not needed for PPDocLayoutV2")
 
     def post_process_object_detection(
         self,
@@ -528,63 +459,13 @@ class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
         return results
 
 
-class GlobalPointer(nn.Module):
+class PPDocLayoutV2GlobalPointer(PPDocLayoutV3GlobalPointer):
     def __init__(self, config):
         super().__init__()
-        self.heads = config.relative_head_num
-        self.head_size = config.relative_head_size
-        self.dense = nn.Linear(config.hidden_size, self.heads * 2 * self.head_size)
-
-    def forward(self, inputs, attn_mask_1d):
-        batch_size, sequence, _ = inputs.shape
-        proj = self.dense(inputs).reshape([batch_size, sequence, self.heads, 2, self.head_size])
-        qw, kw = proj[..., 0, :], proj[..., 1, :]
-
-        qw_t = qw.transpose(1, 2)
-        kw_t = kw.transpose(1, 2)
-        logits = torch.einsum("bhmd,bhnd->bhmn", qw_t, kw_t) / (self.head_size**0.5)
-
-        a = attn_mask_1d.float()
-        pair_mask = 1.0 - (a.unsqueeze(1).unsqueeze(2) * a.unsqueeze(1).unsqueeze(3))
-        logits = logits - pair_mask * 1e4
-
-        lower = torch.tril(torch.ones([sequence, sequence], dtype=torch.float32, device=logits.device))
-        lower = lower.bool().unsqueeze(0).unsqueeze(0)
-        logits = logits - lower.to(logits.dtype) * 1e4
-        pair_mask = torch.logical_or(pair_mask.bool(), lower)
-
-        return logits, pair_mask.bool()
+        self.dense = nn.Linear(config.hidden_size, self.head_size * 2)
 
 
-def box_rel_encoding(src_boxes: torch.Tensor, tgt_boxes: torch.Tensor = None, eps: float = 1e-5):
-    if tgt_boxes is None:
-        tgt_boxes = src_boxes
-    xy1, wh1 = src_boxes[..., :2], src_boxes[..., 2:]
-    xy2, wh2 = tgt_boxes[..., :2], tgt_boxes[..., 2:]
-    delta_xy = torch.abs(xy1.unsqueeze(-2) - xy2.unsqueeze(-3))
-    delta_xy = torch.log(delta_xy / (wh1.unsqueeze(-2) + eps) + 1.0)
-    delta_wh = torch.log((wh1.unsqueeze(-2) + eps) / (wh2.unsqueeze(-3) + eps))
-    pos = torch.cat([delta_xy, delta_wh], dim=-1)
-    return pos
-
-
-def get_sine_pos_embed(inputs: torch.Tensor, num_pos_feats: int, temperature: float = 10000.0, scale: float = 100.0):
-    half = num_pos_feats // 2
-    dim_t = temperature ** (2 * torch.arange(half, dtype=inputs.dtype, device=inputs.device) / half)
-
-    def _encode(t: torch.Tensor):
-        t = t * scale
-        t = t.unsqueeze(-1) / dim_t
-        sin = torch.sin(t)
-        cos = torch.cos(t)
-        return torch.cat([sin, cos], dim=-1)
-
-    embs = [_encode(inputs[..., i]) for i in range(inputs.shape[-1])]
-    out = torch.cat(embs, dim=-1)
-    return out
-
-
-class PositionRelationEmbedding(nn.Module):
+class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.embed_dim = config.rel_bias_embed_dim
@@ -594,18 +475,44 @@ class PositionRelationEmbedding(nn.Module):
             in_channels=self.embed_dim * 4, out_channels=config.num_attention_heads, kernel_size=1
         )
 
-    def forward(self, src_boxes: torch.Tensor, tgt_boxes: torch.Tensor = None):
-        if tgt_boxes is None:
-            tgt_boxes = src_boxes
+    def box_relative_encoding(
+        self, source_boxes: torch.Tensor, target_boxes: torch.Tensor = None, epsilon: float = 1e-5
+    ):
+        source_coordinates, source_dim = source_boxes[..., :2], source_boxes[..., 2:]
+        target_coordinates, target_dim = target_boxes[..., :2], target_boxes[..., 2:]
+        coordinate_difference = torch.abs(source_coordinates.unsqueeze(-2) - target_coordinates.unsqueeze(-3))
+        relative_coordinates = torch.log(coordinate_difference / (source_dim.unsqueeze(-2) + epsilon) + 1.0)
+        relative_dim = torch.log((source_dim.unsqueeze(-2) + epsilon) / (target_dim.unsqueeze(-3) + epsilon))
+        relative_encoding = torch.cat([relative_coordinates, relative_dim], dim=-1)
+
+        return relative_encoding
+
+    def get_sine_position_embedding(
+        self, x: torch.Tensor, embed_dim: int, temperature: float = 10000.0, scale: float = 100.0
+    ):
+        half_dim = embed_dim // 2
+        dim = torch.arange(half_dim, dtype=x.dtype, device=x.device)
+        dim = temperature ** (2 * dim / half_dim)
+        x_scaled = (x * scale).unsqueeze(-1)
+        embedding = x_scaled / dim
+        embedding = torch.cat((embedding.sin(), embedding.cos()), dim=-1).flatten(start_dim=-2)
+
+        return embedding
+
+    def forward(self, source_boxes: torch.Tensor, target_boxes: torch.Tensor = None):
+        if target_boxes is None:
+            target_boxes = source_boxes
         with torch.no_grad():
-            rel = box_rel_encoding(src_boxes, tgt_boxes)
-            pos = get_sine_pos_embed(rel, num_pos_feats=self.embed_dim, temperature=self.temperature, scale=self.scale)
-            pos = pos.permute(0, 3, 1, 2)
-        out = self.pos_proj(pos)
+            relative_encoding = self.box_relative_encoding(source_boxes, target_boxes)
+            position_embedding = self.get_sine_position_embedding(
+                relative_encoding, self.embed_dim, self.temperature, self.scale
+            )
+            position_embedding = position_embedding.permute(0, 3, 1, 2)
+        out = self.pos_proj(position_embedding)
         return out
 
 
-class LayoutLMv3SelfAttentionCustom(LayoutLMv3SelfAttention):
+class PPDocLayoutV2ReadingOrderSelfAttention(LayoutLMv3SelfAttention):
     def forward(
         self,
         hidden_states,
@@ -666,38 +573,38 @@ class LayoutLMv3SelfAttentionCustom(LayoutLMv3SelfAttention):
         return outputs
 
 
-class LayoutLMv3SelfOutputCustom(LayoutLMv3SelfOutput):
+class PPDocLayoutV2ReadingOrderSelfOutput(LayoutLMv3SelfOutput):
     pass
 
 
-class LayoutLMv3IntermediateCustom(LayoutLMv3Intermediate):
+class PPDocLayoutV2ReadingOrderIntermediate(LayoutLMv3Intermediate):
     pass
 
 
-class LayoutLMv3OutputCustom(LayoutLMv3Output):
+class PPDocLayoutV2ReadingOrderOutput(LayoutLMv3Output):
     pass
 
 
-class LayoutLMv3AttentionCustom(LayoutLMv3Attention):
+class PPDocLayoutV2ReadingOrderAttention(LayoutLMv3Attention):
     def __init__(self, config):
         super().__init__()
-        self.self = LayoutLMv3SelfAttentionCustom(config)
-        self.output = LayoutLMv3SelfOutputCustom(config)
+        self.self = PPDocLayoutV2ReadingOrderSelfAttention(config)
+        self.output = PPDocLayoutV2ReadingOrderSelfOutput(config)
 
 
-class LayoutLMv3LayerCustom(LayoutLMv3Layer):
+class PPDocLayoutV2ReadingOrderLayer(LayoutLMv3Layer):
     def __init__(self, config):
         super().__init__()
-        self.attention = LayoutLMv3AttentionCustom(config)
-        self.intermediate = LayoutLMv3IntermediateCustom(config)
-        self.output = LayoutLMv3OutputCustom(config)
+        self.attention = PPDocLayoutV2ReadingOrderAttention(config)
+        self.intermediate = PPDocLayoutV2ReadingOrderIntermediate(config)
+        self.output = PPDocLayoutV2ReadingOrderOutput(config)
 
 
-class LayoutLMv3EncoderCustom(LayoutLMv3Encoder):
+class PPDocLayoutV2ReadingOrderEncoder(LayoutLMv3Encoder):
     def __init__(self, config):
         super().__init__(config)
-        self.layer = nn.ModuleList([LayoutLMv3LayerCustom(config) for _ in range(config.num_hidden_layers)])
-        self.rel_bias_module = PositionRelationEmbedding(config)
+        self.layer = nn.ModuleList([PPDocLayoutV2ReadingOrderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.rel_bias_module = PPDocLayoutV2PositionRelationEmbedding(config)
 
     def _cal_2d_pos_emb(self, bbox):
         x_min, y_min, x_max, y_max = (
@@ -720,7 +627,7 @@ class LayoutLMv3EncoderCustom(LayoutLMv3Encoder):
         return result
 
 
-class LayoutLMv3TextEmbeddingsCustom(LayoutLMv3TextEmbeddings):
+class PPDocLayoutV2TextEmbeddings(LayoutLMv3TextEmbeddings):
     def __init__(self, config):
         super().__init__(config)
 
@@ -775,7 +682,7 @@ class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
-        if isinstance(module, LayoutLMv3TextEmbeddingsCustom):
+        if isinstance(module, PPDocLayoutV2TextEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         if isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
@@ -783,14 +690,14 @@ class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
                 init.zeros_(module.weight.data[module.padding_idx])
 
 
-class ReadingOrder(nn.Module):
+class PPDocLayoutV2ReadingOrder(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.embeddings = LayoutLMv3TextEmbeddingsCustom(config)
+        self.embeddings = PPDocLayoutV2TextEmbeddings(config)
         self.label_embeddings = nn.Embedding(config.num_classes, config.hidden_size)
         self.label_features_projection = nn.Linear(config.hidden_size, config.hidden_size)
-        self.encoder = LayoutLMv3EncoderCustom(config)
-        self.relative_head = GlobalPointer(config)
+        self.encoder = PPDocLayoutV2ReadingOrderEncoder(config)
+        self.relative_head = PPDocLayoutV2GlobalPointer(config)
         self.config = config
 
     def forward(self, boxes, labels=None, mask=None):
@@ -832,9 +739,7 @@ class ReadingOrder(nn.Module):
         encoder_output = self.encoder(hidden_states=final_embeddings, bbox=pad_boxes, attention_mask=attention_mask)
         encoder_output = encoder_output.last_hidden_state
         tok = encoder_output[:, 1 : 1 + seq_len, :]
-        attn_1d = torch.arange(seq_len, device=device)[None, :] < num_pred[:, None]
-        logits_bh, _ = self.relative_head(tok, attn_1d)
-        read_order_logits = logits_bh[:, 0]
+        read_order_logits = self.relative_head(tok)
         return read_order_logits
 
 
@@ -919,7 +824,7 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
         self.model.denoising_class_embed = nn.Embedding(config.num_labels, config.d_model)
         self.class_thresholds = [config.threshold_mapping[v] for v in config.id2label.values()]
         self.class_map = [config.order_map[category] for category in config.order_map]
-        self.reading_order = ReadingOrder(config.reading_order_config)
+        self.reading_order = PPDocLayoutV2ReadingOrder(config.reading_order_config)
         self.num_queries = config.num_queries
 
         self.post_init()
@@ -935,9 +840,6 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
         inputs_embeds: torch.FloatTensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | PPDocLayoutV2ForObjectDetectionOutput:
         r"""
@@ -997,12 +899,6 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
         Order 12: number: 0.88 [106.0, 2257.5, 135.84, 2282.18]
         Order 13: footer: 0.93 [338.4, 2255.52, 986.15, 2284.37]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.model(
             pixel_values,
             pixel_mask=pixel_mask,
@@ -1010,13 +906,10 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             labels=labels,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        intermediate_reference_points = outputs.intermediate_reference_points if return_dict else outputs[3]
-        intermediate_logits = outputs.intermediate_logits if return_dict else outputs[2]
+        intermediate_reference_points = outputs.intermediate_reference_points
+        intermediate_logits = outputs.intermediate_logits
         raw_bboxes = intermediate_reference_points[:, -1]
         logits = intermediate_logits[:, -1]
 
@@ -1055,9 +948,6 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
 
         if labels is not None:
             raise ValueError("PPDocLayoutV2ForObjectDetection does not support training")
-
-        if not return_dict:
-            return (logits, pred_boxes, order_logits) + outputs
 
         return PPDocLayoutV2ForObjectDetectionOutput(
             logits=logits,

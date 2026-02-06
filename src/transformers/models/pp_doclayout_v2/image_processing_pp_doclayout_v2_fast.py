@@ -19,13 +19,19 @@
 # limitations under the License.
 
 
-import torch
+from typing import Optional
 
-from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...image_utils import PILImageResampling
+import torch
+import torchvision.transforms.v2.functional as tvF
+
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import PILImageResampling, SizeDict
+from ...utils import auto_docstring
 from ...utils.generic import TensorType
 
 
+@auto_docstring
 class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = [0, 0, 0]
@@ -38,14 +44,67 @@ class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
+    # We require `self.resize(..., antialias=False)` to approximate the output of `cv2.resize`
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["tvF.InterpolationMode"],
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(
+                    image=stacked_images, size=size, interpolation=interpolation, antialias=False
+                )
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        if do_pad:
+            processed_images = self.pad(processed_images, pad_size=pad_size, disable_grouping=disable_grouping)
+
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
     def _get_order_seqs(self, order_logits):
         """
         Computes the order sequences for a batch of inputs based on logits.
+
         This function takes in the order logits, calculates order scores using a sigmoid activation,
         and determines the order sequences by ranking the votes derived from the scores.
+
         Args:
             order_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
                 Stacked order logits.
+
         Returns:
             torch.Tensor: A tensor of shape `(batch_size, num_queries)`:
                 Containing the computed order sequences for each input in the batch. Each row represents the ranked order of elements for the corresponding input in the batch.
@@ -65,6 +124,9 @@ class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
         order_seq.scatter_(1, order_pointers, ranks)
 
         return order_seq
+
+    def extract_custom_vertices(self):
+        raise AttributeError("Not needed for PPDocLayoutV2")
 
     def post_process_object_detection(
         self,

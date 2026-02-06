@@ -18,16 +18,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
-class ReadingOrderConfig(PreTrainedConfig):
+class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
     def __init__(
         self,
         hidden_size=512,
@@ -59,8 +55,8 @@ class ReadingOrderConfig(PreTrainedConfig):
         rel_bias_embed_dim=16,
         rel_bias_temperature=10000,
         rel_bias_scale=100,
-        relative_head_num=1,
-        relative_head_size=64,
+        global_pointer_head_size=64,
+        gp_dropout_value=0.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -94,8 +90,8 @@ class ReadingOrderConfig(PreTrainedConfig):
         self.rel_bias_embed_dim = rel_bias_embed_dim
         self.rel_bias_temperature = rel_bias_temperature
         self.rel_bias_scale = rel_bias_scale
-        self.relative_head_num = relative_head_num
-        self.relative_head_size = relative_head_size
+        self.global_pointer_head_size = global_pointer_head_size
+        self.gp_dropout_value = gp_dropout_value
 
 
 class PPDocLayoutV2Config(PreTrainedConfig):
@@ -208,7 +204,7 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         order_map (`dict[str, float]`, *optional*):
             Mapping from class name to class threshold.
         reading_order_config (`dict`, *optional*):
-            The configuration of a `ReadingOrder`.
+            The configuration of a `PPDocLayoutV2ReadingOrder`.
 
     Examples:
 
@@ -226,7 +222,7 @@ class PPDocLayoutV2Config(PreTrainedConfig):
     ```"""
 
     model_type = "pp_doclayout_v2"
-    sub_configs = {"backbone_config": AutoConfig, "reading_order_config": ReadingOrderConfig}
+    sub_configs = {"backbone_config": AutoConfig, "reading_order_config": PPDocLayoutV2ReadingOrderConfig}
 
     layer_types = ("basic", "bottleneck")
     attribute_map = {
@@ -297,12 +293,10 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         elif reading_order_config is None:
             self.reading_order_config = self.sub_configs["reading_order_config"]()
 
-        if backbone_config is None and backbone is None:
-            logger.info(
-                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `HGNetV2` backbone."
-            )
-            backbone_config = {
-                "model_type": "hgnet_v2",
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=backbone_config,
+            default_config_type="hgnet_v2",
+            default_config_kwargs={
                 "arch": "L",
                 "return_idx": [1, 2, 3],
                 "freeze_stem_only": True,
@@ -310,23 +304,10 @@ class PPDocLayoutV2Config(PreTrainedConfig):
                 "freeze_norm": True,
                 "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
                 "out_features": ["stage2", "stage3", "stage4"],
-            }
-            config_class = CONFIG_MAPPING["hgnet_v2"]
-            backbone_config = config_class.from_dict(backbone_config)
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
-            if backbone_model_type is None:
-                raise ValueError("`backbone_config` dict must contain key `model_type`.")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
-            backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            },
+            **kwargs,
         )
+
         self.backbone_config = backbone_config
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
