@@ -17,7 +17,7 @@ import math
 import operator
 import os
 import re
-from functools import reduce
+from functools import partial, reduce
 
 from ..distributed import DistributedConfig
 from ..utils import is_torch_greater_or_equal, logging
@@ -317,6 +317,104 @@ def repack_weights(
     return final_ordered_tensor
 
 
+def compute_tensor_shard_slices(empty_param, device_mesh, rank, dim, tensor_idx: int | None = None):
+    """
+    Compute the slice ranges for sharding a tensor across a multi-dimensional device mesh.
+
+    This function calculates the start and end indices for extracting the fraction of a parameter
+    owned by a given rank when sharding along a specified dimension. It follows PyTorch `Shard`
+    placement semantics (torch.chunk style sharding).
+
+    Args:
+        empty_param (torch.Tensor): A tensor used for shape reference.
+        device_mesh (torch.Tensor): Shape [d_0, ..., d_n] representing the mesh.
+        rank (int): Global rank of the current process/device.
+        dim (int): Dimension along which to shard the tensor.
+        tensor_idx (int | None): Optional tensor index for special handling.
+
+    Returns:
+        tuple[int, int]: A tuple (start, end) representing the slice range for the sharding dimension.
+    """
+    param_dim = empty_param.ndim
+    # Flatten the mesh to get the total number of devices
+    mesh_shape = device_mesh.shape
+    world_size = reduce(operator.mul, mesh_shape)
+    if dim < 0:
+        dim = param_dim + dim
+
+    if dim >= param_dim:
+        raise ValueError(f"dim {dim} is out of bounds for tensor of dimension {param_dim}")
+
+    if rank >= world_size:
+        raise ValueError(f"Rank {rank} is out of bounds for mesh size {world_size}")
+
+    shard_size = math.ceil(empty_param.size(dim) / world_size)
+    start = rank * shard_size
+    end = min(start + shard_size, empty_param.size(dim))
+
+    return start, end
+
+
+def compute_flattened_tensor_shard_slices(empty_param, device_mesh, rank, dim, tensor_idx: int | None = None):
+    """
+    Compute all slice ranges needed to extract a shard from a flattened tensor.
+
+    When a multi-dimensional tensor is flattened to 1D, this function computes all the
+    (start, end) ranges that need to be extracted to reconstruct the shard for a given rank.
+    This is useful for loading sharded weights from storage formats that store flattened tensors.
+
+    Args:
+        empty_param (torch.Tensor): A tensor used for shape reference.
+        device_mesh (torch.Tensor): Shape [d_0, ..., d_n] representing the mesh.
+        rank (int): Global rank of the current process/device.
+        dim (int): Dimension along which to shard the tensor.
+        tensor_idx (int | None): Optional tensor index for special handling.
+
+    Returns:
+        list[tuple[int, int]]: A list of (start, end) tuples representing contiguous ranges
+                               to extract from the flattened tensor. Each tuple represents
+                               a slice that should be taken from the flattened 1D array.
+
+    Example:
+        For a tensor of shape (4, 6) sharded along dim=0 with world_size=2 and rank=0:
+        - The shard shape would be (2, 6)
+        - The flattened slices would be: [(0, 6), (6, 12)]
+        - These correspond to rows 0 and 1 of the original tensor
+    """
+    param_dim = empty_param.ndim
+    if dim < 0:
+        dim = param_dim + dim
+
+    # Reuse the base function to get the shard range
+    start, end = compute_tensor_shard_slices(empty_param, device_mesh, rank, dim, tensor_idx)
+
+    # If this rank gets an empty shard, return empty list
+    if start >= empty_param.size(dim):
+        return []
+
+    # Calculate the stride for the sharding dimension
+    # Stride is the product of all dimensions after the sharding dimension
+    stride = 1
+    for i in range(dim + 1, param_dim):
+        stride *= empty_param.size(i)
+
+    # Calculate the number of elements before the sharding dimension
+    outer_size = 1
+    for i in range(dim):
+        outer_size *= empty_param.size(i)
+
+    # Generate all slice ranges
+    slices = []
+    chunk_size = stride * (end - start)  # Size of each contiguous chunk in the flattened array
+
+    for outer_idx in range(outer_size):
+        # Calculate the flat offset for this outer index
+        flat_offset = outer_idx * empty_param.size(dim) * stride + start * stride
+        slices.append((flat_offset, flat_offset + chunk_size))
+
+    return slices
+
+
 def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int | None = None):
     """
     Generalized tensor sharding across a multi-dimensional device mesh.
@@ -381,15 +479,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int
     elif empty_param.dim() == 3 and dim == 2 and len(param_shape) == 2:
         dim = 1
 
-    shard_size = math.ceil(param_shape[dim] / world_size)
-    start = rank * shard_size
-    end = min(start + shard_size, param_shape[dim])
-
-    if dim >= param_dim:
-        raise ValueError(f"dim {dim} is out of bounds for tensor of dimension {param_dim}")
-
-    if rank >= world_size:
-        raise ValueError(f"Rank {rank} is out of bounds for mesh size {world_size}")
+    start, end = compute_tensor_shard_slices(empty_param, device_mesh, rank, dim, tensor_idx)
 
     # we have the full tensor not 1 part of it.
     # in that case, we just assume that the weight was properly saved
