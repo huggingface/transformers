@@ -1284,9 +1284,12 @@ def _infer_model_type_from_tags(model_id: str) -> str | None:
     """
     try:
         model = model_info(model_id)
-        tags = model.tags or []
     except Exception as e:
         logger.debug(f"Can't fetch model info for {model_id}: {e}")
+        return None
+
+    tags = model.tags or []
+    if tags == []:
         return None
 
     sorted_types = sorted(CONFIG_MAPPING, key=len, reverse=True)
@@ -1296,7 +1299,6 @@ def _infer_model_type_from_tags(model_id: str) -> str | None:
         # direct model type tag
         if tag in config_keys:
             return tag
-
         # base_model tag: base_model:org/name
         if tag.startswith("base_model:"):
             base_model = tag.split(":", 1)[1].lower()
