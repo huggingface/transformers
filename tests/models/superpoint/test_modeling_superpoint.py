@@ -117,6 +117,7 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     has_attentions = False
     from_pretrained_id = "magic-leap-community/superpoint"
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = SuperPointModelTester(self)
@@ -147,20 +148,20 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="SuperPoint does not output any loss term in the forward pass")

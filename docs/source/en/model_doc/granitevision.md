@@ -85,6 +85,7 @@ This model was contributed by [Alexander Brooks](https://huggingface.co/abrooks9
 ## LlavaNextProcessor
 
 [[autodoc]] LlavaNextProcessor
+    - __call__
 
 ## LlavaNextForConditionalGeneration
 

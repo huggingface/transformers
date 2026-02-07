@@ -13,8 +13,9 @@
 # limitations under the License.
 import argparse
 import os
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from PIL import Image
 
@@ -80,10 +81,12 @@ def rename_key(dct, old, new):
 
 def prepare_imgs():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im1 = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image_1 = Image.open(BytesIO(response.read()))
     url = "http://images.cocodataset.org/test-stuff2017/000000004016.jpg"
-    im2 = Image.open(requests.get(url, stream=True).raw)
-    return [im1, im2]
+    with httpx.stream("GET", url) as response:
+        image_2 = Image.open(BytesIO(response.read()))
+    return [image_1, image_2]
 
 
 @torch.no_grad()

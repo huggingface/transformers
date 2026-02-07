@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_lasr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team and Google LLC. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Union
 
 from ...configuration_utils import PreTrainedConfig
 
@@ -208,7 +206,7 @@ class LasrCTCConfig(PreTrainedConfig):
         vocab_size=512,
         ctc_loss_reduction="mean",
         ctc_zero_infinity=True,
-        encoder_config: Union[dict, LasrEncoderConfig] = None,
+        encoder_config: dict | LasrEncoderConfig = None,
         pad_token_id=0,
         **kwargs,
     ):
@@ -223,11 +221,9 @@ class LasrCTCConfig(PreTrainedConfig):
 
         self.encoder_config = self.encoder_config
         self.initializer_range = self.encoder_config.initializer_range
+        self.pad_token_id = pad_token_id
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     @classmethod
     def from_encoder_config(cls, encoder_config: LasrEncoderConfig, **kwargs):

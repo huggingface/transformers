@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """ESM model configuration"""
 
 from dataclasses import asdict, dataclass
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -92,7 +90,7 @@ class TrunkConfig:
     layer_drop: float = 0
     cpu_grad_checkpoint: bool = False
     max_recycles: int = 4
-    chunk_size: Optional[int] = 128
+    chunk_size: int | None = 128
     structure_module: "StructureModuleConfig" = None
 
     def __post_init__(self):
@@ -103,16 +101,6 @@ class TrunkConfig:
 
         if self.max_recycles <= 0:
             raise ValueError(f"`max_recycles` should be positive, got {self.max_recycles}.")
-        if self.sequence_state_dim % self.sequence_state_dim != 0:
-            raise ValueError(
-                "`sequence_state_dim` should be a round multiple of `sequence_state_dim`, got"
-                f" {self.sequence_state_dim} and {self.sequence_state_dim}."
-            )
-        if self.pairwise_state_dim % self.pairwise_state_dim != 0:
-            raise ValueError(
-                "`pairwise_state_dim` should be a round multiple of `pairwise_state_dim`, got"
-                f" {self.pairwise_state_dim} and {self.pairwise_state_dim}."
-            )
 
         sequence_num_heads = self.sequence_state_dim // self.sequence_head_width
         pairwise_num_heads = self.pairwise_state_dim // self.pairwise_head_width
@@ -147,7 +135,7 @@ class TrunkConfig:
 
 @dataclass
 class EsmFoldConfig:
-    esm_type: Optional[str] = None
+    esm_type: str | None = None
     fp16_esm: bool = True
     use_esm_attn_map: bool = False
     esm_ablate_pairwise: bool = False
@@ -269,10 +257,18 @@ class EsmConfig(PreTrainedConfig):
         is_folding_model=False,
         esmfold_config=None,
         vocab_list=None,
+        is_decoder=False,
+        add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, mask_token_id=mask_token_id, **kwargs)
+        super().__init__(**kwargs)
 
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.mask_token_id = mask_token_id
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, The RAG Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@ import os
 import pickle
 import time
 from collections.abc import Iterable
-from typing import Optional
 
 import numpy as np
 
@@ -266,8 +264,8 @@ class CanonicalHFIndex(HFIndexBase):
         vector_size: int,
         dataset_name: str = "wiki_dpr",
         dataset_split: str = "train",
-        index_name: Optional[str] = None,
-        index_path: Optional[str] = None,
+        index_name: str | None = None,
+        index_path: str | None = None,
         use_dummy_dataset=False,
         dataset_revision=None,
     ):
@@ -626,7 +624,7 @@ class RagRetriever:
         """
 
         n_docs = n_docs if n_docs is not None else self.n_docs
-        prefix = prefix if prefix is not None else self.config.generator.prefix
+        prefix = prefix if prefix is not None else getattr(self.config.generator, "prefix", None)
         retrieved_doc_embeds, doc_ids, docs = self.retrieve(question_hidden_states, n_docs)
 
         input_strings = self.question_encoder_tokenizer.decode(question_input_ids, skip_special_tokens=True)

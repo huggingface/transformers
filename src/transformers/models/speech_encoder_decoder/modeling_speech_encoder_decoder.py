@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Classes to support Speech-Encoder-Text-Decoder architectures"""
-
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -72,9 +69,9 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
     def __init__(
         self,
-        config: Optional[PreTrainedConfig] = None,
-        encoder: Optional[PreTrainedModel] = None,
-        decoder: Optional[PreTrainedModel] = None,
+        config: PreTrainedConfig | None = None,
+        encoder: PreTrainedModel | None = None,
+        decoder: PreTrainedModel | None = None,
     ):
         r"""
         encoder (`PreTrainedModel`, *optional*):
@@ -90,7 +87,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             if not isinstance(config, self.config_class):
                 raise ValueError(f"Config: {config} has to be of type {self.config_class}")
 
-        if config.decoder.cross_attention_hidden_size is not None:
+        if getattr(config.decoder, "cross_attention_hidden_size", None) is not None:
             if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
                 raise ValueError(
                     "If `cross_attention_hidden_size` is specified in the decoder's configuration, it has to be equal"
@@ -135,7 +132,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         self.encoder_output_dim = getattr(config.encoder, "output_hidden_size", config.encoder.hidden_size)
         if (
             self.encoder_output_dim != self.decoder.config.hidden_size
-            and self.decoder.config.cross_attention_hidden_size is None
+            and getattr(self.decoder.config, "cross_attention_hidden_size", None) is None
         ):
             # encoder outputs might need to be projected to different dimension for decoder
             self.enc_to_dec_proj = nn.Linear(self.encoder.config.hidden_size, self.decoder.config.hidden_size)
@@ -166,8 +163,8 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     @classmethod
     def from_encoder_decoder_pretrained(
         cls,
-        encoder_pretrained_model_name_or_path: Optional[str] = None,
-        decoder_pretrained_model_name_or_path: Optional[str] = None,
+        encoder_pretrained_model_name_or_path: str | None = None,
+        decoder_pretrained_model_name_or_path: str | None = None,
         *model_args,
         **kwargs,
     ) -> PreTrainedModel:
@@ -252,7 +249,9 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                     encoder_pretrained_model_name_or_path, **kwargs_encoder, return_unused_kwargs=True
                 )
 
-                if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
+                if getattr(encoder_config, "is_decoder", False) or getattr(
+                    encoder_config, "add_cross_attention", False
+                ):
                     logger.info(
                         f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model "
                         "from a decoder model. Cross-attention and causal mask are disabled."
@@ -309,22 +308,22 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        inputs: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        input_values: Optional[torch.FloatTensor] = None,
-        input_features: Optional[torch.FloatTensor] = None,
-        return_dict: Optional[bool] = None,
+        inputs: torch.FloatTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        input_values: torch.FloatTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
+    ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
         r"""
         inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, feature_dim)`, *optional*):
             Float values of input raw speech waveform or speech features. Values can be obtained by loading a `.flac`
@@ -426,7 +425,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         # optionally project encoder_hidden_states
         if (
             self.encoder_output_dim != self.decoder.config.hidden_size
-            and self.decoder.config.cross_attention_hidden_size is None
+            and getattr(self.decoder.config, "cross_attention_hidden_size", None) is None
         ):
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 

@@ -89,6 +89,7 @@ print(output.probabilities)
 ## ShieldGemma2Processor
 
 [[autodoc]] ShieldGemma2Processor
+    - __call__
 
 ## ShieldGemma2Config
 

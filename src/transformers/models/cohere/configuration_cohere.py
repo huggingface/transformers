@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Cohere team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -18,8 +17,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Cohere model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -124,26 +121,26 @@ class CohereConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 256000,
-        hidden_size: Optional[int] = 8192,
-        intermediate_size: Optional[int] = 22528,
-        logit_scale: Optional[float] = 0.0625,
-        num_hidden_layers: Optional[int] = 40,
-        num_attention_heads: Optional[int] = 64,
-        num_key_value_heads: Optional[int] = None,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 8192,
-        initializer_range: Optional[float] = 0.02,
-        layer_norm_eps: Optional[int] = 1e-5,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 0,
-        bos_token_id: Optional[int] = 5,
-        eos_token_id: Optional[int] = 255001,
-        tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        use_qk_norm: Optional[bool] = False,
+        vocab_size: int | None = 256000,
+        hidden_size: int | None = 8192,
+        intermediate_size: int | None = 22528,
+        logit_scale: float | None = 0.0625,
+        num_hidden_layers: int | None = 40,
+        num_attention_heads: int | None = 64,
+        num_key_value_heads: int | None = None,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 8192,
+        initializer_range: float | None = 0.02,
+        layer_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 0,
+        bos_token_id: int | None = 5,
+        eos_token_id: int | None = 255001,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        use_qk_norm: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -168,13 +165,11 @@ class CohereConfig(PreTrainedConfig):
         self.use_qk_norm = use_qk_norm
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["CohereConfig"]

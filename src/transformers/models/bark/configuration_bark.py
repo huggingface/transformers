@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Suno AI Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """BARK model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import add_start_docstrings, logging
@@ -177,7 +174,8 @@ class BarkFineConfig(BarkSubModelConfig):
         self.n_codes_total = n_codes_total
         self.n_codes_given = n_codes_given
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 class BarkConfig(PreTrainedConfig):
@@ -243,10 +241,10 @@ class BarkConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        semantic_config: Optional[dict] = None,
-        coarse_acoustics_config: Optional[dict] = None,
-        fine_acoustics_config: Optional[dict] = None,
-        codec_config: Optional[dict] = None,
+        semantic_config: dict | None = None,
+        coarse_acoustics_config: dict | None = None,
+        fine_acoustics_config: dict | None = None,
+        codec_config: dict | None = None,
         initializer_range=0.02,
         **kwargs,
     ):

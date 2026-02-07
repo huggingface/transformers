@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -81,7 +80,8 @@ class MambaConfig(PreTrainedConfig):
             Whether or not the cache should be used.
         use_mambapy (`bool`, *optional*, defaults to `False`):
             Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not available. If `True`, the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
-
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -126,6 +126,7 @@ class MambaConfig(PreTrainedConfig):
         rescale_prenorm_residual=False,
         use_cache=True,
         use_mambapy=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -153,8 +154,9 @@ class MambaConfig(PreTrainedConfig):
         self.residual_in_fp32 = residual_in_fp32
         self.use_cache = use_cache
         self.use_mambapy = use_mambapy
+        self.tie_word_embeddings = tie_word_embeddings
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = ["MambaConfig"]

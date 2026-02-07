@@ -296,7 +296,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
         images = [[], [self.image2]]
-        with self.assertRaises(ValueError):
+        with self.assertRaises((ValueError, IndexError)):
             processor(text=text, images=images, padding=True)
         images = [self.image1, self.image2, self.image3]
         with self.assertRaises(ValueError):

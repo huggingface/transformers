@@ -33,7 +33,6 @@ import logging
 import os
 from collections.abc import Iterable
 from contextlib import nullcontext
-from typing import Optional
 
 import torch
 import torch.distributed as dist
@@ -586,7 +585,7 @@ def all_reduce_grads(model, world_mesh, use_ddp):
 class ContextParallelCollator:
     """Collator for context parallel training that splits sequences into chunks."""
 
-    def __init__(self, cp_mesh: Optional[DeviceMesh] = None):
+    def __init__(self, cp_mesh: DeviceMesh | None = None):
         self.cp_mesh = cp_mesh
 
     def __call__(self, batch: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
@@ -760,8 +759,7 @@ def get_parameters(model: nn.Module) -> Iterable[torch.Tensor]:
             if isinstance(attr, torch.Tensor) and attr.requires_grad:
                 yield attr
         # Recursively get parameters from submodules
-        for param in get_parameters(module):
-            yield param
+        yield from get_parameters(module)
 
 
 def update_model_parameters(model: nn.Module) -> None:
