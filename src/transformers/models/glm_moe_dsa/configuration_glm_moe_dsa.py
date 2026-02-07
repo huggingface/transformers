@@ -118,9 +118,12 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         first_k_dense_replace (`int`, *optional*, defaults to 3):
             Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
                                                             \--k dense layers--/
-        index_topk (`int`, *optional*, defaults to 2048): <fill_docstring>
-        index_head_dim (`int`, *optional*, defaults to 128): <fill_docstring>
-        index_n_heads (`int`, *optional*, defaults to 32): <fill_docstring>
+        index_topk (`int`, *optional*, defaults to 2048):
+            Number of top tokens selected by the indexer for retrieval/attention in each step.
+        index_head_dim (`int`, *optional*, defaults to 128):
+            Hidden size (per-head dimension) of each indexer attention head.
+        index_n_heads (`int`, *optional*, defaults to 32):
+            Number of attention heads used by the indexer module.
 
     ```python
     >>> from transformers import Glm4MoeLiteModel, Glm4MoeLiteConfig
