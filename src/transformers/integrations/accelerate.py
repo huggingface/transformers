@@ -16,6 +16,8 @@ Some of the functions here are derived from the `accelerate` library, with some 
 and simplicity/ease of use.
 """
 
+from __future__ import annotations
+
 import copy
 import inspect
 import os
