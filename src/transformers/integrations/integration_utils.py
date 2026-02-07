@@ -35,8 +35,6 @@ from typing import TYPE_CHECKING, Any, Literal
 import numpy as np
 import packaging.version
 
-from transformers.utils.import_utils import _is_package_available
-
 
 if os.getenv("WANDB_MODE") == "offline":
     print("[INFO] Running in WANDB offline mode")
@@ -59,6 +57,8 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
     import torch.distributed as dist
+
+_MIN_TRACKIO_VERSION = "0.14.0"
 
 # comet_ml requires to be imported before any ML frameworks
 _MIN_COMET_VERSION = "3.43.2"
@@ -930,12 +930,12 @@ class TrackioCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that logs metrics to Trackio.
 
-    It records training metrics, model (and PEFT) configuration, and GPU memory usage.
-    If `nvidia-ml-py` is installed, GPU power consumption is also tracked.
+    It records training metrics, model (and PEFT) configuration, and GPU system metrics from Trackio.
+    If `nvidia-ml-py` is installed, Trackio logs utilization, memory, power, temperature, and more.
 
     **Requires**:
     ```bash
-    pip install trackio
+    pip install "trackio>=0.14.0"
     ```
     """
 
@@ -948,6 +948,12 @@ class TrackioCallback(TrainerCallback):
         if has_trackio:
             import trackio
 
+            trackio_version = packaging.version.parse(trackio.__version__)
+            if trackio_version < packaging.version.parse(_MIN_TRACKIO_VERSION):
+                raise RuntimeError(
+                    "TrackioCallback requires trackio>=%s to be installed. Run `pip install --upgrade trackio`."
+                    % _MIN_TRACKIO_VERSION
+                )
             self._trackio = trackio
         self._initialized = False
 
@@ -992,6 +998,7 @@ class TrackioCallback(TrainerCallback):
                 space_id=space_id,
                 resume="allow",
                 private=args.hub_private_repo,
+                auto_log_gpu=False,
             )
 
             # Add config parameters (run may have been created manually)
@@ -1021,31 +1028,55 @@ class TrackioCallback(TrainerCallback):
             "total_flos",
         ]
 
-        if is_torch_available() and torch.cuda.is_available():
-            device_idx = torch.cuda.current_device()
-            total_memory = torch.cuda.get_device_properties(device_idx).total_memory
-            memory_allocated = torch.cuda.memory_allocated(device_idx)
+        trackio_gpu_logs = {}
+        try:
+            from trackio.gpu import collect_gpu_metrics
 
-            gpu_memory_logs = {
-                f"gpu/{device_idx}/allocated_memory": memory_allocated / (1024**3),  # GB
-                f"gpu/{device_idx}/memory_usage": memory_allocated / total_memory,  # ratio
-            }
-            if _is_package_available("pynvml"):
-                power = torch.cuda.power_draw(device_idx)
-                gpu_memory_logs[f"gpu/{device_idx}/power"] = power / 1000  # Watts
-            if dist.is_available() and dist.is_initialized():
-                gathered_logs = [None] * dist.get_world_size()
-                dist.all_gather_object(gathered_logs, gpu_memory_logs)
-                gpu_memory_logs = {k: v for d in gathered_logs for k, v in d.items()}
-        else:
-            gpu_memory_logs = {}
+            if is_torch_available() and torch.cuda.is_available():
+                trackio_gpu_logs = collect_gpu_metrics(device=torch.cuda.current_device())
+            else:
+                trackio_gpu_logs = collect_gpu_metrics()
+        except Exception:
+            trackio_gpu_logs = {}
+
+        if (
+            not trackio_gpu_logs
+            and is_torch_available()
+            and torch.cuda.is_available()
+            and state.is_world_process_zero
+            and not getattr(self, "_gpu_warning_emitted", False)
+        ):
+            logger.warning(
+                'Trackio GPU metrics are unavailable. Install the GPU extra with `pip install "trackio[gpu]"` '
+                "to enable NVML-based GPU monitoring."
+            )
+            self._gpu_warning_emitted = True
 
         if not self._initialized:
             self.setup(args, state, model)
+        world_size = 1
+        if dist.is_available() and dist.is_initialized():
+            world_size = dist.get_world_size()
+        if world_size > 1:
+            gathered_logs = [None] * world_size
+            dist.all_gather_object(gathered_logs, trackio_gpu_logs)
+            if state.is_world_process_zero:
+                gpu_logs = {
+                    f"rank{rank}/{key}": value
+                    for rank, logs_for_rank in enumerate(gathered_logs)
+                    if logs_for_rank
+                    for key, value in logs_for_rank.items()
+                }
+                if gpu_logs:
+                    self._trackio.log_system(gpu_logs)
+        elif state.is_world_process_zero and trackio_gpu_logs:
+            self._trackio.log_system(trackio_gpu_logs)
+
         if state.is_world_process_zero:
             non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
             non_scalar_logs = rewrite_logs(non_scalar_logs)
-            self._trackio.log({**non_scalar_logs, **gpu_memory_logs, "train/global_step": state.global_step})
+            merged_logs = {**non_scalar_logs, "train/global_step": state.global_step}
+            self._trackio.log(merged_logs)
 
     def on_save(self, args, state, control, **kwargs):
         return
