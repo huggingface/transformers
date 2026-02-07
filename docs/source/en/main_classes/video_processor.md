@@ -47,7 +47,7 @@ processor = torch.compile(processor)
 processed_video = processor(video, return_tensors="pt")
 ```
 
-### Sampling behavior
+## Sampling behavior
 
 The video processor can also sample video frames using the technique best suited for the given model. Sampling behavior is controlled with the `do_sample_frames` argument and can be configured through model-specific parameters such as `num_frames` or `fps` (the rate at which the video will be sampled). If the input video is given as a local path or URL (`str`), the processor will decode it automatically. To obtain metadata about the decoded video, such as sampled frame indices, original dimensions, duration, and fps, pass `return_metadata=True` to the processor.
 
