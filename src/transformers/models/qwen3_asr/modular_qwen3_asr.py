@@ -1,6 +1,13 @@
 import re
-
+import base64
+import io
+import librosa
 import numpy as np
+import soundfile as sf
+
+from dataclasses import dataclass
+from typing import Any, Iterable, List, Optional, Tuple, Union
+from urllib.parse import urlparse
 
 from transformers.audio_utils import AudioInput
 from transformers.feature_extraction_utils import BatchFeature
@@ -190,3 +197,4 @@ class Qwen3ASRProcessor(ProcessorMixin):
                 + ["feature_attention_mask"]
             )
         )
+
