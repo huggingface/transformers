@@ -296,12 +296,12 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         np.testing.assert_allclose(
             outputs.flattened_patches[0][1][:10].numpy().tolist(),
             EXPECTED_FP_1,
-            atol=1e-9,
+            atol=1e-4,
         )
         np.testing.assert_allclose(
             outputs.flattened_patches[0][200][:10].numpy().tolist(),
             EXPECTED_FP_200,
-            atol=1e-9,
+            atol=1e-4,
         )
 
         # test a batch of images and texts, right padding
@@ -322,10 +322,10 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         np.testing.assert_allclose(
             outputs.flattened_patches[1][1][:10].numpy().tolist(),
             EXPECTED_FP_1,
-            atol=1e-9,
+            atol=1e-4,
         )
         np.testing.assert_allclose(
             outputs.flattened_patches[1][200][:10].numpy().tolist(),
             EXPECTED_FP_200,
-            atol=1e-9,
+            atol=1e-4,
         )

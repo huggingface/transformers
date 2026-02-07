@@ -37,11 +37,6 @@ from ..sam2.modeling_sam2 import (
 )
 
 
-# fix this in modular
-if True:
-    from ..timm_wrapper.modeling_timm_wrapper import TimmWrapperModel
-
-
 class EdgeTamVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EdgeTamVisionModel`]. It is used to instantiate a SAM
@@ -145,6 +140,62 @@ class EdgeTamMaskDecoderConfig(Sam2MaskDecoderConfig):
 
 
 class EdgeTamConfig(Sam2Config):
+    r"""
+    [`EdgeTamConfig`] is the configuration class to store the configuration of a [`EdgeTamModel`]. It is used to instantiate a
+    EDGETAM model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
+    configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
+    [facebook/edgetam.1-hiera-tiny](https://huggingface.co/facebook/edgetam.1-hiera-tiny) architecture.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    <Tip>
+
+    EdgeTAM checkpoints with `model_type="edgetam_video"` are compatible with `EdgeTamModel` since the video variant
+    weights are a superset of the image-only model weights. You may see a warning about model type mismatch when
+    loading such checkpoints, which can be safely ignored in this case.
+
+    </Tip>
+
+    Args:
+        vision_config (Union[`dict`, `EdgeTamVisionConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`EdgeTamVisionConfig`].
+        prompt_encoder_config (Union[`dict`, `EdgeTamPromptEncoderConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`EdgeTamPromptEncoderConfig`].
+        mask_decoder_config (Union[`dict`, `EdgeTamMaskDecoderConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`EdgeTamMaskDecoderConfig`].
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            Standard deviation for parameter initialization.
+
+    Example:
+
+    ```python
+    >>> from transformers import (
+    ...     EdgeTamVisionConfig,
+    ...     EdgeTamPromptEncoderConfig,
+    ...     EdgeTamMaskDecoderConfig,
+    ...     EdgeTamModel,
+    ... )
+
+    >>> # Initializing a EdgeTamConfig with `"facebook/edgetam.1_hiera_tiny"` style configuration
+    >>> configuration = EdgeTamConfig()
+
+    >>> # Initializing a EdgeTamModel (with random weights) from the `"facebook/edgetam.1_hiera_tiny"` style configuration
+    >>> model = EdgeTamModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+
+    >>> # We can also initialize a EdgeTamConfig from a EdgeTamVisionConfig, EdgeTamPromptEncoderConfig, and EdgeTamMaskDecoderConfig
+    >>> # Initializing EDGETAM vision encoder, memory attention, and memory encoder configurations
+    >>> vision_config = EdgeTamVisionConfig()
+    >>> prompt_encoder_config = EdgeTamPromptEncoderConfig()
+    >>> mask_decoder_config = EdgeTamMaskDecoderConfig()
+
+    >>> config = EdgeTamConfig(vision_config, prompt_encoder_config, mask_decoder_config)
+    ```
+    """
+
     pass
 
 
@@ -188,7 +239,9 @@ class EdgeTamPreTrainedModel(Sam2PreTrainedModel):
 class EdgeTamVisionModel(Sam2VisionModel):
     config_class = EdgeTamVisionConfig
     main_input_name = "pixel_values"
-    _can_record_outputs = {"hidden_states": TimmWrapperModel, "attentions": TimmWrapperModel}
+    # TODO: TimmWrapper models aren't compatible with _can_record_outputs yet. We specifically set this to
+    # an empty dict to avoid the _can_record_outputs from Sam2VisionModel being inherited here.
+    _can_record_outputs = {}
 
     def get_input_embeddings(self):
         raise NotImplementedError("Can't get input embeddings from timm wrapper model")
@@ -203,7 +256,7 @@ class EdgeTamVisionModel(Sam2VisionModel):
             raise ValueError("You have to specify pixel_values")
 
         # Forward through backbone
-        backbone_output = self.backbone(pixel_values)
+        backbone_output = self.backbone(pixel_values, **kwargs)
         intermediate_hidden_states = backbone_output.last_hidden_state
         intermediate_hidden_states = [hidden_state.permute(0, 2, 3, 1) for hidden_state in intermediate_hidden_states]
 
@@ -216,6 +269,7 @@ class EdgeTamVisionModel(Sam2VisionModel):
             last_hidden_state=intermediate_hidden_states[-1],
             fpn_hidden_states=fpn_hidden_states,
             fpn_position_encoding=fpn_position_encoding,
+            hidden_states=backbone_output.hidden_states,
         )
 
 

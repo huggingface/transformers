@@ -145,6 +145,14 @@ class MptConfig(PreTrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
+        bos_token_id (`int`, *optional*):
+            The id of the beginning of sequence token.
+        eos_token_id (`int`, *optional*):
+            The id of the end of sequence token.
 
     Example:
 
@@ -190,6 +198,10 @@ class MptConfig(PreTrainedConfig):
         norm_type: str = "low_precision_layernorm",
         use_cache: bool = False,
         initializer_range=0.02,
+        tie_word_embeddings=True,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
         if attn_config is None:
@@ -215,6 +227,10 @@ class MptConfig(PreTrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.use_cache = use_cache
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         super().__init__(**kwargs)
 
 

@@ -219,9 +219,9 @@ class BioGptAttention(nn.Module):
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -435,11 +435,7 @@ class BioGptModel(BioGptPreTrainedModel):
 
         # embed positions
         if position_ids is None:
-            # position_ids = cache_position.unsqueeze(0)
-            position_ids = torch.cumsum(attention_mask, dim=1)
-            position_ids = (position_ids * attention_mask - 1).long()
-            # cut positions if `past_seen_tokens` is > 0
-            position_ids = position_ids[:, past_key_values_length:]
+            position_ids = cache_position.unsqueeze(0)
 
         positions = self.embed_positions(attention_mask, past_key_values_length, position_ids=position_ids)
         hidden_states = inputs_embeds + positions

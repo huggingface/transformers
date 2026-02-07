@@ -25,6 +25,7 @@ The [`AttentionInterface`] provides optimized attention implementations. It deco
 | `"flash_attention_2"` | tiles computations into smaller blocks and uses fast on-chip memory |
 | `"flex_attention"` | framework for specifying custom attention patterns (sparse, block-local, sliding window) without writing low-level kernels by hand |
 | `"sdpa"` | built-in PyTorch implementation of [scaled dot product attention](https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) |
+| <code>"paged&#124;flash_attention_3"</code> | Paged version of FlashAttention-3 |
 | <code>"paged&#124;flash_attention_2"</code> | Paged version of FlashAttention-2 |
 | <code>"paged&#124;sdpa"</code> | Paged version of SDPA |
 | <code>"paged&#124;eager"</code> | Paged version of eager |

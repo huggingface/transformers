@@ -124,9 +124,12 @@ class MobileBertConfig(PreTrainedConfig):
         normalization_type="no_norm",
         classifier_activation=True,
         classifier_dropout=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size

@@ -22,11 +22,12 @@ from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import can_return_tuple
+from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3NaiveMoe
 from ..glm4.modeling_glm4 import Glm4Attention
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
@@ -55,7 +56,7 @@ from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
 logger = logging.get_logger(__name__)
 
 
-class Glm4vMoeTextConfig(Glm4MoeConfig, RotaryEmbeddingConfigMixin):
+class Glm4vMoeTextConfig(Glm4MoeConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vMoeModel`]. It is used to instantiate a
     GLM-4.5V model according to the specified arguments, defining the model architecture. Instantiating a
@@ -95,8 +96,6 @@ class Glm4vMoeTextConfig(Glm4MoeConfig, RotaryEmbeddingConfigMixin):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
@@ -124,8 +123,15 @@ class Glm4vMoeTextConfig(Glm4MoeConfig, RotaryEmbeddingConfigMixin):
                                                                     \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.0001):
             The aux loss factor for the loss.
+
     ```python
     >>> from transformers import Glm4vMoeTextModel, Glm4vMoeConfig
 
@@ -171,7 +177,6 @@ class Glm4vMoeTextConfig(Glm4MoeConfig, RotaryEmbeddingConfigMixin):
         initializer_range: float | None = 0.02,
         rms_norm_eps: int | None = 1e-5,
         use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         attention_bias: bool | None = True,
         attention_dropout: float | None = 0.0,
@@ -184,9 +189,15 @@ class Glm4vMoeTextConfig(Glm4MoeConfig, RotaryEmbeddingConfigMixin):
         topk_group: int | None = 1,
         first_k_dense_replace: int | None = 1,
         norm_topk_prob: bool | None = True,
+        pad_token_id: int | None = None,
+        eos_token_id: int | None = None,
+        bos_token_id: int | None = None,
         router_aux_loss_coef: float | None = 0.0001,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -215,9 +226,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig, RotaryEmbeddingConfigMixin):
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
         self.router_aux_loss_coef = router_aux_loss_coef
-        PreTrainedConfig.__init__(
-            self, tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope_section"}, **kwargs
-        )
+        PreTrainedConfig.__init__(self, ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
 
 class Glm4vMoeConfig(Glm4vConfig):
@@ -248,6 +257,8 @@ class Glm4vMoeConfig(Glm4vConfig):
             The video start token index to encode the start of video.
         video_end_token_id (`int`, *optional*, defaults to 151342):
             The video end token index to encode the end of video.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Glm4vMoeForConditionalGeneration, Glm4vMoeConfig
@@ -272,6 +283,7 @@ class Glm4vMoeConfig(Glm4vConfig):
         image_end_token_id=151340,
         video_start_token_id=151341,
         video_end_token_id=151342,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         super().__init__()
@@ -310,9 +322,9 @@ class Glm4vMoeTextAttention(Glm4Attention):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -404,7 +416,7 @@ class Glm4vMoeTextModel(Glm4vTextModel):
         use_cache: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> MoeModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -482,7 +494,7 @@ class Glm4vMoeTextModel(Glm4vTextModel):
 
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
     @auto_docstring
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

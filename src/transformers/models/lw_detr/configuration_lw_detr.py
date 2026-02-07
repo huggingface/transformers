@@ -19,13 +19,9 @@
 # limitations under the License.
 import math
 
+from ...backbone_utils import BackboneConfigMixin, consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
-from ..auto import CONFIG_MAPPING, AutoConfig
-
-
-logger = logging.get_logger(__name__)
+from ..auto import AutoConfig
 
 
 class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
@@ -33,7 +29,7 @@ class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
     This is the configuration class to store the configuration of a [`LwDetrViTModel`]. It is used to instantiate an
     LW-DETR ViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the LW-DETR ViT
-    [stevenbucaille/lwdetr_small_60e_coco](https://huggingface.co/stevenbucaille/lwdetr_small_60e_coco) architecture.
+    [AnnaZhang/lwdetr_small_60e_coco](https://huggingface.co/AnnaZhang/lwdetr_small_60e_coco) architecture.
 
     LW-DETR ViT is the Vision Transformer backbone used in the LW-DETR model for real-time object detection. It features
     interleaved window and global attention mechanisms to reduce computational complexity while maintaining high performance.
@@ -149,9 +145,7 @@ class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
         self.use_absolute_position_embeddings = use_absolute_position_embeddings
 
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
+        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
 
         self.cae_init_values = cae_init_values
         if num_windows % math.sqrt(num_windows) != 0:
@@ -171,7 +165,7 @@ class LwDetrConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`LwDetrModel`]. It is used to instantiate
     a LW-DETR model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the LW-DETR
-    [stevenbucaille/lwdetr_small_60e_coco](https://huggingface.co/stevenbucaille/lwdetr_small_60e_coco) architecture.
+    [AnnaZhang/lwdetr_small_60e_coco](https://huggingface.co/AnnaZhang/lwdetr_small_60e_coco) architecture.
 
     LW-DETR (Lightweight Detection Transformer) is a transformer-based object detection model designed for real-time
     detection tasks. It replaces traditional CNN-based detectors like YOLO with a more efficient transformer architecture
@@ -253,10 +247,10 @@ class LwDetrConfig(PreTrainedConfig):
     ```python
     >>> from transformers import LwDetrConfig, LwDetrModel
 
-    >>> # Initializing a LW-DETR stevenbucaille/lwdetr_small_60e_coco style configuration
+    >>> # Initializing a LW-DETR AnnaZhang/lwdetr_small_60e_coco style configuration
     >>> configuration = LwDetrConfig()
 
-    >>> # Initializing a model (with random weights) from the stevenbucaille/lwdetr_small_60e_coco style configuration
+    >>> # Initializing a model (with random weights) from the AnnaZhang/lwdetr_small_60e_coco style configuration
     >>> model = LwDetrModel(configuration)
 
     >>> # Accessing the model configuration
@@ -308,24 +302,18 @@ class LwDetrConfig(PreTrainedConfig):
     ):
         self.batch_norm_eps = batch_norm_eps
 
-        # backbone
-        if backbone_config is None:
-            logger.info(
-                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `LwDetrViT` backbone."
-            )
-            backbone_config = LwDetrViTConfig(
-                image_size=1024,
-                hidden_size=192,
-                num_hidden_layers=10,
-                num_attention_heads=12,
-                window_block_indices=[0, 1, 3, 6, 7, 9],
-                out_indices=[2, 4, 5, 9],
-                **kwargs,
-            )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.pop("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=backbone_config,
+            default_config_type="lw_detr_vit",
+            default_config_kwargs={
+                "image_size": 1024,
+                "hidden_size": 192,
+                "num_hidden_layers": 10,
+                "window_block_indices": [0, 1, 3, 6, 7, 9],
+                "out_indices": [2, 4, 5, 9],
+            },
+            **kwargs,
+        )
 
         self.backbone_config = backbone_config
         # projector

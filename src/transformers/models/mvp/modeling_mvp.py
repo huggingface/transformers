@@ -38,7 +38,7 @@ from ...modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, logging, torch_compilable_check
 from .configuration_mvp import MvpConfig
 
 
@@ -1299,8 +1299,10 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
-        if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
-            raise ValueError("All examples must have the same number of <eos> tokens.")
+        torch_compilable_check(
+            torch.unique_consecutive(eos_mask.sum(1)).numel() == 1,
+            "All examples must have the same number of <eos> tokens.",
+        )
         sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
             :, -1, :
         ]
@@ -1571,7 +1573,7 @@ class MvpForCausalLM(MvpPreTrainedModel, GenerationMixin):
         >>> from transformers import AutoTokenizer, MvpForCausalLM
 
         >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
-        >>> model = MvpForCausalLM.from_pretrained("RUCAIBox/mvp", add_cross_attention=False)
+        >>> model = MvpForCausalLM.from_pretrained("RUCAIBox/mvp")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

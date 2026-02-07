@@ -34,7 +34,8 @@ from ...modeling_layers import (
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import check_model_inputs
+from ...utils.output_capturing import OutputRecorder
 from ..gemma.modeling_gemma import GemmaMLP
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm
@@ -129,9 +130,9 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
         return expert_output
 
 
-class Qwen2MoeDecoderLayer(LlamaDecoderLayer, nn.Module):
+class Qwen2MoeDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Qwen2MoeConfig, layer_idx: int):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.self_attn = Qwen2MoeAttention(config, layer_idx)
         if (layer_idx not in config.mlp_only_layers) and (
             config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
@@ -235,7 +236,7 @@ class Qwen2MoeModel(MixtralModel):
 
 class Qwen2MoeForCausalLM(MixtralForCausalLM, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):

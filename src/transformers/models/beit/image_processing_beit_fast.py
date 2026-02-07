@@ -16,7 +16,7 @@
 from typing import Optional, Union
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -67,7 +67,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
             label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype), label)
             labels[idx] = label
 
-        return label
+        return labels
 
     @auto_docstring
     def preprocess(
@@ -124,7 +124,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         do_reduce_labels: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

@@ -38,7 +38,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
-from ...utils.generic import maybe_autocast
+from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from ..auto import AutoModel
 from .configuration_kyutai_speech_to_text import KyutaiSpeechToTextConfig
 
@@ -141,17 +141,42 @@ class KyutaiSpeechToTextConv1dPaddingCache:
             raise ValueError(
                 f"Expected `num_layers` ({num_layers}) values in `per_layer_padding`, `per_layer_padding_mode` and `per_layer_in_channels`"
             )
-        elif not all(mode in ["constant", "replicate"] for mode in per_layer_padding_mode):
-            raise NotImplementedError(
-                "`padding_cache` is not supported for convolutions using other than `constant` or `replicate` padding mode"
-            )
 
         self.per_layer_padding = per_layer_padding
         self.per_layer_padding_mode = per_layer_padding_mode
         self.per_layer_in_channels = per_layer_in_channels
-        self.per_layer_is_init = [True] * num_layers
 
         self.padding_cache = [None] * num_layers
+
+    def _cache_init(self, hidden_states: torch.Tensor, layer_idx: int):
+        """
+        Initialize the cache for a specific layer.
+
+        Parameters:
+            hidden_states (`torch.Tensor`):
+                The hidden states to initialize the cache with.
+            layer_idx (`int`):
+                The index of the layer to initialize the cache for.
+        Returns:
+            `torch.Tensor`, the initialized cache.
+        """
+        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
+        padding, padding_mode, in_channels = (
+            self.per_layer_padding[layer_idx],
+            self.per_layer_padding_mode[layer_idx],
+            self.per_layer_in_channels[layer_idx],
+        )
+
+        if padding_mode == "constant":
+            current_cache = torch.zeros(batch_size, in_channels, padding, device=device, dtype=dtype)
+        elif padding_mode == "replicate":
+            current_cache = (
+                torch.ones(batch_size, in_channels, padding, device=device, dtype=dtype) * hidden_states[..., :1]
+            )
+        else:
+            raise NotImplementedError(f"Padding mode {padding_mode} not supported")
+
+        return current_cache
 
     def update(self, hidden_states: torch.Tensor, layer_idx: int):
         """
@@ -166,40 +191,24 @@ class KyutaiSpeechToTextConv1dPaddingCache:
             `torch.Tensor` or `None`, the current padding cache.
         """
         batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
-        padding = self.per_layer_padding[layer_idx]
-        padding_mode = self.per_layer_padding_mode[layer_idx]
-        in_channels = self.per_layer_in_channels[layer_idx]
+        padding, in_channels = self.per_layer_padding[layer_idx], self.per_layer_in_channels[layer_idx]
 
         if self.padding_cache[layer_idx] is None:
-            if padding_mode == "constant":
-                current_cache = torch.zeros(
-                    batch_size,
-                    in_channels,
-                    padding,
-                    device=device,
-                    dtype=dtype,
-                )
-            elif padding_mode == "replicate":
-                current_cache = (
-                    torch.ones(
-                        batch_size,
-                        in_channels,
-                        padding,
-                        device=device,
-                        dtype=dtype,
-                    )
-                    * hidden_states[..., :1]
-                )
+            current_cache = self._cache_init(hidden_states, layer_idx)
         else:
             current_cache = self.padding_cache[layer_idx]
 
         # update the cache
         if padding > 0:
-            padding_states = hidden_states[:, :, -padding:]
+            shortfall = max(0, padding - hidden_states.shape[-1])
+            if shortfall > 0:
+                padding_states = torch.cat([current_cache[:, :, -shortfall:], hidden_states], dim=-1)
+            else:
+                padding_states = hidden_states[:, :, -padding:]
         else:
-            padding_states = torch.empty(batch_size, in_channels, padding, dtype=dtype, device=device)
-        self.padding_cache[layer_idx] = padding_states
+            padding_states = torch.empty(batch_size, in_channels, 0, dtype=dtype, device=device)
 
+        self.padding_cache[layer_idx] = padding_states
         return current_cache
 
 
@@ -362,7 +371,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -370,8 +379,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -594,12 +601,7 @@ class KyutaiSpeechToTextFlashAttention2(KyutaiSpeechToTextAttention):
         device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
-                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
-                target_dtype = (
-                    torch.get_autocast_dtype(device_type)
-                    if hasattr(torch, "get_autocast_dtype")
-                    else torch.get_autocast_gpu_dtype()
-                )
+                target_dtype = torch.get_autocast_dtype(device_type)
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_is_quantized"):
                 target_dtype = self.config.dtype
@@ -691,13 +693,6 @@ class KyutaiSpeechToTextSdpaAttention(KyutaiSpeechToTextAttention):
         causal_mask = attention_mask
         if attention_mask is not None:
             causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
-
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_states.device.type == "cuda" and causal_mask is not None:
-            query_states = query_states.contiguous()
-            key_states = key_states.contiguous()
-            value_states = value_states.contiguous()
 
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
@@ -926,7 +921,7 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool = False,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             if attention_mask is not None and past_key_values is not None:
                 is_padding_right = attention_mask[:, -1].sum().item() != input_tensor.size()[0]
                 if is_padding_right:
@@ -1073,7 +1068,7 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
 @auto_docstring
 class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _keep_in_fp32_modules_strict = ["codec_model"]
     output_modalities = ("audio", "text")
@@ -1213,7 +1208,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         # Add cache-related methods from GenerationMixin to codec model
         cache_methods = [
             "_prepare_cache_for_generation",
-            "_get_cache",
+            "_prepare_static_cache",
         ]
         for method in cache_methods:
             setattr(self.codec_model, method, types.MethodType(getattr(self, method).__func__, self.codec_model))

@@ -26,12 +26,12 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import check_model_inputs
 from .configuration_vitpose_backbone import VitPoseBackboneConfig
 
@@ -155,9 +155,9 @@ class VitPoseBackboneSelfAttention(nn.Module):
         value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
         query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         context_layer, attention_probs = attention_interface(
             self,
@@ -375,10 +375,9 @@ class VitPoseBackbonePreTrainedModel(PreTrainedModel):
     The VitPose backbone useful for downstream tasks.
     """
 )
-class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
+class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
     def __init__(self, config: VitPoseBackboneConfig):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = VitPoseBackboneEmbeddings(config)

@@ -41,6 +41,7 @@ from ...utils import (
     is_torch_flex_attn_available,
     logging,
 )
+from ...utils.generic import is_flash_attention_requested
 from .configuration_gpt_neo import GPTNeoConfig
 
 
@@ -230,12 +231,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         device_type = query.device.type if query.device.type != "mps" else "cpu"
         if query.dtype == torch.float32:
             if torch.is_autocast_enabled():
-                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
-                target_dtype = (
-                    torch.get_autocast_dtype(device_type)
-                    if hasattr(torch, "get_autocast_dtype")
-                    else torch.get_autocast_gpu_dtype()
-                )
+                target_dtype = torch.get_autocast_dtype(device_type)
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_is_quantized"):
                 target_dtype = self.config.dtype
@@ -539,7 +535,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool = False,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None

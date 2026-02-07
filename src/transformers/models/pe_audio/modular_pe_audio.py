@@ -117,7 +117,7 @@ class PeAudioEncoder(PeAudioVideoEncoder):
         input_values: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPooling:
         inputs_embeds, padding_mask = self.embedder(input_values, padding_mask=padding_mask)
         inputs_embeds, attention_mask = self.patch_embedder(inputs_embeds, padding_mask=padding_mask)
 
@@ -220,7 +220,9 @@ class PeAudioModel(PeAudioPreTrainedModel):
         text_audio_embeds = self.text_audio_head(text_audio_embeds)
 
         logits_audio_text = audio_embeds @ text_audio_embeds.T
-        logits_audio_text = logits_audio_text * self.text_audio_logit_scale + self.text_audio_logit_bias
+        logits_audio_text = logits_audio_text * self.text_audio_logit_scale.to(
+            logits_audio_text.device
+        ) + self.text_audio_logit_bias.to(logits_audio_text.device)
 
         loss = None
         if return_loss:

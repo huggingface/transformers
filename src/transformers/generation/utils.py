@@ -42,17 +42,15 @@ from ..dynamic_module_utils import (
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
 from ..masking_utils import create_masks_for_generate
-from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_python import ExtensionsTrie
 from ..utils import (
     ModelOutput,
     TransformersKwargs,
     is_accelerate_available,
-    is_hqq_available,
-    is_optimum_quanto_available,
     is_torchdynamo_exporting,
     logging,
 )
+from ..utils.generic import is_flash_attention_requested
 from .candidate_generator import (
     AssistantVocabTranslatorCache,
     AssistedCandidateGenerator,
@@ -861,11 +859,9 @@ class GenerationMixin(ContinuousMixin):
         if not is_input_ids:
             return default_attention_mask
 
-        is_pad_token_in_inputs = (pad_token_id is not None) and (
-            isin_mps_friendly(elements=inputs_tensor, test_elements=pad_token_id).any()
-        )
+        is_pad_token_in_inputs = (pad_token_id is not None) and (torch.isin(inputs_tensor, pad_token_id).any())
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or ~(
-            isin_mps_friendly(elements=eos_token_id, test_elements=pad_token_id).any()
+            torch.isin(eos_token_id, pad_token_id).any()
         )
         can_infer_attention_mask = is_pad_token_in_inputs * is_pad_token_not_equal_to_eos_token_id
         attention_mask_from_padding = inputs_tensor.ne(pad_token_id).long()
@@ -1772,9 +1768,9 @@ class GenerationMixin(ContinuousMixin):
         """
         # parameterization priority:
         # user-defined kwargs or `generation_config` > `self.generation_config` > global default values
-        # TODO: (raushan) doesn't make sense to allow kwargs and `generation_config`. Should be mutually exclusive!
         # TODO (joao): per-model generation config classes.
 
+        generation_config_provided = generation_config is not None
         if generation_config is None:
             # Users may modify `model.config` to control generation. This is a legacy behavior and is not supported anymore
             if len(self.config._get_generation_parameters()) > 0:
@@ -1809,6 +1805,16 @@ class GenerationMixin(ContinuousMixin):
         # (if we're inside this branch, then it is because we're using default values from the Hub)
         if generation_config.cache_implementation == "hybrid":
             generation_config.cache_implementation = None
+
+        # It doesn't make sense to allow kwargs and `generation_config`, that should be mutually exclusive
+        if generation_config_provided and set(kwargs.keys()) - set(model_kwargs.keys()):
+            generation_kwargs = set(kwargs.keys()) - set(model_kwargs.keys())
+            logger.warning_once(
+                f"Passing `generation_config` together with generation-related "
+                f"arguments=({generation_kwargs}) is deprecated and will be removed in future versions. "
+                "Please pass either a `generation_config` object OR all generation "
+                "parameters explicitly, but not both.",
+            )
 
         # Finally keep output_xxx args in `model_kwargs` so it can be passed to `forward`
         output_attentions = generation_config.output_attentions
@@ -1847,20 +1853,19 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs["cache_position"] = cache_position
         return model_kwargs
 
-    def _get_cache(self, cache_implementation: str, batch_size: int, max_cache_len: int, model_kwargs) -> Cache:
+    def _prepare_static_cache(
+        self, cache_implementation: str, batch_size: int, max_cache_len: int, model_kwargs
+    ) -> Cache:
         """
         Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
         new `generate` call requires a larger cache or uses a different batch size.
 
         Returns the resulting cache object.
         """
-        requires_cross_attention_cache = (
-            self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
-        )
         offload_cache = "offloaded" in cache_implementation
 
         if hasattr(self, "_cache"):
-            cache_to_check = self._cache.self_attention_cache if requires_cross_attention_cache else self._cache
+            cache_to_check = self._cache.self_attention_cache if self.config.is_encoder_decoder else self._cache
 
         need_new_cache = (
             not hasattr(self, "_cache")
@@ -1869,7 +1874,7 @@ class GenerationMixin(ContinuousMixin):
             or cache_to_check.max_cache_len < max_cache_len
         )
 
-        if requires_cross_attention_cache and hasattr(self, "_cache"):
+        if self.config.is_encoder_decoder and hasattr(self, "_cache"):
             need_new_cache = (
                 need_new_cache
                 or self._cache.cross_attention_cache.max_cache_len != model_kwargs["encoder_outputs"][0].shape[1]
@@ -1882,7 +1887,7 @@ class GenerationMixin(ContinuousMixin):
                 "offloading": offload_cache,
             }
             self._cache = StaticCache(**self_attention_cache_kwargs)
-            if requires_cross_attention_cache:
+            if self.config.is_encoder_decoder:
                 cross_attention_cache_kwargs = {
                     "config": self.config.get_text_config(decoder=True),
                     "max_cache_len": model_kwargs["encoder_outputs"][0].shape[1],
@@ -1925,12 +1930,9 @@ class GenerationMixin(ContinuousMixin):
         instantiated, writes it to `model_kwargs`, under the name expected by the model.
         """
 
-        is_hybrid_cache = any(class_name in self.__class__.__name__.lower() for class_name in ["mamba", "falconh1"])
-        cache_name = "past_key_values" if not is_hybrid_cache else "cache_params"
-
-        requires_cross_attention_cache = (
-            self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
-        )
+        # TODO @raushan, unify cache arg naming for all models
+        is_linear_attn_cache = "mamba" in self.__class__.__name__.lower()
+        cache_name = "past_key_values" if not is_linear_attn_cache else "cache_params"
 
         # Quick escape route 1: if the user specifies a cache, we only need to check for conflicting `generate` arguments
         user_defined_cache = model_kwargs.get(cache_name)
@@ -1962,76 +1964,55 @@ class GenerationMixin(ContinuousMixin):
 
         # Otherwise we NEED to prepare a cache, based on `generation_config.cache_implementation`
 
-        # TODO(joao): support static caches in assisted generation. assisted generation needs to roll back caches,
-        # which is only supported in dynamic caches atm
-        if (
-            generation_mode == GenerationMode.ASSISTED_GENERATION
-            and generation_config.cache_implementation is not None
-        ):
-            logger.warning_once(
-                "An assistant model is provided, using a dynamic cache instead of a cache of type="
-                f"'{generation_config.cache_implementation}'."
-            )
-            generation_config.cache_implementation = None
-
         # Assisted decoding and contrastive search require cache rollback, which is incompatible with sliding layers.
         # To handle this, we skip passing the model config to DynamicCache (forcing a full-layer cache).
         # The "dynamic_full" option is a shortcut for generate() users to avoid sliding layers on their own.
-        if (
-            generation_mode in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH)
-            or generation_config.cache_implementation == "dynamic_full"
-        ):
-            dynamic_cache_kwargs = {}
-        else:
-            dynamic_cache_kwargs = {"config": self.config.get_text_config(decoder=True)}
-        if generation_config.cache_implementation is not None:
-            if generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS:
-                if generation_config.cache_implementation in DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS:
-                    logger.warning_once(
-                        f"Using `cache_implementation='{generation_config.cache_implementation}' is deprecated. "
-                        f"Please only use one of {STATIC_CACHE_IMPLEMENTATIONS}, and the layer structure will be "
-                        "inferred automatically."
-                    )
-                model_kwargs[cache_name] = self._get_cache(
-                    cache_implementation=generation_config.cache_implementation,
-                    batch_size=max(generation_config.num_beams, generation_config.num_return_sequences) * batch_size,
-                    max_cache_len=max_cache_length,
-                    model_kwargs=model_kwargs,
+        if generation_mode in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH):
+            if generation_config.cache_implementation is not None:
+                logger.warning_once(
+                    "An assistant model is provided, using a dynamic cache instead of a cache of type="
+                    f"'{generation_config.cache_implementation}'."
                 )
-            elif generation_config.cache_implementation == "quantized":
-                if self.config.is_encoder_decoder or not self._supports_default_dynamic_cache():
-                    raise ValueError(
-                        "This model does not support the quantized cache. If you want your model to support quantized "
-                        "cache, please open an issue and tag @zucchini-nlp."
-                    )
+            generation_config.cache_implementation = "dynamic_full"
 
-                cache_config = generation_config.cache_config if generation_config.cache_config is not None else {}
-                # Add the config if it was not provided, as it's a required argument
-                if "config" not in cache_config:
-                    cache_config["config"] = self.config.get_text_config()
-                # Pop the backend from the config (defaults to quanto if not defined)
-                backend = cache_config.pop("backend", "quanto")
+        dynamic_cache_kwargs = {}
+        if generation_config.cache_implementation != "dynamic_full":
+            dynamic_cache_kwargs["config"] = self.config.get_text_config(decoder=True)
 
-                if backend == "quanto" and not is_optimum_quanto_available():
-                    raise ImportError(
-                        "You need to install optimum-quanto in order to use KV cache quantization with optimum-quanto "
-                        "backend. Please install it via  with `pip install optimum-quanto`"
-                    )
-                elif backend == "HQQ" and not is_hqq_available():
-                    raise ImportError(
-                        "You need to install `HQQ` in order to use KV cache quantization with HQQ backend. "
-                        "Please install it via  with `pip install hqq`"
-                    )
-                model_kwargs[cache_name] = QuantizedCache(backend=backend, **cache_config)
-            elif generation_config.cache_implementation == "offloaded":
-                model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs, offloading=True)
-            elif "dynamic" in generation_config.cache_implementation:
-                model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
+        if generation_config.cache_implementation == "offloaded":
+            dynamic_cache_kwargs["offloading"] = True
 
-        # TODO (joao): this logic is incomplete, e.g. `offloaded` should apply to both caches. Refactor this function
-        # to correctly pass parameterization to both caches.
+        if generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS:
+            if generation_config.cache_implementation in DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS:
+                logger.warning_once(
+                    f"Using `cache_implementation='{generation_config.cache_implementation}' is deprecated "
+                    f"and will be removed in v5.13. Please only use one of {STATIC_CACHE_IMPLEMENTATIONS}, "
+                    "and the layer structure will be inferred automatically."
+                )
+            model_kwargs["past_key_values"] = self._prepare_static_cache(
+                cache_implementation=generation_config.cache_implementation,
+                batch_size=max(generation_config.num_beams, generation_config.num_return_sequences) * batch_size,
+                max_cache_len=max_cache_length,
+                model_kwargs=model_kwargs,
+            )
+        elif generation_config.cache_implementation == "quantized":
+            if self.config.is_encoder_decoder or not self._supports_default_dynamic_cache():
+                raise ValueError(
+                    "This model does not support the quantized cache. If you want your model to support quantized "
+                    "cache, please open an issue and tag @zucchini-nlp."
+                )
+
+            cache_config = generation_config.cache_config if generation_config.cache_config is not None else {}
+            cache_config.setdefault("config", self.config.get_text_config(decoder=True))
+            backend = cache_config.pop("backend", "quanto")
+            model_kwargs["past_key_values"] = QuantizedCache(backend=backend, **cache_config)
+        # i.e. `cache_implementation` in [None, "dynamic", "offloaded", "dynamic_full"]
+        # TODO: prepare linear cache from a single API, instead of creating in modeling code
+        else:
+            model_kwargs["past_key_values"] = DynamicCache(**dynamic_cache_kwargs)
+
         if (
-            requires_cross_attention_cache
+            self.config.is_encoder_decoder
             and "past_key_values" in model_kwargs
             and not isinstance(model_kwargs["past_key_values"], EncoderDecoderCache)
         ):
@@ -2102,10 +2083,7 @@ class GenerationMixin(ContinuousMixin):
             raise ValueError(
                 "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
             )
-        if (
-            eos_token_tensor is not None
-            and isin_mps_friendly(elements=eos_token_tensor, test_elements=pad_token_tensor).any()
-        ):
+        if eos_token_tensor is not None and torch.isin(eos_token_tensor, pad_token_tensor).any():
             if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
                 logger.warning_once(
                     "The attention mask is not set and cannot be inferred from input because pad token is same as "
@@ -2172,13 +2150,13 @@ class GenerationMixin(ContinuousMixin):
             # Finally: if we can compile, disable tokenizers parallelism
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
 
-            # If we use FA2 and a static cache, we cannot compile with fullgraph
-            if self.config._attn_implementation == "flash_attention_2":
+            # If we use FA and a static cache, we cannot compile with fullgraph
+            if is_flash_attention_requested(self.config):
                 # only raise warning if the user passed an explicit compile-config
                 if generation_config.compile_config is not None and generation_config.compile_config.fullgraph:
                     logger.warning_once(
-                        "When using Flash Attention 2 and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
-                        "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
+                        "When using Flash Attention and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
+                        "FA introduces graph breaks. We overrode the option with `fullgraph=False`."
                     )
                     generation_config.compile_config.fullgraph = False
 
@@ -2187,7 +2165,9 @@ class GenerationMixin(ContinuousMixin):
     @contextmanager
     def _optimize_model_for_decode(self):
         original_experts_implementation = self.config._experts_implementation
-        if original_experts_implementation == "grouped_mm":
+        # On non-CPU devices, 'batched_mm' can trade off a bit of memory (by duplicating selected experts weights)
+        # for much better speed during decoding, especially for smaller inputs. On CPU, grouped_mm is usually better.
+        if original_experts_implementation == "grouped_mm" and self.device.type != "cpu":
             logger.info_once(
                 "We will be switching to 'batched_mm' for the decoding stage as it is much more performant than 'grouped_mm' on smaller inputs. "
                 "If you experience any issues with this, please open an issue on the Hugging Face Transformers GitHub repository.",
@@ -2197,7 +2177,7 @@ class GenerationMixin(ContinuousMixin):
         try:
             yield
         finally:
-            if original_experts_implementation == "grouped_mm":
+            if original_experts_implementation == "grouped_mm" and self.device.type != "cpu":
                 self.set_experts_implementation(original_experts_implementation)
 
     def _get_deprecated_gen_repo(

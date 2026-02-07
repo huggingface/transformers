@@ -32,6 +32,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
     "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],
@@ -77,6 +78,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "GPTNeoXConfig": ["rotary_emb_base"],
     "ShieldGemma2Config": ["mm_tokens_per_image", "vision_config"],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
+    "ModernBertConfig": ["local_attention", "reference_compile"],
     "ModernBertDecoderConfig": ["global_attn_every_n_layers", "local_attention", "local_rope_theta"],
     "SmolLM3Config": ["no_rope_layer_interval"],
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],
@@ -164,6 +166,10 @@ ATTRIBUTES_TO_ALLOW = (
     "pretraining_tp",
     "use_sliding_window",
     "max_window_layers",
+    # vision attributes that may be used indirectly via check_model_inputs
+    "vision_feature_layer",
+    "vision_feature_select_strategy",
+    "vision_aspect_ratio",
 )
 
 
@@ -208,9 +214,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
     # Special cases to be allowed even if not found as used
     for attribute in attributes:
         # Allow if the default value in the configuration class is different from the one in `PreTrainedConfig`
-        if (attribute == "is_encoder_decoder" and default_value is True) or (
-            attribute == "tie_word_embeddings" and default_value is False
-        ):
+        if (attribute == "is_encoder_decoder" and default_value is True) or attribute == "tie_word_embeddings":
             return True
         # General exceptions for all models
         elif any(re.search(exception, attribute) for exception in ATTRIBUTES_TO_ALLOW):

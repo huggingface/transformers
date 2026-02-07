@@ -37,6 +37,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.generic import is_flash_attention_requested
 from .configuration_gpt_bigcode import GPTBigCodeConfig
 
 
@@ -219,9 +220,9 @@ class GPTBigCodeAttention(nn.Module):
             if self.is_cross_attention:
                 layer_past.is_updated[self.layer_idx] = True
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -476,7 +477,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             past_key_values=past_key_values,
         )
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             encoder_attention_mask = (
                 encoder_attention_mask.bool()
                 if (encoder_attention_mask is not None and 0 in encoder_attention_mask)

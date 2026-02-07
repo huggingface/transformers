@@ -39,6 +39,7 @@ from ...utils import (
     is_torch_accelerator_available,
     logging,
 )
+from ...utils.generic import is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -473,8 +474,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         batch_size = input_embeds.shape[0]
         seq_length = input_shape[-1]
 
-        device = input_ids.device if input_ids is not None else input_embeds.device
-
         if self.gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
@@ -486,24 +485,32 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             past_key_values = DynamicCache(config=self.config)
 
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        input_embeds = input_embeds.to(self.position_embeds_layer.weight.device)
 
         if position_ids is None:
-            position_ids = torch.arange(past_length, seq_length + past_length, dtype=torch.long, device=device)
+            position_ids = torch.arange(
+                past_length,
+                seq_length + past_length,
+                dtype=torch.long,
+                device=self.position_embeds_layer.weight.device,
+            )
             position_ids = position_ids.unsqueeze(0)  # shape (1, seq_length)
 
+        position_ids = position_ids.to(self.position_embeds_layer.weight.device)
         position_embeds = self.position_embeds_layer(position_ids)  # position embeddings of shape (1, t, n_embd)
 
         # Attention mask.
         if attention_mask is not None:
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
-            if self.config._attn_implementation == "flash_attention_2":
+            if is_flash_attention_requested(self.config):
                 attention_mask = attention_mask if 0 in attention_mask else None
             else:
                 attention_mask = attention_mask.view(batch_size, -1)
                 # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
                 # from_seq_length is 1 to easily broadcast
                 attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
+                attention_mask = attention_mask.to(input_embeds.device)
 
         hidden_states = self.drop(input_embeds + position_embeds)
         output_shape = input_shape + (hidden_states.size(-1),)
@@ -614,9 +621,12 @@ class BarkSemanticModel(BarkCausalModel):
                 mode="constant",
             )
         else:
-            semantic_history = torch.tensor(
-                [semantic_generation_config.semantic_pad_token] * max_input_semantic_length, dtype=torch.int
-            ).to(self.device)
+            semantic_history = torch.full(
+                (max_input_semantic_length,),
+                semantic_generation_config.semantic_pad_token,
+                device=self.device,
+                dtype=torch.int,
+            )
 
         semantic_history = torch.repeat_interleave(semantic_history[None], batch_size, dim=0)
 
@@ -1083,24 +1093,28 @@ class BarkFineModel(BarkPreTrainedModel):
         batch_size = input_embeds.shape[0]
         seq_length = input_shape[1]
 
-        device = input_ids.device if input_ids is not None else input_embeds.device
+        input_embeds = input_embeds.to(self.position_embeds_layer.weight.device)
 
         if position_ids is None:
-            position_ids = torch.arange(0, seq_length, dtype=torch.long, device=device)
+            position_ids = torch.arange(
+                0, seq_length, dtype=torch.long, device=self.position_embeds_layer.weight.device
+            )
             position_ids = position_ids.unsqueeze(0)  # shape (1, seq_length)
 
+        position_ids = position_ids.to(self.position_embeds_layer.weight.device)
         position_embeds = self.position_embeds_layer(position_ids)  # position embeddings of shape (1, t, n_embd)
 
         # Attention mask.
         if attention_mask is not None:
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
-            if self.config._attn_implementation == "flash_attention_2":
+            if is_flash_attention_requested(self.config):
                 attention_mask = attention_mask if 0 in attention_mask else None
             else:
                 # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
                 # from_seq_length is 1 to easily broadcast
                 attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
+                attention_mask = attention_mask.to(input_embeds.device)
 
         hidden_states = self.drop(input_embeds + position_embeds)
         output_shape = input_shape + (hidden_states.size(-1),)

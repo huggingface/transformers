@@ -16,6 +16,7 @@
 import unittest
 
 import numpy as np
+import pytest
 import requests
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
@@ -200,6 +201,10 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
         if is_torch_available()
         else {}
     )
+    # LlavaOnevision merges batch_size and num_patches in the first output dimension
+    skip_test_image_features_output_shape = True
+    # LlavaOnevision merges batch_size and num_frames in the first output dimension
+    skip_test_video_features_output_shape = True
 
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["Siglip2MultiheadAttentionPoolingHead"]
@@ -207,6 +212,7 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
+    test_torch_exportable = False
     _is_composite = True
 
     def setUp(self):
@@ -268,29 +274,43 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
             assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
+
+    def _video_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only video-related inputs from the full set of inputs, for testing `get_video_features`.
+
+        The superclass method will rename "pixel_values" to "pixel_values_videos" automatically, but LlavaOnevision's
+        `get_video_features` uses "pixel_values" as input, so we need to override the inputs accordingly.
+        """
+        pixel_values_videos = floats_tensor(
+            [
+                self.model_tester.batch_size,
+                8,
+                self.model_tester.vision_config["num_channels"],
+                self.model_tester.vision_config["image_size"],
+                self.model_tester.vision_config["image_size"],
+            ]
+        )
+        config = self.model_tester.get_config()
+        inputs_dict = {"pixel_values": pixel_values_videos}
+        return config, inputs_dict
 
 
 @require_torch
@@ -335,7 +355,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("xpu", 3): 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VQAv2," "MM-Vet," "LLaVA-Bench," "LLaVA-1',
+                ("xpu", 3): 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VIZ," "TextVQA," "SQA-IMG," and "MQE." The radar chart shows',
                 ("cuda", 7): 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VQAv2," "MM-Vet," "LLaVA-Bench," "LLaVA-1',
                 ("cuda", 8): 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VIZ," "TextVQA," "SQA-IMG," and "MQE." The radar chart shows',
             }
@@ -463,8 +483,8 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
                     ],
                 ("xpu", 3): [
                     "user\nTell me about the french revolution.\nassistant\nThe French Revolution! A pivotal event in modern history that had a profound impact on the course of Western civilization. Here's a brief overview:\n\n**Background**\n\nIn the late 18th century,",
-                    'user\n\nWhat is the difference between these images?\nassistant\nThe image shows a traffic light with a stop sign in the foreground, while the other images show a car driving through a street intersection.',
-                    'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that represents the performance of different machine learning models in terms of their ability to predict the number of users who have been infected with COVID-19. The radar chart is'
+                    "user\n\nWhat is the difference between these images?\nassistant\nThe first image shows a stop sign with a traditional Chinese architectural background, while the second image displays a radar chart with various algorithms and models, including BLIP-2, InstructBLIP, Q",
+                    "user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different"
                     ],
             }
         )

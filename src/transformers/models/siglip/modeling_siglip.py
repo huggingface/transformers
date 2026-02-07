@@ -13,7 +13,6 @@
 # limitations under the License.
 """PyTorch Siglip model."""
 
-import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -21,7 +20,6 @@ from typing import Any
 import numpy as np
 import torch
 from torch import nn
-from torch.nn.init import _calculate_fan_in_and_fan_out
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -35,41 +33,10 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    filter_out_non_signature_kwargs,
     torch_int,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, is_flash_attention_requested
 from .configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
-
-
-def variance_scaling_(tensor, mode="fan_in", distribution="normal"):
-    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
-    if mode == "fan_in":
-        denom = fan_in
-    elif mode == "fan_out":
-        denom = fan_out
-    elif mode == "fan_avg":
-        denom = (fan_in + fan_out) / 2
-
-    variance = 1.0 / denom
-
-    if distribution == "truncated_normal":
-        init.trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
-    elif distribution == "normal":
-        init.normal_(tensor, std=math.sqrt(variance))
-    elif distribution == "uniform":
-        bound = math.sqrt(3 * variance)
-        init.uniform_(tensor, -bound, bound)
-    else:
-        raise ValueError(f"invalid distribution {distribution}")
-
-
-def lecun_normal_(tensor):
-    variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
-
-
-def default_flax_embed_init(tensor):
-    variance_scaling_(tensor, mode="fan_in", distribution="normal")
 
 
 @dataclass
@@ -325,9 +292,9 @@ class SiglipAttention(nn.Module):
         keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -432,7 +399,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
             if hasattr(module, "position_ids"):
                 init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, nn.Embedding):
-            default_flax_embed_init(module.weight)
+            init.default_flax_embed_init_(module.weight)
         elif isinstance(module, SiglipAttention):
             init.xavier_uniform_(module.q_proj.weight)
             init.xavier_uniform_(module.k_proj.weight)
@@ -460,7 +427,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
                 std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
             )
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            lecun_normal_(module.weight)
+            init.lecun_normal_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
@@ -538,7 +505,7 @@ class SiglipTextTransformer(SiglipPreTrainedModel):
 
         # note: SigLIP's text model does not use a causal mask, unlike the original CLIP model.
         # expand attention_mask
-        uses_flash_attention = "flash" in self.config._attn_implementation
+        uses_flash_attention = is_flash_attention_requested(self.config)
         if uses_flash_attention:
             attention_mask = None
         elif attention_mask is not None and not uses_flash_attention:
@@ -621,10 +588,6 @@ class SiglipTextModel(SiglipPreTrainedModel):
 
 class SiglipVisionTransformer(SiglipPreTrainedModel):
     _input_embed_layer = "patch_embedding"
-    _can_record_outputs = {
-        "hidden_states": SiglipEncoderLayer,
-        "attentions": SiglipAttention,
-    }
 
     def __init__(self, config: SiglipVisionConfig):
         super().__init__(config)
@@ -640,7 +603,6 @@ class SiglipVisionTransformer(SiglipPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -724,14 +686,16 @@ class SiglipVisionModel(SiglipPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, SiglipVisionModel
 
         >>> model = SiglipVisionModel.from_pretrained("google/siglip-base-patch16-224")
         >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -789,19 +753,16 @@ class SiglipModel(SiglipPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.text_model.embeddings.token_embedding = value
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`SiglipTextModel`].
-
         Examples:
 
         ```python
@@ -816,28 +777,22 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> with torch.no_grad():
         ...     text_features = model.get_text_features(**inputs)
         ```"""
-        text_outputs: BaseModelOutputWithPooling = self.text_model(
+        return self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            **kwargs,
         )
-        pooled_output = text_outputs.pooler_output
 
-        return pooled_output
-
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`SiglipVisionModel`].
-
         Examples:
 
         ```python
@@ -856,14 +811,11 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> with torch.no_grad():
         ...     image_features = model.get_image_features(**inputs)
         ```"""
-        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
+        return self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
             **kwargs,
         )
-        pooled_output = vision_outputs.pooler_output
-
-        return pooled_output
 
     # NOTE: SiglipModel uses Pretrained backbones, so we don't need to add `check_model_inputs` here
     @can_return_tuple
@@ -886,7 +838,8 @@ class SiglipModel(SiglipPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, AutoModel
         >>> import torch
 
@@ -894,7 +847,8 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> texts = ["a photo of 2 cats", "a photo of 2 dogs"]
         >>> # important: we pass `padding=max_length` since the model was trained with this
@@ -1011,11 +965,13 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
         >>> from transformers import AutoImageProcessor, SiglipForImageClassification
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> # note: we are loading a `SiglipModel` from the hub here,
         >>> # so the head will be randomly initialized, hence the predictions will be random if seed is not set above.

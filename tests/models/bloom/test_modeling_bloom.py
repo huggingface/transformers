@@ -544,7 +544,7 @@ class BloomIntegrationTest(unittest.TestCase):
 
         input_sentence = ["I enjoy walking with my cute dog", "I enjoy walking with my cute dog"]
 
-        inputs = tokenizer.batch_encode_plus(input_sentence, return_tensors="pt", padding=True)
+        inputs = tokenizer(input_sentence, return_tensors="pt", padding=True)
         input_ids = inputs["input_ids"].to(torch_device)
         attention_mask = inputs["attention_mask"]
         greedy_output = model.generate(input_ids, attention_mask=attention_mask, max_length=50, do_sample=False)
@@ -565,7 +565,7 @@ class BloomIntegrationTest(unittest.TestCase):
         input_sentence = ["I enjoy walking with my cute dog", "Hello my name is"]
         input_sentence_without_pad = "Hello my name is"
 
-        input_ids = tokenizer.batch_encode_plus(input_sentence, return_tensors="pt", padding=True)
+        input_ids = tokenizer(input_sentence, return_tensors="pt", padding=True)
         input_ids_without_pad = tokenizer.encode(input_sentence_without_pad, return_tensors="pt")
 
         input_ids, attention_mask = input_ids["input_ids"].to(torch_device), input_ids["attention_mask"]
