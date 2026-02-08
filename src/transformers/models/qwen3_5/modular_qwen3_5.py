@@ -60,7 +60,7 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
     This is the configuration class to store the configuration of a [`Qwen3_5TextModel`]. It is used to instantiate a
     Qwen3_5 model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of
-    Qwen3.5-9B-Instruct [Qwen/Qwen3_5-9B-Instruct](https://huggingface.co/Qwen/Qwen3.5-9B-Instruct).
+    Qwen3.5-9B-Instruct [Qwen/Qwen3.5-9B-Instruct](https://huggingface.co/Qwen/Qwen3.5-9B-Instruct).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
