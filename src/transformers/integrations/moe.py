@@ -184,6 +184,11 @@ def _grouped_linear(
     Returns:
         `torch.Tensor`: Output tensor of shape (S, output_dim).
     """
+    # torch._grouped_mm is not autocast-enabled, so we need to ensure dtype compatibility manually.
+    # Cast input to match weight dtype to avoid dtype mismatch errors.
+    if input.dtype != weight.dtype:
+        input = input.to(weight.dtype)
+
     if is_transposed:
         # (S, input_dim) @ grouped (num_experts, input_dim, output_dim) -> (S, output_dim)
         out = torch._grouped_mm(input, weight, offs=offs)
