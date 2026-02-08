@@ -266,15 +266,15 @@ class Qwen3_5MoeVisionText2TextModelTester:
             "rope_theta": 10000,
             "tie_word_embeddings": True,
             "rope_parameters": {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
-            "linear_conv_kernel_dim" : 2,
-            "linear_key_head_dim" : 16,
-            "linear_value_head_dim" : 16,
-            "linear_num_key_heads" : 4,
-            "linear_num_value_heads" : 8,
-            "moe_intermediate_size" : 16,
-            "shared_expert_intermediate_size" : 36,
-            "num_experts_per_tok" : 2,
-            "num_experts" : 8,
+            "linear_conv_kernel_dim": 2,
+            "linear_key_head_dim": 16,
+            "linear_value_head_dim": 16,
+            "linear_num_key_heads": 4,
+            "linear_num_value_heads": 8,
+            "moe_intermediate_size": 16,
+            "shared_expert_intermediate_size": 36,
+            "num_experts_per_tok": 2,
+            "num_experts": 8,
         },
         vision_config={
             "depth": 2,
@@ -447,7 +447,9 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), sum(layer == "full_attention" for layer in config.text_config.layer_types))
+            self.assertEqual(
+                len(attentions), sum(layer == "full_attention" for layer in config.text_config.layer_types)
+            )
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -458,8 +460,12 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), sum(layer == "full_attention" for layer in config.text_config.layer_types))
-            self.assertListEqual(list(attentions[0].shape[-3:]), [config.text_config.num_attention_heads, seq_len, seq_len])
+            self.assertEqual(
+                len(attentions), sum(layer == "full_attention" for layer in config.text_config.layer_types)
+            )
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]), [config.text_config.num_attention_heads, seq_len, seq_len]
+            )
             out_len = len(outputs)
 
             # Check attention is always last and order is fine
@@ -473,8 +479,12 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 self_attentions = outputs.attentions
 
             self.assertEqual(out_len + 1, len(outputs))
-            self.assertEqual(len(self_attentions), sum(layer == "full_attention" for layer in config.text_config.layer_types))
-            self.assertListEqual(list(self_attentions[0].shape[-3:]), [config.text_config.num_attention_heads, seq_len, seq_len])
+            self.assertEqual(
+                len(self_attentions), sum(layer == "full_attention" for layer in config.text_config.layer_types)
+            )
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]), [config.text_config.num_attention_heads, seq_len, seq_len]
+            )
 
     @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
     def test_multi_gpu_data_parallel_forward(self):
