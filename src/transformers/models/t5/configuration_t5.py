@@ -140,7 +140,7 @@ class T5Config(PreTrainedConfig):
         # The model code was relying on saved configs where `tie_word_embeddings` is
         # set to `False` in 1.1v and using it as indicator of whether to scale or not
         # But in fact we tie weights always and force it to be `True`
-        self.scale_decoder_outputs = kwargs.get("tie_word_embeddings") is not False
+        self.scale_decoder_outputs = tie_word_embeddings is True
         self.tie_word_embeddings = True
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)

@@ -27,6 +27,7 @@ from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .generation.configuration_utils import GenerationConfig
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+from .modeling_rope_utils import RotaryEmbeddingConfigMixin
 from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
@@ -53,7 +54,7 @@ _FLOAT_TAG_KEY = "__float__"
 _FLOAT_TAG_VALUES = {"Infinity": float("inf"), "-Infinity": float("-inf"), "NaN": float("nan")}
 
 
-class PreTrainedConfig(PushToHubMixin):
+class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     # no-format
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
@@ -541,8 +542,11 @@ class PreTrainedConfig(PushToHubMixin):
             # raise warning only if we still can't see a match in `model_type`
             if config_dict["model_type"] != cls.model_type:
                 logger.warning(
-                    f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                    f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+                    f"You are using a model of type `{config_dict['model_type']}` to instantiate a model of type "
+                    f"`{cls.model_type}`. This may be expected if you are loading a checkpoint that shares a subset "
+                    f"of the architecture (e.g., loading a `sam2_video` checkpoint into `Sam2Model`), but is otherwise "
+                    f"not supported and can yield errors. Please verify that the checkpoint is compatible with the "
+                    f"model you are instantiating."
                 )
 
         return cls.from_dict(config_dict, **kwargs)

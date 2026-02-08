@@ -22,8 +22,6 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
-
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -31,6 +29,8 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.generic import TransformersKwargs, check_model_inputs
+from ...utils.output_capturing import OutputRecorder
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
@@ -248,9 +248,9 @@ class SamAttention(nn.Module):
         value = self._separate_heads(value, self.num_attention_heads)
 
         # SamAttention
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,

@@ -37,11 +37,11 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 from ...utils.generic import check_model_inputs
 from ...video_utils import VideoInput
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig
 from ..qwen2_vl.modeling_qwen2_vl import (
     PatchEmbed,
     PatchMerger,
-    Qwen2RMSNorm,
     Qwen2VLCausalLMOutputWithPast,
     Qwen2VLForConditionalGeneration,
     Qwen2VLModel,
@@ -106,6 +106,10 @@ class Qwen2_5_VLConfig(Qwen2VLConfig):
     sub_configs = {"vision_config": Qwen2_5_VLVisionConfig, "text_config": Qwen2_5_VLTextConfig}
 
 
+class Qwen2_5_VLRMSNorm(LlamaRMSNorm):
+    pass
+
+
 class Qwen2_5_VLMLP(nn.Module):
     def __init__(self, config, bias: bool = False):
         super().__init__()
@@ -131,7 +135,7 @@ class Qwen2_5_VisionRotaryEmbedding(VisionRotaryEmbedding):
 class Qwen2_5_VLPatchMerger(PatchMerger):
     def __init__(self, dim: int, context_dim: int, spatial_merge_size: int = 2) -> None:
         super().__init__(dim, context_dim, spatial_merge_size)
-        self.ln_q = Qwen2RMSNorm(context_dim, eps=1e-6)
+        self.ln_q = Qwen2_5_VLRMSNorm(context_dim, eps=1e-6)
 
 
 class Qwen2_5_VLVisionAttention(VisionAttention):
@@ -143,8 +147,8 @@ class Qwen2_5_VLVisionAttention(VisionAttention):
 class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
-        self.norm1 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
-        self.norm2 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
+        self.norm1 = Qwen2_5_VLRMSNorm(config.hidden_size, eps=1e-6)
+        self.norm2 = Qwen2_5_VLRMSNorm(config.hidden_size, eps=1e-6)
         self.attn = Qwen2_5_VLVisionAttention(config=config)
         self.mlp = Qwen2_5_VLMLP(config, bias=True)
 

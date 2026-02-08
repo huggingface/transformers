@@ -52,6 +52,7 @@ from transformers import (
     set_seed,
 )
 from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
+from transformers.integrations.neftune import activate_neftune
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     TOKEN,
@@ -108,6 +109,8 @@ from transformers.trainer_utils import (
     HPSearchBackend,
     check_target_module_exists,
     get_last_checkpoint,
+    rotate_checkpoints,
+    sort_checkpoints,
 )
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
@@ -1687,7 +1690,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
-        trainer.model = trainer._activate_neftune(trainer.model)
+        activate_neftune(trainer.model, trainer.args.neftune_noise_alpha)
 
         dummy_input = torch.LongTensor([[1, 0, 1]]).to(torch_device)
 
@@ -3470,6 +3473,49 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # We should be back to 14 again, picking up based upon the last ran Trainer
         self.assertEqual(trainer._train_batch_size, previous_batch_size)
 
+    def test_resume_training_with_different_batch_size(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/43708
+        # When resuming from checkpoint without auto_find_batch_size, user's new batch size should be used
+        train_dataset = RegressionDataset(length=64)
+
+        config = RegressionModelConfig(a=0, b=2)
+        model = RegressionRandomPreTrainedModel(config)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+
+        # First training run with batch_size=2
+        args = RegressionTrainingArguments(
+            tmp_dir,
+            do_train=True,
+            max_steps=2,
+            save_steps=1,
+            per_device_train_batch_size=2,
+            auto_find_batch_size=False,
+        )
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.train()
+
+        # Verify the checkpoint saved with batch_size=2
+        checkpoint = os.path.join(tmp_dir, "checkpoint-1")
+        state = TrainerState.load_from_json(os.path.join(checkpoint, "trainer_state.json"))
+        self.assertEqual(state.train_batch_size, 2)
+
+        # Resume with a different batch_size=4 (without auto_find_batch_size)
+        # The trainer should use the new batch_size, not the checkpoint's
+        args2 = RegressionTrainingArguments(
+            tmp_dir,
+            do_train=True,
+            max_steps=4,
+            save_steps=1,
+            per_device_train_batch_size=4,
+            auto_find_batch_size=False,
+        )
+        trainer2 = Trainer(model, args2, train_dataset=train_dataset)
+        trainer2.train(resume_from_checkpoint=checkpoint)
+
+        # The trainer should be using the new batch size (4), not the checkpoint's (2)
+        self.assertEqual(trainer2._train_batch_size, 4 * max(trainer2.args.n_gpu, 1))
+
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):
         train_dataset = RegressionDataset(length=128)
@@ -3945,11 +3991,38 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.assertTrue(isinstance(trainer.state.total_flos, float))
 
+    def test_checkpoint_sorting(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Create fake checkpoints in non-sorted order
+            for n in [20, 5, 15, 25, 10]:
+                os.makedirs(os.path.join(tmp_dir, f"{PREFIX_CHECKPOINT_DIR}-{n}"))
+
+            # Test sorting by step number (oldest first)
+            sorted_cps = sort_checkpoints(tmp_dir)
+            values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in sorted_cps]
+            self.assertEqual(values, [5, 10, 15, 20, 25])
+
+            # Test with best_model_checkpoint - moved to second-to-last to protect from deletion
+            best = os.path.join(tmp_dir, f"{PREFIX_CHECKPOINT_DIR}-5")
+            sorted_cps = sort_checkpoints(tmp_dir, best_model_checkpoint=best)
+            values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in sorted_cps]
+            self.assertEqual(values, [10, 15, 20, 5, 25])
+
+            # Test with best_model_checkpoint already at end (stays at end)
+            best = os.path.join(tmp_dir, f"{PREFIX_CHECKPOINT_DIR}-25")
+            sorted_cps = sort_checkpoints(tmp_dir, best_model_checkpoint=best)
+            values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in sorted_cps]
+            self.assertEqual(values, [5, 10, 15, 20, 25])
+
     def check_checkpoint_deletion(self, trainer, output_dir, expected):
         # Make fake checkpoints
         for n in [5, 10, 15, 20, 25]:
             os.makedirs(os.path.join(output_dir, f"{PREFIX_CHECKPOINT_DIR}-{n}"), exist_ok=True)
-        trainer._rotate_checkpoints(output_dir=output_dir)
+        rotate_checkpoints(
+            output_dir=output_dir,
+            save_total_limit=trainer.args.save_total_limit,
+            best_model_checkpoint=trainer.state.best_model_checkpoint,
+        )
         glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{PREFIX_CHECKPOINT_DIR}-*")]
         values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in glob_checkpoints]
         self.assertSetEqual(set(values), set(expected))

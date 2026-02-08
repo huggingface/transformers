@@ -113,7 +113,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("emu3", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("ernie", "BertTokenizer" if is_tokenizers_available() else None),
         ("esm", "EsmTokenizer"),
-        ("exaone4", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("falcon_mamba", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("fastspeech2_conformer", "FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None),
         ("flaubert", "FlaubertTokenizer"),
@@ -646,12 +645,15 @@ class AutoTokenizer:
             != tokenizer_config_class.replace("Fast", "")
         ):
             # new model, but we ignore it unless the model type is the same
-            try:
-                return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-            except Exception:
-                return tokenizer_class_from_name(tokenizer_config_class).from_pretrained(
-                    pretrained_model_name_or_path, *inputs, **kwargs
-                )
+            if TokenizersBackend is not None:
+                try:
+                    return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                except Exception as e:
+                    logger.debug(f"Failed to use TokenizersBackend: {e}")
+
+            return tokenizer_class_from_name(tokenizer_config_class).from_pretrained(
+                pretrained_model_name_or_path, *inputs, **kwargs
+            )
 
         if "_commit_hash" in tokenizer_config:
             kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]

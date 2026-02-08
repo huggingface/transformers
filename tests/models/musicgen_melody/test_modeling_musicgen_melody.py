@@ -1170,7 +1170,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # for stochastic sampling we can generate multiple outputs
         unconditional_inputs = self.processor.get_unconditional_inputs(num_samples=2).to(torch_device)
 
-        set_seed(0)
+        set_seed(42)
 
         output_values = model.generate(
             **unconditional_inputs, do_sample=True, max_new_tokens=10, guidance_scale=1.0, temperature=1.0, top_k=250
@@ -1254,7 +1254,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         input_ids = inputs.input_ids.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
 
-        set_seed(0)
+        set_seed(42)
         output_values = model.generate(
             input_ids,
             attention_mask=attention_mask,

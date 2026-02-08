@@ -20,10 +20,9 @@
 
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 
 
-class CwmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class CwmConfig(PreTrainedConfig):
     """
     Configuration for Code World Model (CWM).
     This is an inherited Llama3-compatible configuration with layer-interleaved

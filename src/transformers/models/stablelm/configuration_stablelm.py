@@ -14,14 +14,14 @@
 """StableLM model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class StableLmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class StableLmConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~StableLmModel`].
     It is used to instantiate an StableLM model according to the specified arguments, defining the model
@@ -87,6 +87,8 @@ class StableLmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             The id of the `BOS` token in the vocabulary.
         eos_token_id (int, *optional*, defaults to 0):
             The id of the `EOS` token in the vocabulary.
+        pad_token_id (int, *optional*):
+            The id of the `PAD` token in the vocabulary.
 
     Example:
 
@@ -122,6 +124,7 @@ class StableLmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         attention_dropout: float | None = 0.0,
         bos_token_id: int | None = 0,
         eos_token_id: int | None = 0,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -147,6 +150,7 @@ class StableLmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
         self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 

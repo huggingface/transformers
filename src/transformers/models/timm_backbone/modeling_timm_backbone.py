@@ -17,10 +17,10 @@ import torch
 from torch import Tensor, nn
 
 from ... import initialization as init
+from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_timm_available, requires_backends
-from ...utils.backbone_utils import BackboneMixin
 from .configuration_timm_backbone import TimmBackboneConfig
 
 
@@ -28,7 +28,7 @@ if is_timm_available():
     import timm
 
 
-class TimmBackbone(PreTrainedModel, BackboneMixin):
+class TimmBackbone(BackboneMixin, PreTrainedModel):
     """
     Wrapper class for timm models to be used as backbones. This enables using the timm models interchangeably with the
     other models in the library keeping the same API.
@@ -41,8 +41,6 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
 
     def __init__(self, config, **kwargs):
         requires_backends(self, "timm")
-        super().__init__(config)
-        self.config = config
 
         if config.backbone is None:
             raise ValueError("backbone is not set in the config. Please set it to a timm model name.")
@@ -50,25 +48,29 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         if hasattr(config, "out_features") and config.out_features is not None:
             raise ValueError("out_features is not supported by TimmBackbone. Please use out_indices instead.")
 
-        pretrained = getattr(config, "use_pretrained_backbone", None)
-        if pretrained is None:
-            raise ValueError("use_pretrained_backbone is not set in the config. Please set it to True or False.")
-
         # We just take the final layer by default. This matches the default for the transformers models.
         out_indices = config.out_indices if getattr(config, "out_indices", None) is not None else (-1,)
-
+        pretrained = kwargs.pop("pretrained", False)
         in_chans = kwargs.pop("in_chans", config.num_channels)
-        self._backbone = timm.create_model(
+
+        backbone = timm.create_model(
             config.backbone,
             pretrained=pretrained,
             # This is currently not possible for transformer architectures.
             features_only=config.features_only,
             in_chans=in_chans,
             out_indices=out_indices,
+            output_stride=config.output_stride,
             **kwargs,
         )
 
-        # Converts all `BatchNorm2d` and `SyncBatchNorm` or `BatchNormAct2d` and `SyncBatchNormAct2d` layers of provided module into `FrozenBatchNorm2d` or `FrozenBatchNormAct2d` respectively
+        # Needs to be called after creating timm model, because `super()` will try to infer
+        # `stage_names` from model architecture
+        super().__init__(config, timm_backbone=backbone)
+        self._backbone = backbone
+
+        # Converts all `BatchNorm2d` and `SyncBatchNorm` or `BatchNormAct2d` and `SyncBatchNormAct2d` layers of
+        # provided module into `FrozenBatchNorm2d` or `FrozenBatchNormAct2d` respectively
         if getattr(config, "freeze_batch_norm_2d", False):
             self.freeze_batch_norm_2d()
 
@@ -78,7 +80,6 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
             layer["module"]: str(layer["index"]) for layer in self._backbone.feature_info.get_dicts()
         }
         self._all_layers = {layer["module"]: str(i) for i, layer in enumerate(self._backbone.feature_info.info)}
-        super()._init_backbone(config)
 
         self.post_init()
 
@@ -87,23 +88,16 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         requires_backends(cls, ["vision", "timm"])
 
         config = kwargs.pop("config", TimmBackboneConfig())
-
-        use_timm = kwargs.pop("use_timm_backbone", True)
-        if not use_timm:
-            raise ValueError("use_timm_backbone must be True for timm backbones")
-
         num_channels = kwargs.pop("num_channels", config.num_channels)
         features_only = kwargs.pop("features_only", config.features_only)
-        use_pretrained_backbone = kwargs.pop("use_pretrained_backbone", config.use_pretrained_backbone)
         out_indices = kwargs.pop("out_indices", config.out_indices)
         config = TimmBackboneConfig(
             backbone=pretrained_model_name_or_path,
             num_channels=num_channels,
             features_only=features_only,
-            use_pretrained_backbone=use_pretrained_backbone,
             out_indices=out_indices,
         )
-        return super()._from_config(config, **kwargs)
+        return super()._from_config(config, pretrained=True, **kwargs)
 
     def freeze_batch_norm_2d(self):
         timm.utils.model.freeze_batch_norm_2d(self._backbone)
@@ -118,10 +112,6 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         if hasattr(module, "init_non_persistent_buffers"):
             module.init_non_persistent_buffers()
         elif isinstance(module, nn.BatchNorm2d):
-            # Skip initialization if using pretrained backbone - buffers are already loaded from checkpoint
-            if self.config.use_pretrained_backbone:
-                return
-
             # For non-pretrained models, always initialize buffers (handles both meta device and to_empty() cases)
             running_mean = getattr(module, "running_mean", None)
             if running_mean is not None:
