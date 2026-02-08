@@ -1345,7 +1345,7 @@ class PipelineRegistry:
             targeted_task = self.supported_tasks[task]
             return task, targeted_task, None
 
-        if task.startswith("translation"):
+        if "translation" in self.supported_tasks and task.startswith("translation"):
             tokens = task.split("_")
             if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
                 targeted_task = self.supported_tasks["translation"]
@@ -1354,7 +1354,7 @@ class PipelineRegistry:
             raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
 
         raise KeyError(
-            f"Unknown task {task}, available tasks are {self.get_supported_tasks() + ['translation_XX_to_YY']}"
+            f"Unknown task {task}, available tasks are {self.get_supported_tasks() + (['translation_XX_to_YY'] if 'translation' in self.supported_tasks else [])}."
         )
 
     def register_pipeline(
