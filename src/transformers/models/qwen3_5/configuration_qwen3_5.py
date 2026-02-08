@@ -86,6 +86,12 @@ class Qwen3_5TextConfig(PreTrainedConfig):
             Number of value heads used in linear attention layers.
         layer_types (`list[str]`, *optional*):
             Types of each layer (attention or linear).
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3_5TextModel, Qwen3_5TextConfig
@@ -152,10 +158,9 @@ class Qwen3_5TextConfig(PreTrainedConfig):
         pad_token_id: int | None = None,
         bos_token_id: int | None = None,
         eos_token_id: int | None = None,
-        ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
         **kwargs,
     ):
-        kwargs["ignore_keys_at_rope_validation"] = ignore_keys_at_rope_validation
+        kwargs["ignore_keys_at_rope_validation"] = {"mrope_section", "mrope_interleaved"}
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
@@ -279,10 +284,10 @@ class Qwen3_5Config(PreTrainedConfig):
         self,
         text_config=None,
         vision_config=None,
-        image_token_id=151655,
-        video_token_id=151656,
-        vision_start_token_id=151652,
-        vision_end_token_id=151653,
+        image_token_id=248056,
+        video_token_id=248057,
+        vision_start_token_id=248053,
+        vision_end_token_id=248054,
         tie_word_embeddings=False,
         **kwargs,
     ):

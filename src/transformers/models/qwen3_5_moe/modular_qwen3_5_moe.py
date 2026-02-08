@@ -130,6 +130,12 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
             The aux loss factor for the total loss.
         layer_types (`list[str]`, *optional*):
             Types of each layer (attention or linear).
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3_5MoeTextModel, Qwen3_5MoeTextConfig
@@ -180,10 +186,9 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
         pad_token_id: int | None = None,
         bos_token_id: int | None = None,
         eos_token_id: int | None = None,
-        ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
         **kwargs,
     ):
-        kwargs["ignore_keys_at_rope_validation"] = ignore_keys_at_rope_validation
+        kwargs["ignore_keys_at_rope_validation"] = {"mrope_section", "mrope_interleaved"}
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
@@ -240,6 +245,28 @@ class Qwen3_5MoeConfig(Qwen3VLConfig):
 
     model_type = "qwen3_5_moe"
     sub_configs = {"vision_config": Qwen3_5MoeVisionConfig, "text_config": Qwen3_5MoeTextConfig}
+
+    def __init__(
+        self,
+        text_config=None,
+        vision_config=None,
+        image_token_id=248056,
+        video_token_id=248057,
+        vision_start_token_id=248053,
+        vision_end_token_id=248054,
+        tie_word_embeddings=False,
+        **kwargs,
+    ):
+        super().__init__(
+            text_config=text_config,
+            vision_config=vision_config,
+            image_token_id=image_token_id,
+            video_token_id=video_token_id,
+            vision_start_token_id=vision_start_token_id,
+            vision_end_token_id=vision_end_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
 
 class Qwen3_5MoeVisionRotaryEmbedding(Qwen3_5VisionRotaryEmbedding):
