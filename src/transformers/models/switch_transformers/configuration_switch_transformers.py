@@ -148,13 +148,17 @@ class SwitchTransformersConfig(PreTrainedConfig):
         if self.num_sparse_encoder_layers > 0:
             self.encoder_sparse_step = self.num_layers // self.num_sparse_encoder_layers
         else:
-            self.encoder_sparse_step = self.num_layers  # HACK: this will create 0 sparse layers
+            # Set to 0 to disable sparse layers. The modeling code checks `if sparse_step > 0`
+            # to determine whether to create sparse layers.
+            self.encoder_sparse_step = 0
 
-        # This tells us, each how many encoder layer we'll have to set a sparse layer.
+        # This tells us, each how many decoder layer we'll have to set a sparse layer.
         if self.num_sparse_decoder_layers > 0:
             self.decoder_sparse_step = self.num_decoder_layers // self.num_sparse_decoder_layers
         else:
-            self.decoder_sparse_step = self.num_decoder_layers  # HACK: this will create 0 sparse layers
+            # Set to 0 to disable sparse layers. The modeling code checks `if sparse_step > 0`
+            # to determine whether to create sparse layers.
+            self.decoder_sparse_step = 0
 
         self.num_heads = num_heads
         self.num_experts = num_experts
