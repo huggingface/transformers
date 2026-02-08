@@ -191,8 +191,6 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         attention_dropout: float | None = 0.0,
         first_k_dense_replace: int | None = 3,
         index_topk: int | None = 2048,
-        index_head_dim: int | None = 128,
-        index_n_heads: int | None = 32,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -215,8 +213,6 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         self.num_key_value_heads = num_key_value_heads
         self.initializer_range = initializer_range
         self.index_topk = index_topk
-        self.index_head_dim = index_head_dim
-        self.index_n_heads = index_n_heads
         self.mlp_layer_types = mlp_layer_types
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
