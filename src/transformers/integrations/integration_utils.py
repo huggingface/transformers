@@ -210,6 +210,10 @@ def is_swanlab_available():
     return importlib.util.find_spec("swanlab") is not None
 
 
+def is_pluto_available():
+    return importlib.util.find_spec("pluto") is not None
+
+
 def hp_params(trial):
     if is_optuna_available():
         import optuna
@@ -539,6 +543,8 @@ def get_available_reporting_integrations():
         integrations.append("swanlab")
     if is_trackio_available():
         integrations.append("trackio")
+    if is_pluto_available():
+        integrations.append("pluto")
     return integrations
 
 
@@ -2346,6 +2352,94 @@ class SwanLabCallback(TrainerCallback):
             self._swanlab.log(metrics)
 
 
+class PlutoCallback(TrainerCallback):
+    """
+    A [`TrainerCallback`] that sends the logs to [Pluto](https://pluto.trainy.ai/).
+
+    **Requires**:
+    ```bash
+    pip install pluto-ml
+    ```
+    """
+
+    def __init__(self):
+        if not is_pluto_available():
+            raise RuntimeError("PlutoCallback requires the pluto client library. Run `pip install pluto-ml`.")
+        import pluto
+
+        self._pluto = pluto
+        self._initialized = False
+
+    def setup(self, args, state, model, **kwargs):
+        """
+        Setup the optional Pluto integration.
+
+        Environment:
+        - **PLUTO_API_KEY** (`str`, *optional*):
+            API key for authenticating with the Pluto server.
+        - **PLUTO_PROJECT** (`str`, *optional*):
+            Project name to log runs under. Falls back to `TrainingArguments.project`.
+        - **PLUTO_RUN_ID** (`str`, *optional*):
+            Shared run ID for multi-node distributed training. When set, all processes with the
+            same run ID will log to the same run.
+        """
+        self._initialized = True
+
+        if state.is_world_process_zero:
+            combined_dict = {**args.to_dict()}
+
+            if hasattr(model, "config") and model.config is not None:
+                model_config = model.config if isinstance(model.config, dict) else model.config.to_dict()
+                combined_dict = {**model_config, **combined_dict}
+            if hasattr(model, "peft_config") and model.peft_config is not None:
+                combined_dict = {"peft_config": model.peft_config, **combined_dict}
+
+            project = os.getenv("PLUTO_PROJECT", None) or getattr(args, "project", None)
+
+            init_args = {}
+            if project is not None:
+                init_args["project"] = project
+            if args.run_name is not None:
+                init_args["name"] = args.run_name
+            run_id = os.getenv("PLUTO_RUN_ID", None)
+            if run_id is not None:
+                init_args["run_id"] = run_id
+
+            run = self._pluto.init(config=combined_dict, **init_args)
+
+            try:
+                run.update_config({"model_num_parameters": model.num_parameters()})
+            except AttributeError:
+                logger.info("Could not log the number of model parameters in Pluto due to an AttributeError.")
+
+    def on_train_begin(self, args, state, control, model=None, **kwargs):
+        if not self._initialized:
+            self.setup(args, state, model, **kwargs)
+
+    def on_train_end(self, args, state, control, **kwargs):
+        if self._initialized and state.is_world_process_zero:
+            self._pluto.finish()
+
+    def on_log(self, args, state, control, model=None, logs=None, **kwargs):
+        single_value_scalars = [
+            "train_runtime",
+            "train_samples_per_second",
+            "train_steps_per_second",
+            "train_loss",
+            "total_flos",
+        ]
+
+        if not self._initialized:
+            self.setup(args, state, model)
+        if state.is_world_process_zero:
+            for k, v in logs.items():
+                if k in single_value_scalars:
+                    self._pluto.log({k: v}, step=state.global_step)
+            non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
+            non_scalar_logs = rewrite_logs(non_scalar_logs)
+            self._pluto.log({**non_scalar_logs, "train/global_step": state.global_step}, step=state.global_step)
+
+
 INTEGRATION_TO_CALLBACK = {
     "azure_ml": AzureMLCallback,
     "comet_ml": CometCallback,
@@ -2360,6 +2454,7 @@ INTEGRATION_TO_CALLBACK = {
     "flyte": FlyteCallback,
     "dvclive": DVCLiveCallback,
     "swanlab": SwanLabCallback,
+    "pluto": PlutoCallback,
 }
 
 
