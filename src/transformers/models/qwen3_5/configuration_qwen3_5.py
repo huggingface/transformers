@@ -26,25 +26,25 @@ class Qwen3_5TextConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`Qwen3_5TextModel`]. It is used to instantiate a
     Qwen3_5 model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of
-    Qwen3.5-2B-Instruct [Qwen/Qwen3_5-2B-Instruct](https://huggingface.co/Qwen/Qwen3.5-2B-Instruct).
+    Qwen3.5-9B-Instruct [Qwen/Qwen3_5-9B-Instruct](https://huggingface.co/Qwen/Qwen3.5-9B-Instruct).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 151936):
+        vocab_size (`int`, *optional*, defaults to 248320):
             Vocabulary size of the model. Defines the number of different tokens that can be represented by the
             `inputs_ids`.
-        hidden_size (`int`, *optional*, defaults to 2048):
+        hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 5632):
+        intermediate_size (`int`, *optional*, defaults to 12288):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 48):
+        num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 2):
+        num_key_value_heads (`int`, *optional*, defaults to 4):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -93,7 +93,7 @@ class Qwen3_5TextConfig(PreTrainedConfig):
     >>> # Initializing a Qwen3.5 style configuration
     >>> configuration =  Qwen3_5TextConfig()
 
-    >>> # Initializing a model from the Qwen3.5-2B style configuration
+    >>> # Initializing a model from the Qwen3.5-9B style configuration
     >>> model = Qwen3_5TextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -127,12 +127,12 @@ class Qwen3_5TextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size=151936,
-        hidden_size=2048,
-        intermediate_size=8192,
-        num_hidden_layers=48,
+        vocab_size=248320,
+        hidden_size=4096,
+        intermediate_size=12288,
+        num_hidden_layers=32,
         num_attention_heads=16,
-        num_key_value_heads=2,
+        num_key_value_heads=4,
         hidden_act="silu",
         max_position_embeddings=32768,
         initializer_range=0.02,
@@ -236,7 +236,7 @@ class Qwen3_5Config(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`Qwen3_5Model`]. It is used to instantiate a
     Qwen3.5 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    Qwen3.5-2B-Instruct [Qwen/Qwen3.5-2B-Instruct](https://huggingface.co/Qwen/Qwen3.5-2B-Instruct).
+    Qwen3.5-9B-Instruct [Qwen/Qwen3.5-9B-Instruct](https://huggingface.co/Qwen/Qwen3.5-9B-Instruct).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -247,13 +247,13 @@ class Qwen3_5Config(PreTrainedConfig):
             The config object or dictionary of the text backbone.
         vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Qwen3_5VisionConfig`):
             The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 151655):
+        image_token_id (`int`, *optional*, defaults to 248056):
             The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 151656):
+        video_token_id (`int`, *optional*, defaults to 248057):
             The video token index to encode the image prompt.
-        vision_start_token_id (`int`, *optional*, defaults to 151652):
+        vision_start_token_id (`int`, *optional*, defaults to 248053):
             The start token index to encode the image prompt.
-        vision_end_token_id (`int`, *optional*, defaults to 151653):
+        vision_end_token_id (`int`, *optional*, defaults to 248054):
             The end token index to encode the image prompt.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie the word embeddings.
@@ -264,7 +264,7 @@ class Qwen3_5Config(PreTrainedConfig):
     >>> # Initializing a Qwen3.5 style configuration
     >>> configuration = Qwen3_5Config()
 
-    >>> # Initializing a model from the Qwen3.5-2B style configuration
+    >>> # Initializing a model from the Qwen3.5-9B style configuration
     >>> model = Qwen3_5ForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration

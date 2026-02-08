@@ -66,12 +66,12 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 151936):
+        vocab_size (`int`, *optional*, defaults to 248320):
             Vocabulary size of the model. Defines the number of different tokens that can be represented by the
             `inputs_ids`.
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
-        num_hidden_layers (`int`, *optional*, defaults to 48):
+        num_hidden_layers (`int`, *optional*, defaults to 40):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -119,9 +119,9 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
             Intermediate size of the routed expert.
         shared_expert_intermediate_size (`int`, *optional*, defaults to 512):
             Intermediate size of the shared expert.
-        num_experts_per_tok (`int`, *optional*, defaults to 10):
+        num_experts_per_tok (`int`, *optional*, defaults to 8):
             Number of selected experts.
-        num_experts (`int`, *optional*, defaults to 512):
+        num_experts (`int`, *optional*, defaults to 256):
             Number of routed experts.
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabling this will also
@@ -150,9 +150,9 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
 
     def __init__(
         self,
-        vocab_size=151936,
+        vocab_size=248320,
         hidden_size=2048,
-        num_hidden_layers=48,
+        num_hidden_layers=40,
         num_attention_heads=16,
         num_key_value_heads=2,
         hidden_act="silu",
@@ -172,8 +172,8 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
         linear_num_value_heads=32,
         moe_intermediate_size=512,
         shared_expert_intermediate_size=512,
-        num_experts_per_tok=10,
-        num_experts=512,
+        num_experts_per_tok=8,
+        num_experts=256,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         layer_types=None,
@@ -210,17 +210,17 @@ class Qwen3_5MoeConfig(Qwen3VLConfig):
 
 
     Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Qwen3_5MoeTextConfig`):
+        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Qwen3_5TextConfig`):
             The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Qwen3_5MoeVisionConfig`):
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Qwen3_5VisionConfig`):
             The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 151655):
+        image_token_id (`int`, *optional*, defaults to 248056):
             The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 151656):
+        video_token_id (`int`, *optional*, defaults to 248057):
             The video token index to encode the image prompt.
-        vision_start_token_id (`int`, *optional*, defaults to 151652):
+        vision_start_token_id (`int`, *optional*, defaults to 248053):
             The start token index to encode the image prompt.
-        vision_end_token_id (`int`, *optional*, defaults to 151653):
+        vision_end_token_id (`int`, *optional*, defaults to 248054):
             The end token index to encode the image prompt.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie the word embeddings.
