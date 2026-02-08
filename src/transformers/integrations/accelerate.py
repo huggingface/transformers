@@ -26,7 +26,6 @@ from collections import OrderedDict, defaultdict
 from typing import TYPE_CHECKING
 
 from safetensors import safe_open
-from safetensors.torch import save_file
 
 from ..utils import (
     is_accelerate_available,
@@ -42,6 +41,7 @@ from .fsdp import is_fsdp_enabled
 if is_torch_available():
     import torch
     import torch.nn as nn
+    from safetensors.torch import save_file
 
 if is_accelerate_available():
     from accelerate import dispatch_model
