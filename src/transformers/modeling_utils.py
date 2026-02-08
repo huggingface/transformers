@@ -1461,17 +1461,55 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if dtype is not None:
             init_contexts.append(local_torch_dtype(dtype, cls.__name__))
 
+        _needs_zero3_reinit = False
         if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
             import deepspeed
 
-            init_contexts.extend([deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()])
+            init_contexts.extend(
+                [
+                    init.no_init_weights(),
+                    deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
+                    set_zero3_state(),
+                ]
+            )
+            _needs_zero3_reinit = True
 
         # Instantiate the model
         with ContextManagers(init_contexts):
             model = cls(config, **kwargs)
+
+        if _needs_zero3_reinit:
+            # Re-initialize weights for models created via from_config() under ZeRO-3.
+            # During construction, no_init_weights() suppressed all weight init (including
+            # init_weights -> initialize_weights -> _init_weights) so _is_hf_initialized was
+            # NOT set on any module. We now re-init each module using GatheredParameters,
+            # mirroring smart_apply traversal to preserve composite-model dispatch and RNG order.
+            import deepspeed
+
+            GatheredParameters = deepspeed.zero.GatheredParameters
+
+            @torch.no_grad()
+            def _reinit_zero3_weights(model_or_module, init_fn):
+                for child in model_or_module.children():
+                    if isinstance(child, PreTrainedModel):
+                        _reinit_zero3_weights(child, child._init_weights)
+                    else:
+                        _reinit_zero3_weights(child, init_fn)
+
+                params = list(model_or_module.parameters(recurse=False))
+                if params:
+                    with GatheredParameters(params, modifier_rank=0):
+                        if deepspeed.comm.get_rank() == 0:
+                            init_fn(model_or_module)
+                else:
+                    init_fn(model_or_module)
+                model_or_module._is_hf_initialized = True
+
+            _reinit_zero3_weights(model, model._init_weights)
+            model.tie_weights()
 
         return model
 
