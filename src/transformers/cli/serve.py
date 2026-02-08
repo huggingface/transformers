@@ -54,6 +54,8 @@ from ..utils import logging
 
 
 if TYPE_CHECKING:
+    from pydantic import TypeAdapter
+
     from transformers import (
         PreTrainedModel,
         PreTrainedTokenizerFast,
@@ -585,7 +587,7 @@ class Serve:
         self,
         request: dict,
         schema: TypedDict,
-        validator: TypeAdapter,
+        validator: "TypeAdapter",
         unused_fields: set,
     ):
         """
