@@ -723,6 +723,8 @@
         title: Qwen3
       - local: model_doc/qwen3_5
         title: Qwen3.5
+      - local: model_doc/qwen3_5_moe
+        title: Qwen3.5 Moe
       - local: model_doc/qwen3_moe
         title: Qwen3MoE
       - local: model_doc/qwen3_next

@@ -22,9 +22,9 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">    </div>
 </div>
 
-# Qwen3.5
+# Qwen3.5 Moe
 
-[Qwen3.5](https://huggingface.co/papers/2502.13923) TODO @shuaibai @bozheng
+[Qwen3.5 Moe](https://huggingface.co/papers/2502.13923) TODO @shuaibai @bozheng
 
 Model usage
 
@@ -38,39 +38,35 @@ TODO
 </hfoption>
 </hfoptions>
 
-## Qwen3_5Config
+## Qwen3_5MoeConfig
 
-[[autodoc]] Qwen3_5Config
+[[autodoc]] Qwen3_5MoeConfig
 
-## Qwen3_5TextConfig
+## Qwen3_5MoeTextConfig
 
-[[autodoc]] Qwen3_5TextConfig
+[[autodoc]] Qwen3_5MoeTextConfig
 
-## Qwen3_5VisionModel
+## Qwen3_5MoeVisionModel
 
-[[autodoc]] Qwen3_5VisionModel
+[[autodoc]] Qwen3_5MoeVisionModel
     - forward
 
-## Qwen3_5TextModel
+## Qwen3_5MoeTextModel
 
-[[autodoc]] Qwen3_5TextModel
+[[autodoc]] Qwen3_5MoeTextModel
     - forward
 
-## Qwen3_5Model
+## Qwen3_5MoeModel
 
-[[autodoc]] Qwen3_5Model
+[[autodoc]] Qwen3_5MoeModel
     - forward
 
-## Qwen3_5ForCausalLM
+## Qwen3_5MoeForCausalLM
 
-[[autodoc]] Qwen3_5ForCausalLM
+[[autodoc]] Qwen3_5MoeForCausalLM
     - forward
 
-## Qwen3_5ForConditionalGeneration
+## Qwen3_5MoeForConditionalGeneration
 
-[[autodoc]] Qwen3_5ForConditionalGeneration
+[[autodoc]] Qwen3_5MoeForConditionalGeneration
     - forward
-
-## Qwen3_5Tokenizer
-
-[[autodoc]] Qwen3_5Tokenizer
