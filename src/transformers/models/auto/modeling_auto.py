@@ -684,8 +684,10 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("qwen2", "Qwen2ForCausalLM"),
         ("qwen2_moe", "Qwen2MoeForCausalLM"),
         ("qwen3", "Qwen3ForCausalLM"),
-        ("qwen3_5", "Qwen3_5ForCausalLM"),
-        ("qwen3_5_moe", "Qwen3_5MoeForCausalLM"),
+        ("qwen3_5", "Qwen3_5ForCausalLM"),  # VLM compatibility
+        ("qwen3_5_text", "Qwen3_5ForCausalLM"),
+        ("qwen3_5_moe", "Qwen3_5MoeForCausalLM"),  # VLM compatibility
+        ("qwen3_5_moe_text", "Qwen3_5MoeForCausalLM"),
         ("qwen3_moe", "Qwen3MoeForCausalLM"),
         ("qwen3_next", "Qwen3NextForCausalLM"),
         ("recurrent_gemma", "RecurrentGemmaForCausalLM"),

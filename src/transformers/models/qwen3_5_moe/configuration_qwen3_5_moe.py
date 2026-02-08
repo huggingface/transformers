@@ -131,9 +131,6 @@ class Qwen3_5MoeTextConfig(PreTrainedConfig):
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
         "layers.*.mlp.shared_expert.down_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

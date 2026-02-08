@@ -154,6 +154,18 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
     model_type = "qwen3_5_moe_text"
     base_config_key = "text_config"
 
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.shared_expert.gate_proj": "colwise",
+        "layers.*.mlp.shared_expert.up_proj": "colwise",
+        "layers.*.mlp.shared_expert.down_proj": "rowwise",
+    }
+
     def __init__(
         self,
         vocab_size=248320,

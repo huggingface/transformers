@@ -71,6 +71,9 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "qwen3_5_text": [
+            WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
+        ],
         "t5gemma2": [
             WeightRenaming(r"(?<!vision_model\.)encoder.embed_tokens.", "encoder.text_model.embed_tokens."),
             WeightRenaming(r"(?<!vision_model\.)encoder.norm.", "encoder.text_model.norm."),
@@ -352,20 +355,8 @@ def _build_checkpoint_conversion_mapping():
     mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
     mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
 
-    # for qwen3.5 text-only mode compatibility
-    mapping["qwen3_5_text"] = [
-        WeightRenaming(
-            source_patterns="model.language_model.",
-            target_patterns="model.",
-        ),
-    ]
-    mapping["qwen3_5_moe_text"] = mapping["qwen2_moe"].copy()
-    mapping["qwen3_5_moe_text"] += [
-        WeightRenaming(
-            source_patterns="model.language_model.",
-            target_patterns="model.",
-        ),
-    ]
+    mapping["qwen3_5_moe_text"] = mapping["qwen3_5_text"].copy()
+    mapping["qwen3_5_moe_text"] += mapping["qwen2_moe"].copy()
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
