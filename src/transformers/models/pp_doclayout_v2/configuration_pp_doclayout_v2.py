@@ -40,7 +40,6 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         max_rel_pos=128,
         rel_2d_pos_bins=64,
         max_rel_2d_pos=256,
-        num_labels=510,
         max_position_embeddings=514,
         max_2d_position_embeddings=1024,
         type_vocab_size=1,
@@ -59,8 +58,6 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         gp_dropout_value=0.0,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
@@ -75,7 +72,6 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         self.max_rel_pos = max_rel_pos
         self.rel_2d_pos_bins = rel_2d_pos_bins
         self.max_rel_2d_pos = max_rel_2d_pos
-        self.num_labels = num_labels
         self.max_position_embeddings = max_position_embeddings
         self.max_2d_position_embeddings = max_2d_position_embeddings
         self.type_vocab_size = type_vocab_size
@@ -92,6 +88,8 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         self.rel_bias_scale = rel_bias_scale
         self.global_pointer_head_size = global_pointer_head_size
         self.gp_dropout_value = gp_dropout_value
+
+        super().__init__(**kwargs)
 
 
 class PPDocLayoutV2Config(PreTrainedConfig):
@@ -238,11 +236,7 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         batch_norm_eps=1e-5,
         # backbone
         backbone_config=None,
-        backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
         freeze_backbone_batch_norms=True,
-        backbone_kwargs=None,
         # encoder HybridEncoder
         encoder_hidden_dim=256,
         encoder_in_channels=[512, 1024, 2048],
@@ -309,11 +303,7 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         )
 
         self.backbone_config = backbone_config
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
         self.freeze_backbone_batch_norms = freeze_backbone_batch_norms
-        self.backbone_kwargs = dict(backbone_kwargs) if backbone_kwargs is not None else None
 
         # ---- encoder ----
         self.encoder_hidden_dim = encoder_hidden_dim
@@ -350,10 +340,10 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         self.anchor_image_size = list(anchor_image_size) if anchor_image_size is not None else None
         self.disable_custom_kernels = disable_custom_kernels
 
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-
         self.threshold_mapping = threshold_mapping
         self.order_map = order_map
+
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["PPDocLayoutV2Config"]

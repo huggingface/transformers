@@ -2299,7 +2299,6 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
 
     @auto_docstring
     @can_return_tuple
-    @check_model_inputs
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -2375,6 +2374,7 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             labels=labels,
+            **kwargs,
         )
 
         intermediate_reference_points = outputs.intermediate_reference_points
