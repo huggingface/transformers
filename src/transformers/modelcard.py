@@ -90,7 +90,6 @@ TASK_TAG_TO_NAME_MAPPING = {
     "text-generation": "Causal Language Modeling",
     "text2text-generation": "Sequence-to-sequence Language Modeling",
     "token-classification": "Token Classification",
-    "translation": "Translation",
     "zero-shot-classification": "Zero Shot Classification",
     "automatic-speech-recognition": "Automatic Speech Recognition",
     "audio-classification": "Audio Classification",
