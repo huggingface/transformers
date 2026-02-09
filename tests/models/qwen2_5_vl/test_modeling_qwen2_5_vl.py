@@ -467,7 +467,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         # verify generation
         inputs = inputs.to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in"
 
         self.assertEqual(
@@ -486,7 +486,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         )
 
         # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
         EXPECTED_DECODED_TEXT = [
             'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
@@ -535,7 +535,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         )
 
         # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
         EXPECTED_DECODED_TEXT = [
             'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
@@ -563,7 +563,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
         expected_decoded_texts = Expectations(
             {
@@ -572,7 +572,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
                     "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is",
                 ],
                 ("cuda", (8, 6)): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
                     'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is',
                 ],
                 ("rocm", None): [
@@ -607,7 +607,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         )
 
         # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
         expected_decoded_text = Expectations({
             ("cuda", None): "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
@@ -642,7 +642,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         )
 
         # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
         # FIXME: The second decoded text in the CUDA expectation seems to be incorrect, it used to be the second text
         # on the ROCm expectation that was the correct one. Either model changed or code is buggy.
@@ -657,7 +657,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             ],
             ("xpu", None): [
                 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-                'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\niclaim to be a large language model created by Alibaba Cloud. I am called Qwen.',
+                "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nanvas is an AI language model created by Alibaba Cloud. I am here to assist with any questions or tasks you may have, as long as they are",
             ],
         }).get_expectation()  # fmt: skip
 
@@ -703,10 +703,9 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         inputs = self.processor(text=[text], videos=[frames], return_tensors="pt").to(torch_device)
 
         # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
-
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat is shown in this video?\nassistant\nThe video shows an indoor tennis court with a player standing on the baseline, preparing to serve. The player is wearing a white shirt and black shorts,',
+            'system\nYou are a helpful assistant.\nuser\nWhat is shown in this video?\nassistant\nThe video shows an indoor tennis court with a person standing on the service line, preparing to serve. The individual is wearing athletic attire, including a white',
         ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
