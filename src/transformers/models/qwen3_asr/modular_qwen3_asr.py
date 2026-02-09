@@ -55,14 +55,18 @@ class Qwen3ASRProcessor(ProcessorMixin):
             The Jinja template to use for formatting the conversation. If not provided, the default chat template is used.
     """
 
-    attributes = ["feature_extractor", "tokenizer"]
+    attributes = ["tokenizer", "feature_extractor"]
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(
         self, feature_extractor=None, tokenizer=None, chat_template=None
     ):
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            chat_template=chat_template,
+        )
         self.audio_token = self.tokenizer.audio_token
         self.audio_bos_token = self.tokenizer.audio_bos_token
         self.audio_eos_token = self.tokenizer.audio_eos_token
