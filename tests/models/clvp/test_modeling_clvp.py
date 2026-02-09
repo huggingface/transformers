@@ -184,10 +184,6 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="ClvpEncoder does not output loss")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="ClvpEncoder does not output loss")
     def test_gradient_checkpointing_enable_disable(self):
         pass
 
@@ -325,6 +321,7 @@ class ClvpModelForConditionalGenerationTester:
     def __init__(self, parent, is_training=False):
         self.parent = parent
         self.clvp_encoder_tester = ClvpEncoderTester(parent)
+        self.text_model_tester = self.clvp_encoder_tester
         self.is_training = is_training
         self.batch_size = self.clvp_encoder_tester.batch_size  # need bs for batching_equivalence test
 
@@ -399,6 +396,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
     test_resize_embeddings = False
     test_attention_outputs = False
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = ClvpModelForConditionalGenerationTester(self)

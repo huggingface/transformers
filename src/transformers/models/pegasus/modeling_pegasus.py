@@ -236,9 +236,9 @@ class PegasusAttention(nn.Module):
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1302,7 +1302,7 @@ class PegasusForCausalLM(PegasusPreTrainedModel, GenerationMixin):
         >>> from transformers import AutoTokenizer, PegasusForCausalLM
 
         >>> tokenizer = AutoTokenizer.from_pretrained("google/pegasus-large")
-        >>> model = PegasusForCausalLM.from_pretrained("google/pegasus-large", add_cross_attention=False)
+        >>> model = PegasusForCausalLM.from_pretrained("google/pegasus-large")
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

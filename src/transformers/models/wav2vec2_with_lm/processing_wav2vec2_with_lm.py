@@ -16,7 +16,6 @@ Speech processor class for Wav2Vec2
 """
 
 import os
-import warnings
 from collections.abc import Iterable
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -208,11 +207,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
     @auto_docstring
     def __call__(self, *args, **kwargs):
-        if "raw_speech" in kwargs:
-            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
-            audio = kwargs.pop("raw_speech")
-        else:
-            audio = kwargs.pop("audio", None)
+        audio = kwargs.pop("audio", None)
         sampling_rate = kwargs.pop("sampling_rate", None)
         text = kwargs.pop("text", None)
         if len(args) > 0:

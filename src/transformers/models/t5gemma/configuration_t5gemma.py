@@ -93,6 +93,9 @@ class T5GemmaModuleConfig(PreTrainedConfig):
             scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
             scaling factor when applying tanh softcapping on the attention scores.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
 
     ```python
     >>> from transformers import T5GemmaModuleModel, T5GemmaModuleConfig
@@ -147,8 +150,14 @@ class T5GemmaModuleConfig(PreTrainedConfig):
         layer_types: list[str] | None = None,
         final_logit_softcapping: float | None = 30.0,
         attn_logit_softcapping: float | None = 50.0,
+        is_decoder: bool | None = False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -177,13 +186,7 @@ class T5GemmaModuleConfig(PreTrainedConfig):
 
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 class T5GemmaConfig(PreTrainedConfig):
@@ -272,30 +275,12 @@ class T5GemmaConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
         self.is_encoder_decoder = is_encoder_decoder
-        self.use_cache = kwargs.get("use_cache", decoder.use_cache)
         self.initializer_range = kwargs.get("initializer_range", decoder.initializer_range)
-        self.dropout_rate = dropout_rate
-        self.attention_dropout = attention_dropout
         self.classifier_dropout_rate = classifier_dropout_rate
         self.tie_word_embeddings = tie_word_embeddings
 
         # Used in pipeline generation.
         self.vocab_size = vocab_size
-
-    def __setattr__(self, key, value):
-        shared_attr_with_submodules = [
-            "output_hidden_states",
-            "output_attentions",
-            "_attn_implementation",
-            "dropout_rate",
-            "attention_dropout",
-            "vocab_size",
-        ]
-
-        if key in shared_attr_with_submodules:
-            setattr(self.encoder, key, value)
-            setattr(self.decoder, key, value)
-        super().__setattr__(key, value)
 
 
 __all__ = ["T5GemmaConfig", "T5GemmaModuleConfig"]

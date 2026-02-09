@@ -19,7 +19,6 @@ import pytest
 
 from transformers import DepthAnythingConfig, Dinov2Config
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils.import_utils import get_torch_major_and_minor_version
 
@@ -146,8 +145,6 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     pipeline_model_mapping = {"depth-estimation": DepthAnythingForDepthEstimation} if is_torch_available() else {}
 
     test_resize_embeddings = False
-    test_torch_exportable = True
-    test_torch_exportable_strictly = get_torch_major_and_minor_version() != "2.7"
 
     def setUp(self):
         self.model_tester = DepthAnythingModelTester(self)
@@ -170,28 +167,24 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_depth_estimation(*config_and_inputs)
 
-    @unittest.skip(reason="Depth Anything does not support training yet")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="Depth Anything does not support training yet")
-    def test_training_gradient_checkpointing(self):
-        pass
-
     @unittest.skip(reason="Depth Anything with AutoBackbone does not have a base model and hence no input_embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="Training is not yet supported")
+    def test_training(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @unittest.skip(reason="Training is not yet supported")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="Training is not yet supported")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="Training is not yet supported")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @slow
@@ -212,21 +205,26 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
+        # These kwargs are all removed and are supported only for BC
+        # In new models we have only `backbone_config`. Let's test that there is no regression
         # Load a timm backbone
-        config.backbone = "resnet18"
-        config.use_pretrained_backbone = True
-        config.use_timm_backbone = True
-        config.backbone_config = None
-        # For transformer backbones we can't set the out_indices or just return the features
-        config.backbone_kwargs = {"out_indices": (-2, -1)}
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "resnet18"
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["use_timm_backbone"] = True
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"out_indices": (-2, -1)}
+        config = config.__class__(**config_dict)
         _validate_backbone_init()
 
         # Load a HF backbone
-        config.backbone = "facebook/dinov2-small"
-        config.use_pretrained_backbone = True
-        config.use_timm_backbone = False
-        config.backbone_config = None
-        config.backbone_kwargs = {"out_indices": [-2, -1]}
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "facebook/dinov2-small"
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["use_timm_backbone"] = False
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"out_indices": [-2, -1]}
+        config = config.__class__(**config_dict)
         _validate_backbone_init()
 
 
@@ -293,8 +291,6 @@ class DepthAnythingModelIntegrationTest(unittest.TestCase):
                 if strict and get_torch_major_and_minor_version() == "2.7":
                     self.skipTest(reason="`strict=True` is currently failing with torch 2.7.")
 
-                if not is_torch_greater_or_equal_than_2_4:
-                    self.skipTest(reason="This test requires torch >= 2.4 to run.")
                 model = (
                     DepthAnythingForDepthEstimation.from_pretrained("LiheYoung/depth-anything-small-hf")
                     .to(torch_device)

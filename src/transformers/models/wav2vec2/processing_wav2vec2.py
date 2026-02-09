@@ -15,8 +15,6 @@
 Speech processor class for Wav2Vec2
 """
 
-import warnings
-
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 from ...utils import auto_docstring
@@ -42,10 +40,6 @@ class Wav2Vec2Processor(ProcessorMixin):
         Returns:
             This method returns the results of each `call` method. If both are used, the output is a dictionary containing the results of both.
         """
-        if "raw_speech" in kwargs:
-            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
-            audio = kwargs.pop("raw_speech")
-
         if audio is None and text is None:
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 

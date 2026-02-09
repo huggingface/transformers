@@ -16,7 +16,6 @@
 import collections
 
 import torch
-import torch.nn.functional
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 

@@ -413,6 +413,11 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         pass
 
     @pytest.mark.generate
+    @unittest.skip(reason="Kosmos2 does not support generation from no inputs")
+    def test_generate_without_input_ids(self):
+        pass
+
+    @pytest.mark.generate
     def test_left_padding_compatibility(self):
         # Overwrite -- kosmos2 needs to prepare `image_embeds_position_mask`, and it must be padded accordingly
         _, inputs_dict = self.prepare_config_and_inputs_for_generate()

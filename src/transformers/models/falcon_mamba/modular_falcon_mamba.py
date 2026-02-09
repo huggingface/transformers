@@ -110,6 +110,8 @@ class FalconMambaConfig(MambaConfig):
             Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not available. If `True`, the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
         mixer_rms_eps (`float`, *optional*, defaults to 1e-06):
             The RMS norm epsilon value that is used in the Mixer RMS norm for B, C and dt states.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
 
     Example:
@@ -154,6 +156,7 @@ class FalconMambaConfig(MambaConfig):
         use_cache=True,
         use_falcon_mambapy=False,
         mixer_rms_eps=1e-6,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__(
@@ -181,6 +184,7 @@ class FalconMambaConfig(MambaConfig):
             rescale_prenorm_residual=rescale_prenorm_residual,
             use_cache=use_cache,
             use_falcon_mambapy=use_falcon_mambapy,
+            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
         self.mixer_rms_eps = mixer_rms_eps
@@ -355,7 +359,7 @@ class FalconMambaMixer(MambaMixer):
 
             # In case the model has been quantized, we need a hack to properly call the `nn.Linear` module
             # at the price of a small overhead.
-            if hasattr(self.config, "quantization_config"):
+            if hasattr(self.config, "_is_quantized"):
                 discrete_time_step = (self.dt_proj(time_step) - self.dt_proj.bias).transpose(1, 2)
             else:
                 discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)

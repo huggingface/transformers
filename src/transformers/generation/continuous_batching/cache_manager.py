@@ -99,7 +99,8 @@ class BlockManager:
         for _ in range(block_to_uninitialize):
             id_to_uninitialize = self._init_block_ids.popitem()[0]
             block = self._id_to_block[id_to_uninitialize]
-            self._hash_to_id.pop(block.hash)
+            # Since the block is initialized it must have a hash, thus no need to check .hash is not None
+            self._hash_to_id.pop(block.hash)  # ty:ignore[invalid-argument-type]
             self._uninit_block_ids.append(id_to_uninitialize)
         return True
 
@@ -124,7 +125,7 @@ class BlockManager:
 
     def fork_blocks(
         self, parent_blocks: list[int], num_forks: int, shareable: bool, group_id: int
-    ) -> tuple[list[list[int]], list[int], list[int]]:
+    ) -> tuple[list[list[int]] | None, list[int], list[int]]:
         """Fork a given list of (parent_blocks) as many times as (num_forks). If the blocks are (shareable), we use
         reference on the blocks that are complete. Otherwise, we allocate new blocks and keep track of their indices to
         later copy the physical cache. For instance, when forking 4 blocks for 2 children:
@@ -206,6 +207,15 @@ class BlockManager:
         else:
             self._uninit_block_ids.extend(blocks)
 
+    def uninitialize_unshared_block(self, block_id: int) -> None:
+        """Marks a block as uninitialized. Raises an error if the block has more than one reference."""
+        # Make sure the block has only one reference and remove it from the block table
+        block = self._id_to_block.pop(block_id)
+        if block.ref_count > 1:
+            raise RuntimeError(f"Block {block_id} has more than one reference: {block.ref_count = }")
+        # Add the block to the uninitialized blocks queue
+        self._uninit_block_ids.append(block_id)
+
     def mark_shareable_blocks_as_complete(
         self, num_complete_blocks: int, allocated_blocks: list[int], prompt_ids: list[int]
     ) -> None:
@@ -241,13 +251,17 @@ class BlockManager:
             block.hash = self.compute_hash(parent_hash, tokens, block.group_id)
 
             existing_block_id = self._hash_to_id.get(block.hash)
-            # If the block hash is already in the hash to id mapping, we reference the existing block instead
+            # If their was a different block with the same hash, we reference the existing block instead
             if existing_block_id is not None:
-                logger.debug(f"Found existing block {existing_block_id} for block {block.id}")
-                allocated_blocks[i] = existing_block_id
-                self._id_to_block[existing_block_id].ref_count += 1
-                new_parent_id = existing_block_id
-                self.free_blocks([block.id], shareable=True)
+                if existing_block_id == block.id:
+                    # This should not happen, but is not a problem in itself, so we just log a warning
+                    logger.warning(f"Block {block.id} was marked as complete more than once")
+                else:
+                    logger.debug(f"Found existing block {existing_block_id} for block {block.id}")
+                    allocated_blocks[i] = existing_block_id
+                    new_parent_id = existing_block_id
+                    self.increase_ref_count(existing_block_id)
+                    self.uninitialize_unshared_block(block.id)
 
             # Otherwise, we add the completed block to the hash table
             else:
@@ -293,10 +307,6 @@ class CacheAllocator(ABC):
     @abstractmethod
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
         """Returns the physical indices of where to write request_id's cache in the cache tensor."""
-
-    @abstractmethod
-    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
-        """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
 
     def fork_blocks(
         self, parent_request_id: str, children_request_ids: list[str], block_manager: BlockManager
@@ -348,16 +358,17 @@ class FullAttentionCacheAllocator(CacheAllocator):
         allocated if successful and None otherwise. For group of full attention layers, we always allocate the number of
         requested blocks."""
         # Make sure the request_id is in the block table and get the first block id
-        if request_id not in self.block_table:
-            self.block_table[request_id] = []  # TODO: check the impact of making this a deque
-            last_block_id = None
+        block_table = self.block_table.get(request_id, [])
+        if block_table:
+            last_block_id = block_table[-1]
         else:
-            last_block_id = self.block_table[request_id][-1]
+            self.block_table[request_id] = block_table  # TODO: check the impact of making this a deque
+            last_block_id = None
         # Actual allocation, return early if failed
         allocated_blocks = block_manager.get_free_blocks(n_blocks, last_block_id, self.uses_block_sharing, self._index)
         if allocated_blocks is None:
             return None
-        self.block_table[request_id].extend(allocated_blocks)
+        block_table.extend(allocated_blocks)
         return n_blocks
 
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
@@ -390,11 +401,6 @@ class FullAttentionCacheAllocator(CacheAllocator):
             physical_index = block_table[block_idx] * self.block_size + block_offset
             physical_indices.append(physical_index)
         return physical_indices
-
-    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
-        """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
-        seqlens_k = past_length + query_length
-        return "full_attention", seqlens_k
 
 
 class SlidingAttentionCacheAllocator(CacheAllocator):
@@ -482,8 +488,3 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         if padding_length > 0:
             physical_indices = [-1] * padding_length + physical_indices
         return physical_indices
-
-    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
-        """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
-        seqlens_k = query_length + min(past_length, self.sliding_window - 1)
-        return "sliding_attention", seqlens_k

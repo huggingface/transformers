@@ -14,7 +14,6 @@
 """PyTorch BARK model."""
 
 import math
-import warnings
 
 import numpy as np
 import torch
@@ -29,7 +28,7 @@ from ...generation.logits_process import (
     BarkEosPrioritizerLogitsProcessor,
     SuppressTokensLogitsProcessor,
 )
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
@@ -471,10 +470,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             raise ValueError("You have to specify either input_ids or input_embeds")
 
         input_shape = input_embeds.size()[:-1]
-        batch_size = input_embeds.shape[0]
         seq_length = input_shape[-1]
-
-        device = input_ids.device if input_ids is not None else input_embeds.device
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -487,24 +483,25 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             past_key_values = DynamicCache(config=self.config)
 
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        input_embeds = input_embeds.to(self.position_embeds_layer.weight.device)
 
         if position_ids is None:
-            position_ids = torch.arange(past_length, seq_length + past_length, dtype=torch.long, device=device)
+            position_ids = torch.arange(
+                past_length,
+                seq_length + past_length,
+                dtype=torch.long,
+                device=self.position_embeds_layer.weight.device,
+            )
             position_ids = position_ids.unsqueeze(0)  # shape (1, seq_length)
 
+        position_ids = position_ids.to(self.position_embeds_layer.weight.device)
         position_embeds = self.position_embeds_layer(position_ids)  # position embeddings of shape (1, t, n_embd)
 
-        # Attention mask.
-        if attention_mask is not None:
-            if batch_size <= 0:
-                raise ValueError("batch_size has to be defined and > 0")
-            if self.config._attn_implementation == "flash_attention_2":
-                attention_mask = attention_mask if 0 in attention_mask else None
-            else:
-                attention_mask = attention_mask.view(batch_size, -1)
-                # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
-                # from_seq_length is 1 to easily broadcast
-                attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=input_embeds,
+            attention_mask=attention_mask,
+        )
 
         hidden_states = self.drop(input_embeds + position_embeds)
         output_shape = input_shape + (hidden_states.size(-1),)
@@ -615,9 +612,12 @@ class BarkSemanticModel(BarkCausalModel):
                 mode="constant",
             )
         else:
-            semantic_history = torch.tensor(
-                [semantic_generation_config.semantic_pad_token] * max_input_semantic_length, dtype=torch.int
-            ).to(self.device)
+            semantic_history = torch.full(
+                (max_input_semantic_length,),
+                semantic_generation_config.semantic_pad_token,
+                device=self.device,
+                dtype=torch.int,
+            )
 
         semantic_history = torch.repeat_interleave(semantic_history[None], batch_size, dim=0)
 
@@ -1081,27 +1081,24 @@ class BarkFineModel(BarkPreTrainedModel):
             input_embeds = input_embeds[:, :, :, : codebook_idx + 1].sum(dim=-1)
 
         input_shape = input_embeds.size()[:-1]
-        batch_size = input_embeds.shape[0]
         seq_length = input_shape[1]
 
-        device = input_ids.device if input_ids is not None else input_embeds.device
+        input_embeds = input_embeds.to(self.position_embeds_layer.weight.device)
 
         if position_ids is None:
-            position_ids = torch.arange(0, seq_length, dtype=torch.long, device=device)
+            position_ids = torch.arange(
+                0, seq_length, dtype=torch.long, device=self.position_embeds_layer.weight.device
+            )
             position_ids = position_ids.unsqueeze(0)  # shape (1, seq_length)
 
+        position_ids = position_ids.to(self.position_embeds_layer.weight.device)
         position_embeds = self.position_embeds_layer(position_ids)  # position embeddings of shape (1, t, n_embd)
 
-        # Attention mask.
-        if attention_mask is not None:
-            if batch_size <= 0:
-                raise ValueError("batch_size has to be defined and > 0")
-            if self.config._attn_implementation == "flash_attention_2":
-                attention_mask = attention_mask if 0 in attention_mask else None
-            else:
-                # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
-                # from_seq_length is 1 to easily broadcast
-                attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=input_embeds,
+            attention_mask=attention_mask,
+        )
 
         hidden_states = self.drop(input_embeds + position_embeds)
         output_shape = input_shape + (hidden_states.size(-1),)
@@ -1352,24 +1349,12 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
 
         Args:
             accelerator_id (`int`, *optional*, defaults to 0):
-                accelerator id on which the sub-models will be loaded and offloaded. This argument is deprecated.
-            kwargs (`dict`, *optional*):
-                additional keyword arguments:
-                    `gpu_id`: accelerator id on which the sub-models will be loaded and offloaded.
+                accelerator id on which the sub-models will be loaded and offloaded.
         """
         if is_accelerate_available():
             from accelerate import cpu_offload_with_hook
         else:
             raise ImportError("`enable_model_cpu_offload` requires `accelerate`.")
-
-        gpu_id = kwargs.get("gpu_id", 0)
-
-        if gpu_id != 0:
-            warnings.warn(
-                "The argument `gpu_id` is deprecated and will be removed in version 4.54.0 of Transformers. Please use `accelerator_id` instead.",
-                FutureWarning,
-            )
-            accelerator_id = gpu_id
 
         device_type = "cuda"
         if is_torch_accelerator_available():

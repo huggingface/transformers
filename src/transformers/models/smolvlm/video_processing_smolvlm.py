@@ -16,7 +16,7 @@ from typing import Optional
 
 import numpy as np
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
@@ -124,7 +124,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         self,
         video: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -140,14 +140,14 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         Returns:
             `torch.Tensor`: The resized video.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
-        if interpolation == F.InterpolationMode.LANCZOS:
+        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
+        if interpolation == tvF.InterpolationMode.LANCZOS:
             logger.warning_once(
                 "You have used fast image processor with LANCZOS resample which not yet supported for torch.Tensor. "
                 "BICUBIC resample will be used as an alternative. Please fall back to image processor if you "
                 "want full consistency with the original model."
             )
-            interpolation = F.InterpolationMode.BICUBIC
+            interpolation = tvF.InterpolationMode.BICUBIC
 
         if size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
@@ -161,12 +161,12 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         else:
             raise ValueError(f"Size must contain 'height' and 'width' keys, or 'longest_edge' key. Got {size}.")
 
-        video = F.resize(video, new_size, interpolation=interpolation, antialias=antialias)
+        video = tvF.resize(video, new_size, interpolation=interpolation, antialias=antialias)
 
         # Resize again to match image processor when `do_image_splitting=False`. Frames have to be squared to `max_image_size`
         # NOTE: videos are always processoed without image splitting
         max_size = self.max_image_size["longest_edge"], self.max_image_size["longest_edge"]
-        video = F.resize(video, max_size, interpolation=interpolation, antialias=antialias)
+        video = tvF.resize(video, max_size, interpolation=interpolation, antialias=antialias)
         return video
 
     def pad(
@@ -201,7 +201,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
             )
         if original_size != padded_size:
             padding = [0, padding_width, 0, padding_height, 0, 0, 0, padding_frame]
-            video = F.pad(video, padding, fill=fill)
+            video = tvF.pad(video, padding, fill=fill)
 
         # Make a pixel mask for the video, where 1 indicates a valid pixel and 0 indicates padding.
         # Mask shape is (num_frames, height, width) so we omit the channel dim
@@ -283,7 +283,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

@@ -16,10 +16,8 @@
 import inspect
 import unittest
 
-import pytest
-
 from transformers import VitPoseBackboneConfig
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
@@ -28,8 +26,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
-    import torch
-
     from transformers import VitPoseBackbone
 
 
@@ -126,7 +122,6 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (VitPoseBackbone,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = VitPoseBackboneModelTester(self)
@@ -164,18 +159,6 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip(reason="VitPoseBackbone does not support training yet")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="VitPoseBackbone does not support training yet")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(reason="VitPoseBackbone does not support training yet")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -187,18 +170,6 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    @pytest.mark.torch_export_test
-    def test_torch_export(self):
-        # Dense architecture
-        super().test_torch_export()
-
-        # MOE architecture
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_experts = 2
-        config.part_features = config.hidden_size // config.num_experts
-        inputs_dict["dataset_index"] = torch.tensor([0] * self.model_tester.batch_size, device=torch_device)
-        super().test_torch_export(config=config, inputs_dict=inputs_dict)
 
 
 @require_torch

@@ -8,6 +8,11 @@ from urllib.request import Request, urlopen
 
 from huggingface_hub import paper_info
 
+from transformers import logging
+
+
+logger = logging.get_logger(__name__)
+
 
 ROOT = os.getcwd().split("utils")[0]
 DOCS_PATH = os.path.join(ROOT, "docs/source/en/model_doc")
@@ -78,7 +83,13 @@ def check_file_exists_on_github(file_path: str) -> bool:
 def get_modified_cards() -> list[str]:
     """Get the list of model names from modified files in docs/source/en/model_doc/"""
 
-    result = subprocess.check_output(["git", "diff", "--name-only", "upstream/main"], text=True)
+    current_branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
+    if current_branch == "main":
+        # On main branch, only uncommitted changes detected
+        result = subprocess.check_output(["git", "diff", "--name-only", "HEAD"], text=True)
+    else:
+        fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")
+        result = subprocess.check_output(f"git diff --name-only {fork_point_sha}".split()).decode("utf-8")
 
     model_names = []
     for line in result.strip().split("\n"):
@@ -151,9 +162,9 @@ def get_release_date(link: str) -> str:
         try:
             info = paper_info(link)
             return info.published_at.date().isoformat()
-        except Exception:
+        except Exception as e:
             # Error fetching release date, function returns None (will use placeholder)
-            pass
+            logger.debug(f"Could not fetch paper info for {link}: {e}")
 
     elif link.startswith("https://arxiv.org/abs/") or link.startswith("https://arxiv.org/pdf/"):
         return r"{release_date}"

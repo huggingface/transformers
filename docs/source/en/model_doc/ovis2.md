@@ -95,6 +95,7 @@ with torch.inference_mode():
 
 [[autodoc]] Ovis2ForConditionalGeneration
     - forward
+    - get_image_features
 
 ## Ovis2ImageProcessor
 

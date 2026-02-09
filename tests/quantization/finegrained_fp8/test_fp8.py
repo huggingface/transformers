@@ -18,13 +18,14 @@ import unittest
 from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
 
+from parameterized import parameterized
+
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FineGrainedFP8Config, OPTForCausalLM
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import (
     backend_empty_cache,
     get_device_properties,
     require_accelerate,
-    require_read_token,
     require_torch_accelerator,
     require_torch_multi_accelerator,
     slow,
@@ -74,7 +75,6 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 
 @slow
 @require_accelerate
-@require_read_token
 @require_torch_accelerator
 @unittest.skipIf(
     get_device_properties()[0] == "cuda"
@@ -138,6 +138,16 @@ class FP8QuantizerTest(unittest.TestCase):
         gc.collect()
         backend_empty_cache(torch_device)
         gc.collect()
+
+    @parameterized.expand(
+        [
+            "hf-internal-testing/tiny-random-Qwen3MoeForCausalLM",
+            "hf-internal-testing/tiny-random-MixtralForCausalLM",
+        ]
+    )
+    def test_moe_conversion_doesnt_raise(self, model_id):
+        quantization_config = FineGrainedFP8Config(weight_block_size=(32, 32))
+        AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
 
     def test_quantized_model_conversion(self):
         """

@@ -32,9 +32,9 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    require_deterministic_for_xpu,
     require_flash_attn,
     require_kernels,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -52,7 +52,12 @@ if is_torch_available():
         GptOssModel,
     )
 
-    NUM_GPUS = torch.cuda.device_count()
+    if torch.cuda.is_available():
+        NUM_GPUS = torch.cuda.device_count()
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
+        NUM_GPUS = torch.xpu.device_count()
+    else:
+        NUM_GPUS = 0
 
 
 class GptOssModelTester(CausalLMModelTester):
@@ -121,6 +126,9 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     def test_generate_compile_model_forward_fullgraph(self):
         return super().test_generate_compile_model_forward_fullgraph()
 
+    def test_reverse_loading_mapping(self, check_keys_were_modified=False):
+        super().test_reverse_loading_mapping(check_keys_were_modified)
+
 
 RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/gpt_oss/integration_tests.json"
 
@@ -137,7 +145,7 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
 
     def generate_config_key(quantized, model, kernels, attn_impl, mode):
         """Generate a key for the restructured integration test results."""
-        return f"quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
+        return f"device={torch_device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
 
     input_text = [
         "Roses are red, violets",
@@ -225,7 +233,7 @@ class GptOssIntegrationTest(unittest.TestCase):
     @staticmethod
     def generate_config_key(quantized, model, kernels, attn_impl, mode):
         """Generate a key for the restructured integration test results."""
-        return f"quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
+        return f"device={torch_device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -343,8 +351,11 @@ if __name__ == "__main__":
     # Non-distributed test
     # ------------------------
     @parameterized.expand(PARAMETERS)
-    @require_read_token
+    @require_deterministic_for_xpu
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
+        if torch_device == "xpu" and attn_impl == "kernels-community/vllm-flash-attn3":
+            self.skipTest("flash attention 3 is not supported on XPU yet.")
+
         model_id = f"openai/gpt-oss-{model}"
         output_texts = self.load_and_forward(
             model_id,
@@ -406,15 +417,16 @@ if __name__ == "__main__":
     # Distributed test
     # ------------------------
     @parameterized.expand(PARAMETERS)
-    @require_read_token
     def test_model_outputs_distributed(self, quantized, model, kernels, attn_impl, mode):
+        if torch_device == "xpu" and attn_impl == "kernels-community/vllm-flash-attn3":
+            self.skipTest("flash attention 3 is not supported on XPU yet.")
+
         self.run_distributed_test(quantized, model, kernels, attn_impl, mode)
 
     # ------------------------
     # Training test
     # ------------------------
     @parameterized.expand(PARAMETERS)
-    @require_read_token
     def test_training_step(self, quantized, model, kernels, attn_impl, mode):
         if mode != "train":
             self.skipTest("This test is only for training mode.")

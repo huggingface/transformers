@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Building a compatible model backend for inference
 
-Transformers models are compatible with inference engines like [vLLM](https://github.com/vllm-project/vllm) and [SGLang](https://docs.sglang.ai). Use the same Transformers model anywhere and avoid reimplementing a model from scratch for each inference engine. Models in Transformers that aren't natively supported by either inference engine work too.
+Transformers models are compatible with inference engines like [vLLM](https://github.com/vllm-project/vllm) and [SGLang](https://docs.sglang.ai). Use the same Transformers model anywhere and avoid reimplementing a model from scratch for each inference engine. This also helps with models that an engine does not natively reimplement, as long as the model supports the attention backend interface described below.
 
 This guide shows you how to implement a model in Transformers that works as a backend for any inference engine.
 
@@ -26,7 +26,7 @@ This guide shows you how to implement a model in Transformers that works as a ba
 
 2. Use the [`AttentionInterface`] class for custom and optimized attention functions. This interface unlocks each inference engine's performance features. 
 
-   Use `ALL_ATTENTION_FUNCTIONS` when defining the attention layer and propagate `**kwargs**` from the base `MyModel` class to the attention layers. Set `_supports_attention_backend` to `True` in [`PreTrainedModel`].
+   Use `ALL_ATTENTION_FUNCTIONS` when defining the attention layer and propagate `**kwargs` from the base `MyModel` class to the attention layers. Set `_supports_attention_backend` to `True` in [`PreTrainedModel`].
    
    Expand the code below for an example.
 
@@ -35,6 +35,7 @@ This guide shows you how to implement a model in Transformers that works as a ba
 
     ```python
     from transformers import PreTrainedModel
+    from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
     from torch import nn
 
     class MyAttention(nn.Module):

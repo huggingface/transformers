@@ -487,9 +487,9 @@ class BridgeTowerSelfAttention(nn.Module):
                 {"cache_position": cache_position},
             )
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -565,9 +565,9 @@ class BridgeTowerCrossAttention(nn.Module):
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 past_key_values.is_updated[self.layer_idx] = True
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1250,11 +1250,13 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> # prepare image and text
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> text = "hello world"
         >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base")
         >>> model = BridgeTowerModel.from_pretrained("BridgeTower/bridgetower-base")
@@ -1280,7 +1282,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        image_token_type_idx = image_token_type_idx if image_token_type_idx else 1
+        image_token_type_idx = image_token_type_idx or 1
         input_shape = input_ids.size()
         text_embeds = self.text_model.embeddings(input_ids=input_ids)
 
@@ -1551,10 +1553,12 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForMaskedLM
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000360943.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> text = "a <mask> looking out of the window"
 
         >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
@@ -1650,11 +1654,13 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
 
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForImageAndTextRetrieval
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
 
         >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
@@ -1762,7 +1768,8 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
 
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForContrastiveLearning
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
 
@@ -1771,7 +1778,14 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         ...     "http://images.cocodataset.org/val2017/000000039769.jpg",
         ... ]
         >>> texts = ["two dogs in a car", "two cats sleeping on a couch"]
-        >>> images = [Image.open(requests.get(url, stream=True).raw) for url in image_urls]
+
+        >>> with httpx.stream("GET", urls[0]) as response:
+        ...     image1 = Image.open(BytesIO(response.read()))
+
+        >>> with httpx.stream("GET", urls[1]) as response:
+        ...     image2 = Image.open(BytesIO(response.read()))
+
+        >>> images = [image1, image2]
 
         >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
         >>> model = BridgeTowerForContrastiveLearning.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")

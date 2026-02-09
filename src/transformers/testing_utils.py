@@ -48,7 +48,6 @@ from unittest import mock
 from unittest.mock import patch
 
 import httpx
-import urllib3
 from huggingface_hub import create_repo, delete_repo
 from packaging import version
 
@@ -97,7 +96,6 @@ from .utils import (
     is_flute_available,
     is_fp_quant_available,
     is_fsdp_available,
-    is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
     is_gguf_available,
@@ -106,7 +104,6 @@ from .utils import (
     is_hadamard_available,
     is_hqq_available,
     is_huggingface_hub_greater_or_equal,
-    is_ipex_available,
     is_jinja_available,
     is_jmespath_available,
     is_jumanpp_available,
@@ -648,40 +645,6 @@ def require_flash_attn_3(test_case):
     return unittest.skipUnless(is_flash_attn_3_available(), "test requires Flash Attention 3")(test_case)
 
 
-def require_read_token(test_case):
-    """
-    A decorator that loads the HF token for tests that require to load gated models.
-    """
-    token = os.getenv("HF_HUB_READ_TOKEN")
-
-    if isinstance(test_case, type):
-        for attr_name in dir(test_case):
-            attr = getattr(test_case, attr_name)
-            if isinstance(attr, types.FunctionType):
-                if getattr(attr, "__require_read_token__", False):
-                    continue
-                wrapped = require_read_token(attr)
-                if isinstance(inspect.getattr_static(test_case, attr_name), staticmethod):
-                    # Don't accidentally bind staticmethods to `self`
-                    wrapped = staticmethod(wrapped)
-                setattr(test_case, attr_name, wrapped)
-        return test_case
-    else:
-        if getattr(test_case, "__require_read_token__", False):
-            return test_case
-
-        @functools.wraps(test_case)
-        def wrapper(*args, **kwargs):
-            if token is not None:
-                with patch("huggingface_hub.utils._headers.get_token", return_value=token):
-                    return test_case(*args, **kwargs)
-            else:  # Allow running locally with the default token env variable
-                return test_case(*args, **kwargs)
-
-        wrapper.__require_read_token__ = True
-        return wrapper
-
-
 def require_peft(test_case):
     """
     Decorator marking a test that requires PEFT.
@@ -710,21 +673,6 @@ def require_torchcodec(test_case):
 
     """
     return unittest.skipUnless(is_torchcodec_available(), "test requires Torchcodec")(test_case)
-
-
-def require_intel_extension_for_pytorch(test_case):
-    """
-    Decorator marking a test that requires Intel Extension for PyTorch.
-
-    These tests are skipped when Intel Extension for PyTorch isn't installed or it does not match current PyTorch
-    version.
-
-    """
-    return unittest.skipUnless(
-        is_ipex_available(),
-        "test requires Intel Extension for PyTorch to be installed and match current PyTorch version, see"
-        " https://github.com/intel/intel-extension-for-pytorch",
-    )(test_case)
 
 
 def require_torchaudio(test_case):
@@ -799,13 +747,6 @@ def require_vision(test_case):
     installed.
     """
     return unittest.skipUnless(is_vision_available(), "test requires vision")(test_case)
-
-
-def require_ftfy(test_case):
-    """
-    Decorator marking a test that requires ftfy. These tests are skipped when ftfy isn't installed.
-    """
-    return unittest.skipUnless(is_ftfy_available(), "test requires ftfy")(test_case)
 
 
 def require_spacy(test_case):
@@ -937,9 +878,7 @@ def require_torch_xpu(test_case):
     """
     Decorator marking a test that requires XPU (in PyTorch).
 
-    These tests are skipped when XPU backend is not available. XPU backend might be available either via stock
-    PyTorch (>=2.4) or via Intel Extension for PyTorch. In the latter case, if IPEX is installed, its version
-    must match match current PyTorch version.
+    These tests are skipped when XPU backend is not available.
     """
     return unittest.skipUnless(is_torch_xpu_available(), "test requires XPU device")(test_case)
 
@@ -2549,6 +2488,8 @@ class RequestCounter:
 
             return wrap
 
+        import urllib3
+
         self.patcher = patch.object(
             urllib3.connectionpool.log, "debug", side_effect=patched_with_thread_info(urllib3.connectionpool.log.debug)
         )
@@ -3352,7 +3293,7 @@ def _get_test_info():
         # check frame's function + if it has `self` as locals; double check if self has the (function) name
         # TODO: Question: How about expanded?
         if (
-            frame.function == test_name
+            test_name.startswith(frame.function)
             and "self" in frame.frame.f_locals
             and hasattr(frame.frame.f_locals["self"], test_name)
         ):
@@ -3380,7 +3321,7 @@ def _get_test_info():
     # Between `the test method being called` and `before entering `patched``.
     for frame in reversed(stack_from_inspect):
         if (
-            frame.function == test_name
+            test_name.startswith(frame.function)
             and "self" in frame.frame.f_locals
             and hasattr(frame.frame.f_locals["self"], test_name)
         ):

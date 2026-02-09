@@ -22,7 +22,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import is_flaky, require_read_token, require_torch, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
 from transformers.utils import check_torch_load_is_safe
 
 from ...test_configuration_common import ConfigTester
@@ -332,7 +332,6 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         )
         torch.testing.assert_close(output[0, :7, :1, :1], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
-    @require_read_token
     def test_prediction_head(self):
         model = PatchTSTForPrediction.from_pretrained("namctin/patchtst_etth1_forecast").to(torch_device)
         batch = prepare_batch(file="test-batch.pt")
@@ -352,7 +351,6 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         )
         torch.testing.assert_close(output[0, :1, :7], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
-    @require_read_token
     def test_prediction_generation(self):
         model = PatchTSTForPrediction.from_pretrained("namctin/patchtst_etth1_forecast").to(torch_device)
         batch = prepare_batch(file="test-batch.pt")
