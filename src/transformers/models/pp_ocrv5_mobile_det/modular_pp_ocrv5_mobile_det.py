@@ -1067,7 +1067,7 @@ def make_divisible(v, divisor: int = 16, min_value=None):
     return new_v
 
 
-class LearnableAffineBlock(nn.Module):
+class PPOCRV5MobileDetLearnableAffineBlock(nn.Module):
     """
     Learnable affine transformation block that applies scale and bias to the input tensor.
     Both scale and bias are trainable parameters, allowing the model to learn optimal
@@ -1076,7 +1076,7 @@ class LearnableAffineBlock(nn.Module):
 
     def __init__(self, scale_value=1.0, bias_value=0.0):
         """
-        Initialize the LearnableAffineBlock with initial scale and bias values.
+        Initialize the PPOCRV5MobileDetLearnableAffineBlock with initial scale and bias values.
 
         Args:
             scale_value (float, optional): Initial value for the scale parameter. Defaults to 1.0.
@@ -1099,7 +1099,7 @@ class LearnableAffineBlock(nn.Module):
         return self.scale * hidden_state + self.bias
 
 
-class Act(nn.Module):
+class PPOCRV5MobileDetAct(nn.Module):
     """
     Activation block with a trainable affine transformation applied after the non-linear activation.
     Supports two activation functions: Hardswish (hswish) for mobile-efficient inference and ReLU.
@@ -1119,7 +1119,7 @@ class Act(nn.Module):
         else:
             assert act == "relu"
             self.act = nn.ReLU()
-        self.lab = LearnableAffineBlock()
+        self.lab = PPOCRV5MobileDetLearnableAffineBlock()
 
     def forward(self, hidden_state: torch.Tensor):
         """
@@ -1134,7 +1134,7 @@ class Act(nn.Module):
         return self.lab(self.act(hidden_state))
 
 
-class ConvBNLayer(nn.Module):
+class PPOCRV5MobileDetConvBNLayer(nn.Module):
     """
     Convolution-Batch Normalization layer block, a fundamental building block for modern CNNs.
     Applies 2D convolution followed by batch normalization, with He Kaiming initialization for the convolution weights.
@@ -1142,7 +1142,7 @@ class ConvBNLayer(nn.Module):
 
     def __init__(self, in_channels, out_channels, kernel_size, stride, groups=1):
         """
-        Initialize the ConvBNLayer with specified convolution and batch normalization parameters.
+        Initialize the PPOCRV5MobileDetConvBNLayer with specified convolution and batch normalization parameters.
 
         Args:
             in_channels (int): Number of input channels for the convolution layer.
@@ -1180,7 +1180,7 @@ class ConvBNLayer(nn.Module):
         return hidden_state
 
 
-class LearnableRepLayer(nn.Module):
+class PPOCRV5MobileDetLearnableRepLayer(nn.Module):
     """
     Learnable Reparameterization Layer (RepLayer) that fuses multiple convolution branches
     (kxk and 1x1) with an optional identity branch. This layer enables structural reparameterization
@@ -1198,13 +1198,13 @@ class LearnableRepLayer(nn.Module):
         groups: int = 1,
     ):
         """
-        Initialize the LearnableRepLayer with multiple convolution branches and optional identity connection.
+        Initialize the PPOCRV5MobileDetLearnableRepLayer with multiple convolution branches and optional identity connection.
 
         Args:
             in_channels (int): Number of input channels.
             out_channels (int): Number of output channels.
             kernel_size (int): Size of the kxk convolution kernel.
-            act (str): Activation function type (passed to Act block).
+            act (str): Activation function type (passed to PPOCRV5MobileDetAct block).
             stride (int): Stride of the convolution operations.
             num_conv_branches (int): Number of kxk convolution branches to stack.
             groups (int, optional): Number of groups for grouped convolution. Defaults to 1.
@@ -1226,7 +1226,7 @@ class LearnableRepLayer(nn.Module):
 
         self.conv_kxk = nn.ModuleList(
             [
-                ConvBNLayer(
+                PPOCRV5MobileDetConvBNLayer(
                     in_channels,
                     out_channels,
                     kernel_size,
@@ -1237,14 +1237,14 @@ class LearnableRepLayer(nn.Module):
             ]
         )
 
-        self.conv_1x1 = ConvBNLayer(in_channels, out_channels, 1, stride, groups=groups) if kernel_size > 1 else None
+        self.conv_1x1 = PPOCRV5MobileDetConvBNLayer(in_channels, out_channels, 1, stride, groups=groups) if kernel_size > 1 else None
 
-        self.lab = LearnableAffineBlock()
-        self.act = Act(act=act)
+        self.lab = PPOCRV5MobileDetLearnableAffineBlock()
+        self.act = PPOCRV5MobileDetAct(act=act)
 
     def forward(self, hidden_state: torch.Tensor):
         """
-        Forward pass of the LearnableRepLayer, fusing all enabled branches and applying post-processing.
+        Forward pass of the PPOCRV5MobileDetLearnableRepLayer, fusing all enabled branches and applying post-processing.
 
         Args:
             hidden_state (torch.Tensor): Input feature tensor of shape (B, in_channels, H, W).
@@ -1268,7 +1268,7 @@ class LearnableRepLayer(nn.Module):
         return hidden_state
 
 
-class SELayer(nn.Module):
+class PPOCRV5MobileDetSELayer(nn.Module):
     """
     Squeeze-and-Excitation (SE) Layer for channel-wise feature recalibration.
     This layer adaptively scales channel features based on their importance,
@@ -1277,7 +1277,7 @@ class SELayer(nn.Module):
 
     def __init__(self, channel, reduction=4):
         """
-        Initialize the SELayer with channel reduction factor.
+        Initialize the PPOCRV5MobileDetSELayer with channel reduction factor.
 
         Args:
             channel (int): Number of input/output channels.
@@ -1324,30 +1324,30 @@ class SELayer(nn.Module):
         return hidden_state
 
 
-class LCNetV3Block(nn.Module):
+class PPOCRV5MobileDetLCNetV3Block(nn.Module):
     """
     Lightweight Convolutional Network V3 (LCNetV3) Block, the core building block of the PPOCRV5 Mobile Det backbone.
-    Consists of a depthwise LearnableRepLayer, an optional SE Layer, and a pointwise LearnableRepLayer.
+    Consists of a depthwise PPOCRV5MobileDetLearnableRepLayer, an optional SE Layer, and a pointwise PPOCRV5MobileDetLearnableRepLayer.
     Optimized for mobile devices with low computational complexity and high efficiency.
     """
 
     def __init__(self, in_channels, out_channels, act, dw_size, stride, use_se, conv_kxk_num, reduction):
         """
-        Initialize the LCNetV3Block with specified parameters for depthwise and pointwise layers.
+        Initialize the PPOCRV5MobileDetLCNetV3Block with specified parameters for depthwise and pointwise layers.
 
         Args:
             in_channels (int): Number of input channels.
             out_channels (int): Number of output channels.
-            act (str): Activation function type (passed to Act block).
+            act (str): Activation function type (passed to PPOCRV5MobileDetAct block).
             dw_size (int): Kernel size for the depthwise convolution.
             stride (int): Stride of the depthwise convolution.
             use_se (bool): Whether to enable the SE Layer for channel recalibration.
-            conv_kxk_num (int): Number of kxk convolution branches in LearnableRepLayer.
+            conv_kxk_num (int): Number of kxk convolution branches in PPOCRV5MobileDetLearnableRepLayer.
             reduction (int): Reduction factor for the SE Layer (if enabled).
         """
         super().__init__()
         self.use_se = use_se
-        self.dw_conv = LearnableRepLayer(
+        self.dw_conv = PPOCRV5MobileDetLearnableRepLayer(
             in_channels=in_channels,
             out_channels=in_channels,
             kernel_size=dw_size,
@@ -1357,8 +1357,8 @@ class LCNetV3Block(nn.Module):
             num_conv_branches=conv_kxk_num,
         )
         if use_se:
-            self.se = SELayer(in_channels, reduction=reduction)
-        self.pw_conv = LearnableRepLayer(
+            self.se = PPOCRV5MobileDetSELayer(in_channels, reduction=reduction)
+        self.pw_conv = PPOCRV5MobileDetLearnableRepLayer(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=1,
@@ -1369,7 +1369,7 @@ class LCNetV3Block(nn.Module):
 
     def forward(self, hidden_state: torch.Tensor):
         """
-        Forward pass of the LCNetV3Block, applying depthwise convolution, optional SE, and pointwise convolution.
+        Forward pass of the PPOCRV5MobileDetLCNetV3Block, applying depthwise convolution, optional SE, and pointwise convolution.
 
         Args:
             hidden_state (torch.Tensor): Input feature tensor of shape (B, in_channels, H, W).
@@ -1403,7 +1403,7 @@ class PPOCRV5MobileDetBackbone(nn.Module):
         self.backbone_config = config.backbone_config
         self.out_channels = make_divisible(config.backbone_out_channels * config.scale, config.divisor)
 
-        self.conv1 = ConvBNLayer(
+        self.conv1 = PPOCRV5MobileDetConvBNLayer(
             in_channels=3,
             out_channels=make_divisible(16 * config.scale, config.divisor),
             kernel_size=3,
@@ -1413,7 +1413,7 @@ class PPOCRV5MobileDetBackbone(nn.Module):
         def _build_blocks(block_key):
             return nn.Sequential(
                 *[
-                    LCNetV3Block(
+                    PPOCRV5MobileDetLCNetV3Block(
                         in_channels=make_divisible(in_c * config.scale, config.divisor),
                         out_channels=make_divisible(out_c * config.scale, config.divisor),
                         act=config.hidden_act,
@@ -1508,7 +1508,7 @@ class PPOCRV5MobileDetBackbone(nn.Module):
         return out_list, last_hidden_state, hidden_states
 
 
-class SEModule(nn.Module):
+class PPOCRV5MobileDetSEModule(nn.Module):
     """
     Simplified Squeeze-and-Excitation (SE) Module for the neck network.
     Applies channel-wise recalibration with a clamped activation to stabilize training.
@@ -1516,7 +1516,7 @@ class SEModule(nn.Module):
 
     def __init__(self, in_channels, reduction=4):
         """
-        Initialize the SEModule with channel reduction factor.
+        Initialize the PPOCRV5MobileDetSEModule with channel reduction factor.
 
         Args:
             in_channels (int): Number of input/output channels.
@@ -1558,7 +1558,7 @@ class SEModule(nn.Module):
         return inputs * outputs
 
 
-class RSELayer(nn.Module):
+class PPOCRV5MobileDetRSELayer(nn.Module):
     """
     Residual Squeeze-and-Excitation (RSE) Layer for the neck network.
     Combines a 1x1/3x3 convolution with an SE Module and an optional residual shortcut connection.
@@ -1566,7 +1566,7 @@ class RSELayer(nn.Module):
 
     def __init__(self, in_channels, out_channels, kernel_size, shortcut=True):
         """
-        Initialize the RSELayer with convolution and residual connection parameters.
+        Initialize the PPOCRV5MobileDetRSELayer with convolution and residual connection parameters.
 
         Args:
             in_channels (int): Number of input channels.
@@ -1583,12 +1583,12 @@ class RSELayer(nn.Module):
             padding=int(kernel_size // 2),
             bias=False,
         )
-        self.se_block = SEModule(self.out_channels)
+        self.se_block = PPOCRV5MobileDetSEModule(self.out_channels)
         self.shortcut = shortcut
 
     def forward(self, ins):
         """
-        Forward pass of the RSELayer, applying convolution, SE recalibration, and optional residual connection.
+        Forward pass of the PPOCRV5MobileDetRSELayer, applying convolution, SE recalibration, and optional residual connection.
 
         Args:
             ins (torch.Tensor): Input feature tensor of shape (B, in_channels, H, W).
@@ -1627,10 +1627,10 @@ class PPOCRV5MobileDetNeck(nn.Module):
 
         for i in range(len(in_channels)):
             self.ins_conv.append(
-                RSELayer(in_channels[i], config.neck_out_channels, kernel_size=1, shortcut=config.shortcut)
+                PPOCRV5MobileDetRSELayer(in_channels[i], config.neck_out_channels, kernel_size=1, shortcut=config.shortcut)
             )
             self.inp_conv.append(
-                RSELayer(
+                PPOCRV5MobileDetRSELayer(
                     config.neck_out_channels, config.neck_out_channels // 4, kernel_size=3, shortcut=config.shortcut
                 )
             )
@@ -1669,7 +1669,7 @@ class PPOCRV5MobileDetNeck(nn.Module):
         return fuse
 
 
-class Head(nn.Module):
+class PPOCRV5MobileDetHead(nn.Module):
     """
     Head sub-module for PPOCRV5 Mobile Det, responsible for generating text segmentation maps.
     Uses two transposed convolutions for upsampling to recover the original image spatial scale,
@@ -1734,7 +1734,7 @@ class Head(nn.Module):
         return x
 
 
-class PPOCRV5MobileDetHead(nn.Module):
+class PPOCRV5MobileDetDBHead(nn.Module):
     """
     Head network for PPOCRV5 Mobile Det, wrapping the Head sub-module to generate text segmentation maps.
     Contains the `k` parameter for candidate box selection during post-processing.
@@ -1749,7 +1749,7 @@ class PPOCRV5MobileDetHead(nn.Module):
         """
         super().__init__()
         self.k = config.k
-        self.binarize = Head(config.neck_out_channels, config.kernel_list)
+        self.binarize = PPOCRV5MobileDetHead(config.neck_out_channels, config.kernel_list)
 
     def forward(self, x):
         """
@@ -1799,10 +1799,10 @@ class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
-        if isinstance(module, ConvBNLayer):
+        if isinstance(module, PPOCRV5MobileDetConvBNLayer):
             nn.init.kaiming_normal_(module.conv.weight)
 
-        if isinstance(module, Head):
+        if isinstance(module, PPOCRV5MobileDetHead):
             nn.init.constant_(module.conv_bn1.weight, 1.0)
             nn.init.constant_(module.conv_bn1.bias, 1e-4)
             nn.init.constant_(module.conv_bn2.weight, 1.0)
@@ -1810,7 +1810,7 @@ class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
             nn.init.kaiming_uniform_(module.conv2.weight)
             nn.init.kaiming_uniform_(module.conv3.weight)
 
-        if isinstance(module, RSELayer):
+        if isinstance(module, PPOCRV5MobileDetRSELayer):
             nn.init.kaiming_uniform_(module.in_conv.weight)
 
 
@@ -1832,7 +1832,7 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
 
         self.backbone = PPOCRV5MobileDetBackbone(config)
         self.neck = PPOCRV5MobileDetNeck(config, self.backbone.out_channels)
-        self.head = PPOCRV5MobileDetHead(config)
+        self.head = PPOCRV5MobileDetDBHead(config)
         self.post_init()
 
     def forward(
