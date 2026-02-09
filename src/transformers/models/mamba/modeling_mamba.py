@@ -33,7 +33,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.import_utils import is_mambapy_available, is_torch_greater_or_equal, is_torchdynamo_compiling
+from ...utils.import_utils import is_mambapy_available, is_torch_greater_or_equal, is_torchdynamo_compiling, is_tracing
 from .configuration_mamba import MambaConfig
 
 
@@ -411,7 +411,7 @@ class MambaMixer(nn.Module):
             scan_output = scan_output * self.act(gate)
         else:
             # Use associative_scan for parallel computation when available
-            if associative_scan is not None and cache_params is None and is_torchdynamo_compiling():
+            if associative_scan is not None and cache_params is None and is_tracing():
                 def combine_fn(left, right):
                     a_left, b_left = left
                     a_right, b_right = right
