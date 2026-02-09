@@ -488,18 +488,6 @@ class Trainer:
         else:
             self.place_model_on_device = True
 
-        # SageMaker Model Parallel mixed-precision setup
-        if is_sagemaker_mp_enabled():
-            if args.bf16:
-                raise ValueError("SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead ")
-            if args.fp16 != smp.state.cfg.fp16:
-                logger.warning(
-                    f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
-                    f"but FP16 provided in trainer argument is {args.fp16}, "
-                    f"setting to {smp.state.cfg.fp16}"
-                )
-                args.fp16 = smp.state.cfg.fp16
-
         # ---- 5. Device placement ----------------------------------------------------
         # Bnb Quantized models don't support `.to` operation.
         if (
@@ -640,6 +628,18 @@ class Trainer:
     def _validate_args(self):
         """Validate constructor arguments and fail fast on incompatible combinations."""
         args = self.args
+
+        # --- SageMaker Model Parallel mixed-precision validation ---
+        if is_sagemaker_mp_enabled():
+            if args.bf16:
+                raise ValueError("SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead ")
+            if args.fp16 != smp.state.cfg.fp16:
+                logger.warning(
+                    f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
+                    f"but FP16 provided in trainer argument is {args.fp16}, "
+                    f"setting to {smp.state.cfg.fp16}"
+                )
+                args.fp16 = smp.state.cfg.fp16
 
         # --- Training-argument validations ---
         if args.batch_eval_metrics and self.compute_metrics is not None:
