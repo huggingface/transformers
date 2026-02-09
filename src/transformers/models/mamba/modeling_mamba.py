@@ -33,15 +33,15 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling
+from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling, is_torch_greater_or_equal
 from .configuration_mamba import MambaConfig
 
 
 logger = logging.get_logger(__name__)
 
-try:
+if is_torch_greater_or_equal("2.9.0"):
     from torch._higher_order_ops.associative_scan import associative_scan
-except ImportError:
+else:
     associative_scan = None
 
 

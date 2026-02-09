@@ -31,16 +31,16 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ...utils.generic import maybe_autocast
-from ...utils.import_utils import is_torchdynamo_compiling
+from ...utils.import_utils import is_torchdynamo_compiling, is_torch_greater_or_equal
 from .configuration_recurrent_gemma import RecurrentGemmaConfig
 
 
 logger = logging.get_logger(__name__)
 _MAX_SQRT_GRADIENT = 1000.0
 
-try:
+if is_torch_greater_or_equal("2.9.0"):
     from torch._higher_order_ops.associative_scan import associative_scan
-except ImportError:
+else:
     associative_scan = None
 
 
