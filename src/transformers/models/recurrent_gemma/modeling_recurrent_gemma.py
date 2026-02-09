@@ -31,7 +31,7 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ...utils.generic import maybe_autocast
-from ...utils.import_utils import is_torchdynamo_compiling, is_torch_greater_or_equal
+from ...utils.import_utils import is_torch_greater_or_equal, is_torchdynamo_compiling
 from .configuration_recurrent_gemma import RecurrentGemmaConfig
 
 
