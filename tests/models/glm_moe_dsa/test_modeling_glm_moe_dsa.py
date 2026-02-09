@@ -15,23 +15,18 @@
 
 import unittest
 
-import pytest
-import torch
-
 from transformers import Cache, is_torch_available
 from transformers.testing_utils import (
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
-    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
-    from transformers import AutoTokenizer, GlmMoeDsaForCausalLM, GlmMoeDsaModel
+    from transformers import GlmMoeDsaModel
 
 
 class GlmMoeDsaModelTester(CausalLMModelTester):
