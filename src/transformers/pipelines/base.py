@@ -1357,9 +1357,7 @@ class PipelineRegistry:
         available_tasks = self.get_supported_tasks()
         if supports_translation:
             available_tasks.append("translation_XX_to_YY")
-        raise KeyError(
-            f"Unknown task {task}, available tasks are {available_tasks}"
-        )
+        raise KeyError(f"Unknown task {task}, available tasks are {available_tasks}")
 
     def register_pipeline(
         self,
