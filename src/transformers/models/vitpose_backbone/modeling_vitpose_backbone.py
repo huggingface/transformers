@@ -59,12 +59,14 @@ class VitPoseBackbonePatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size, padding=2)
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         height, width = pixel_values.shape[-2:]
-        if height != self.image_size[0] or width != self.image_size[1]:
-            raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
-            )
+        if not interpolate_pos_encoding:
+            if height != self.image_size[0] or width != self.image_size[1]:
+                raise ValueError(
+                    f"Input image size ({height}*{width}) doesn't match model"
+                    f" ({self.image_size[0]}*{self.image_size[1]})."
+                )
         embeddings = self.projection(pixel_values)
 
         embeddings = embeddings.flatten(2).transpose(1, 2)
@@ -83,12 +85,62 @@ class VitPoseBackboneEmbeddings(nn.Module):
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.config = config
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        embeddings = self.patch_embeddings(pixel_values)
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
+        resolution images. This method is also adapted to support torch.jit tracing.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+        num_patches = embeddings.shape[1]
+        num_positions = self.position_embeddings.shape[1] - 1
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embeddings[:, 1:] + self.position_embeddings[:, :1]
+
+        class_pos_embed = self.position_embeddings[:, :1]
+        patch_pos_embed = self.position_embeddings[:, 1:]
+
+        dim = embeddings.shape[-1]
+
+        patch_size = self.config.patch_size
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        new_height = height // patch_size[0]
+        new_width = width // patch_size[1]
+
+        image_size = self.config.image_size
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        orig_height = image_size[0] // patch_size[0]
+        orig_width = image_size[1] // patch_size[1]
+
+        patch_pos_embed = patch_pos_embed.reshape(1, orig_height, orig_width, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        return patch_pos_embed + class_pos_embed
+
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+        batch_size, num_channels, height, width = pixel_values.shape
+        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
         # add positional encoding to each token
-        embeddings = embeddings + self.position_embeddings[:, 1:] + self.position_embeddings[:, :1]
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embeddings[:, 1:] + self.position_embeddings[:, :1]
 
         embeddings = self.dropout(embeddings)
 
@@ -395,6 +447,7 @@ class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
         pixel_values: torch.Tensor,
         dataset_index: torch.Tensor | None = None,
         output_hidden_states: bool | None = None,
+        interpolate_pos_encoding: bool | None = None,
         **kwargs,
     ):
         r"""
@@ -420,7 +473,7 @@ class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
         if output_hidden_states is None:
             output_hidden_states = self.config.output_hidden_states
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         outputs: BaseModelOutput = self.encoder(
             embedding_output, dataset_index=dataset_index, output_hidden_states=True
         )

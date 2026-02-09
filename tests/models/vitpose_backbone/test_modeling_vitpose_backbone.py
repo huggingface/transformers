@@ -17,7 +17,7 @@ import inspect
 import unittest
 
 from transformers import VitPoseBackboneConfig
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
@@ -26,6 +26,8 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
+    import torch
+
     from transformers import VitPoseBackbone
 
 
@@ -158,6 +160,31 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="VitPoseBackbone does not support training yet")
     def test_training(self):
         pass
+
+    def test_interpolate_pos_encoding(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+
+            # Create input with a different resolution than the model's default
+            image_size = self.model_tester.image_size
+            pixel_values = floats_tensor(
+                [self.model_tester.batch_size, self.model_tester.num_channels, image_size[0] * 2, image_size[1] * 2]
+            ).to(torch_device)
+
+            # Forward pass with interpolate_pos_encoding=True should work
+            with torch.no_grad():
+                outputs = model(pixel_values, interpolate_pos_encoding=True)
+
+            # Verify output shape is as expected for the new resolution
+            patch_size = config.patch_size
+            patch_size = patch_size if isinstance(patch_size, (list, tuple)) else (patch_size, patch_size)
+            # VitPose uses padding=2 in convolution, so output size differs from simple division
+            expected_height = (image_size[0] * 2 + 2 * 2 - patch_size[0]) // patch_size[0] + 1
+            expected_width = (image_size[1] * 2 + 2 * 2 - patch_size[1]) // patch_size[1] + 1
+            expected_seq_len = expected_height * expected_width
+            self.assertEqual(outputs.feature_maps[0].shape[1], expected_seq_len)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
