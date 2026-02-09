@@ -813,11 +813,13 @@ def spawn_tp_materialize(
 
 def dot_natural_key(s: str):
     parts = s.split(".")
-    for i, p in enumerate(parts):
-        # whole-segment digits -> int; otherwise leave as str
+    key = []
+    for p in parts:
         if p.isdigit():
-            parts[i] = int(p)
-    return parts
+            key.append((0, int(p)))
+        else:
+            key.append((1, p))
+    return tuple(key)
 
 
 @contextmanager
