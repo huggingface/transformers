@@ -36,7 +36,7 @@ from transformers import (
     pipeline,
 )
 from transformers.pipelines import PIPELINE_REGISTRY, get_task
-from transformers.pipelines.base import Pipeline, _pad
+from transformers.pipelines.base import Pipeline, PipelineRegistry, _pad
 from transformers.testing_utils import (
     TOKEN,
     USER,
@@ -788,6 +788,7 @@ class CustomPipelineTest(unittest.TestCase):
         )
 
         self.assertEqual(old_classifier.__class__.__name__, "TextClassificationPipeline")
+
         self.assertEqual(old_classifier.task, "text-classification")
         results = old_classifier("I hate you", text_pair="I love you")
         self.assertListEqual(
@@ -864,6 +865,40 @@ class CustomPipelineTest(unittest.TestCase):
         )
 
         self.assertIsInstance(mask_generator, MaskGenerationPipeline)  # Assert successful loading
+
+
+@is_pipeline_test
+class PipelineRegistryTest(unittest.TestCase):
+    def test_check_task_without_translation_pipeline(self):
+        registry = PipelineRegistry(supported_tasks={"text-classification": {}}, task_aliases={})
+
+        with self.assertRaises(KeyError) as exc:
+            registry.check_task("translation")
+        self.assertIn("Unknown task translation", str(exc.exception))
+        self.assertNotIn("translation_XX_to_YY", str(exc.exception))
+
+        with self.assertRaises(KeyError) as exc:
+            registry.check_task("translation_en_to_de")
+        self.assertIn("Unknown task translation_en_to_de", str(exc.exception))
+        self.assertNotIn("translation_XX_to_YY", str(exc.exception))
+
+    def test_check_task_with_translation_pipeline(self):
+        translation_task = {"impl": object()}
+        registry = PipelineRegistry(supported_tasks={"translation": translation_task}, task_aliases={})
+
+        normalized_task, targeted_task, task_options = registry.check_task("translation_en_to_de")
+        self.assertEqual(normalized_task, "translation")
+        self.assertIs(targeted_task, translation_task)
+        self.assertEqual(task_options, ("en", "de"))
+
+        normalized_task, targeted_task, task_options = registry.check_task("translation")
+        self.assertEqual(normalized_task, "translation")
+        self.assertIs(targeted_task, translation_task)
+        self.assertIsNone(task_options)
+
+        with self.assertRaises(KeyError) as exc:
+            registry.check_task("unknown-task")
+        self.assertIn("translation_XX_to_YY", str(exc.exception))
 
 
 @require_torch
