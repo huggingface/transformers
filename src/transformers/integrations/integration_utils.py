@@ -2236,6 +2236,18 @@ class SwanLabCallback(TrainerCallback):
         - **SWANLAB_API_HOST** (`str`, *optional*, defaults to `None`):
             API address for the SwanLab cloud environment for private version (its free)
 
+        - **SWANLAB_RUN_ID** (`str`, *optional*, defaults to `None`):
+            The SwanLab run ID (21-character string) to resume. When set together with `SWANLAB_RESUME`, enables
+            resuming a previous run so that `trainer.train(resume_from_checkpoint=...)` continues the same
+            experiment instead of creating a new one. The run ID can be found in the experiment's Environment tab
+            or in the URL on the SwanLab dashboard.
+
+        - **SWANLAB_RESUME** (`str` or `bool`, *optional*, defaults to `None`):
+            Resume mode for SwanLab. Use with `SWANLAB_RUN_ID` when resuming training. Accepted values: `"allow"`
+            (resume if run exists, else create new; same as `True`), `"must"` (resume only, error if run missing),
+            `"never"` (always create new run; same as `False`). Set to `"allow"` or `True` when using
+            `trainer.train(resume_from_checkpoint=...)` to continue the same experiment.
+
         """
         self._initialized = True
 
@@ -2258,6 +2270,21 @@ class SwanLabCallback(TrainerCallback):
             elif trial_name is not None:
                 init_args["experiment_name"] = trial_name
             init_args["project"] = os.getenv("SWANLAB_PROJECT", None)
+
+            # Support resuming a previous run (e.g. when using trainer.train(resume_from_checkpoint=...))
+            swanlab_run_id = os.getenv("SWANLAB_RUN_ID", None) or os.getenv("SWANLAB_ID", None)
+            swanlab_resume = os.getenv("SWANLAB_RESUME", None)
+            if swanlab_run_id is not None:
+                init_args["id"] = swanlab_run_id
+            if swanlab_resume is not None:
+                if swanlab_resume.lower() in ("true", "1"):
+                    init_args["resume"] = True
+                elif swanlab_resume.lower() in ("false", "0"):
+                    init_args["resume"] = False
+                elif swanlab_resume.lower() in ("allow", "must", "never"):
+                    init_args["resume"] = swanlab_resume.lower()
+                else:
+                    init_args["resume"] = swanlab_resume
 
             if self._swanlab.get_run() is None:
                 self._swanlab.init(
