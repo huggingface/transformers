@@ -245,17 +245,13 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_chunkwise_shape_calculation(self):
         config = self.model_tester.get_config()
 
-        config.hidden_size = 64
-        config.qk_dim_factor = 0.5
-        config.v_dim_factor = 1.0
-        config.num_heads = 2
         config.chunkwise_kernel = "chunkwise--native_autograd"
 
         model = xLSTMModel(config)
         model.to(torch_device)
         model.train(False)
 
-        batch_size, seq_length = 2, 8
+        batch_size, seq_length = 2, config.chunk_size * 2
         input_ids = ids_tensor([batch_size, seq_length], config.vocab_size)
 
         with torch.no_grad():
