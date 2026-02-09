@@ -962,8 +962,6 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         )
         return special_image_mask
 
-    @merge_with_config_defaults
-    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -992,16 +990,13 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
 
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
-        hidden_states = self.text_model(
+        outputs = self.text_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
             **kwargs,
         )
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-        )
+        return outputs
 
 
 class T5Gemma2Decoder(T5Gemma2PreTrainedModel):

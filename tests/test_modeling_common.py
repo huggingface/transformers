@@ -5535,6 +5535,7 @@ class ModelTesterMixin:
             # Each individual model is a subtest
             with self.subTest(model_class.__name__):
                 model = model_class(copy.deepcopy(config)).to(device=torch_device)
+                model.eval()
 
                 # Apparently this model cannot correctly create its inputs and has to use another function....
                 if "modeling_perceiver.py" in inspect.getfile(model_class):
