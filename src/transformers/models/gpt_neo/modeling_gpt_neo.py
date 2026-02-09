@@ -209,9 +209,6 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
 
         attn_dropout = self.config.attention_dropout if self.training else 0.0
 
-        if attention_mask is not None:
-            attention_mask = attention_mask[:, :, :, : key.shape[-2]]
-
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in the correct dtype just to be sure everything works as expected.
