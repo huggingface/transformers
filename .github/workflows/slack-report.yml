@@ -94,6 +94,7 @@ jobs:
           pip install huggingface_hub
           pip install slack_sdk
           pip show slack_sdk
+          pip install .
           if [ "$quantization_matrix" != "" ]; then
             python utils/notification_service.py "$quantization_matrix"
           else

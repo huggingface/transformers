@@ -6,9 +6,10 @@
   - local: quicktour
     title: Quickstart
   title: Get started
-- isExpanded: false
+- isExpanded: true
   sections:
-  - sections:
+  - isExpanded: false
+    sections:
     - local: weightconverter
       title: Dynamic weight loading
     - local: models
@@ -28,7 +29,8 @@
     - local: auto_docstring
       title: Documenting a model
     title: Models
-  - sections:
+  - isExpanded: false
+    sections:
     - local: fast_tokenizers
       title: Tokenizers
     - local: image_processors
@@ -47,9 +49,10 @@
       title: Padding and truncation
     title: Preprocessors
   title: Base classes
-- isExpanded: false
+- isExpanded: true
   sections:
-  - sections:
+  - isExpanded: false
+    sections:
     - local: pipeline_tutorial
       title: Pipeline
     - local: pipeline_gradio
@@ -59,7 +62,8 @@
     - local: add_new_pipeline
       title: Adding a new pipeline
     title: Pipeline API
-  - sections:
+  - isExpanded: false
+    sections:
     - local: llm_tutorial
       title: Text generation
     - local: generation_strategies
@@ -71,7 +75,8 @@
     - local: perplexity
       title: Perplexity of fixed-length models
     title: Generate API
-  - sections:
+  - isExpanded: false
+    sections:
     - local: optimization_overview
       title: Overview
     - local: attention_interface
@@ -101,7 +106,8 @@
     - local: llm_tutorial_optimization
       title: Getting the most out of LLMs
     title: Optimization
-  - sections:
+  - isExpanded: false
+    sections:
     - local: conversations
       title: Chat basics
     - local: chat_templating
@@ -115,7 +121,8 @@
     - local: chat_templating_writing
       title: Writing a chat template
     title: Chat with models
-  - sections:
+  - isExpanded: false
+    sections:
     - local: serve-cli/serving
       title: Serve CLI
     - local: serve-cli/serving_optims
@@ -130,9 +137,10 @@
       title: tiny-agents
     title: Serving
   title: Inference
-- isExpanded: false
+- isExpanded: true
   sections:
-  - sections:
+  - isExpanded: false
+    sections:
     - local: trainer
       title: Trainer
     - local: training
@@ -142,7 +150,8 @@
     - local: hpo_train
       title: Hyperparameter search
     title: Trainer API
-  - sections:
+  - isExpanded: false
+    sections:
     - local: accelerator_selection
       title: Accelerator selection
     - local: accelerate
@@ -158,7 +167,8 @@
     - local: perf_train_gpu_many
       title: Parallelism methods
     title: Distributed training
-  - sections:
+  - isExpanded: false
+    sections:
     - local: perf_train_gpu_one
       title: GPU
     - local: perf_train_cpu
@@ -555,6 +565,8 @@
         title: GLM-4.7-Flash
       - local: model_doc/glm_image
         title: GLM-Image
+      - local: model_doc/glm_moe_dsa
+        title: GlmMoeDsa
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -711,6 +723,10 @@
         title: Qwen2MoE
       - local: model_doc/qwen3
         title: Qwen3
+      - local: model_doc/qwen3_5
+        title: Qwen3.5
+      - local: model_doc/qwen3_5_moe
+        title: Qwen3.5 Moe
       - local: model_doc/qwen3_moe
         title: Qwen3MoE
       - local: model_doc/qwen3_next
