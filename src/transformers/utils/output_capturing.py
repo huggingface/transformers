@@ -230,6 +230,11 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
                 f"output_{k}": kwargs.get(f"output_{k}", getattr(self.config, f"output_{k}", False))
                 for k in capturable_flags
             }
+            # The sam model variants need this annoying exception as they use a different name for the kwarg and the record...
+            if "mask_decoder_attentions" in capturable_flags:
+                recordable_keys["output_mask_decoder_attentions"] = kwargs.get(
+                    "output_attentions", getattr(self.config, "output_attentions", False)
+                )
 
             collected_outputs = {k.replace("output_", ""): [] for k, v in recordable_keys.items() if v}
             # Make sure hooks are installed if we need to collect outputs
