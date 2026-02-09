@@ -137,9 +137,6 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        first_k_dense_replace (`int`, *optional*, defaults to 3):
-            Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
-                                                            \--k dense layers--/
         index_topk (`int`, *optional*, defaults to 2048):
             Number of top tokens selected by the indexer for retrieval/attention in each step.
 
@@ -189,7 +186,6 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         mlp_layer_types=None,
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
-        first_k_dense_replace: int | None = 3,
         index_topk: int | None = 2048,
         **kwargs,
     ):
@@ -205,7 +201,6 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         self.q_lora_rank = q_lora_rank
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
-        self.first_k_dense_replace = first_k_dense_replace
         self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
         self.head_dim = qk_rope_head_dim
@@ -223,9 +218,7 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         # Default to MoE from the second layer and on
         self.mlp_layer_types = mlp_layer_types
         if self.mlp_layer_types is None:
-            self.mlp_layer_types = ["dense"] * self.first_k_dense_replace + ["sparse"] * (
-                self.num_hidden_layers - self.first_k_dense_replace
-            )
+            self.mlp_layer_types = ["dense"] * 3 + ["sparse"] * (self.num_hidden_layers - 3)
         layer_type_validation(self.mlp_layer_types, self.num_hidden_layers, attention=False)
 
         self.moe_intermediate_size = moe_intermediate_size
