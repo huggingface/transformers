@@ -29,8 +29,8 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.generic import check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..mixtral.modeling_mixtral import (
     MixtralAttention,
@@ -535,7 +535,8 @@ class MiniMaxPreTrainedModel(MixtralPreTrainedModel):
 
 
 class MiniMaxModel(MixtralModel):
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

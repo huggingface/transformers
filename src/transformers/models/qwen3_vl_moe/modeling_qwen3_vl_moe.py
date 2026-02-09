@@ -50,8 +50,8 @@ from ...utils import (
     is_grouped_mm_available,
     torch_compilable_check,
 )
-from ...utils.generic import check_model_inputs, is_flash_attention_requested, maybe_autocast
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_qwen3_vl_moe import Qwen3VLMoeConfig, Qwen3VLMoeTextConfig, Qwen3VLMoeVisionConfig
 
 
@@ -745,7 +745,8 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
         patch_pos_embeds = torch.cat(patch_pos_embeds_permute)
         return patch_pos_embeds
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
@@ -920,7 +921,8 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

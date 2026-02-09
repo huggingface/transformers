@@ -34,8 +34,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple, check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_conditional_detr import ConditionalDetrConfig
 
 
@@ -1100,7 +1100,8 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         inputs_embeds=None,
@@ -1198,7 +1199,8 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         inputs_embeds=None,

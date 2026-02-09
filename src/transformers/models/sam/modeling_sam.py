@@ -29,8 +29,8 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.generic import TransformersKwargs, check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import TransformersKwargs, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
@@ -1053,7 +1053,8 @@ class SamVisionEncoder(SamPreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_embed
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | SamVisionEncoderOutput:
@@ -1186,7 +1187,8 @@ class SamModel(SamPreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

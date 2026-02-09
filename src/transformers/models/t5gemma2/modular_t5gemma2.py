@@ -44,8 +44,8 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
 from ..gemma3.configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 from ..gemma3.modeling_gemma3 import (
@@ -829,7 +829,8 @@ class T5Gemma2TextEncoder(T5Gemma2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -961,7 +962,8 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         )
         return special_image_mask
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -1032,7 +1034,8 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
         self.rotary_emb = T5Gemma2RotaryEmbedding(config)
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

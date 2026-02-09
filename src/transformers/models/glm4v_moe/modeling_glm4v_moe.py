@@ -46,8 +46,8 @@ from ...utils import (
     is_torchdynamo_compiling,
     torch_compilable_check,
 )
-from ...utils.generic import can_return_tuple, check_model_inputs, is_flash_attention_requested, maybe_autocast
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import can_return_tuple, is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_glm4v_moe import Glm4vMoeConfig, Glm4vMoeTextConfig, Glm4vMoeVisionConfig
 
 
@@ -829,7 +829,8 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb, pos_ids
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
@@ -990,7 +991,8 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

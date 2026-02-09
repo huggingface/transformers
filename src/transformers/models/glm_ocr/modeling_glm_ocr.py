@@ -47,7 +47,8 @@ from ...utils import (
     is_torchdynamo_compiling,
     torch_compilable_check,
 )
-from ...utils.generic import check_model_inputs, is_flash_attention_requested, maybe_autocast
+from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_glm_ocr import GlmOcrConfig, GlmOcrTextConfig, GlmOcrVisionConfig
 
 
@@ -615,7 +616,8 @@ class GlmOcrVisionModel(GlmOcrPreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb, pos_ids
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
         r"""
@@ -763,7 +765,8 @@ class GlmOcrTextModel(GlmOcrPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

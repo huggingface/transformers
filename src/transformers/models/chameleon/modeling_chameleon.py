@@ -39,7 +39,8 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_chameleon import ChameleonConfig, ChameleonVQVAEConfig
 
 
@@ -835,7 +836,8 @@ class ChameleonVQVAE(ChameleonPreTrainedModel):
         self.eval()  # Chameleon's VQ model is frozen
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def encode(
         self, pixel_values: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> ChameleonVQVAEModelOutput:

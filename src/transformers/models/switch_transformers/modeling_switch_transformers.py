@@ -40,8 +40,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging
-from ...utils.generic import can_return_tuple, check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_switch_transformers import SwitchTransformersConfig
 
 
@@ -667,7 +667,8 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
         self.gradient_checkpointing = False
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids=None,

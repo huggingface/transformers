@@ -38,8 +38,11 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.generic import can_return_tuple, check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import (
+    can_return_tuple,
+    merge_with_config_defaults,
+)
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..t5.modeling_t5 import T5Attention, T5DenseActDense, T5LayerCrossAttention, T5LayerNorm, T5LayerSelfAttention
 from .configuration_switch_transformers import SwitchTransformersConfig
 
@@ -428,7 +431,8 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
         self.gradient_checkpointing = False
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids=None,

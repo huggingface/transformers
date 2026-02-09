@@ -33,7 +33,8 @@ from ...utils import (
     can_return_tuple,
     torch_int,
 )
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_efficientloftr import EfficientLoFTRConfig
 
 
@@ -733,7 +734,8 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

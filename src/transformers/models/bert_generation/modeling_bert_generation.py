@@ -33,7 +33,8 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_bert_generation import BertGenerationConfig
 
 
@@ -504,7 +505,8 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

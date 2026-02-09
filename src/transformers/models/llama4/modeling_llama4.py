@@ -45,7 +45,8 @@ from ...modeling_rope_utils import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_llama4 import Llama4Config, Llama4TextConfig
 
 
@@ -523,7 +524,8 @@ class Llama4TextModel(Llama4PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -1208,7 +1210,8 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring(custom_intro="Obtains image last hidden states from the vision tower and apply al projection.")
     def get_image_features(
         self,
@@ -1249,7 +1252,8 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         )
         return special_image_mask
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,

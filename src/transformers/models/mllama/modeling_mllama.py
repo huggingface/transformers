@@ -36,8 +36,11 @@ from ...modeling_rope_utils import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs, maybe_autocast
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import (
+    maybe_autocast,
+    merge_with_config_defaults,
+)
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_mllama import MllamaConfig, MllamaTextConfig, MllamaVisionConfig
 
 
@@ -907,7 +910,8 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         hidden_state = torch.cat([class_embedding, hidden_state], dim=1)
         return hidden_state
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, aspect_ratio_ids: torch.Tensor, aspect_ratio_mask: torch.Tensor, **kwargs
@@ -1079,7 +1083,8 @@ class MllamaTextModel(MllamaPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @can_return_tuple
     @auto_docstring
     def forward(

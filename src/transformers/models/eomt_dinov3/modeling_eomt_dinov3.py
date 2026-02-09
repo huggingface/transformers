@@ -36,7 +36,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, is_accelerate_available
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_eomt_dinov3 import EomtDinov3Config
 
 
@@ -1235,7 +1236,8 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
     def get_loss(self, loss_dict: dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

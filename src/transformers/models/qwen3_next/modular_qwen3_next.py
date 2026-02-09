@@ -29,12 +29,12 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_flash_linear_attention_available,
 )
-from ...utils.output_capturing import OutputRecorder
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..bamba.modeling_bamba import apply_mask_to_padding_states, apply_rotary_pos_emb
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
@@ -766,7 +766,8 @@ class Qwen3NextModel(Qwen3NextPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

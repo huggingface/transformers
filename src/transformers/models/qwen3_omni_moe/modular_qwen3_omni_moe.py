@@ -45,8 +45,8 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.generic import TransformersKwargs, check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import TransformersKwargs, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoInput, make_batched_videos
 from ..mimi.modeling_mimi import MimiLayerScale
 from ..qwen2_5_omni.configuration_qwen2_5_omni import (
@@ -1745,7 +1745,8 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
     def get_input_embeddings(self):
         return self.codec_embedding
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

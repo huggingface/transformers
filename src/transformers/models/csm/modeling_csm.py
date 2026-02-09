@@ -25,8 +25,6 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
-from transformers.utils.generic import check_model_inputs
-
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
@@ -39,8 +37,9 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_csm import CsmConfig, CsmDepthDecoderConfig
 from .generation_csm import CsmGenerationMixin
@@ -442,7 +441,8 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -695,7 +695,8 @@ class CsmBackboneModel(CsmPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

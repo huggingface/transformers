@@ -38,7 +38,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import meshgrid
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_lw_detr import LwDetrConfig, LwDetrViTConfig
 
 
@@ -381,7 +382,8 @@ class LwDetrViTBackbone(BackboneMixin, LwDetrViTPreTrainedModel):
     def get_input_embeddings(self) -> LwDetrViTEmbeddings:
         return self.embeddings.projection
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""
@@ -1120,7 +1122,8 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         query_pos = self.ref_point_head(query_sine_embed)
         return reference_points_inputs, query_pos
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         inputs_embeds: torch.Tensor | None = None,
