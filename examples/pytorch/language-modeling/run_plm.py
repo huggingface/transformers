@@ -38,7 +38,6 @@ import os
 import sys
 from dataclasses import dataclass, field
 from itertools import chain
-from typing import Optional
 
 import datasets
 from datasets import load_dataset
@@ -73,7 +72,7 @@ class ModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
     """
 
-    model_name_or_path: Optional[str] = field(
+    model_name_or_path: str | None = field(
         default=None,
         metadata={
             "help": (
@@ -81,10 +80,10 @@ class ModelArguments:
             )
         },
     )
-    config_name: Optional[str] = field(
+    config_name: str | None = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
-    config_overrides: Optional[str] = field(
+    config_overrides: str | None = field(
         default=None,
         metadata={
             "help": (
@@ -93,10 +92,10 @@ class ModelArguments:
             )
         },
     )
-    tokenizer_name: Optional[str] = field(
+    tokenizer_name: str | None = field(
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
-    cache_dir: Optional[str] = field(
+    cache_dir: str | None = field(
         default=None,
         metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
     )
@@ -131,10 +130,10 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    dataset_name: Optional[str] = field(
+    dataset_name: str | None = field(
         default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
     )
-    dataset_config_name: Optional[str] = field(
+    dataset_config_name: str | None = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
     trust_remote_code: bool = field(
@@ -147,15 +146,15 @@ class DataTrainingArguments:
             )
         },
     )
-    train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
-    validation_file: Optional[str] = field(
+    train_file: str | None = field(default=None, metadata={"help": "The input training data file (a text file)."})
+    validation_file: str | None = field(
         default=None,
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
-    validation_split_percentage: Optional[int] = field(
+    validation_split_percentage: int | None = field(
         default=5,
         metadata={
             "help": "The percentage of the train set used as validation set in case there's no validation split"
@@ -170,7 +169,7 @@ class DataTrainingArguments:
             )
         },
     )
-    preprocessing_num_workers: Optional[int] = field(
+    preprocessing_num_workers: int | None = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
@@ -199,7 +198,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_train_samples: Optional[int] = field(
+    max_train_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -208,7 +207,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_eval_samples: Optional[int] = field(
+    max_eval_samples: int | None = field(
         default=None,
         metadata={
             "help": (

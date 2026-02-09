@@ -81,7 +81,7 @@ Explore the [Hub](https://huggingface.com/) today to find a model and use Transf
 
 ## Installation
 
-Transformers works with Python 3.9+, and [PyTorch](https://pytorch.org/get-started/locally/) 2.1+.
+Transformers works with Python 3.9+, and [PyTorch](https://pytorch.org/get-started/locally/) 2.4+.
 
 Create and activate a virtual environment with [venv](https://docs.python.org/3/library/venv.html) or [uv](https://docs.astral.sh/uv/), a fast Rust-based Python package and project manager.
 
@@ -224,7 +224,7 @@ pipeline(
     - Reduce compute time and production costs.
     - Dozens of model architectures with 1M+ pretrained checkpoints across all modalities.
 
-1. Choose the right framework for every part of a models lifetime:
+1. Choose the right framework for every part of a model's lifetime:
     - Train state-of-the-art models in 3 lines of code.
     - Move a single model between PyTorch/JAX/TF2.0 frameworks at will.
     - Pick the right framework for training, evaluation, and production.

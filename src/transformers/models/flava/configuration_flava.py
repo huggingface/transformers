@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 """FLAVA model configurations"""
 
-from typing import Any, Optional
+from typing import Any
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -432,9 +431,8 @@ class FlavaConfig(PreTrainedConfig):
             Whether to skip running unmasked multimodal encoder whose outputs are not used by FLAVA losses.
         return_loss (`bool`, *optional*, defaults to `True`):
             Whether to return loss or not
-
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -464,10 +462,10 @@ class FlavaConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        image_config: Optional[dict[str, Any]] = None,
-        text_config: Optional[dict[str, Any]] = None,
-        multimodal_config: Optional[dict[str, Any]] = None,
-        image_codebook_config: Optional[dict[str, Any]] = None,
+        image_config: dict[str, Any] | None = None,
+        text_config: dict[str, Any] | None = None,
+        multimodal_config: dict[str, Any] | None = None,
+        image_codebook_config: dict[str, Any] | None = None,
         hidden_size: int = 768,
         layer_norm_eps: float = 1e-12,
         projection_dim: int = 768,
@@ -484,6 +482,7 @@ class FlavaConfig(PreTrainedConfig):
         global_backprop_contrastive: bool = True,
         skip_unmasked_multimodal_encoder: bool = True,
         return_loss: bool = True,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         # If `_config_dict` exist, we use them for the backward compatibility.
@@ -664,6 +663,7 @@ class FlavaConfig(PreTrainedConfig):
         self.global_backprop_contrastive = global_backprop_contrastive
         self.skip_unmasked_multimodal_encoder = skip_unmasked_multimodal_encoder
         self.return_loss = return_loss
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

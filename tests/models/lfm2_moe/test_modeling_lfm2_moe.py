@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +20,6 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_deterministic_for_xpu,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -145,7 +143,6 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-@require_read_token
 @slow
 class Lfm2MoeIntegrationTest(unittest.TestCase):
     @classmethod

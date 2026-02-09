@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 """Feature extractor class for CLAP."""
 
 import copy
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -94,7 +93,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
         frequency_min: float = 0,
         frequency_max: float = 14_000,
-        top_db: Optional[int] = None,
+        top_db: int | None = None,
         truncation: str = "fusion",
         padding: str = "repeatpad",
         **kwargs,
@@ -152,7 +151,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             del output["mel_filters_slaney"]
         return output
 
-    def _np_extract_fbank_features(self, waveform: np.ndarray, mel_filters: Optional[np.ndarray] = None) -> np.ndarray:
+    def _np_extract_fbank_features(self, waveform: np.ndarray, mel_filters: np.ndarray | None = None) -> np.ndarray:
         """
         Compute the log-mel spectrogram of the provided `waveform` using the Hann window. In CLAP, two different filter
         banks are used depending on the truncation pattern:
@@ -259,12 +258,12 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        truncation: Optional[str] = None,
-        padding: Optional[str] = None,
-        max_length: Optional[int] = None,
-        sampling_rate: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        truncation: str | None = None,
+        padding: str | None = None,
+        max_length: int | None = None,
+        sampling_rate: int | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

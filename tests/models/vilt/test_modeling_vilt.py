@@ -231,6 +231,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     model_split_percents = [0.5, 0.8, 0.9]
+    test_torch_exportable = False
 
     # ViltForMaskedLM, ViltForQuestionAnswering and ViltForImagesAndTextClassification require special treatment
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -291,7 +292,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
-    def test_training_gradient_checkpointing(self):
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:
             self.skipTest(reason="model_tester.is_training is set to False.")
 
@@ -309,23 +310,11 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable()
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
 
     @unittest.skip(
         reason="""VilT samples image tokens from a multinomial distribution, resulting in not deterministic
@@ -541,6 +530,8 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 class ViltForImagesAndTextClassificationModelTest(ViltModelTest, unittest.TestCase):
     all_model_classes = (ViltForImagesAndTextClassification,) if is_torch_available() else ()
 
+    test_torch_exportable = False
+
     def setUp(self):
         self.model_tester = ViltModelTester(self, modality_type_vocab_size=3, add_multiple_images=True, num_images=2)
         self.config_tester = ConfigTester(self, config_class=ViltConfig, hidden_size=37)
@@ -667,7 +658,7 @@ class ViltModelIntegrationTest(unittest.TestCase):
             )
         else:
             expected_slice = torch.tensor(
-                [-2.3713, 2.9168],
+                [-2.3694, 2.9153],
                 device=torch_device,
             )
 

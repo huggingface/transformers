@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2024 The Rhymes-AI Teams Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,8 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -117,27 +114,27 @@ class AriaTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 32000,
-        hidden_size: Optional[int] = 4096,
+        vocab_size: int | None = 32000,
+        hidden_size: int | None = 4096,
         intermediate_size: int = 4096,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = None,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 2048,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = None,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 2048,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
         pad_token_id=2,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        pretraining_tp: Optional[int] = 1,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        mlp_bias: Optional[bool] = False,
-        head_dim: Optional[int] = None,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        pretraining_tp: int | None = 1,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        mlp_bias: bool | None = False,
+        head_dim: int | None = None,
         moe_num_experts: int = 8,
         moe_topk: int = 2,
         moe_num_shared_experts: int = 2,
@@ -170,13 +167,11 @@ class AriaTextConfig(PreTrainedConfig):
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 class AriaConfig(PreTrainedConfig):
@@ -202,18 +197,8 @@ class AriaConfig(PreTrainedConfig):
             Index used to represent image tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal initializer for initializing all weight matrices.
-
-    Attributes:
-        model_type (`str`):
-            Type of the model, set to `"aria"`.
-        image_token_index (`int`):
-            Index used to represent image tokens.
-        projector_patch_to_query_dict (`dict`):
-            Mapping of patch sizes to query dimensions.
-        vision_config (`AriaVisionConfig`):
-            Configuration for the vision component.
-        text_config (`AriaTextConfig`):
-            Configuration for the text component.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
     """
 
     model_type = "aria"
@@ -227,9 +212,10 @@ class AriaConfig(PreTrainedConfig):
         vision_config=None,
         vision_feature_layer: int = -1,
         text_config: AriaTextConfig = None,
-        projector_patch_to_query_dict: Optional[dict] = None,
-        image_token_index: int = 9,
-        initializer_range: float = 0.02,
+        projector_patch_to_query_dict: dict | None = None,
+        image_token_index: int | None = 9,
+        initializer_range: float | None = 0.02,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -259,6 +245,7 @@ class AriaConfig(PreTrainedConfig):
             text_config = AriaTextConfig()
 
         self.text_config = text_config
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

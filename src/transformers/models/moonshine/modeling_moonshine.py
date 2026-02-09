@@ -19,20 +19,17 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from typing import Optional, Union
+from dataclasses import dataclass
+from typing import Optional
 
-import numpy as np
 import torch
 import torch.nn as nn
-
-from transformers.utils.generic import OutputRecorder, check_model_inputs
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernelized_func
-from ...masking_utils import create_causal_mask
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -46,8 +43,19 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast
+from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.output_capturing import OutputRecorder
 from .configuration_moonshine import MoonshineConfig
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Extends [~modeling_outputs.BaseModelOutput] to include the output attention mask since sequence length is not preserved in the model's forward.
+    """
+)
+class MoonshineEncoderModelOutput(BaseModelOutput):
+    attention_mask: torch.Tensor | None = None
 
 
 class MoonshineEncoderMLP(nn.Module):
@@ -102,9 +110,9 @@ class MoonshineRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[MoonshineConfig] = None,
+        config: MoonshineConfig | None = None,
         device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
+        seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -165,7 +173,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -193,7 +201,7 @@ def rotate_half(x):
     return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -201,8 +209,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -279,13 +285,13 @@ class MoonshineAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        key_value_states: Optional[torch.Tensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        key_value_states: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         bsz, q_len = hidden_states.shape[:-1]
 
         query_states = (
@@ -333,9 +339,9 @@ class MoonshineAttention(nn.Module):
                     key_states, value_states, self.layer_idx, cache_kwargs
                 )
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         is_causal = self.is_causal and attention_mask is None and q_len > 1
 
@@ -384,12 +390,12 @@ class MoonshineEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -416,7 +422,7 @@ class MoonshineEncoderLayer(GradientCheckpointingLayer):
 
 
 class MoonshineDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: MoonshineConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: MoonshineConfig, layer_idx: int | None = None):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -424,18 +430,18 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
             config=config,
             layer_idx=layer_idx,
             is_causal=True,
-            num_attention_heads=config.decoder_num_attention_heads,
-            num_key_value_heads=config.decoder_num_key_value_heads,
+            num_attention_heads=config.num_attention_heads,
+            num_key_value_heads=config.num_key_value_heads,
         )
         self.encoder_attn = MoonshineAttention(
             config=config,
             layer_idx=layer_idx,
             is_causal=False,
-            num_attention_heads=config.decoder_num_attention_heads,
-            num_key_value_heads=config.decoder_num_key_value_heads,
+            num_attention_heads=config.num_attention_heads,
+            num_key_value_heads=config.num_key_value_heads,
         )
 
-        self.mlp = MoonshineDecoderMLP(config, config.decoder_hidden_act)
+        self.mlp = MoonshineDecoderMLP(config, config.hidden_act)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
@@ -443,18 +449,18 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        encoder_position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        encoder_position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        encoder_position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        encoder_position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -556,9 +562,9 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
     def forward(
         self,
         input_values: torch.FloatTensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         r"""
         Args:
             input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
@@ -586,12 +592,14 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             mask_len = self._get_feat_extract_output_lengths(attention_mask.shape[-1])
             downsample_stride = 64 * 3 * 2  # conv strides
             attention_mask = attention_mask[..., ::downsample_stride][..., :mask_len]
-            if self.config._attn_implementation == "flash_attention_2":
-                attention_mask = attention_mask if (attention_mask == 0.0).any() else None
-            elif self.config._attn_implementation == "sdpa":
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, hidden_states.dtype)
-            else:
-                attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+            output_attention_mask = attention_mask
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=attention_mask,
+            encoder_hidden_states=hidden_states,
+        )
 
         position_ids = torch.arange(0, hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -607,8 +615,9 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
 
         hidden_states = self.layer_norm(hidden_states)
 
-        return BaseModelOutputWithPast(
+        return MoonshineEncoderModelOutput(
             last_hidden_state=hidden_states,
+            attention_mask=output_attention_mask.int() if attention_mask is not None else None,
         )
 
 
@@ -627,9 +636,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [MoonshineDecoderLayer(config, idx) for idx in range(config.decoder_num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([MoonshineDecoderLayer(config, idx) for idx in range(config.num_hidden_layers)])
         self.norm = nn.LayerNorm(config.hidden_size, bias=False)
         self.rotary_emb = MoonshineRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
@@ -640,17 +647,17 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
     @check_model_inputs
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPast]:
+    ) -> tuple | BaseModelOutputWithPast:
         r"""
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
@@ -687,24 +694,15 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
+        encoder_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=encoder_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+        )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
-
-        if encoder_attention_mask is not None:
-            mask_len = encoder_hidden_states.shape[-2]
-            downsample_stride = 64 * 3 * 2  # conv strides
-            encoder_attention_mask = encoder_attention_mask[..., ::downsample_stride][..., :mask_len]
-            if self.config._attn_implementation == "flash_attention_2":
-                encoder_attention_mask = encoder_attention_mask if (encoder_attention_mask == 0.0).any() else None
-            elif self.config._attn_implementation == "sdpa":
-                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-                    encoder_attention_mask, hidden_states.dtype, hidden_states.shape[-2]
-                )
-            else:
-                encoder_attention_mask = _prepare_4d_attention_mask(
-                    encoder_attention_mask, hidden_states.dtype, hidden_states.shape[-2]
-                )
 
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
@@ -726,125 +724,6 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
-
-
-def _compute_mask_indices(
-    shape: tuple[int, int],
-    mask_prob: float,
-    mask_length: int,
-    attention_mask: Optional[torch.LongTensor] = None,
-    min_masks: int = 0,
-) -> np.ndarray:
-    """
-    Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://huggingface.co/papers/1904.08779). Note that this method is not optimized to run on TPU and should be run on
-    CPU as part of the preprocessing during training.
-
-    Args:
-        shape: The shape for which to compute masks. This should be of a tuple of size 2 where
-               the first element is the batch size and the second element is the length of the axis to span.
-        mask_prob:  The percentage of the whole axis (between 0 and 1) which will be masked. The number of
-                    independently generated mask spans of length `mask_length` is computed by
-                    `mask_prob*shape[1]/mask_length`. Note that due to overlaps, `mask_prob` is an upper bound and the
-                    actual percentage will be smaller.
-        mask_length: size of the mask
-        min_masks: minimum number of masked spans
-        attention_mask: A (right-padded) attention mask which independently shortens the feature axis of
-                        each batch dimension.
-    """
-    batch_size, sequence_length = shape
-
-    if mask_length < 1:
-        raise ValueError("`mask_length` has to be bigger than 0.")
-
-    if mask_length > sequence_length:
-        raise ValueError(
-            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length}"
-            f" and `sequence_length`: {sequence_length}`"
-        )
-
-    # epsilon is used for probabilistic rounding
-    epsilon = np.random.rand(1).item()
-
-    def compute_num_masked_span(input_length):
-        """Given input length, compute how many spans should be masked"""
-        num_masked_span = int(mask_prob * input_length / mask_length + epsilon)
-        num_masked_span = max(num_masked_span, min_masks)
-
-        # make sure num masked span <= sequence_length
-        if num_masked_span * mask_length > sequence_length:
-            num_masked_span = sequence_length // mask_length
-
-        # make sure num_masked span is also <= input_length - (mask_length - 1)
-        if input_length - (mask_length - 1) < num_masked_span:
-            num_masked_span = max(input_length - (mask_length - 1), 0)
-
-        return num_masked_span
-
-    # compute number of masked spans in batch
-    input_lengths = (
-        attention_mask.detach().sum(-1).tolist()
-        if attention_mask is not None
-        else [sequence_length for _ in range(batch_size)]
-    )
-
-    # SpecAugment mask to fill
-    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=bool)
-    spec_aug_mask_idxs = []
-
-    max_num_masked_span = compute_num_masked_span(sequence_length)
-
-    if max_num_masked_span == 0:
-        return spec_aug_mask
-
-    for input_length in input_lengths:
-        # compute num of masked spans for this input
-        num_masked_span = compute_num_masked_span(input_length)
-
-        # get random indices to mask
-        spec_aug_mask_idx = np.random.choice(
-            np.arange(input_length - (mask_length - 1)), num_masked_span, replace=False
-        )
-
-        # pick first sampled index that will serve as a dummy index to pad vector
-        # to ensure same dimension for all batches due to probabilistic rounding
-        # Picking first sample just pads those vectors twice.
-        if len(spec_aug_mask_idx) == 0:
-            # this case can only happen if `input_length` is strictly smaller then
-            # `sequence_length` in which case the last token has to be a padding
-            # token which we can use as a dummy mask id
-            dummy_mask_idx = sequence_length - 1
-        else:
-            dummy_mask_idx = spec_aug_mask_idx[0]
-
-        spec_aug_mask_idx = np.concatenate(
-            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
-        )
-        spec_aug_mask_idxs.append(spec_aug_mask_idx)
-
-    spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
-
-    # expand masked indices to masked spans
-    spec_aug_mask_idxs = np.broadcast_to(
-        spec_aug_mask_idxs[:, :, None], (batch_size, max_num_masked_span, mask_length)
-    )
-    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
-
-    # add offset to the starting indexes so that indexes now create a span
-    offsets = np.arange(mask_length)[None, None, :]
-    offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
-        batch_size, max_num_masked_span * mask_length
-    )
-    spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
-
-    # ensure that we cannot have indices larger than sequence_length
-    if spec_aug_mask_idxs.max() > sequence_length - 1:
-        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
-
-    # scatter indices to mask
-    np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
-
-    return spec_aug_mask
 
 
 @auto_docstring
@@ -870,63 +749,27 @@ class MoonshineModel(MoonshinePreTrainedModel):
         """
         self.encoder._freeze_parameters()
 
-    def _mask_input_features(
-        self,
-        input_features: torch.FloatTensor,
-        attention_mask: Optional[torch.LongTensor] = None,
-    ):
+    def _mask_input_features(self):
         """
         Masks extracted features along time axis and/or along feature axis according to
         [SpecAugment](https://huggingface.co/papers/1904.08779).
         """
-
-        # `config.apply_spec_augment` can set masking to False
-        if not getattr(self.config, "apply_spec_augment", True):
-            return input_features
-
-        # generate indices & apply SpecAugment along time axis
-        batch_size, hidden_size, sequence_length = input_features.size()
-
-        if self.config.mask_time_prob > 0 and self.training:
-            # generate indices & apply SpecAugment along time axis
-            mask_time_indices = _compute_mask_indices(
-                (batch_size, sequence_length),
-                mask_prob=self.config.mask_time_prob,
-                mask_length=self.config.mask_time_length,
-                attention_mask=attention_mask,
-                min_masks=self.config.mask_time_min_masks,
-            )
-            mask_time_indices = torch.tensor(mask_time_indices, device=input_features.device, dtype=torch.bool)
-            mask_time_indices = mask_time_indices[:, None].expand(-1, hidden_size, -1)
-            input_features[mask_time_indices] = 0
-
-        if self.config.mask_feature_prob > 0 and self.training:
-            # generate indices & apply SpecAugment along feature axis
-            mask_feature_indices = _compute_mask_indices(
-                (batch_size, hidden_size),
-                mask_prob=self.config.mask_feature_prob,
-                mask_length=self.config.mask_feature_length,
-                min_masks=self.config.mask_feature_min_masks,
-            )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=input_features.device, dtype=torch.bool)
-            input_features[mask_feature_indices] = 0
-
-        return input_features
+        raise AttributeError("Not needed for Moonshine")
 
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[EncoderDecoderCache] = None,
-        decoder_inputs_embeds: Optional[tuple[torch.FloatTensor]] = None,
-        decoder_position_ids: Optional[tuple[torch.LongTensor]] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_values: torch.FloatTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
+        decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
+        decoder_position_ids: tuple[torch.LongTensor] | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqModelOutput:
         r"""
@@ -965,8 +808,8 @@ class MoonshineModel(MoonshinePreTrainedModel):
         decoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
-            encoder_attention_mask=attention_mask,
             encoder_hidden_states=encoder_outputs.last_hidden_state,
+            encoder_attention_mask=encoder_outputs.attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             position_ids=decoder_position_ids,
@@ -1032,17 +875,17 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
     @auto_docstring
     def forward(
         self,
-        input_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[EncoderDecoderCache] = None,
-        decoder_inputs_embeds: Optional[tuple[torch.FloatTensor]] = None,
-        decoder_position_ids: Optional[tuple[torch.LongTensor]] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_values: torch.FloatTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
+        decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
+        decoder_position_ids: tuple[torch.LongTensor] | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqLMOutput:
         r"""

@@ -22,7 +22,7 @@ import os
 from collections import defaultdict
 from collections.abc import Iterable
 from shutil import copyfile
-from typing import Any, Optional, Union
+from typing import Any
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from huggingface_hub import is_offline_mode
@@ -30,7 +30,10 @@ from tokenizers import AddedToken, processors
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
+from tokenizers.models import BPE, Unigram
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
+
+from transformers.utils.hub import cached_file
 
 from .integrations.ggml import convert_gguf_tokenizer
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
@@ -121,7 +124,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 if isinstance(vocab, list):
                     vocab = list(map(tuple, vocab))  # TODO just for now
             elif cls.model.__name__ == "Unigram":
-                vocab = list(map(tuple, vocab))
+                if vocab and isinstance(vocab[0], (list, tuple)):
+                    vocab = [tuple(item) for item in vocab]
             elif cls.model.__name__ == "WordLevel":
                 vocab = {token: i for i, token in enumerate(vocab)}
             elif cls.model.__name__ == "BPE" or cls.model.__name__ == "WordPiece":
@@ -237,6 +241,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         add_prefix_space = kwargs.get("add_prefix_space", False)
         vocab_file = kwargs.get("vocab_file")
 
+        vocab = kwargs.get("vocab")
+        merges = kwargs.get("merges")
+
         fast_tokenizer = None
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
@@ -245,7 +252,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
-            gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
+            gguf_path = cached_file(kwargs.get("name_or_path", ""), gguf_file, **kwargs)
+            gguf_param = load_gguf_checkpoint(gguf_path)
             architecture = gguf_param["config"]["model_type"]
             tokenizer_dict = gguf_param["tokenizer"]
             tokenizer_config = gguf_param["tokenizer_config"]
@@ -253,6 +261,15 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             kwargs.update(tokenizer_config)
             if len(additional_kwargs) > 0:
                 kwargs.update(additional_kwargs)
+        elif self._tokenizer is None and vocab is not None:
+            # Build from vocab/merges extracted by convert_to_native_format
+            if merges is not None:
+                vocab_dict = vocab if isinstance(vocab, dict) else {w: i for i, (w, _) in enumerate(vocab)}
+                fast_tokenizer = TokenizerFast(BPE(vocab=vocab_dict, merges=merges, fuse_unk=True, dropout=None))
+            elif isinstance(vocab, dict):
+                fast_tokenizer = TokenizerFast(BPE(vocab=vocab, merges=[], fuse_unk=True, dropout=None))
+            elif isinstance(vocab, list) and vocab and isinstance(vocab[0], (tuple, list)):
+                fast_tokenizer = TokenizerFast(Unigram(vocab=vocab, unk_id=kwargs.get("unk_id", 0)))
         elif self._tokenizer is None:
             raise ValueError(
                 "Couldn't instantiate the backend tokenizer from one of: \n"
@@ -261,6 +278,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 "(3) an equivalent slow tokenizer class to instantiate and convert. \n"
                 "You need to have sentencepiece or tiktoken installed to convert a slow tokenizer to a fast one."
             )
+        # Only set defaults when creating TokenizersBackend from scratch
+        if fast_tokenizer_file is None and tokenizer_object is None and self._tokenizer is None:
+            kwargs.setdefault("bos_token", "<s>")
+            kwargs.setdefault("eos_token", "</s>")
+
         if fast_tokenizer is not None:
             self._tokenizer = fast_tokenizer
 
@@ -290,6 +312,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # Set backend to "tokenizers" if not already set
         if "backend" not in kwargs:
             kwargs["backend"] = "tokenizers"
+
         explicit_bos_eos_in_kwargs = "add_bos_token" in kwargs or "add_eos_token" in kwargs
         self._add_bos_token = kwargs.get("add_bos_token", False)
         self._add_eos_token = kwargs.get("add_eos_token", False)
@@ -382,7 +405,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         else:
             return True
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -730,8 +753,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     def _encode_plus(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
+        text_pair: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -748,7 +771,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        split_special_tokens: Optional[bool] = None,
+        split_special_tokens: bool | None = None,
         **kwargs,
     ) -> BatchEncoding:
         # Input validation (from _call_one)
@@ -903,7 +926,33 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             token_ids = [token_ids]
         if isinstance(token_ids, dict):
             token_ids = token_ids["input_ids"]
-        return self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
+        text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
+
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
+        if clean_up_tokenization_spaces:
+            # Call custom cleanup method if it exists
+            if hasattr(self, "clean_up_tokenization") and callable(self.clean_up_tokenization):
+                text = self.clean_up_tokenization(text)
+            else:
+                # Apply standard cleanup
+                text = (
+                    text.replace(" .", ".")
+                    .replace(" ?", "?")
+                    .replace(" !", "!")
+                    .replace(" ,", ",")
+                    .replace(" ' ", "'")
+                    .replace(" n't", "n't")
+                    .replace(" 'm", "'m")
+                    .replace(" 's", "'s")
+                    .replace(" 've", "'ve")
+                    .replace(" 're", "'re")
+                )
+
+        return text
 
     def _save_pretrained(
         self,

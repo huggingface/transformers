@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,9 @@ import json
 import os
 from collections import OrderedDict
 from collections.abc import Iterator
-from typing import Any, TypeVar, Union
+from typing import Any, TypeVar
+
+from huggingface_hub import repo_exists
 
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
@@ -46,7 +47,7 @@ logger = logging.get_logger(__name__)
 
 _T = TypeVar("_T")
 # Tokenizers will depend on packages installed, too much variance and there are no common base or Protocol
-_LazyAutoMappingValue = tuple[Union[type[Any], None], Union[type[Any], None]]
+_LazyAutoMappingValue = tuple[type[Any] | None, type[Any] | None]
 
 CLASS_DOCSTRING = """
     This is a generic model class that will be instantiated as one of the model classes of the library when created
@@ -69,7 +70,7 @@ FROM_CONFIG_DOCSTRING = """
 
                 List options
             attn_implementation (`str`, *optional*):
-                The attention implementation to use in the model (if relevant). Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), or `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
+                The attention implementation to use in the model (if relevant). Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)), or `"flash_attention_3"` (using [Dao-AILab/flash-attention/hopper](https://github.com/Dao-AILab/flash-attention/tree/main/hopper)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
 
         Examples:
 
@@ -247,7 +248,7 @@ class _BaseAutoModelClass:
         return config
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike[str]], *model_args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike[str], *model_args, **kwargs):
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.get("trust_remote_code")
         kwargs["_from_auto"] = True
@@ -417,21 +418,21 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
 
         num_channels = kwargs.pop("num_channels", config.num_channels)
         features_only = kwargs.pop("features_only", config.features_only)
-        use_pretrained_backbone = kwargs.pop("use_pretrained_backbone", config.use_pretrained_backbone)
         out_indices = kwargs.pop("out_indices", config.out_indices)
         config = TimmBackboneConfig(
             backbone=pretrained_model_name_or_path,
             num_channels=num_channels,
             features_only=features_only,
-            use_pretrained_backbone=use_pretrained_backbone,
             out_indices=out_indices,
         )
-        return super().from_config(config, **kwargs)
+        # Always load a pretrained model when `from_pretrained` is called
+        kwargs.pop("use_pretrained_backbone", None)
+        return super().from_config(config, pretrained=True, **kwargs)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        use_timm_backbone = kwargs.pop("use_timm_backbone", False)
-        if use_timm_backbone:
+        kwargs.pop("use_timm_backbone", None)
+        if not repo_exists(pretrained_model_name_or_path):
             return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
@@ -592,7 +593,7 @@ class _LazyAutoMapping(OrderedDict[type[PreTrainedConfig], _LazyAutoMappingValue
         ]
         return mapping_keys + list(self._extra_content.keys())
 
-    def get(self, key: type[PreTrainedConfig], default: _T) -> Union[_LazyAutoMappingValue, _T]:
+    def get(self, key: type[PreTrainedConfig], default: _T) -> _LazyAutoMappingValue | _T:
         try:
             return self.__getitem__(key)
         except KeyError:

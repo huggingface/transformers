@@ -378,7 +378,7 @@ class Seq2SeqTrainer(Trainer):
                 else self.processing_class.eos_token_id
             )
         else:
-            if self.model.config.pad_token_id is not None:
+            if getattr(self.model.config, "pad_token_id", None) is not None:
                 pad_token_id = self.model.config.pad_token_id
             else:
                 raise ValueError("Pad_token_id must be set in the configuration of the model, in order to pad tensors")

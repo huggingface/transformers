@@ -495,7 +495,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     model_split_percents = [0.5, 0.8, 0.9]
     # `SwitchTransformers` is a MOE in which not all experts will get gradients because they are not all used in a single forward pass
     test_all_params_have_gradient = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = SwitchTransformersModelTester(self)
@@ -621,7 +620,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/switch-base-8"
-        model = SwitchTransformersModel.from_pretrained(model_name)
+        model = SwitchTransformersModel.from_pretrained(model_name, use_safetensors=False)
         self.assertIsNotNone(model)
 
     @unittest.skip(
@@ -739,8 +738,6 @@ class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase
     all_model_classes = (SwitchTransformersEncoderModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_model_parallel = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = SwitchTransformersEncoderOnlyModelTester(self)
@@ -948,7 +945,9 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = SwitchTransformersModel.from_pretrained("google/switch-base-8", dtype=torch.bfloat16).to(torch_device)
+        model = SwitchTransformersModel.from_pretrained(
+            "google/switch-base-8", use_safetensors=False, dtype=torch.bfloat16
+        ).to(torch_device)
         input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
         decoder_input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
 

@@ -17,7 +17,6 @@ A subclass of `Trainer` specific to Question-Answering tasks
 
 import math
 import time
-from typing import Optional
 
 from torch.utils.data import Dataset
 
@@ -39,9 +38,9 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
     # def evaluate(self, eval_dataset=None, eval_examples=None, ignore_keys=None, metric_key_prefix: str = "eval"):
     def evaluate(
         self,
-        eval_dataset: Optional[Dataset] = None,
+        eval_dataset: Dataset | None = None,
         eval_examples=None,
-        ignore_keys: Optional[list[str]] = None,
+        ignore_keys: list[str] | None = None,
         metric_key_prefix: str = "eval",
         **gen_kwargs,
     ) -> dict[str, float]:

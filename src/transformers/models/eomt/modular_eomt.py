@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Mobile Perception Systems Lab at TU/e and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -161,6 +159,23 @@ class EomtConfig(ViTConfig):
         num_register_tokens=4,
         **kwargs,
     ):
+        self.mlp_ratio = mlp_ratio
+        self.attention_dropout = attention_dropout
+        self.layerscale_value = layerscale_value
+        self.drop_path_rate = drop_path_rate
+        self.num_upscale_blocks = num_upscale_blocks
+        self.use_swiglu_ffn = use_swiglu_ffn
+        self.num_blocks = num_blocks
+        self.no_object_weight = no_object_weight
+        self.class_weight = class_weight
+        self.mask_weight = mask_weight
+        self.dice_weight = dice_weight
+        self.train_num_points = train_num_points
+        self.oversample_ratio = oversample_ratio
+        self.importance_sample_ratio = importance_sample_ratio
+        self.num_queries = num_queries
+        self.num_register_tokens = num_register_tokens
+
         super().__init__(
             hidden_size=hidden_size,
             num_hidden_layers=num_hidden_layers,
@@ -181,23 +196,6 @@ class EomtConfig(ViTConfig):
         del self.pooler_output_size
         del self.encoder_stride
         del self.attention_probs_dropout_prob
-
-        self.mlp_ratio = mlp_ratio
-        self.attention_dropout = attention_dropout
-        self.layerscale_value = layerscale_value
-        self.drop_path_rate = drop_path_rate
-        self.num_upscale_blocks = num_upscale_blocks
-        self.use_swiglu_ffn = use_swiglu_ffn
-        self.num_blocks = num_blocks
-        self.no_object_weight = no_object_weight
-        self.class_weight = class_weight
-        self.mask_weight = mask_weight
-        self.dice_weight = dice_weight
-        self.train_num_points = train_num_points
-        self.oversample_ratio = oversample_ratio
-        self.importance_sample_ratio = importance_sample_ratio
-        self.num_queries = num_queries
-        self.num_register_tokens = num_register_tokens
 
 
 @dataclass
@@ -233,13 +231,13 @@ class EomtForUniversalSegmentationOutput(ModelOutput):
         list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    class_queries_logits: Optional[torch.FloatTensor] = None
-    masks_queries_logits: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    patch_offsets: Optional[list[torch.Tensor]] = None
+    loss: torch.FloatTensor | None = None
+    class_queries_logits: torch.FloatTensor | None = None
+    masks_queries_logits: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    patch_offsets: list[torch.Tensor] | None = None
 
 
 class EomtLoss(Mask2FormerLoss):
@@ -298,7 +296,7 @@ class EomtLayer(Dinov2Layer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         hidden_states_norm = self.norm1(hidden_states)
         self_attention_output, _ = self.attention(hidden_states_norm, attention_mask)
@@ -506,9 +504,9 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
     def forward(
         self,
         pixel_values: Tensor,
-        mask_labels: Optional[list[Tensor]] = None,
-        class_labels: Optional[list[Tensor]] = None,
-        patch_offsets: Optional[list[Tensor]] = None,
+        mask_labels: list[Tensor] | None = None,
+        class_labels: list[Tensor] | None = None,
+        patch_offsets: list[Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> EomtForUniversalSegmentationOutput:
         r"""

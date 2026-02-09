@@ -15,7 +15,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -177,13 +176,13 @@ class SuperGlueKeypointMatchingOutput(ModelOutput):
         num_keypoints)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`)
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    matches: Optional[torch.FloatTensor] = None
-    matching_scores: Optional[torch.FloatTensor] = None
-    keypoints: Optional[torch.FloatTensor] = None
-    mask: Optional[torch.IntTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    matches: torch.FloatTensor | None = None
+    matching_scores: torch.FloatTensor | None = None
+    keypoints: torch.FloatTensor | None = None
+    mask: torch.IntTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 class SuperGlueMultiLayerPerceptron(nn.Module):
@@ -221,8 +220,8 @@ class SuperGlueKeypointEncoder(nn.Module):
         self,
         keypoints: torch.Tensor,
         scores: torch.Tensor,
-        output_hidden_states: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]]]:
+        output_hidden_states: bool | None = False,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor] | None]:
         scores = scores.unsqueeze(2)
         hidden_state = torch.cat([keypoints, scores], dim=2)
         all_hidden_states = () if output_hidden_states else None
@@ -257,10 +256,10 @@ class SuperGlueSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
@@ -338,10 +337,10 @@ class SuperGlueAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
@@ -371,12 +370,12 @@ class SuperGlueAttentionalPropagation(nn.Module):
     def forward(
         self,
         descriptors: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor] | None, tuple[torch.Tensor] | None]:
         attention_outputs = self.attention(
             descriptors,
             attention_mask=attention_mask,
@@ -408,10 +407,10 @@ class SuperGlueAttentionalGNN(nn.Module):
     def forward(
         self,
         descriptors: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
+        mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        output_hidden_states: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Optional[tuple], Optional[tuple]]:
+        output_hidden_states: bool | None = False,
+    ) -> tuple[torch.Tensor, tuple | None, tuple | None]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -522,9 +521,9 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         scores: torch.Tensor,
         height: int,
         width: int,
-        mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, tuple, tuple]:
         """
         Perform keypoint matching between two images.
@@ -666,12 +665,12 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, SuperGlueKeypointMatchingOutput]:
+    ) -> tuple | SuperGlueKeypointMatchingOutput:
         r"""
         Examples:
 
@@ -679,13 +678,18 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"
-        >>> image1 = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image_1 = Image.open(BytesIO(response.read()))
+
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_19481797_2295892421.jpg?raw=true"
-        >>> image2 = Image.open(requests.get(url, stream=True).raw)
-        >>> images = [image1, image2]
+        >>> with httpx.stream("GET", url) as response:
+        ...     image_2 = Image.open(BytesIO(response.read()))
+
+        >>> images = [image_1, image_2]
 
         >>> processor = AutoImageProcessor.from_pretrained("magic-leap-community/superglue_outdoor")
         >>> model = AutoModel.from_pretrained("magic-leap-community/superglue_outdoor")

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for Nougat."""
-
-from typing import Optional, Union
 
 import numpy as np
 
@@ -109,16 +106,16 @@ class NougatImageProcessor(BaseImageProcessor):
         self,
         do_crop_margin: bool = True,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_thumbnail: bool = True,
         do_align_long_axis: bool = False,
         do_pad: bool = True,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -159,8 +156,8 @@ class NougatImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         gray_threshold: int = 200,
-        data_format: Optional[ChannelDimension] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Crops the margin of the image. Gray pixels are considered margin (i.e., pixels with a value below the
@@ -212,8 +209,8 @@ class NougatImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Align the long axis of the image to the longest axis of the specified size.
@@ -259,8 +256,8 @@ class NougatImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Pad the image to the specified size at the top, bottom, left and right.
@@ -296,8 +293,8 @@ class NougatImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -347,8 +344,8 @@ class NougatImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -385,21 +382,21 @@ class NougatImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_crop_margin: Optional[bool] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_thumbnail: Optional[bool] = None,
-        do_align_long_axis: Optional[bool] = None,
-        do_pad: Optional[bool] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[Union[int, float]] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_crop_margin: bool | None = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_thumbnail: bool | None = None,
+        do_align_long_axis: bool | None = None,
+        do_pad: bool | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: int | float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: ChannelDimension | None = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.

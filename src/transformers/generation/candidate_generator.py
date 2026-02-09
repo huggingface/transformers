@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +27,6 @@ from ..utils import is_sklearn_available
 if is_sklearn_available():
     from sklearn.metrics import roc_curve
 
-from ..pytorch_utils import isin_mps_friendly
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor, SuppressTokensLogitsProcessor
 
 
@@ -489,7 +487,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             new_tokens_only: 2D array of shape (batch_size, new_token_length), represents the new tokens that are not in prompt
             discrepancy_only: 2D array of shape (batch_size, discrepancy_length), represents the new tokens that are in prompt but not in prompt_plus_new_tokens
         """
-        compare_mat = prompt_plus_new_tokens.T == prompt
+        compare_mat = prompt == prompt_plus_new_tokens.T
         if not torch.is_tensor(compare_mat):
             compare_mat = torch.tensor(compare_mat)
 
@@ -1166,7 +1164,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
                     # remove remaining candidate ids if an "eos" token is found, otherwise the target model may
                     # accept eos and the rest as valid, thus not stopping generation after "eos"
                     # NOTE: below code is written based on the fact that assisted decoding supports only bs=1
-                    mask = isin_mps_friendly(chosen_ids, self.eos_token_id)
+                    mask = torch.isin(chosen_ids, self.eos_token_id)
                     match_indices_eos = torch.nonzero(mask)
                     if match_indices_eos.numel() > 0:
                         first_eos_index = match_indices_eos[0].item()
