@@ -49,7 +49,7 @@ class GlmMoeDsaModelTester(CausalLMModelTester):
         qk_rope_head_dim=64,
         v_head_dim=128,
         num_hidden_layers=2,
-        mlp_layer_types=["sparse", "mlp"],  # sparse is MoE here... Not sure why it was not called moe...
+        mlp_layer_types=["sparse", "dense"],
     ):
         super().__init__(parent=parent, num_hidden_layers=num_hidden_layers)
         self.n_routed_experts = n_routed_experts

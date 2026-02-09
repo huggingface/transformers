@@ -188,9 +188,9 @@ class GlmMoeDsaAttention(nn.Module):
     This implements the native sparse attention from [DeepSeek V3.2](https://huggingface.co/deepseek-ai/DeepSeek-V3.2) which uses
     an indexer to select top-k tokens for attention computation, making it more efficient for long sequences.
 
-    In GLM-5, the indexer RoPE uses neox_style = false. Therefore, we introduced the indexer_rope_interleave parameter: when indexer_rope_interleave is set to True, RoPE is computed using the same neox_style = false behavior as in the GLMMOEDSA model. This part has not yet been implemented in transformers.
-
-    Switch to the implementation from this [PR](https://github.com/huggingface/transformers/pull/41251) as soon as it’s merged.
+    In GLM-5, the indexer RoPE uses neox_style = false. Therefore, we introduced the indexer_rope_interleave parameter:
+    when indexer_rope_interleave is set to True, RoPE is computed using the same neox_style = false behavior as in the
+    GlmMoeDsa model. This part has not yet been implemented in transformers.
     """
 
     def __init__(self, config: GlmMoeDsaConfig, layer_idx: int):
