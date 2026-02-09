@@ -24,9 +24,7 @@ _import_structure = {
         "replace_with_awq_linear",
     ],
     "bitnet": [
-        "VALUES_PER_ITEM",
         "BitLinear",
-        "BitNetDeserialize",
         "pack_weights",
         "replace_with_bitnet_linear",
         "unpack_weights",
@@ -178,9 +176,7 @@ if TYPE_CHECKING:
         replace_with_awq_linear,
     )
     from .bitnet import (
-        VALUES_PER_ITEM,
         BitLinear,
-        BitNetDeserialize,
         pack_weights,
         replace_with_bitnet_linear,
         unpack_weights,
