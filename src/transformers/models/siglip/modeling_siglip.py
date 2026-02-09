@@ -818,7 +818,7 @@ class SiglipModel(SiglipPreTrainedModel):
             **kwargs,
         )
 
-    # NOTE: SiglipModel uses Pretrained backbones, so we don't need to add `check_model_inputs` here
+    # NOTE: SiglipModel uses Pretrained backbones, so we don't need to add `capture_outputs` here
     @can_return_tuple
     @auto_docstring
     def forward(

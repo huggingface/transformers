@@ -1165,7 +1165,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # In practice, it means that they support attention (mask) interface functions, fully pass the kwargs
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
     _supports_attention_backend: bool = False
-    # A mapping describing what outputs can be captured by `check_model_inputs` decorator during the forward pass
+    # A mapping describing what outputs can be captured by `capture_outputs` decorator during the forward pass
     _can_record_outputs: dict | None = None
 
     @property
