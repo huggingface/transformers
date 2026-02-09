@@ -230,7 +230,7 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
                 f"output_{k}": kwargs.get(f"output_{k}", getattr(self.config, f"output_{k}", False))
                 for k in capturable_flags
             }
-            # For BC as cross-attentions used to be captured with attentions
+            # For BC as cross-attentions used to be captured with `output_attentions`
             if "cross_attentions" in capturable_flags:
                 recordable_keys["output_cross_attentions"] = kwargs.get(
                     "output_attentions", getattr(self.config, "output_attentions", False)
