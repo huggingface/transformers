@@ -1162,7 +1162,6 @@ class ConvBNLayer(nn.Module):
             groups=groups,
             bias=False,
         )
-        nn.init.kaiming_normal_(self.conv.weight)
 
         self.bn = nn.BatchNorm2d(out_channels, momentum=0.9)
 
@@ -1584,7 +1583,6 @@ class RSELayer(nn.Module):
             padding=int(kernel_size // 2),
             bias=False,
         )
-        nn.init.kaiming_uniform_(self.in_conv.weight)
         self.se_block = SEModule(self.out_channels)
         self.shortcut = shortcut
 
@@ -1699,21 +1697,14 @@ class Head(nn.Module):
         self.conv_bn1 = nn.BatchNorm2d(in_channels // 4, momentum=0.9)
         self.relu1 = nn.ReLU()
 
-        nn.init.constant_(self.conv_bn1.weight, 1.0)
-        nn.init.constant_(self.conv_bn1.bias, 1e-4)
-
         self.conv2 = nn.ConvTranspose2d(
             in_channels=in_channels // 4,
             out_channels=in_channels // 4,
             kernel_size=kernel_list[1],
             stride=2,
         )
-        nn.init.kaiming_uniform_(self.conv2.weight)
         self.conv_bn2 = nn.BatchNorm2d(in_channels // 4, momentum=0.9)
         self.relu2 = nn.ReLU()
-
-        nn.init.constant_(self.conv_bn2.weight, 1.0)
-        nn.init.constant_(self.conv_bn2.bias, 1e-4)
 
         self.conv3 = nn.ConvTranspose2d(
             in_channels=in_channels // 4,
@@ -1721,7 +1712,6 @@ class Head(nn.Module):
             kernel_size=kernel_list[2],
             stride=2,
         )
-        nn.init.kaiming_uniform_(self.conv3.weight)
 
     def forward(self, x):
         """
@@ -1804,6 +1794,24 @@ class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "pp_ocrv5_mobile_det"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        if isinstance(module, ConvBNLayer):
+            nn.init.kaiming_normal_(module.conv.weight)
+
+        if isinstance(module, Head):
+            nn.init.constant_(module.conv_bn1.weight, 1.0)
+            nn.init.constant_(module.conv_bn1.bias, 1e-4)
+            nn.init.constant_(module.conv_bn2.weight, 1.0)
+            nn.init.constant_(module.conv_bn2.bias, 1e-4)
+            nn.init.kaiming_uniform_(module.conv2.weight)
+            nn.init.kaiming_uniform_(module.conv3.weight)
+
+        if isinstance(module, RSELayer):
+            nn.init.kaiming_uniform_(module.in_conv.weight)
 
 
 @auto_docstring(custom_intro="The PPOCRV5 Mobile Det model.")
@@ -1893,7 +1901,7 @@ class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
     """
 
     _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
-    
+
     def __init__(self, config: PPOCRV5MobileDetConfig):
         """
         Initialize the PPOCRV5MobileDetForObjectDetection with the specified configuration.
