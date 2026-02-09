@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 @auto_docstring
 class PvtImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.BILINEAR
+    resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
     size = {"height": 224, "width": 224}

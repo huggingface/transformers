@@ -275,30 +275,12 @@ class T5GemmaConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
         self.is_encoder_decoder = is_encoder_decoder
-        self.use_cache = kwargs.get("use_cache", decoder.use_cache)
         self.initializer_range = kwargs.get("initializer_range", decoder.initializer_range)
-        self.dropout_rate = dropout_rate
-        self.attention_dropout = attention_dropout
         self.classifier_dropout_rate = classifier_dropout_rate
         self.tie_word_embeddings = tie_word_embeddings
 
         # Used in pipeline generation.
         self.vocab_size = vocab_size
-
-    def __setattr__(self, key, value):
-        shared_attr_with_submodules = [
-            "output_hidden_states",
-            "output_attentions",
-            "_attn_implementation",
-            "dropout_rate",
-            "attention_dropout",
-            "vocab_size",
-        ]
-
-        if key in shared_attr_with_submodules:
-            setattr(self.encoder, key, value)
-            setattr(self.decoder, key, value)
-        super().__setattr__(key, value)
 
 
 __all__ = ["T5GemmaConfig", "T5GemmaModuleConfig"]

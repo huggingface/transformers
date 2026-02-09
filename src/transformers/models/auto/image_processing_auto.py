@@ -47,9 +47,14 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
-
-FORCE_FAST_IMAGE_PROCESSOR = ["Qwen2VLImageProcessor"]
-
+# These image processors use Lanczos interpolation, which is not supported by fast image processors.
+# To avoid important differences in outputs, we default to using the slow image processors for these processors.
+DEFAULT_TO_SLOW_IMAGE_PROCESSORS = [
+    "ChameleonImageProcessor",
+    "FlavaImageProcessor",
+    "Idefics3ImageProcessor",
+    "SmolVLMImageProcessor",
+]
 
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
@@ -98,6 +103,7 @@ else:
             ("efficientnet", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
             ("emu3", ("Emu3ImageProcessor", None)),
             ("eomt", ("EomtImageProcessor", "EomtImageProcessorFast")),
+            ("eomt_dinov3", ("EomtImageProcessor", "EomtImageProcessorFast")),
             ("ernie4_5_vl_moe", ("Ernie4_5_VL_MoeImageProcessor", "Ernie4_5_VL_MoeImageProcessorFast")),
             ("flava", ("FlavaImageProcessor", "FlavaImageProcessorFast")),
             ("florence2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
@@ -164,12 +170,15 @@ else:
             ("pixio", ("BitImageProcessor", "BitImageProcessorFast")),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("poolformer", ("PoolFormerImageProcessor", "PoolFormerImageProcessorFast")),
+            ("pp_doclayout_v3", (None, "PPDocLayoutV3ImageProcessorFast")),
             ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor", "PromptDepthAnythingImageProcessorFast")),
             ("pvt", ("PvtImageProcessor", "PvtImageProcessorFast")),
             ("pvt_v2", ("PvtImageProcessor", "PvtImageProcessorFast")),
             ("qwen2_5_omni", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("qwen2_5_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("qwen2_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
+            ("qwen3_5", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
+            ("qwen3_5_moe", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("qwen3_omni_moe", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("qwen3_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("regnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
@@ -196,6 +205,7 @@ else:
             ("swin2sr", ("Swin2SRImageProcessor", "Swin2SRImageProcessorFast")),
             ("swinv2", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("t5gemma2", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
+            ("t5gemma2_encoder", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
             ("table-transformer", ("DetrImageProcessor", "DetrImageProcessorFast")),
             ("textnet", ("TextNetImageProcessor", "TextNetImageProcessorFast")),
             ("timesformer", ("VideoMAEImageProcessor", None)),
@@ -535,24 +545,20 @@ class AutoImageProcessor:
                 image_processor_auto_map = config.auto_map["AutoImageProcessor"]
 
         image_processor_class = None
-        # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
         if image_processor_type is not None:
             # if use_fast is not set and the processor was saved with a fast processor, we use it, otherwise we use the slow processor.
             if use_fast is None:
                 use_fast = image_processor_type.endswith("Fast")
-                if not use_fast and image_processor_type in FORCE_FAST_IMAGE_PROCESSOR and is_torchvision_available():
-                    use_fast = True
+                if (
+                    not use_fast
+                    and is_torchvision_available()
+                    and image_processor_type not in DEFAULT_TO_SLOW_IMAGE_PROCESSORS
+                ):
                     logger.warning_once(
                         f"The image processor of type `{image_processor_type}` is now loaded as a fast processor by default, even if the model checkpoint was saved with a slow processor. "
                         "This is a breaking change and may produce slightly different outputs. To continue using the slow processor, instantiate this class with `use_fast=False`. "
-                        "Note that this behavior will be extended to all models in a future release."
                     )
-                if not use_fast:
-                    logger.warning_once(
-                        "Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. "
-                        "`use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. "
-                        "This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`."
-                    )
+                    use_fast = True
             if use_fast and not image_processor_type.endswith("Fast"):
                 image_processor_type += "Fast"
             if use_fast and not is_torchvision_available():

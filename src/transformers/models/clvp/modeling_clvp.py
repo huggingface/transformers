@@ -27,7 +27,7 @@ from ... import initialization as init
 from ...activations import ACT2FN, get_activation
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig, GenerationMixin
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -35,10 +35,13 @@ from ...modeling_outputs import (
     CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import Conv1D, isin_mps_friendly
+from ...processing_utils import Unpack
+from ...pytorch_utils import Conv1D
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
+    can_return_tuple,
     logging,
 )
 from .configuration_clvp import (
@@ -128,7 +131,7 @@ def _pad_extra_bos_eos_tokens(
         )
         for i, each_input_id in enumerate(input_ids):
             # locate where the valid tokens end and then add the eos token
-            if isin_mps_friendly(each_input_id, pad_token_id).sum():
+            if torch.isin(each_input_id, pad_token_id).sum():
                 pos = torch.where(each_input_id == pad_token_id)[0].min()
                 modified_input_ids[i] = torch.concatenate(
                     [each_input_id[:pos], torch.tensor([eos_token_id], device=input_ids.device), each_input_id[pos:]]
@@ -214,7 +217,7 @@ class ClvpOutput(ModelOutput):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Clvp
 class ClvpRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         ClvpRMSNorm is equivalent to T5LayerNorm
         """
@@ -222,7 +225,7 @@ class ClvpRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -920,9 +923,11 @@ class ClvpEncoder(ClvpPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         # expand attention_mask and create position_ids if needed
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+        )
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -1066,23 +1071,32 @@ class ClvpDecoder(ClvpPreTrainedModel):
                 )
                 use_cache = False
 
+        if inputs_embeds is None:
+            inputs_embeds = self.input_embeds_layer(input_ids)
+
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        if cache_position is None:
+            cache_position = torch.arange(
+                past_key_values_length, past_key_values_length + input_shape[-1], device=inputs_embeds.device
+            )
         if position_ids is None:
             position_ids = torch.arange(
                 past_key_values_length, input_shape[-1] + past_key_values_length, dtype=torch.long, device=device
             )
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
-        if inputs_embeds is None:
-            inputs_embeds = self.input_embeds_layer(input_ids)
         position_embeds = self.position_embeds_layer(position_ids)
         inputs_embeds = inputs_embeds + position_embeds
 
-        attention_mask = _prepare_4d_causal_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
+        attention_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
         )
 
         hidden_states = inputs_embeds
@@ -1489,36 +1503,23 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
 
         return speech_ids
 
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="""
+        This method can be used to extract text_embeds from a text. The text embeddings obtained by applying the
+        projection layer to the pooled output of the CLVP text encoder model.
+        """
+    )
     def get_text_features(
         self,
         input_ids: torch.LongTensor | None = None,
         text_encoder_inputs_embeds: torch.FloatTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | ClvpEncoderOutput:
         r"""
-        This method can be used to extract text_embeds from a text. The text embeddings obtained by applying the
-        projection layer to the pooled output of the CLVP text encoder model.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                [What are input IDs?](../glossary#input-ids)
-            text_encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
-                inputs_embeds for the text encoder model passed in place of `input_ids`.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-
-        Returns:
-            `torch.FloatTensor` of shape `(batch_size, output_dim)`:
-                The text embeddings obtained by applying the projection layer to the pooled output of the CLVP Text
-                Model.
+        text_encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
+            inputs_embeds for the text encoder model passed in place of `input_ids`.
 
         Examples:
 
@@ -1537,14 +1538,13 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         >>> text_embeds = model.get_text_features(input_ids=processor_output["input_ids"])
         ```
         """
-
-        outputs = self.text_encoder_model(
+        return self.text_encoder_model(
             input_ids=input_ids,
             inputs_embeds=text_encoder_inputs_embeds,
             attention_mask=attention_mask,
+            return_dict=True,
+            **kwargs,
         )
-
-        return outputs[0]
 
     def get_speech_features(
         self,

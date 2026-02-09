@@ -266,6 +266,34 @@ class Ernie4_5_VL_MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
+    def _video_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only video-related inputs from the full set of inputs, for testing `get_video_features`.
+
+        The superclass method simply calls the model_tester.prepare_config_and_inputs_for_common(),
+        but that method only prepared image inputs, i.e. where the temporal dimension in grid_thw is 1.
+        This override prepares proper video inputs with 12 frames.
+        """
+        config = self.model_tester.get_config()
+        patch_size = config.vision_config.patch_size
+        batch_size = self.model_tester.batch_size
+        image_size = self.model_tester.image_size
+        num_channels = self.model_tester.num_channels
+        num_frames = 12
+        pixel_values_videos = floats_tensor(
+            [num_frames * batch_size * (image_size**2) // (patch_size**2), num_channels * (patch_size**2)]
+        )
+
+        patches_per_side = image_size // patch_size
+        video_grid_thw = torch.tensor(
+            [[num_frames, patches_per_side, patches_per_side]] * batch_size, device=torch_device
+        )
+        inputs_dict = {
+            "pixel_values_videos": pixel_values_videos,
+            "video_grid_thw": video_grid_thw,
+        }
+        return config, inputs_dict
+
 
 @slow
 @require_torch_large_accelerator(memory=64)  # Tested on A100

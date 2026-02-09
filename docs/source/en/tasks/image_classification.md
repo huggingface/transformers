@@ -38,7 +38,7 @@ To see all architectures and checkpoints compatible with this task, we recommend
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install transformers datasets evaluate accelerate pillow torchvision scikit-learn
+pip install transformers datasets evaluate accelerate pillow torchvision scikit-learn trackio
 ```
 
 We encourage you to log in to your Hugging Face account to upload and share your model with the community. When prompted, enter your token to log in:
@@ -213,6 +213,8 @@ At this point, only three steps remain:
 ...     num_train_epochs=3,
 ...     warmup_steps=0.1,
 ...     logging_steps=10,
+...     report_to="trackio",
+...     run_name="food101",
 ...     load_best_model_at_end=True,
 ...     metric_for_best_model="accuracy",
 ...     push_to_hub=True,

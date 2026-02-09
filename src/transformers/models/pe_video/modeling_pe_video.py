@@ -29,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -316,9 +316,9 @@ class PeVideoEncoderAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -526,12 +526,16 @@ class PeVideoEncoder(PeVideoPreTrainedModel):
         pixel_values_videos: torch.Tensor,
         padding_mask_videos: torch.Tensor | None = None,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPooling:
         inputs_embeds, padding_mask = self.embedder(pixel_values_videos, padding_mask=padding_mask_videos)
         inputs_embeds, attention_mask = self.patch_embedder(inputs_embeds, padding_mask=padding_mask)
 
         if attention_mask is not None:
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+            )
 
         position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
         position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
@@ -570,27 +574,39 @@ class PeVideoModel(PeVideoPreTrainedModel):
 
         self.post_init()
 
-    def get_text_features(self, input_ids, attention_mask=None):
-        # TODO: should it be named feature or embeds
-        text_outputs: MaskedLMOutput = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            return_dict=True,
-        )
+        @can_return_tuple
+        @auto_docstring
+        def get_text_features(
+            self,
+            input_ids: torch.Tensor,
+            attention_mask: torch.Tensor | None = None,
+            **kwargs: Unpack[TransformersKwargs],
+        ) -> tuple | BaseModelOutputWithPooling:
+            text_outputs: BaseModelOutputWithPooling = self.text_model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                return_dict=True,
+                **kwargs,
+            )
+            text_outputs.pooler_output = self.text_video_head(text_outputs.last_hidden_state)
+            return text_outputs
 
-        text_features = text_outputs.last_hidden_state
-        text_features = self.text_video_head(text_features)
-        return text_features
-
-    def get_video_features(self, pixel_values_videos, padding_mask_videos=None):
-        # TODO: should it be named feature or embeds
-        video_outputs: BaseModelOutputWithPooling = self.video_encoder(
-            pixel_values_videos=pixel_values_videos,
-            padding_mask_videos=padding_mask_videos,
-            return_dict=True,
-        )
-        video_features = self.video_head(video_outputs.pooler_output)
-        return video_features
+        @can_return_tuple
+        @auto_docstring
+        def get_video_features(
+            self,
+            pixel_values_videos: torch.Tensor,
+            padding_mask_videos: torch.Tensor | None = None,
+            **kwargs: Unpack[TransformersKwargs],
+        ) -> tuple | BaseModelOutputWithPooling:
+            video_outputs: BaseModelOutputWithPooling = self.video_encoder(
+                pixel_values_videos=pixel_values_videos,
+                padding_mask_videos=padding_mask_videos,
+                return_dict=True,
+                **kwargs,
+            )
+            video_outputs.pooler_output = self.video_head(video_outputs.pooler_output)
+            return video_outputs
 
     @can_return_tuple
     def forward(

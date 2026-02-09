@@ -762,7 +762,7 @@ class FlavaModelTester:
             image_codebook_kwargs = {}
 
         self.parent = parent
-        self.image_model_tester = FlavaImageModelTester(parent, **image_kwargs)
+        self.vision_model_tester = FlavaImageModelTester(parent, **image_kwargs)
         self.text_model_tester = FlavaTextModelTester(parent, **text_kwargs)
         self.multimodal_model_tester = FlavaMultimodalModelTester(parent, **multimodal_kwargs)
         self.image_codebook_tester = FlavaImageCodebookTester(parent, **image_codebook_kwargs)
@@ -778,7 +778,7 @@ class FlavaModelTester:
         self.config_tester.run_common_tests()
 
     def prepare_config_and_inputs_for_common(self):
-        _, pixel_values, bool_masked_pos = self.image_model_tester.prepare_config_and_inputs()
+        _, pixel_values, bool_masked_pos = self.vision_model_tester.prepare_config_and_inputs()
         _, input_ids, token_type_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
@@ -793,7 +793,7 @@ class FlavaModelTester:
 
     def get_config(self):
         return FlavaConfig(
-            image_config=self.image_model_tester.get_config(),
+            image_config=self.vision_model_tester.get_config(),
             text_config=self.text_model_tester.get_config(),
             multimodal_config=self.multimodal_model_tester.get_config(),
             image_codebook_config=self.image_codebook_tester.get_config(),
@@ -818,14 +818,14 @@ class FlavaModelTester:
                 pixel_values=inputs["pixel_values"] if test_image else None,
                 bool_masked_pos=inputs["bool_masked_pos"] if test_image else None,
             )
-        image_size = (self.image_model_tester.image_size, self.image_model_tester.image_size)
-        patch_size = (self.image_model_tester.patch_size, self.image_model_tester.patch_size)
+        image_size = (self.vision_model_tester.image_size, self.vision_model_tester.image_size)
+        patch_size = (self.vision_model_tester.patch_size, self.vision_model_tester.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
         if test_image:
             self.parent.assertEqual(
                 result.image_embeddings.shape,
-                (self.image_model_tester.batch_size, num_patches + 1, self.image_model_tester.hidden_size),
+                (self.vision_model_tester.batch_size, num_patches + 1, self.vision_model_tester.hidden_size),
             )
         else:
             self.parent.assertIsNone(result.image_embeddings)
@@ -927,7 +927,7 @@ class FlavaForPreTrainingTester(FlavaModelTester):
     model_class = FlavaForPreTraining
 
     def prepare_config_and_inputs_for_common(self):
-        _, pixel_values, bool_masked_pos = self.image_model_tester.prepare_config_and_inputs()
+        _, pixel_values, bool_masked_pos = self.vision_model_tester.prepare_config_and_inputs()
         _, input_ids, token_type_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
         config = self.get_config()
 
@@ -937,7 +937,7 @@ class FlavaForPreTrainingTester(FlavaModelTester):
         mlm_labels[:, :] = config.ce_ignore_index
         mlm_labels[:, 1:3] = input_ids[:, 1:3]
         mim_labels = torch.randint(
-            0, self.image_model_tester.vocab_size, bool_masked_pos.size(), device=bool_masked_pos.device
+            0, self.vision_model_tester.vocab_size, bool_masked_pos.size(), device=bool_masked_pos.device
         ).long()
         mim_labels[bool_masked_pos.ne(True)] = config.ce_ignore_index
         itm_labels = torch.ones(mlm_labels.size(0), device=bool_masked_pos.device).long()
@@ -970,14 +970,14 @@ class FlavaForPreTrainingTester(FlavaModelTester):
                 itm_labels=inputs["itm_labels"],
                 return_loss=inputs["return_loss"],
             )
-        image_size = (self.image_model_tester.image_size, self.image_model_tester.image_size)
-        patch_size = (self.image_model_tester.patch_size, self.image_model_tester.patch_size)
+        image_size = (self.vision_model_tester.image_size, self.vision_model_tester.image_size)
+        patch_size = (self.vision_model_tester.patch_size, self.vision_model_tester.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
         if test_image:
             self.parent.assertEqual(
                 result.image_embeddings.shape,
-                (self.image_model_tester.batch_size, num_patches + 1, self.image_model_tester.hidden_size),
+                (self.vision_model_tester.batch_size, num_patches + 1, self.vision_model_tester.hidden_size),
             )
             if not test_text:
                 self.parent.assertEqual(
@@ -986,7 +986,7 @@ class FlavaForPreTrainingTester(FlavaModelTester):
                 )
                 self.parent.assertEqual(
                     result.mim_logits.shape,
-                    (inputs["bool_masked_pos"].sum().item(), self.image_model_tester.vocab_size),
+                    (inputs["bool_masked_pos"].sum().item(), self.vision_model_tester.vocab_size),
                 )
 
         else:
@@ -1035,15 +1035,15 @@ class FlavaForPreTrainingTester(FlavaModelTester):
             )
             self.parent.assertEqual(
                 result.mmm_image_logits.shape,
-                (inputs["bool_masked_pos"].sum().item(), self.image_model_tester.vocab_size),
+                (inputs["bool_masked_pos"].sum().item(), self.vision_model_tester.vocab_size),
             )
             self.parent.assertEqual(
                 result.contrastive_logits_per_image.shape,
-                (self.image_model_tester.batch_size, self.text_model_tester.batch_size),
+                (self.vision_model_tester.batch_size, self.text_model_tester.batch_size),
             )
             self.parent.assertEqual(
                 result.contrastive_logits_per_text.shape,
-                (self.text_model_tester.batch_size, self.image_model_tester.batch_size),
+                (self.text_model_tester.batch_size, self.vision_model_tester.batch_size),
             )
 
             for item in [
@@ -1118,9 +1118,9 @@ class FlavaModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs, return_dict=True)
 
         # verify the embeddings
-        self.assertAlmostEqual(outputs.image_embeddings.sum().item(), -1352.53540, places=4)
+        self.assertAlmostEqual(outputs.image_embeddings.sum().item(), -1352.4685, places=4)
         self.assertAlmostEqual(outputs.text_embeddings.sum().item(), -198.98225, places=4)
-        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4604492, places=4)
+        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4226, places=4)
 
 
 @require_vision

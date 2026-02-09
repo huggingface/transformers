@@ -572,13 +572,15 @@ class Sam3Processor(ProcessorMixin):
         ```python
         >>> from transformers import AutoModel, AutoProcessor
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> model = AutoModel.from_pretrained("facebook/sam3-base")
         >>> processor = AutoProcessor.from_pretrained("facebook/sam3-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = processor(images=image, text="cat", return_tensors="pt")
         >>> outputs = model(**inputs)
 
@@ -626,13 +628,15 @@ class Sam3Processor(ProcessorMixin):
         ```python
         >>> from transformers import AutoModel, AutoProcessor
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> model = AutoModel.from_pretrained("facebook/sam3-base")
         >>> processor = AutoProcessor.from_pretrained("facebook/sam3-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = processor(images=image, text="cat", return_tensors="pt")
         >>> outputs = model(**inputs)
 
