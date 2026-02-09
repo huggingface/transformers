@@ -26,12 +26,13 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
-    from transformers import GlmMoeDsaModel
+    from transformers import GlmMoeDsaForCausalLM, GlmMoeDsaModel
 
 
 class GlmMoeDsaModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = GlmMoeDsaModel
+        causal_lm_class = GlmMoeDsaForCausalLM
 
     def __init__(
         self,
