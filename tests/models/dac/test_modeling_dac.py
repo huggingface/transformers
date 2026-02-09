@@ -802,6 +802,7 @@ class DacIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             encoder_outputs = model.encode(input_values)
             latents = encoder_outputs.projected_latents
+            original_quantizer_representation = encoder_outputs.quantized_representation
 
             # reconstruction using from_latents
             quantizer_representation, quantized_latents = model.quantizer.from_latents(latents=latents)
@@ -810,6 +811,11 @@ class DacIntegrationTest(unittest.TestCase):
             # forward pass
             original_reconstructed = model(input_values).audio_values
 
+        # ensure quantizer representations match
+        self.assertTrue(
+            torch.allclose(quantizer_representation, original_quantizer_representation, atol=1e-6),
+            msg="Quantizer representation from from_latents should match original quantizer forward pass",
+        )
         # ensure forward and decode are the same
         self.assertTrue(
             torch.allclose(reconstructed, original_reconstructed, atol=1e-6),
