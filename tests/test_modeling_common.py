@@ -112,6 +112,7 @@ from transformers.utils import (
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
+from transformers.utils.output_capturing import CompileableContextVar
 
 from .generation.test_utils import GenerationTesterMixin
 
@@ -5499,6 +5500,50 @@ class ModelTesterMixin:
                     getattr(config, k).output_attentions = True
 
             check_attentions_output(inputs_dict, config, model_class)
+
+    def test_capture_outputs_decorator_is_not_chained(self):
+        """Test that the decorator `capture_outputs` is not chained, and that only the base models use it.
+        Chaining the calls to `capture_outputs` is:
+            1) useless - because the class above in the graph can simply reuse the already collected outputs
+            2) dangerous - as outputs can quickly be mixed up between the callers, or captured several times leading
+                to very high memory usage.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        COUNTER = 0
+        origional_set = CompileableContextVar.set
+        origional_reset = CompileableContextVar.reset
+
+        # Every time we enter the `capture_outputs` decorator, we first call `set`, and then `reset`. So if we end
+        # up calling `set` twice in a row before `reset`, it means we chained the calls to `capture_outputs` which is
+        # an illegal practice
+        def new_set(self, value):
+            nonlocal COUNTER
+            COUNTER += 1
+            if COUNTER > 1:
+                raise ValueError("You're calling `capture_outputs` several time in a chain!")
+            return origional_set(self, value)
+
+        def new_reset(self, token):
+            nonlocal COUNTER
+            origional_reset(self, token)
+            COUNTER -= 1
+
+        for model_class in self.all_model_classes:
+            # Each individual model is a subtest
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config)).to(device=torch_device)
+
+                # Apparently this model cannot correctly create its inputs and has to use another function....
+                if "modeling_perceiver.py" in inspect.getfile(model_class):
+                    _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+                # Prepare inputs
+                inputs = self._prepare_for_class(inputs_dict, model_class)
+
+                # If we don't trigger the exception of the new set, then all good
+                with patch.object(CompileableContextVar, "set", new=new_set):
+                    with patch.object(CompileableContextVar, "reset", new=new_reset):
+                        _ = model(**inputs)
 
 
 global_rng = random.Random()
