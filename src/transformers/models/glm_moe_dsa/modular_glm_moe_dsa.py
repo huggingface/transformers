@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-import warnings
 from collections.abc import Callable
 
 import torch
@@ -30,6 +29,7 @@ from ...models.llama.modeling_llama import (
 )
 from ...processing_utils import Unpack
 from ...utils import logging
+from ...utils.import_utils import is_tracing
 from ..deepseek_v3.modeling_deepseek_v3 import apply_rotary_pos_emb_interleave, yarn_get_mscale
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeForCausalLM,
@@ -341,12 +341,12 @@ class GlmMoeDsaAttention(nn.Module):
         # For training or when index_topk is not effective, fall back to standard attention
         # This is a simplified implementation - in practice, you'd implement the full sparse indexer
         if self.training or seq_length <= self.index_topk:
-            warnings.warn(
-                "DeepSeek V3.2 sparse attention is not fully implemented in this version. "
-                "Falling back to standard attention. For production use, please use vLLM or "
-                "other optimized inference engines.",
-                UserWarning,
-            )
+            if not is_tracing(hidden_states):
+                logger.warning_once(
+                    "DeepSeek V3.2 sparse attention is not fully implemented in this version. "
+                    "Falling back to standard attention. For production use, please use vLLM or "
+                    "other optimized inference engines.",
+                )
             return self._standard_attention(
                 hidden_states, position_embeddings, attention_mask, past_key_values, cache_position, **kwargs
             )

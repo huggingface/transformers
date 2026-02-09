@@ -20,7 +20,6 @@
 
 
 import math
-import warnings
 from collections.abc import Callable
 from typing import Optional
 
@@ -40,9 +39,13 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_grouped_mm_available
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_grouped_mm_available, logging
 from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.import_utils import is_tracing
 from .configuration_glm_moe_dsa import GlmMoeDsaConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -267,12 +270,12 @@ class GlmMoeDsaAttention(nn.Module):
         # For training or when index_topk is not effective, fall back to standard attention
         # This is a simplified implementation - in practice, you'd implement the full sparse indexer
         if self.training or seq_length <= self.index_topk:
-            warnings.warn(
-                "DeepSeek V3.2 sparse attention is not fully implemented in this version. "
-                "Falling back to standard attention. For production use, please use vLLM or "
-                "other optimized inference engines.",
-                UserWarning,
-            )
+            if not is_tracing(hidden_states):
+                logger.warning_once(
+                    "DeepSeek V3.2 sparse attention is not fully implemented in this version. "
+                    "Falling back to standard attention. For production use, please use vLLM or "
+                    "other optimized inference engines.",
+                )
             return self._standard_attention(
                 hidden_states, position_embeddings, attention_mask, past_key_values, cache_position, **kwargs
             )
