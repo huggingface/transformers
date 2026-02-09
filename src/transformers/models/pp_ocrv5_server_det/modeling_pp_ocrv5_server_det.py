@@ -17,7 +17,7 @@ from ...utils import ModelOutput, auto_docstring
 from .configuration_pp_ocrv5_server_det import PPOCRV5ServerDetConfig
 
 
-class LearnableAffineBlock(nn.Module):
+class PPOCRV5ServerDetLearnableAffineBlock(nn.Module):
     """
     Applies a learnable affine transformation (element-wise scaling and shifting) to the input tensor.
     This is often used after normalization or activation layers to provide additional modeling flexibility.
@@ -36,7 +36,7 @@ class LearnableAffineBlock(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass of the LearnableAffineBlock.
+        Forward pass of the PPOCRV5ServerDetLearnableAffineBlock.
 
         Args:
             x (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`):
@@ -49,7 +49,7 @@ class LearnableAffineBlock(nn.Module):
         return self.scale * x + self.bias
 
 
-class ConvBNAct(nn.Module):
+class PPOCRV5ServerDetConvBNAct(nn.Module):
     """
     Standard sequence of Convolution, Batch Normalization, and optional Activation/LAB.
     Args:
@@ -100,11 +100,11 @@ class ConvBNAct(nn.Module):
         if self.use_act:
             self.act = nn.ReLU()
             if self.use_lab:
-                self.lab = LearnableAffineBlock()
+                self.lab = PPOCRV5ServerDetLearnableAffineBlock()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass of the ConvBNAct module.
+        Forward pass of the PPOCRV5ServerDetConvBNAct module.
 
         Args:
             x (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
@@ -123,9 +123,9 @@ class ConvBNAct(nn.Module):
         return x
 
 
-class LightConvBNAct(nn.Module):
+class PPOCRV5ServerDetLightConvBNAct(nn.Module):
     """
-    Lightweight version of ConvBNAct using Pointwise Convolution followed by Depthwise Convolution.
+    Lightweight version of PPOCRV5ServerDetConvBNAct using Pointwise Convolution followed by Depthwise Convolution.
     This effectively separates spatial and channel-wise processing to reduce parameters.
 
     Args:
@@ -138,7 +138,7 @@ class LightConvBNAct(nn.Module):
         use_lab (`bool`, *optional*, defaults to False):
             Whether to apply the Learnable Affine Block (LAB) in both sub-layers.
         **kwargs:
-            Additional arguments passed to the sub-ConvBNAct layers.
+            Additional arguments passed to the sub-PPOCRV5ServerDetConvBNAct layers.
     """
 
     def __init__(
@@ -150,14 +150,14 @@ class LightConvBNAct(nn.Module):
         **kwargs,
     ):
         super().__init__()
-        self.conv1 = ConvBNAct(
+        self.conv1 = PPOCRV5ServerDetConvBNAct(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=1,
             use_act=False,
             use_lab=use_lab,
         )
-        self.conv2 = ConvBNAct(
+        self.conv2 = PPOCRV5ServerDetConvBNAct(
             in_channels=out_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
@@ -172,9 +172,9 @@ class LightConvBNAct(nn.Module):
         return x
 
 
-class StemBlock(nn.Module):
+class PPOCRV5ServerDetStemBlock(nn.Module):
     """
-    Stem block of PPHGNetV2, performing initial feature extraction and spatial downsampling.
+    Stem block of PPOCRV5ServerDetHGNetV2, performing initial feature extraction and spatial downsampling.
     It splits the input into two branches: one for max pooling and another for convolution,
     then concatenates them to enrich feature representation.
 
@@ -186,7 +186,7 @@ class StemBlock(nn.Module):
         out_channels (`int`):
             Final output channel dimension of the stem block.
         use_lab (`bool`, *optional*, defaults to `False`):
-            Whether to use Learnable Affine Block (LAB) in the internal ConvBNAct layers.
+            Whether to use Learnable Affine Block (LAB) in the internal PPOCRV5ServerDetConvBNAct layers.
     """
 
     def __init__(
@@ -197,14 +197,14 @@ class StemBlock(nn.Module):
         use_lab: bool = False,
     ):
         super().__init__()
-        self.stem1 = ConvBNAct(
+        self.stem1 = PPOCRV5ServerDetConvBNAct(
             in_channels=in_channels,
             out_channels=mid_channels,
             kernel_size=3,
             stride=2,
             use_lab=use_lab,
         )
-        self.stem2a = ConvBNAct(
+        self.stem2a = PPOCRV5ServerDetConvBNAct(
             in_channels=mid_channels,
             out_channels=mid_channels // 2,
             kernel_size=2,
@@ -212,7 +212,7 @@ class StemBlock(nn.Module):
             padding="same",
             use_lab=use_lab,
         )
-        self.stem2b = ConvBNAct(
+        self.stem2b = PPOCRV5ServerDetConvBNAct(
             in_channels=mid_channels // 2,
             out_channels=mid_channels,
             kernel_size=2,
@@ -220,14 +220,14 @@ class StemBlock(nn.Module):
             padding="same",
             use_lab=use_lab,
         )
-        self.stem3 = ConvBNAct(
+        self.stem3 = PPOCRV5ServerDetConvBNAct(
             in_channels=mid_channels * 2,
             out_channels=mid_channels,
             kernel_size=3,
             stride=2,
             use_lab=use_lab,
         )
-        self.stem4 = ConvBNAct(
+        self.stem4 = PPOCRV5ServerDetConvBNAct(
             in_channels=mid_channels,
             out_channels=out_channels,
             kernel_size=1,
@@ -239,7 +239,7 @@ class StemBlock(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass of the StemBlock.
+        Forward pass of the PPOCRV5ServerDetStemBlock.
 
         Args:
             x (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
@@ -259,9 +259,9 @@ class StemBlock(nn.Module):
         return x
 
 
-class HGV2_Block(nn.Module):
+class PPOCRV5ServerDetHGV2_Block(nn.Module):
     """
-    HGV2_Block (Hierarchical Grouping Variable Block V2), the fundamental building block of PPHGNetV2 stages.
+    PPOCRV5ServerDetHGV2_Block (Hierarchical Grouping Variable Block V2), the fundamental building block of PPOCRV5ServerDetHGNetV2 stages.
     It uses a dense connection style to collect multi-scale features and a squeeze-excitation
     aggregation to refine the final output.
 
@@ -279,7 +279,7 @@ class HGV2_Block(nn.Module):
         identity (`bool`, *optional*, defaults to `False`):
             Whether to add a residual connection between the input and the final output.
         light_block (`bool`, *optional*, defaults to `True`):
-            Whether to use `LightConvBNAct` (depthwise separable) instead of standard `ConvBNAct`.
+            Whether to use `PPOCRV5ServerDetLightConvBNAct` (depthwise separable) instead of standard `PPOCRV5ServerDetConvBNAct`.
         use_lab (`bool`, *optional*, defaults to `False`):
             Whether to use Learnable Affine Block (LAB) in the internal layers.
     """
@@ -299,7 +299,7 @@ class HGV2_Block(nn.Module):
         self.identity = identity
 
         self.layers = nn.ModuleList()
-        block_type = LightConvBNAct if light_block else ConvBNAct
+        block_type = PPOCRV5ServerDetLightConvBNAct if light_block else PPOCRV5ServerDetConvBNAct
         for i in range(layer_num):
             self.layers.append(
                 block_type(
@@ -312,14 +312,14 @@ class HGV2_Block(nn.Module):
             )
         # feature aggregation
         total_channels = in_channels + layer_num * mid_channels
-        self.aggregation_squeeze_conv = ConvBNAct(
+        self.aggregation_squeeze_conv = PPOCRV5ServerDetConvBNAct(
             in_channels=total_channels,
             out_channels=out_channels // 2,
             kernel_size=1,
             stride=1,
             use_lab=use_lab,
         )
-        self.aggregation_excitation_conv = ConvBNAct(
+        self.aggregation_excitation_conv = PPOCRV5ServerDetConvBNAct(
             in_channels=out_channels // 2,
             out_channels=out_channels,
             kernel_size=1,
@@ -329,7 +329,7 @@ class HGV2_Block(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass of the HGV2_Block.
+        Forward pass of the PPOCRV5ServerDetHGV2_Block.
 
         Args:
             x (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
@@ -353,21 +353,21 @@ class HGV2_Block(nn.Module):
         return x
 
 
-class HGV2_Stage(nn.Module):
+class PPOCRV5ServerDetHGV2_Stage(nn.Module):
     """
-    HGV2_Stage consists of an optional downsampling layer followed by a sequence of `HGV2_Block`s.
+    PPOCRV5ServerDetHGV2_Stage consists of an optional downsampling layer followed by a sequence of `PPOCRV5ServerDetHGV2_Block`s.
 
     Args:
         in_channels (`int`):
             Number of input channels from the previous stage or stem.
         mid_channels (`int`):
-            Hidden channel dimension within each `HGV2_Block`.
+            Hidden channel dimension within each `PPOCRV5ServerDetHGV2_Block`.
         out_channels (`int`):
             Final output channel dimension for this stage.
         block_num (`int`):
-            Number of `HGV2_Block` units to stack in this stage.
+            Number of `PPOCRV5ServerDetHGV2_Block` units to stack in this stage.
         layer_num (`int`, *optional*, defaults to 6):
-            Number of layers inside each `HGV2_Block`.
+            Number of layers inside each `PPOCRV5ServerDetHGV2_Block`.
         is_downsample (`bool`, *optional*, defaults to `True`):
             Whether to apply a stride-2 depthwise convolution at the start of the stage.
         light_block (`bool`, *optional*, defaults to `True`):
@@ -396,7 +396,7 @@ class HGV2_Stage(nn.Module):
         super().__init__()
         self.is_downsample = is_downsample
         if self.is_downsample:
-            self.downsample = ConvBNAct(
+            self.downsample = PPOCRV5ServerDetConvBNAct(
                 in_channels=in_channels,
                 out_channels=in_channels,
                 kernel_size=3,
@@ -409,7 +409,7 @@ class HGV2_Stage(nn.Module):
         blocks_list = []
         for i in range(block_num):
             blocks_list.append(
-                HGV2_Block(
+                PPOCRV5ServerDetHGV2_Block(
                     in_channels=in_channels if i == 0 else out_channels,
                     mid_channels=mid_channels,
                     out_channels=out_channels,
@@ -424,7 +424,7 @@ class HGV2_Stage(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass of the HGV2_Stage.
+        Forward pass of the PPOCRV5ServerDetHGV2_Stage.
 
         Args:
             x (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
@@ -440,9 +440,9 @@ class HGV2_Stage(nn.Module):
         return x
 
 
-class PPHGNetV2(nn.Module):
+class PPOCRV5ServerDetHGNetV2(nn.Module):
     """
-    PPHGNetV2 (Paddle High-Performance GPU Network V2) backbone.
+    PPOCRV5ServerDetHGNetV2 (Paddle High-Performance GPU Network V2) backbone.
     Extracts multi-scale hierarchical features from input images for downstream detection or classification.
 
     Args:
@@ -464,7 +464,7 @@ class PPHGNetV2(nn.Module):
         self.out_channels = []
 
         # stem
-        self.stem = StemBlock(
+        self.stem = PPOCRV5ServerDetStemBlock(
             in_channels=config.stem_channels[0],
             mid_channels=config.stem_channels[1],
             out_channels=config.stem_channels[2],
@@ -486,7 +486,7 @@ class PPHGNetV2(nn.Module):
                 stride,
             ) = config.backbone_config[k]
             self.stages.append(
-                HGV2_Stage(
+                PPOCRV5ServerDetHGV2_Stage(
                     in_channels,
                     mid_channels,
                     out_channels,
@@ -515,29 +515,16 @@ class PPHGNetV2(nn.Module):
             )
             self.act = nn.ReLU()
             if self.use_lab:
-                self.lab = LearnableAffineBlock()
+                self.lab = PPOCRV5ServerDetLearnableAffineBlock()
             self.dropout = nn.Dropout(p=config.dropout_prob)
 
         self.flatten = nn.Flatten(start_dim=1, end_dim=-1)
-
-        self._init_weights()
-
-    def _init_weights(self):
-        """Initializes model weights using Kaiming normal and constant schemes."""
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight)
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1.0)
-                nn.init.constant_(m.bias, 0.0)
-            elif isinstance(m, nn.Linear):
-                nn.init.constant_(m.bias, 0.0)
 
     def forward(
         self, hidden_state: torch.Tensor, output_hidden_states: bool = False, return_dict: bool = True
     ) -> tuple[list[torch.Tensor], torch.Tensor, Optional[tuple[torch.Tensor, ...]]]:
         """
-        Forward pass of PPHGNetV2.
+        Forward pass of PPOCRV5ServerDetHGNetV2.
 
         Args:
             hidden_state (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
@@ -571,7 +558,7 @@ class PPHGNetV2(nn.Module):
         return out, hidden_state, hidden_states
 
 
-class DSConv(nn.Module):
+class PPOCRV5ServerDetDSConv(nn.Module):
     """
     Depthwise Separable Convolution block with an expanded intermediate state and residual connection.
     This block mimics the inverted residual structure to reduce computation while maintaining capacity.
@@ -653,7 +640,7 @@ class DSConv(nn.Module):
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass of DSConv.
+        Forward pass of PPOCRV5ServerDetDSConv.
 
         Args:
             inputs (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
@@ -682,7 +669,7 @@ class DSConv(nn.Module):
         return x
 
 
-class IntraCLBlock(nn.Module):
+class PPOCRV5ServerDetIntraCLBlock(nn.Module):
     """
     Intra-Class Relationship Block. It uses multi-scale convolutions (7x7, 5x5, 3x3)
     and asymmetric kernels (e.g., 7x1, 1x7) to capture long-range spatial dependencies
@@ -722,11 +709,11 @@ class IntraCLBlock(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass of IntraCLBlock.
+        Forward pass of PPOCRV5ServerDetIntraCLBlock.
 
         Args:
             x (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
-                The input feature map from LKPAN stages.
+                The input feature map from PPOCRV5ServerDetLKPAN stages.
 
         Returns:
             `torch.FloatTensor`: Refined feature map with the same shape as input,
@@ -745,7 +732,7 @@ class IntraCLBlock(nn.Module):
         return x + x_relation
 
 
-class LKPAN(nn.Module):
+class PPOCRV5ServerDetLKPAN(nn.Module):
     """
     Large Kernel Path Aggregation Network (Neck).
     It fuses features from multiple backbone stages (C2-C5) using a combination of
@@ -761,10 +748,9 @@ class LKPAN(nn.Module):
     def __init__(self, config: Any, in_channels: list[int]):
         super().__init__()
         self.interpolate_mode = config.interpolate_mode
-        self.weight_init = nn.init.kaiming_uniform_
 
         if config.mode == "lite":
-            p_layer = DSConv
+            p_layer = PPOCRV5ServerDetDSConv
         elif config.mode == "large":
             p_layer = nn.Conv2d
         else:
@@ -780,7 +766,6 @@ class LKPAN(nn.Module):
                 in_channels=in_channels[i], out_channels=config.neck_out_channels, kernel_size=1, bias=False
             )
 
-            self.weight_init(conv.weight)
             self.ins_conv.append(conv)
 
             inp_conv = p_layer(
@@ -791,7 +776,6 @@ class LKPAN(nn.Module):
                 bias=False,
             )
 
-            self.weight_init(inp_conv.weight)
             self.inp_conv.append(inp_conv)
 
             if i > 0:
@@ -803,7 +787,6 @@ class LKPAN(nn.Module):
                     stride=2,
                     bias=False,
                 )
-                self.weight_init(pan_head.weight)
                 self.pan_head_conv.append(pan_head)
 
             pan_lat = p_layer(
@@ -813,25 +796,24 @@ class LKPAN(nn.Module):
                 padding=4,
                 bias=False,
             )
-            self.weight_init(pan_lat.weight)
             self.pan_lat_conv.append(pan_lat)
 
-        self.incl1 = IntraCLBlock(
+        self.incl1 = PPOCRV5ServerDetIntraCLBlock(
             config.intraclblock_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
         )
-        self.incl2 = IntraCLBlock(
+        self.incl2 = PPOCRV5ServerDetIntraCLBlock(
             config.intraclblock_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
         )
-        self.incl3 = IntraCLBlock(
+        self.incl3 = PPOCRV5ServerDetIntraCLBlock(
             config.intraclblock_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
         )
-        self.incl4 = IntraCLBlock(
+        self.incl4 = PPOCRV5ServerDetIntraCLBlock(
             config.intraclblock_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
         )
 
     def forward(self, x: list[torch.Tensor]) -> torch.Tensor:
         """
-        Forward pass of LKPAN.
+        Forward pass of PPOCRV5ServerDetLKPAN.
 
         Args:
             x (`list` of `torch.FloatTensor`):
@@ -880,7 +862,7 @@ class LKPAN(nn.Module):
         return fuse
 
 
-class ConvBNLayer(nn.Module):
+class PPOCRV5ServerDetConvBNLayer(nn.Module):
     """
     A basic wrapper for Convolution-BatchNorm-Activation, typically used for head components.
 
@@ -918,13 +900,12 @@ class ConvBNLayer(nn.Module):
             groups=groups,
             bias=False,
         )
-        nn.init.kaiming_normal_(self.conv.weight)
 
         self.bn = nn.BatchNorm2d(out_channels, momentum=0.9)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass of ConvBNLayer.
+        Forward pass of PPOCRV5ServerDetHead.
 
         Args:
             x (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
@@ -946,14 +927,14 @@ class ConvBNLayer(nn.Module):
         return x
 
 
-class Head(nn.Module):
+class PPOCRV5ServerDetHead(nn.Module):
     """
     Standard segmentation head for generating probability maps. It uses transposed
     convolutions to upsample the feature map back to the original image size.
 
     Args:
         in_channels (`int`):
-            Number of input channels from the neck (e.g., LKPAN).
+            Number of input channels from the neck (e.g., PPOCRV5ServerDetLKPAN).
         kernel_list (`List[int]`, *optional*, defaults to `[3, 2, 2]`):
             List of kernel sizes for the sequence of [Conv2d, ConvTranspose2d, ConvTranspose2d].
     """
@@ -975,22 +956,15 @@ class Head(nn.Module):
         self.conv_bn1 = nn.BatchNorm2d(in_channels // 4, momentum=0.9)
         self.relu1 = nn.ReLU()
 
-        nn.init.constant_(self.conv_bn1.weight, 1.0)
-        nn.init.constant_(self.conv_bn1.bias, 1e-4)
-
         self.conv2 = nn.ConvTranspose2d(
             in_channels=in_channels // 4,
             out_channels=in_channels // 4,
             kernel_size=kernel_list[1],
             stride=2,
         )
-        nn.init.kaiming_uniform_(self.conv2.weight)
 
         self.conv_bn2 = nn.BatchNorm2d(in_channels // 4, momentum=0.9)
         self.relu2 = nn.ReLU()
-
-        nn.init.constant_(self.conv_bn2.weight, 1.0)
-        nn.init.constant_(self.conv_bn2.bias, 1e-4)
 
         self.conv3 = nn.ConvTranspose2d(
             in_channels=in_channels // 4,
@@ -998,13 +972,12 @@ class Head(nn.Module):
             kernel_size=kernel_list[2],
             stride=2,
         )
-        nn.init.kaiming_uniform_(self.conv3.weight)
 
     def forward(
         self, x: torch.Tensor, return_f: bool = False
     ) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """
-        Forward pass of the Head.
+        Forward pass of the PPOCRV5ServerDetHead.
 
         Args:
             x (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
@@ -1032,7 +1005,7 @@ class Head(nn.Module):
         return x
 
 
-class DBHead(nn.Module):
+class PPOCRV5ServerDetDBHead(nn.Module):
     """
     Differentiable Binarization (DB) Head wrapper.
 
@@ -1045,7 +1018,7 @@ class DBHead(nn.Module):
     def __init__(self, in_channels: int, k: int = 50, kernel_list: list[int] = [3, 2, 2]):
         super().__init__()
         self.k = k
-        self.binarize = Head(in_channels=in_channels, kernel_list=kernel_list)
+        self.binarize = PPOCRV5ServerDetHead(in_channels=in_channels, kernel_list=kernel_list)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -1061,7 +1034,7 @@ class DBHead(nn.Module):
         return shrink_maps
 
 
-class LocalModule(nn.Module):
+class PPOCRV5ServerDetLocalModule(nn.Module):
     """
     Local Refinement Module that refines the initial probability map by
     concatenating it with higher-resolution features.
@@ -1074,7 +1047,7 @@ class LocalModule(nn.Module):
 
     def __init__(self, in_c: int, mid_c: int, act: str):
         super().__init__()
-        self.last_3 = ConvBNLayer(in_c + 1, mid_c, 3, 1, 1, act=act)
+        self.last_3 = PPOCRV5ServerDetConvBNLayer(in_c + 1, mid_c, 3, 1, 1, act=act)
         self.last_1 = nn.Conv2d(
             in_channels=mid_c,
             out_channels=1,
@@ -1098,9 +1071,9 @@ class LocalModule(nn.Module):
         return out
 
 
-class PFHeadLocal(DBHead):
+class PPOCRV5ServerDetPFHeadLocal(PPOCRV5ServerDetDBHead):
     """
-    PFHeadLocal implements the Progressive Fusion Head with Local refinement,
+    PPOCRV5ServerDetPFHeadLocal implements the Progressive Fusion Head with Local refinement,
     the core detection head of PP-OCRv5.
 
     Args:
@@ -1119,11 +1092,11 @@ class PFHeadLocal(DBHead):
             mid_ch = config.neck_out_channels // 8
         else:
             raise ValueError(f"mode must be 'large' or 'small', currently {config.mode}")
-        self.cbn_layer = LocalModule(config.neck_out_channels // 4, mid_ch, config.hidden_act)
+        self.cbn_layer = PPOCRV5ServerDetLocalModule(config.neck_out_channels // 4, mid_ch, config.hidden_act)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass of PFHeadLocal, combining base shrink maps and locally refined maps.
+        Forward pass of PPOCRV5ServerDetPFHeadLocal, combining base shrink maps and locally refined maps.
 
         Args:
             x (`torch.FloatTensor` of shape `(batch_size, neck_out_channels, H, W)`):
@@ -1174,12 +1147,43 @@ class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        if isinstance(module, PPOCRV5ServerDetConvBNLayer):
+            nn.init.kaiming_normal_(module.conv.weight)
+
+        if isinstance(module, PPOCRV5ServerDetHead):
+            nn.init.constant_(module.conv_bn1.weight, 1.0)
+            nn.init.constant_(module.conv_bn1.bias, 1e-4)
+            nn.init.constant_(module.conv_bn2.weight, 1.0)
+            nn.init.constant_(module.conv_bn2.bias, 1e-4)
+            nn.init.kaiming_uniform_(module.conv2.weight)
+            nn.init.kaiming_uniform_(module.conv3.weight)
+
+        if isinstance(module, PPOCRV5ServerDetLKPAN):
+            for sub_module in module.modules():
+                if isinstance(sub_module, nn.ModuleList):
+                    for m in sub_module:
+                        nn.init.kaiming_uniform_(m.weight)
+
+        if isinstance(module, PPOCRV5ServerDetHGNetV2):
+            for m in module.modules():
+                if isinstance(m, nn.Conv2d):
+                    nn.init.kaiming_normal_(m.weight)
+                elif isinstance(m, nn.BatchNorm2d):
+                    nn.init.constant_(m.weight, 1.0)
+                    nn.init.constant_(m.bias, 0.0)
+                elif isinstance(m, nn.Linear):
+                    nn.init.constant_(m.bias, 0.0)
+
 
 @auto_docstring(custom_intro="The PPOCRV5 Server Det model.")
 class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
     """
     Core PPOCRV5 Server Det model.
-    Integration of PPHGNetV2 (Backbone), LKPAN (Neck), and PFHeadLocal (Head).
+    Integration of PPOCRV5ServerDetHGNetV2 (Backbone), PPOCRV5ServerDetLKPAN (Neck), and PPOCRV5ServerDetPFHeadLocal (Head).
     """
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
@@ -1191,9 +1195,9 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
         """
         super().__init__(config)
 
-        self.backbone = PPHGNetV2(config)
-        self.neck = LKPAN(config, in_channels=self.backbone.out_channels)
-        self.head = PFHeadLocal(config)
+        self.backbone = PPOCRV5ServerDetHGNetV2(config)
+        self.neck = PPOCRV5ServerDetLKPAN(config, in_channels=self.backbone.out_channels)
+        self.head = PPOCRV5ServerDetPFHeadLocal(config)
         self.post_init()
 
     def forward(
