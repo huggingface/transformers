@@ -519,6 +519,8 @@ OBJECTS_TO_IGNORE = {
     "Llama4TextConfig",
     "BltConfig",
     "BltPatcherConfig",
+    "MoonshineStreamingConfig",
+    "MoonshineStreamingEncoderConfig",
 }
 # In addition to the objects above, we also ignore objects with certain prefixes. If you add an item to the list
 # below, make sure to add a comment explaining why.

@@ -29,7 +29,7 @@ from transformers.testing_utils import require_torch
 @require_torch
 class ExecutorchTest(unittest.TestCase):
     def setUp(self):
-        set_seed(0)
+        set_seed(42)
         self.model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
         self.model.eval()
 

@@ -214,7 +214,7 @@ class LoadStateDictInfo:
             tips += f"\n- {_color('CONVERSION', 'purple') + PALETTE['italic']}\t:originate from the conversion scheme"
             for k, v in update_key_name(self.conversion_errors).items():
                 status = _color("CONVERSION", "purple")
-                _details = v[:term_w]
+                _details = f"\n\n{v}\n\n"
                 rows.append([k, status, _details])
 
         # If nothing is wrong, return None

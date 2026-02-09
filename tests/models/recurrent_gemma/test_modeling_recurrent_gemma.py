@@ -162,7 +162,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_2b_sample(self):
-        set_seed(0)
+        set_seed(42)
         expectations = Expectations(
             {
                 (None, None): [
