@@ -232,7 +232,7 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
             }
             # For BC as cross-attentions used to be captured with attentions
             if "cross_attentions" in capturable_flags:
-                recordable_keys["cross_attentions"] = kwargs.get(
+                recordable_keys["output_cross_attentions"] = kwargs.get(
                     "output_attentions", getattr(self.config, "output_attentions", False)
                 )
             # The sam model variants need this annoying exception as well...
