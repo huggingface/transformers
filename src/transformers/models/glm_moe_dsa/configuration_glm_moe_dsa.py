@@ -207,10 +207,12 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
 
-        # Default to MoE from the second layer and on
+        # Default to MoE from the fourth layer and on
         self.mlp_layer_types = mlp_layer_types
         if self.mlp_layer_types is None:
-            self.mlp_layer_types = ["dense"] * 3 + ["sparse"] * (self.num_hidden_layers - 3)
+            self.mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (
+                self.num_hidden_layers - 3
+            )
         layer_type_validation(self.mlp_layer_types, self.num_hidden_layers, attention=False)
 
         self.moe_intermediate_size = moe_intermediate_size
