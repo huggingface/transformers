@@ -980,6 +980,27 @@ def convert_and_load_state_dict_in_model(
     We build a mapping from the keys obtained by renaming each of the checkpoint keys according to the weight_mapping rules.
     Then we load the tensors into the model, applying any conversion operations as needed.
 
+    # Early return for FSDP CPU RAM efficient loading
+    # When FSDP is enabled with CPU RAM efficient loading, only rank 0 needs to load the weights
+    # for FULL_SHARD and SHARD_GRAD_OP strategies. Non-rank 0 processes will receive the sharded
+    # weights from rank 0 via FSDP's broadcast. This prevents all ranks from temporarily allocating
+    # model-sized CPU RAM.
+    #
+    # For HYBRID_SHARD and HYBRID_SHARD_ZERO2 strategies, all ranks need to load weights as there
+    # are multiple data parallel groups.
+    from .integrations import should_skip_non_rank0_weight_loading
+
+    if should_skip_non_rank0_weight_loading() and load_config.hf_quantizer is None:
+        # Return empty loading info - the weights will be synced from rank 0 via FSDP
+        loading_info = LoadStateDictInfo(
+            missing_keys=set(model.state_dict().keys()),
+            unexpected_keys=set(),
+            mismatched_keys=set(),
+            conversion_errors={},
+            error_msgs=[],
+        )
+        return loading_info, disk_offload_index
+
     The `param_name_to_load` will look like this:
     {
         "model.layers.0.attention.q.weight": # Notice here there is only the first key of the target keys
@@ -1105,12 +1126,6 @@ def convert_and_load_state_dict_in_model(
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
-
-    from .integrations import is_fsdp_enabled
-    from .modeling_utils import is_local_dist_rank_0
-
-    if is_fsdp_enabled() and not is_local_dist_rank_0() and hf_quantizer is None:
-        state_dict = []
 
     for original_key, tensor in state_dict:
         # 1. Rename the key according to all renaming pattern and optional weight converter patterns
