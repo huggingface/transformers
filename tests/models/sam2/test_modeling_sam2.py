@@ -194,6 +194,7 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
+            config.backbone_config.output_attentions = True
             window_size = config.backbone_config.window_size_per_stage[0]
             out_dim = config.backbone_config.hidden_size
             patch_stride = config.backbone_config.patch_stride
@@ -263,6 +264,7 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
+            config.backbone_config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class, image_size)
 
@@ -514,6 +516,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             del inputs_dict["output_attentions"]
             config.mask_decoder_config.output_attentions = True
             config.vision_config.output_attentions = True
+            config.vision_config.backbone_config.output_attentions = True
             config.output_attentions = True
             model = model_class._from_config(config, attn_implementation="eager")
             window_size = config.vision_config.backbone_config.window_size_per_stage[0]

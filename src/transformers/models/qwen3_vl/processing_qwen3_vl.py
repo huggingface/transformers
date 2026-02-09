@@ -152,7 +152,7 @@ class Qwen3VLProcessor(ProcessorMixin):
                     curr_timestamp = self._calculate_timestamps(
                         metadata.frames_indices,
                         metadata.fps,
-                        self.video_processor.merge_size,
+                        self.video_processor.temporal_patch_size,
                     )
 
                     video_placeholder = ""

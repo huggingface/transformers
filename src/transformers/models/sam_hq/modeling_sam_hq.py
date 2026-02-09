@@ -27,9 +27,6 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from transformers.modeling_outputs import ModelOutput
-from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
-
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -37,6 +34,8 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.generic import ModelOutput, TransformersKwargs, check_model_inputs
+from ...utils.output_capturing import OutputRecorder
 from .configuration_sam_hq import SamHQConfig, SamHQMaskDecoderConfig, SamHQPromptEncoderConfig, SamHQVisionConfig
 
 
