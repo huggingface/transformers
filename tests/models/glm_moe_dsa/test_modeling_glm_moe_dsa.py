@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch GLM-4.5, GLM-4.6, GLM-4.7 model."""
+"""Testing suite for the PyTorch GlmMoeDsa model."""
 
 import unittest
 
@@ -48,14 +48,17 @@ class GlmMoeDsaModelTester(CausalLMModelTester):
         qk_nope_head_dim=64,
         qk_rope_head_dim=64,
         v_head_dim=128,
+        num_hidden_layers=2,
+        mlp_layer_types=["sparse", "mlp"],  # sparse is MoE here... Not sure why it was not called moe...
     ):
-        super().__init__(parent=parent)
+        super().__init__(parent=parent, num_hidden_layers=num_hidden_layers)
         self.n_routed_experts = n_routed_experts
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
         self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
+        self.mlp_layer_types = mlp_layer_types
 
 
 @require_torch

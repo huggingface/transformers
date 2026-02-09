@@ -118,11 +118,6 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 1):
             End of stream token id.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
-            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
-            issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
@@ -179,7 +174,6 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         pad_token_id: int | None = None,
         bos_token_id: int | None = 0,
         eos_token_id: int | None = 1,
-        pretraining_tp: int | None = 1,
         tie_word_embeddings: bool | None = False,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         rope_interleave: bool | None = True,
@@ -242,7 +236,6 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
@@ -266,9 +259,9 @@ class GlmMoeDsaAttention(nn.Module):
     This implements the native sparse attention from [DeepSeek V3.2](https://huggingface.co/deepseek-ai/DeepSeek-V3.2) which uses
     an indexer to select top-k tokens for attention computation, making it more efficient for long sequences.
 
-    In GLM-5, the indexer RoPE uses neox_style = false. Therefore, we introduced the indexer_rope_interleave parameter: when indexer_rope_interleave is set to True, RoPE is computed using the same neox_style = false behavior as in the GLMMOEDSA model. This part has not yet been implemented in transformers.
-
-    Switch to the implementation from this [PR](https://github.com/huggingface/transformers/pull/41251) as soon as it’s merged.
+    In GLM-5, the indexer RoPE uses neox_style = false. Therefore, we introduced the indexer_rope_interleave parameter:
+    when indexer_rope_interleave is set to True, RoPE is computed using the same neox_style = false behavior as in the
+    GlmMoeDsa model. This part has not yet been implemented in transformers.
     """
 
     def __init__(self, config: GlmMoeDsaConfig, layer_idx: int):
