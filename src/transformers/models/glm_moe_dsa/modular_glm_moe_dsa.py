@@ -246,6 +246,7 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
+        del self.pretraining_tp
 
 
 class GlmMoeDsaRMSNorm(Glm4MoeRMSNorm):
