@@ -149,6 +149,8 @@ class SinqDeserialize(ConversionOps):
         meta = input_dict.get(".meta", None)
         bias = input_dict.get(".bias", None)
 
+        # Fallback path: if W_q or meta is missing, this is not a valid SINQ checkpoint.
+        # Return the tensor as-is so standard HF weight loading can handle it.
         if W_q is None or meta is None:
             v = next(iter(input_dict.values()))
             if isinstance(v, list):

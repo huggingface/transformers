@@ -55,7 +55,6 @@ First, create a [`SinqConfig`] and specify the following parameters:
 | `--group_size` | Weights per quantization group | int | 64, 128 | 64 |
 | `--method` | Quantization method | str | sinq, asinq | sinq |
 | `--modules_to_not_convert` | List of the layers that are NOT quantize | List of str | [lm_head, ...] | [lm_head] |
-| `--device` | Device on which the model is loaded | str | cpu, cuda:0, cuda:1, etc | cuda:0 |
 
 Then specify the model you want to quantize and pass the SinqConfig as quantization configuration option
 
@@ -64,15 +63,13 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, SinqConfig
 
 model_name = "Qwen/Qwen3-1.7B"
-device = "cuda:0"
 
 cfg = SinqConfig(
     nbits=4,
     group_size=64,
     tiling_mode="1D",
     method="sinq",
-    modules_to_not_convert=["lm_head"],
-    device=device
+    modules_to_not_convert=["lm_head"]
 )
 
 tok = AutoTokenizer.from_pretrained(model_name)
@@ -151,6 +148,7 @@ from lm_eval.models.huggingface import HFLM
 
 # Wrap the already quantized model and tokenizer with HFLM
 lm = HFLM(pretrained=qmodel, tokenizer=tok, device=device)
+device = "cuda:0"
 
 # Evaluate (many tasks available on lm-eval such as MMLU and HellaSwag)
 results = evaluator.simple_evaluate(

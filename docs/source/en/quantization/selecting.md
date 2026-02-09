@@ -161,7 +161,7 @@ The key takeaways are:
 | Quantization & Methods                      | Memory Savings (vs bf16) | Accuracy             | Other Notes                                                        |
 |-------------------------------------------- |------------------------- |--------------------- |------------------------------------------------------------------- |
 | **8-bit** (bnb-int8, HQQ, Quanto, torchao, fp8) | ~2x             | Very close to baseline bf16 model   |                                                                    |
-| **4-bit** (AWQ, GPTQ, HQQ, bnb-nf4)    | ~4x                      | Relatively high accuracy            | AWQ/GPTQ often lead in accuracy but need calibration. HQQ/bnb-nf4 are easy on-the-fly. |
+| **4-bit** (AWQ, GPTQ, HQQ, bnb-nf4, SINQ)    | ~4x                      | Relatively high accuracy            | AWQ/GPTQ often lead in accuracy but need calibration. HQQ/bnb-nf4/SINQ are easy on-the-fly. |
 | **Sub-4-bit** (VPTQ, AQLM, 2-bit GPTQ) | Extreme (>4x)            | Noticeable drop, especially at 2-bit | Quantization times can be very long (AQLM, VPTQ). Performance varies. |
 
 > [!TIP]

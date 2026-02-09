@@ -2114,12 +2114,6 @@ class SinqConfig(QuantizationConfigMixin):
         method (`str`, default "sinq"):
             "sinq"  – calibration-free weight-only SINQ  
             "asinq" – A-SINQ (activation-aware), not supported in Hugging Face. Please refer to the official SINQ repository.
-        per_channel (`bool`, default True):
-            Reserved flag for future per-channel options (not used directly here).
-        symmetric (`bool`, default True):
-            Reserved flag; kept for API symmetry.
-        use_nf4 (`bool`, default False):
-            Reserved flag; kept for API symmetry.
         modules_to_not_convert (`list[str]`, *optional*):
             List of module names/prefixes to keep in full precision.
 
@@ -2133,11 +2127,7 @@ class SinqConfig(QuantizationConfigMixin):
         group_size: int = 64,
         tiling_mode: str = "1D",
         method: str = "sinq",  # "sinq" | "asinq"
-        per_channel: bool = True,
-        symmetric: bool = True,
-        use_nf4: bool = False,
         modules_to_not_convert: Optional[List[str]] = None,
-        device: Optional[Union[str, int]] = "cpu",
         **kwargs: Any,
     ):
         self.quant_method = QuantizationMethod.SINQ
@@ -2147,13 +2137,7 @@ class SinqConfig(QuantizationConfigMixin):
         self.tiling_mode = tiling_mode
         self.method = method
 
-        self.per_channel = per_channel
-        self.symmetric = symmetric
-        self.use_nf4 = use_nf4
-
         self.modules_to_not_convert = modules_to_not_convert
-
-        self.device = device
 
         self._extra_kwargs: Dict[str, Any] = dict(kwargs)
 
@@ -2165,13 +2149,6 @@ class SinqConfig(QuantizationConfigMixin):
         self.group_size = int(self.group_size)
         self.tiling_mode = str(self.tiling_mode)
         self.method = str(self.method).lower()
-        
-        self.per_channel = bool(self.per_channel)
-        self.symmetric = bool(self.symmetric)
-        self.use_nf4 = bool(self.use_nf4)
-        
-        if self.modules_to_not_convert is not None:
-            self.modules_to_not_convert = list(self.modules_to_not_convert)
         
         # Validation
         if not isinstance(self.nbits, int):
@@ -2187,12 +2164,3 @@ class SinqConfig(QuantizationConfigMixin):
                 f"SINQ: group_size={self.group_size} is not a multiple of 8; "
                 "this may be rejected by the backend."
             )
-
-    def to_dict(self) -> dict[str, Any]:
-        """
-        Convert configuration to a plain dict that will be stored in `config.json`
-        under `quantization_config`.
-        """
-        base = super().to_dict()
-
-        return base

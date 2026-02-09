@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,46 +28,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-def _normalize_cuda_device(dev: Optional[Union[str, int]]) -> str:
-    if dev is None or dev == "auto":
-        if torch.cuda.is_available():
-            idx = torch.cuda.current_device() if torch.cuda.device_count() else 0
-            return f"cuda:{idx}"
-        return "cpu"
-
-    if dev == "cuda":
-        return "cuda:0"
-
-    if dev == "cpu":
-        return "cpu"
-
-    if isinstance(dev, int):
-        if torch.cuda.is_available():
-            return f"cuda:{dev}"
-        return "cpu"
-
-    if isinstance(dev, str) and dev.startswith("cuda"):
-        if not torch.cuda.is_available():
-            return "cpu"
-        return dev
-
-    raise ValueError(f"Unsupported device spec: {dev!r}")
-
-def _flatten_device_map(dmap: Optional[dict]) -> set[str]:
-    if not isinstance(dmap, dict):
-        return set()
-    out: set[str] = set()
-
-    def _walk(v):
-        if isinstance(v, str):
-            out.add(v)
-        elif isinstance(v, dict):
-            for vv in v.values():
-                _walk(vv)
-
-    _walk(dmap)
-    return out
-
 class SinqHfQuantizer(HfQuantizer):
     """
     HF v5 quantizer for SINQ.
@@ -91,13 +51,17 @@ class SinqHfQuantizer(HfQuantizer):
         self._do_param_level_sinq: bool = False
 
     def is_serializable(self, safe_serialization: Optional[bool] = None) -> bool:
-        if safe_serialization:
-            return True
-        return False
+        return True
 
     @property
     def is_trainable(self) -> bool:
         return True
+
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            dtype = torch.bfloat16
+        self.dtype = dtype
+        return dtype
 
     def validate_environment(self, *args, **kwargs) -> None:
         from ..utils import is_sinq_available
@@ -108,39 +72,15 @@ class SinqHfQuantizer(HfQuantizer):
 
         if not torch.cuda.is_available():
             raise RuntimeError("SINQ currently expects a CUDA device (for GemLite backend).")
-        
-        # Validate and set dtype
-        passed_dtype = kwargs.get("torch_dtype", None) or kwargs.get("dtype", None)
-        if passed_dtype is not None:
-            if isinstance(passed_dtype, str):
-                # Convert string to torch dtype
-                if not hasattr(torch, passed_dtype):
-                    raise ValueError(f"Unsupported torch_dtype string: {passed_dtype!r}")
-                passed_dtype = getattr(torch, passed_dtype)
-            
-            if not isinstance(passed_dtype, torch.dtype):
-                raise TypeError(f"Expected torch.dtype, got {type(passed_dtype)}")
-            
-            # Warn if using unsupported dtype for SINQ
-            if passed_dtype not in (torch.float16, torch.bfloat16, torch.float32):
-                logger.warning(
-                    f"SINQ quantization with dtype={passed_dtype} may not be supported. "
-                    f"Recommended dtypes: torch.float16, torch.bfloat16, torch.float32"
-                )
-            
-            self.dtype = passed_dtype
-        else:
-            # Set default dtype if not provided
-            self.dtype = torch.bfloat16
 
         device_map = kwargs.get("device_map", None)
 
-        devs = _flatten_device_map(device_map)
-        if devs:
-            if len(devs) > 1:
+        if isinstance(device_map, dict):
+            device_map_values = set(device_map.values())
+            if len(device_map_values) > 1:
                 raise RuntimeError(
                     "SinqHfQuantizer: multi-GPU device_map detected, but SINQ currently supports only a single CUDA "
-                    f"device. Got {sorted(devs)}. Please use device_map=None."
+                    f"device. Got {sorted(device_map_values)}. Please use device_map=None."
                 )
         
         if self.quantization_config.method == "asinq" and not self.pre_quantized:
@@ -271,7 +211,19 @@ class SinqHfQuantizer(HfQuantizer):
         #     raise ValueError("A-SINQ is not supported in HuggingFace integration")
 
         sinq_quant_dict = None if self.pre_quantized else self._build_sinq_quant_dict(self.quantization_config)
-        device_str = _normalize_cuda_device(getattr(self.quantization_config, "device", "auto"))
+
+        # Extract device from device_map.
+        if device_map is None:
+            device_str = "cuda:0" if torch.cuda.is_available() else "cpu"
+        elif isinstance(device_map, dict):
+            first_device = next(iter(device_map.values()), 0)
+            if isinstance(first_device, int):
+                device_str = f"cuda:{first_device}"
+            else:
+                device_str = str(first_device)
+        else:
+            # device_map is a string like "auto", "balanced", etc.
+            device_str = "cuda:0" if torch.cuda.is_available() else "cpu"
 
         model = replace_with_sinq_linear(
                 model,
@@ -290,10 +242,16 @@ class SinqHfQuantizer(HfQuantizer):
         """
         Called after *all* weights have been loaded.
 
-        We patch the HF save/load methods here so that subsequent save_pretrained
-        calls will correctly serialize SINQ modules. The patch must happen before
-        any save attempt, not during save (which would be too late for the first save).
+        For SINQ:
+        1. Move non-SINQLinear modules to GPU (embeddings, norms, lm_head, etc.)
+           - SINQLinear modules already have GemLite buffers on GPU
+           - We skip moving SINQLinear's W_q/meta to avoid memory duplication
+        2. Patch HF save/load methods for SINQ serialization
         """
+        from sinq.sinqlinear_hf import SINQLinear
         from sinq.hf_io import patch_hf_pretrained_io
+
+        # Patch HF save/load methods for SINQ serialization
         patch_hf_pretrained_io()
+
         return model
