@@ -5530,6 +5530,8 @@ class ModelTesterMixin:
             COUNTER -= 1
 
         for model_class in self.all_model_classes:
+            # Reset the counter in case one subtest fails and thus does not clean it up correctly
+            COUNTER = 0
             # Each individual model is a subtest
             with self.subTest(model_class.__name__):
                 model = model_class(copy.deepcopy(config)).to(device=torch_device)
