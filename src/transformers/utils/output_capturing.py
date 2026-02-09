@@ -224,16 +224,10 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
             # Pop it so that internal modules always return a dict even if False is requested
             return_dict = kwargs.pop("return_dict", getattr(self.config, "return_dict", True))
 
-            # In case `kwargs` are passed as an explicit dict
-            all_passed_kargs = kwargs.copy()
-            if "kwargs" in all_passed_kargs:
-                for k, v in all_passed_kargs["kwargs"].items():
-                    all_passed_kargs[k] = v
-
             # _can_record_outputs is None by default
             capturable_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__)) or {}
             recordable_keys = {
-                f"output_{k}": all_passed_kargs.pop(f"output_{k}", getattr(self.config, f"output_{k}", False))
+                f"output_{k}": kwargs.get(f"output_{k}", getattr(self.config, f"output_{k}", False))
                 for k in capturable_flags
             }
 

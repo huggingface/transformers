@@ -895,9 +895,7 @@ def merge_with_config_defaults(func):
                     kwargs[arg_name] = arg_value
 
         # Maybe temporarily overwrite config value to create the correct mask - kwarg takes precedence
-        is_causal = kwargs.get("is_causal")
-        if is_causal is None:
-            is_causal = getattr(self.config, "is_causal", None)
+        is_causal = kwargs.get("is_causal", getattr(self.config, "is_causal", None))
         if is_causal is not None:
             is_causal_in_config = hasattr(self.config, "is_causal")
             if is_causal_in_config:
