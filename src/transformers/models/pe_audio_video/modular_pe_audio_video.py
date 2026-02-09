@@ -185,7 +185,9 @@ class PeAudioVideoEncoderEmbedder(nn.Module):
             # note: when one of the above is true, we can expect the other to be true as there is no reason
             # to have masked audio without masked video and vice versa
 
-            return nn.functional.interpolate(video_hidden_state, size=audio_hidden_state.shape[1], mode="nearest")
+            return nn.functional.interpolate(
+                video_hidden_state.transpose(1, 2), size=audio_hidden_state.shape[1], mode="nearest"
+            ).transpose(1, 2)
 
         aligned_shape = (*audio_hidden_state.shape[:2], video_hidden_state.shape[-1])
         aligned_hidden_state = audio_hidden_state.new_zeros(aligned_shape)

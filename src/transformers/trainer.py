@@ -2297,6 +2297,8 @@ class Trainer:
                     model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
                         self.model, self.optimizer, self.lr_scheduler
                     )
+                else:
+                    model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
             else:
                 model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
         else:
