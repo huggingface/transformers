@@ -468,7 +468,9 @@ class CodeSimilarityAnalyzer:
             `np.ndarray`: Stacked embeddings for all texts.
         """
         output = []
-        for i in tqdm(range(0, len(texts), BATCH_SIZE), desc="encode", leave=False):
+        num_batches = (len(texts) + BATCH_SIZE - 1) // BATCH_SIZE
+        batch_indices = list(range(0, len(texts), BATCH_SIZE))
+        for i in tqdm(batch_indices, desc="Encoding definitions", total=num_batches, unit="batch"):
             output.append(self._encode_batch(texts[i : i + BATCH_SIZE]))
             if self.device.type == "cuda":
                 torch.cuda.empty_cache()
@@ -486,7 +488,7 @@ class CodeSimilarityAnalyzer:
         sanitized_sources = []
         tokens_map = {}
 
-        for file_path in tqdm(files, desc="parse", leave=False):
+        for file_path in tqdm(files, desc="Parsing modeling files", unit="file"):
             model_hint = self._infer_model_from_relative_path(file_path)
             (
                 _,
@@ -503,11 +505,17 @@ class CodeSimilarityAnalyzer:
             f"encoding {len(sanitized_sources)} definitions with {EMBEDDING_MODEL} (device={self.device.type}, batch={BATCH_SIZE}, max_length={MAX_LENGTH})"
         )
         embeddings = self.encode(sanitized_sources)
-        safetensors_save({"embeddings": embeddings}, EMBEDDINGS_PATH)
-        with open(INDEX_MAP_PATH, "w", encoding="utf-8") as file:
-            json.dump({int(i): identifiers[i] for i in range(len(identifiers))}, file)
-        with open(TOKENS_PATH, "w", encoding="utf-8") as file:
-            json.dump(tokens_map, file)
+        
+        logging.info("Saving index files...")
+        with tqdm(total=3, desc="Saving index", unit="file") as pbar:
+            safetensors_save({"embeddings": embeddings}, EMBEDDINGS_PATH)
+            pbar.update(1)
+            with open(INDEX_MAP_PATH, "w", encoding="utf-8") as file:
+                json.dump({int(i): identifiers[i] for i in range(len(identifiers))}, file)
+            pbar.update(1)
+            with open(TOKENS_PATH, "w", encoding="utf-8") as file:
+                json.dump(tokens_map, file)
+            pbar.update(1)
 
         self.index_dir = Path.cwd()
 
