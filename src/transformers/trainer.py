@@ -29,6 +29,7 @@ import sys
 import tempfile
 import time
 import warnings
+from collections import defaultdict
 from collections.abc import Callable, Iterator, Mapping
 from functools import partial
 from pathlib import Path
@@ -426,6 +427,8 @@ class Trainer:
         # memory metrics - must set up as early as possible
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
         self._memory_tracker.start()
+
+        self._metrics = {"train": defaultdict(list), "eval": defaultdict(list)}
 
         # set the correct log level depending on the node
         log_level = args.get_process_log_level()
@@ -3539,6 +3542,14 @@ class Trainer:
             start_time (`Optional[float]`):
                 The start of training.
         """
+        mode = "train" if self.model.training else "eval"
+        if self._metrics[mode]:
+            metrics = {key: sum(val) / len(val) for key, val in self._metrics[mode].items()}
+            if mode == "eval":
+                metrics = {f"eval_{key}": val for key, val in metrics.items()}
+            logs = {**logs, **metrics}
+            self._metrics[mode].clear()
+
         if self.state.epoch is not None:
             logs["epoch"] = self.state.epoch
         if self.args.include_num_input_tokens_seen != "no":
