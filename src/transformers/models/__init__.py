@@ -122,6 +122,7 @@ if TYPE_CHECKING:
     from .encodec import *
     from .encoder_decoder import *
     from .eomt import *
+    from .eomt_dinov3 import *
     from .ernie import *
     from .ernie4_5 import *
     from .ernie4_5_moe import *
@@ -129,6 +130,7 @@ if TYPE_CHECKING:
     from .esm import *
     from .evolla import *
     from .exaone4 import *
+    from .exaone_moe import *
     from .falcon import *
     from .falcon_h1 import *
     from .falcon_mamba import *
@@ -257,6 +259,7 @@ if TYPE_CHECKING:
     from .modernbert import *
     from .modernbert_decoder import *
     from .moonshine import *
+    from .moonshine_streaming import *
     from .moshi import *
     from .mpnet import *
     from .mpt import *
@@ -307,6 +310,7 @@ if TYPE_CHECKING:
     from .plbart import *
     from .poolformer import *
     from .pop2piano import *
+    from .pp_doclayout_v3 import *
     from .prompt_depth_anything import *
     from .prophetnet import *
     from .pvt import *
@@ -428,6 +432,7 @@ if TYPE_CHECKING:
     from .xmod import *
     from .yolos import *
     from .yoso import *
+    from .youtu import *
     from .zamba import *
     from .zamba2 import *
     from .zoedepth import *

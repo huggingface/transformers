@@ -106,6 +106,7 @@ if is_torch_available():
     from test_module.custom_modeling import CustomModel
     from torch import nn
 
+    import transformers.initialization as init
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
@@ -113,6 +114,8 @@ if is_torch_available():
         BertModel,
         CLIPTextModel,
         GenerationMixin,
+        LlamaConfig,
+        LlamaForCausalLM,
         MixtralConfig,
         MixtralModel,
         MusicgenConfig,
@@ -134,7 +137,6 @@ if is_torch_available():
         _find_identical,
         get_total_byte_count,
     )
-    from transformers.pytorch_utils import isin_mps_friendly
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -289,6 +291,51 @@ if is_torch_available():
 
         def forward(self, x):
             return self.decoder(self.base(x))
+
+    class VerySimpleLayer(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.simple = nn.Linear(2, 2)
+
+        def forward(self, x):
+            return self.simple(x)
+
+    class DummyLanguageModel(PreTrainedModel):
+        _keep_in_fp32_modules = ["linear"]
+        _no_split_modules = ["VerySimpleLayer"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(2, 2)
+            self.layers = nn.ModuleList((VerySimpleLayer(), VerySimpleLayer()))
+            self.post_init()
+
+        def forward(self, x):
+            return self.linear(self.layers[1](self.layers[0](x)))
+
+    class DummyVisionModel(PreTrainedModel):
+        _keep_in_fp32_modules_strict = ["simple"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.simple = nn.Linear(2, 2)
+            self.post_init()
+
+        def forward(self, x):
+            return self.simple(x)
+
+    class MultimodalModel(PreTrainedModel):
+        _keep_in_fp32_modules = ["head"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.language_model = DummyLanguageModel(config)
+            self.vision_model = DummyVisionModel(config)
+            self.head = nn.Linear(2, 2)
+            self.post_init()
+
+        def forward(self, x):
+            return self.head(self.language_model(self.vision_model(x)))
 
     class Prepare4dCausalAttentionMaskModel(nn.Module):
         def forward(self, inputs_embeds):
@@ -521,7 +568,10 @@ class ModelUtilsTest(TestCasePlus):
         with LoggingLevel(logging.WARNING):
             with CaptureLogger(logger) as cl:
                 BertModel.from_pretrained(TINY_T5)
-        self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
+        self.assertTrue(
+            "You are using a model of type `t5` to instantiate a model of type `bert`. "
+            "This may be expected if you are loading a checkpoint that shares a subset" in cl.out
+        )
 
     @require_accelerate
     def test_model_from_pretrained_with_none_quantization_config(self):
@@ -1519,6 +1569,29 @@ class ModelUtilsTest(TestCasePlus):
             # They should still be tied though
             self.assertIs(new_model.linear.weight, new_model.linear_2.weight, msg="Weights are not tied!")
 
+    def test_tied_weights_are_always_tied_from_config(self):
+        """Test that if a model is initialized from config it's always tied, and that the context `no_tie_weights` works
+        as expected"""
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=16, tie_word_embeddings=True)
+
+        # Make sure they are tied if called with `_from_config` and directly
+        model = LlamaForCausalLM._from_config(copy.deepcopy(config))
+        self.assertTrue(model.lm_head.weight is model.model.embed_tokens.weight)
+        model = LlamaForCausalLM(copy.deepcopy(config))
+        self.assertTrue(model.lm_head.weight is model.model.embed_tokens.weight)
+
+        # Also when using a meta device explicitly (as it skips e.g. weight init automatically)
+        with torch.device("meta"):
+            model = LlamaForCausalLM._from_config(copy.deepcopy(config))
+            self.assertTrue(model.lm_head.weight is model.model.embed_tokens.weight)
+            model = LlamaForCausalLM(copy.deepcopy(config))
+            self.assertTrue(model.lm_head.weight is model.model.embed_tokens.weight)
+
+        # Make sure the context works as expected
+        with init.no_tie_weights():
+            model = LlamaForCausalLM._from_config(copy.deepcopy(config))
+            self.assertTrue(model.lm_head.weight is not model.model.embed_tokens.weight)
+
     def test_unexpected_keys_warnings(self):
         model = ModelWithHead(PreTrainedConfig(tie_word_embeddings=True))
         logger = logging.get_logger("transformers.modeling_utils")
@@ -1542,7 +1615,9 @@ class ModelUtilsTest(TestCasePlus):
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
                     _, loading_info = ModelWithHead.from_pretrained(tmp_dir, output_loading_info=True)
-            self.assertIn("added_key | UNEXPECTED", cl.out)
+            # Will be colored if terminal is interactive
+            expected_output = "added_key | [38;5;208mUNEXPECTED" if sys.stdout.isatty() else "added_key | UNEXPECTED"
+            self.assertIn(expected_output, cl.out)
             self.assertEqual(loading_info["unexpected_keys"], {"added_key"})
 
     def test_warn_if_padding_and_no_attention_mask(self):
@@ -1737,27 +1812,6 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIn("LayerNorm.weight", unexpected_keys)
         self.assertIn("LayerNorm.beta", missing_keys)
         self.assertIn("LayerNorm.bias", unexpected_keys)
-
-    def test_isin_mps_friendly(self):
-        """tests that our custom `isin_mps_friendly` matches `torch.isin`"""
-        random_ids = torch.randint(0, 100, (100,))
-        # We can match against an integer
-        random_test_integer = torch.randint(0, 100, (1,)).item()
-        self.assertTrue(
-            torch.equal(
-                torch.isin(random_ids, random_test_integer), isin_mps_friendly(random_ids, random_test_integer)
-            )
-        )
-        # We can match against an 0D tensor
-        random_test_tensor = torch.randint(0, 100, (1,)).squeeze()
-        self.assertTrue(
-            torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
-        )
-        # We can match against an 1D tensor (with many items)
-        random_test_tensor = torch.randint(0, 100, (10,))
-        self.assertTrue(
-            torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
-        )
 
     def test_can_generate(self):
         """Tests the behavior of `PreTrainedModel.can_generate` method."""
@@ -2245,6 +2299,88 @@ class ModelUtilsTest(TestCasePlus):
                     RuntimeError, "We encountered some issues during automatic conversion of the weights."
                 ):
                     _ = MixtralModel.from_pretrained(tmpdirname)
+
+    def test_composite_model_inherit_properties(self):
+        model = MultimodalModel(PreTrainedConfig())
+        # Make sure the top level inherited properties from its child language and vision models
+        self.assertEqual(model._no_split_modules, {"VerySimpleLayer"})  # language model
+        self.assertEqual(model._keep_in_fp32_modules, {"linear", "head"})  # language model + composite model
+        self.assertEqual(model._keep_in_fp32_modules_strict, {"simple"})  # vision model
+
+    @parameterized.expand([("sdpa",), ("flash_attention_2",)])
+    def test_decoder_only_model_can_be_used_as_encoder(self, attn_implementation: str):
+        """Test that most well-behaved decoder models can be used as encoders through the `is_causal` kwarg/config.
+        Note that it's enough to test it on Llama, as the entry points are all through general code
+        (masking_utils.py + `check_model_inputs` decorator). This makes it easier as the model need to use both the
+        mask API from masking_utils.py and the decorator as mentionned above, and we don't know what models follow that
+        standard exactly (so we cannot make it easily a common model test)."""
+        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+            self.skipTest("FA2 not available")
+
+        from transformers import LlamaConfig, LlamaModel
+        from transformers.masking_utils import create_bidirectional_mask
+
+        config = LlamaConfig(
+            num_hidden_layers=2,
+            hidden_size=32,
+            intermediate_size=64,
+            vocab_size=100,
+            attn_implementation=attn_implementation,
+        )
+        model = LlamaModel(copy.deepcopy(config)).to(device=torch_device, dtype=torch.bfloat16)
+
+        # Create inputs, making sure we use padding to verify that mask creation accounts for it correctly
+        input_ids = torch.randint(5, 95, (2, 17), device=torch_device)
+        attention_mask = torch.ones_like(input_ids, device=torch_device)
+        attention_mask[1, 0:3] = 0
+
+        # The original `create_causal_mask` used in modeling_llama forward more kwargs than `create_bidirectional_mask`,
+        # so we need this one instead to absorb them
+        def create_bidirectional_mask_with_kwargs(
+            config,
+            input_embeds,
+            attention_mask,
+            encoder_hidden_states=None,
+            or_mask_function=None,
+            and_mask_function=None,
+            **kwargs,
+        ):
+            return create_bidirectional_mask(
+                config, input_embeds, attention_mask, encoder_hidden_states, or_mask_function, and_mask_function
+            )
+
+        # Explicitly monkey patch the mask creation function + forward the is_causal kwarg to get the expected result
+        # from the model behaving as encoder instead of decoder
+        with patch(
+            "transformers.models.llama.modeling_llama.create_causal_mask", new=create_bidirectional_mask_with_kwargs
+        ):
+            reference = model(input_ids, attention_mask=attention_mask, is_causal=False).last_hidden_state
+            without_kwarg = model(input_ids, attention_mask=attention_mask).last_hidden_state
+
+        # Here, since we have padding, the mask created should never be None. Since the mask is never None, the sdpa
+        # backend will always use `is_causal=False`, so both should be strictly equivalent
+        if attn_implementation == "sdpa":
+            torch.testing.assert_close(reference, without_kwarg)
+        # But FA2 relies solely on the `is_causal` kwarg to decide how to dispatch, as it will use varlen since we
+        # have padding, so both won't be equivalent at all
+        else:
+            # Everything should be different (we only test the maximum of the diff to avoid flakyness)
+            self.assertTrue(torch.abs(reference - without_kwarg).max() >= 1e-1)
+
+        # Now if we simply forward the kwarg with the usual mask function, it should still work the exact same
+        with_kwarg_only = model(input_ids, attention_mask=attention_mask, is_causal=False).last_hidden_state
+        torch.testing.assert_close(reference, with_kwarg_only)
+
+        # Now, if we use the usual forward, the model should behave normally as a decoder, and output should be
+        # completely different
+        as_decoder = model(input_ids, attention_mask=attention_mask).last_hidden_state
+        # Everything should be different (we only test the maximum of the diff to avoid flakyness)
+        self.assertTrue(torch.abs(reference - as_decoder).max() >= 1e-1)
+
+        # It should also work with it in the config
+        model.config.is_causal = False
+        with_config_only = model(input_ids, attention_mask=attention_mask).last_hidden_state
+        torch.testing.assert_close(reference, with_config_only)
 
 
 @slow
@@ -3057,6 +3193,51 @@ class TestAttentionImplementation(unittest.TestCase):
             )
 
         self.assertTrue("`kernels` is either not installed or uses an incompatible version." in str(cm.exception))
+
+    def test_attention_and_experts_modules_can_be_used_standalone(self):
+        """Test that both Attention and Expert modules can be used on their own, instantiated from a config without the
+        respective `_xxx_implementation` attr set. Also checks that it correctly raises a warning"""
+        from transformers.models.mixtral.configuration_mixtral import MixtralConfig
+        from transformers.models.mixtral.modeling_mixtral import (
+            MixtralAttention,
+            MixtralExperts,
+            MixtralRotaryEmbedding,
+        )
+
+        hidden_size = 32
+        seq_len = 10
+        config = MixtralConfig(hidden_size=32, intermediate_size=16, num_hidden_layers=2)
+        experts_module = MixtralExperts(config)
+        attn_module = MixtralAttention(config, layer_idx=0)
+
+        hidden_states = torch.randn(1, seq_len, hidden_size)
+
+        # Try the Attention (check it works + raises the warning)
+        dummy_ids = torch.arange(seq_len).unsqueeze(0)
+        dummy_embeddings = MixtralRotaryEmbedding(config)(hidden_states, dummy_ids)
+        with CaptureLogger(logging.get_logger("transformers.modeling_utils")) as cl:
+            _ = attn_module(hidden_states, dummy_embeddings, None)
+        self.assertIn(
+            "You tried to access the `AttentionInterface` with a `config._attn_implementation` set to `None`.", cl.out
+        )
+        # With a wrong _attn_implementation, it should raise a proper exception
+        attn_module.config._attn_implementation = "foobar"
+        with self.assertRaisesRegex(KeyError, "`foobar` is not a valid attention implementation registered"):
+            _ = attn_module(hidden_states, dummy_embeddings, None)
+
+        # Try the Experts (check it works + raises the warning)
+        hidden_states = hidden_states.reshape(-1, hidden_size)
+        dummy_scores = torch.randn(seq_len, config.num_experts_per_tok)
+        dummy_indices = torch.randint(0, config.num_local_experts, (seq_len, config.num_experts_per_tok))
+        with CaptureLogger(logging.get_logger("transformers.integrations.moe")) as cl:
+            _ = experts_module(hidden_states, dummy_indices, dummy_scores)
+        self.assertIn(
+            "You tried to access the `ExpertsInterface` with a `config._experts_implementation` set to `None`.", cl.out
+        )
+        # With a wrong _experts_implementation, it should raise a proper exception
+        experts_module.config._experts_implementation = "foobar"
+        with self.assertRaisesRegex(KeyError, "`foobar` is not a valid experts implementation registered"):
+            _ = experts_module(hidden_states, dummy_indices, dummy_scores)
 
 
 @require_torch

@@ -26,6 +26,7 @@ select = [
     "UP",  # pyupgrade
     "FURB",  # refurb
     "SIM",  # flake8-simplify
+    "S110",  # bandit's try-except-pass rule
     "C4",  # flake8-comprehensions
     "RUF013",  # Checks for the use of implicit Optional in type annotations when the default parameter value is None.
     "PERF102",  # Checks for uses of dict.items() that discard either the key or the value when iterating over the dictionary.
@@ -85,4 +86,9 @@ filterwarnings = [
     "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
     "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
     "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
+]
+env = [
+    # Avoid any ReadTimeout when making requests to the Hub (default is 10)
+    # Note: 'D:' means default value from laptop or CI won't be overwritten
+    "D:HF_HUB_DOWNLOAD_TIMEOUT=60",
 ]

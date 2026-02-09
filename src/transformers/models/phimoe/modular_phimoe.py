@@ -23,7 +23,8 @@ from ...modeling_layers import (
     GenericForSequenceClassification,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...utils.generic import OutputRecorder, maybe_autocast
+from ...utils.generic import maybe_autocast
+from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import LlamaAttention
 from ..mixtral.modeling_mixtral import (
     MixtralDecoderLayer,

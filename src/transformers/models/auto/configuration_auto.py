@@ -138,6 +138,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("encodec", "EncodecConfig"),
         ("encoder-decoder", "EncoderDecoderConfig"),
         ("eomt", "EomtConfig"),
+        ("eomt_dinov3", "EomtDinov3Config"),
         ("ernie", "ErnieConfig"),
         ("ernie4_5", "Ernie4_5Config"),
         ("ernie4_5_moe", "Ernie4_5_MoeConfig"),
@@ -145,6 +146,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("esm", "EsmConfig"),
         ("evolla", "EvollaConfig"),
         ("exaone4", "Exaone4Config"),
+        ("exaone_moe", "ExaoneMoeConfig"),
         ("falcon", "FalconConfig"),
         ("falcon_h1", "FalconH1Config"),
         ("falcon_mamba", "FalconMambaConfig"),
@@ -292,6 +294,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("modernbert", "ModernBertConfig"),
         ("modernbert-decoder", "ModernBertDecoderConfig"),
         ("moonshine", "MoonshineConfig"),
+        ("moonshine_streaming", "MoonshineStreamingConfig"),
+        ("moonshine_streaming_encoder", "MoonshineStreamingEncoderConfig"),
         ("moshi", "MoshiConfig"),
         ("mpnet", "MPNetConfig"),
         ("mpt", "MptConfig"),
@@ -343,6 +347,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("plbart", "PLBartConfig"),
         ("poolformer", "PoolFormerConfig"),
         ("pop2piano", "Pop2PianoConfig"),
+        ("pp_doclayout_v3", "PPDocLayoutV3Config"),
         ("prompt_depth_anything", "PromptDepthAnythingConfig"),
         ("prophetnet", "ProphetNetConfig"),
         ("pvt", "PvtConfig"),
@@ -425,6 +430,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("t5", "T5Config"),
         ("t5gemma", "T5GemmaConfig"),
         ("t5gemma2", "T5Gemma2Config"),
+        ("t5gemma2_encoder", "T5Gemma2EncoderConfig"),
         ("table-transformer", "TableTransformerConfig"),
         ("tapas", "TapasConfig"),
         ("textnet", "TextNetConfig"),
@@ -442,6 +448,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("univnet", "UnivNetConfig"),
         ("upernet", "UperNetConfig"),
         ("vaultgemma", "VaultGemmaConfig"),
+        ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerConfig"),
         ("video_llama_3", "VideoLlama3Config"),
         ("video_llama_3_vision", "VideoLlama3VisionConfig"),
         ("video_llava", "VideoLlavaConfig"),
@@ -479,6 +486,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("xmod", "XmodConfig"),
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
+        ("youtu", "YoutuConfig"),
         ("zamba", "ZambaConfig"),
         ("zamba2", "Zamba2Config"),
         ("zoedepth", "ZoeDepthConfig"),
@@ -603,6 +611,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("encodec", "EnCodec"),
         ("encoder-decoder", "Encoder decoder"),
         ("eomt", "EoMT"),
+        ("eomt_dinov3", "EoMT-DINOv3"),
         ("ernie", "ERNIE"),
         ("ernie4_5", "Ernie4_5"),
         ("ernie4_5_moe", "Ernie4_5_MoE"),
@@ -610,6 +619,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("esm", "ESM"),
         ("evolla", "Evolla"),
         ("exaone4", "EXAONE-4.0"),
+        ("exaone_moe", "EXAONE-MoE"),
         ("falcon", "Falcon"),
         ("falcon3", "Falcon3"),
         ("falcon_h1", "FalconH1"),
@@ -770,6 +780,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("modernbert", "ModernBERT"),
         ("modernbert-decoder", "ModernBertDecoder"),
         ("moonshine", "Moonshine"),
+        ("moonshine_streaming", "MoonshineStreaming"),
+        ("moonshine_streaming_encoder", "MoonshineStreamingEncoder"),
         ("moshi", "Moshi"),
         ("mpnet", "MPNet"),
         ("mpt", "MPT"),
@@ -825,6 +837,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("plbart", "PLBart"),
         ("poolformer", "PoolFormer"),
         ("pop2piano", "Pop2Piano"),
+        ("pp_doclayout_v3", "PPDocLayoutV3"),
         ("prompt_depth_anything", "PromptDepthAnything"),
         ("prophetnet", "ProphetNet"),
         ("pvt", "PVT"),
@@ -907,6 +920,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("t5", "T5"),
         ("t5gemma", "T5Gemma"),
         ("t5gemma2", "T5Gemma2"),
+        ("t5gemma2_encoder", "T5Gemma2Encoder"),
         ("t5v1.1", "T5v1.1"),
         ("table-transformer", "Table Transformer"),
         ("tapas", "TAPAS"),
@@ -926,6 +940,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("univnet", "UnivNet"),
         ("upernet", "UPerNet"),
         ("vaultgemma", "VaultGemma"),
+        ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizer"),
         ("video_llama_3", "VideoLlama3"),
         ("video_llama_3_vision", "VideoLlama3Vision"),
         ("video_llava", "VideoLlava"),
@@ -967,6 +982,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("xmod", "X-MOD"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
+        ("youtu", "Youtu"),
         ("zamba", "Zamba"),
         ("zamba2", "Zamba2"),
         ("zoedepth", "ZoeDepth"),
@@ -1012,6 +1028,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("glm_ocr_text", "glm_ocr"),
         ("glmasr_encoder", "glmasr"),
         ("grounding-dino", "grounding_dino"),
+        ("moonshine_streaming_encoder", "moonshine_streaming"),
         ("mm-grounding-dino", "mm_grounding_dino"),
         ("idefics3_vision", "idefics3"),
         ("mgp-str", "mgp_str"),
@@ -1034,6 +1051,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("sam3_vision_model", "sam3"),
         ("edgetam_vision_model", "edgetam"),
         ("sam_hq_vision_model", "sam_hq"),
+        ("t5gemma2_encoder", "t5gemma2"),
         ("llama4_text", "llama4"),
         ("blip_2_qformer", "blip_2"),
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
@@ -1405,17 +1423,10 @@ class AutoConfig:
                     "`pip install git+https://github.com/huggingface/transformers.git`"
                 )
             return config_class.from_dict(config_dict, **unused_kwargs)
-        else:
-            # Fallback: use pattern matching on the string.
-            # We go from longer names to shorter names to catch roberta before bert (for instance)
-            for pattern in sorted(CONFIG_MAPPING.keys(), key=len, reverse=True):
-                if pattern in str(pretrained_model_name_or_path):
-                    return CONFIG_MAPPING[pattern].from_dict(config_dict, **unused_kwargs)
 
         raise ValueError(
             f"Unrecognized model in {pretrained_model_name_or_path}. "
-            f"Should have a `model_type` key in its {CONFIG_NAME}, or contain one of the following strings "
-            f"in its name: {', '.join(CONFIG_MAPPING.keys())}"
+            f"Should have a `model_type` key in its {CONFIG_NAME}."
         )
 
     @staticmethod

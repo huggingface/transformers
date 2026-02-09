@@ -19,6 +19,7 @@ import torch
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_torch,
     require_torch_accelerator,
@@ -100,10 +101,18 @@ class SolarOpenIntegrationTest(unittest.TestCase):
             "Lorem ipsum dolor sit amet",
         ]
         # expected random outputs from the tiny dummy model
-        EXPECTED_DECODED_TEXT = [
-            "Orange is the new blackRIB yshift yshift catheter merits catheterCCTV meritsCCTVCCTVCCTVCCTVCCTVCCTV SyllabusCCTVCCTVCCTVCCTV Syllabus",
-            "Lorem ipsum dolor sit amet=√=√=√ 치수 치수 치수 치수 치수 치수 치수 Shelley Shelley Shelley Shelley Shelley Shelley Shelley Shelley площа площа",
-        ]
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                ("cuda", None): [
+                    "Orange is the new blackRIB yshift yshift catheter merits catheterCCTV meritsCCTVCCTVCCTVCCTVCCTVCCTV SyllabusCCTVCCTVCCTVCCTV Syllabus",
+                    "Lorem ipsum dolor sit amet=√=√=√ 치수 치수 치수 치수 치수 치수 치수 Shelley Shelley Shelley Shelley Shelley Shelley Shelley Shelley площа площа",
+                ],
+                ("xpu", 3): [
+                    "Orange is the new blackRIB yshift yshift merits catheter merits yshiftCCTVCCTVCCTVCCTVCCTVCCTVCCTVCCTVCCTVCCTV SyllabusCCTVCCTV",
+                    "Lorem ipsum dolor sit amet=√=√ 치수=√ 치수 치수 치수 치수 치수 Shelley Shelley Shelley Shelley Shelley Shelley Shelley Shelley Shelley площа площа",
+                ],
+            }
+        ).get_expectation()
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = SolarOpenForCausalLM.from_pretrained(
