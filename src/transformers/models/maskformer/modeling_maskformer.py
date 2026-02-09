@@ -28,9 +28,11 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
     is_accelerate_available,
     is_scipy_available,
@@ -554,7 +556,7 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Args:
@@ -669,7 +671,7 @@ class DetrDecoder(PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Args:
