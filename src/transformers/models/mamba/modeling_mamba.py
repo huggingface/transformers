@@ -185,6 +185,7 @@ class MambaMixer(nn.Module):
         self.act = ACT2FN[config.hidden_act]
 
         self.use_mambapy = config.use_mambapy
+        self.use_associative_scan = config.use_associative_scan
 
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=config.use_bias)
@@ -411,7 +412,7 @@ class MambaMixer(nn.Module):
             scan_output = scan_output * self.act(gate)
         else:
             # Use associative_scan for parallel computation when available
-            if associative_scan is not None and cache_params is None and is_tracing():
+            if self.use_associative_scan and associative_scan is not None and is_tracing() and cache_params is None:
                 def combine_fn(left, right):
                     a_left, b_left = left
                     a_right, b_right = right

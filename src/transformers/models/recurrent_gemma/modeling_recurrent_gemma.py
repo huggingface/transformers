@@ -74,6 +74,8 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
 
         self.config = config
 
+        self.use_associative_scan = config.use_associative_scan
+
         self.rope_type = self.config.rope_parameters["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
@@ -419,7 +421,7 @@ class RecurrentGemmaRglru(nn.Module):
             if recurrent_states is None:
                 recurrent_states = torch.zeros(hidden_states[:, 0].shape, dtype=acc_dtype, device=hidden_states.device)
 
-            if associative_scan is not None and is_tracing():
+            if self.use_associative_scan and associative_scan is not None and is_tracing():
                 # Use parallel associative scan
                 def combine_fn(left, right):
                     a_left, b_left = left

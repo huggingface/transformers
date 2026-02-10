@@ -84,6 +84,9 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         w_init_variance_scale (`float`, *optional*, defaults to 0.01): weight initialization variance.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
+        use_associative_scan (`bool`, *optional*, defaults to `True`):
+            Whether to use PyTorch's associative scan during torch.compile tracing for the parallel scan path. If `False`, the naive and slower implementation is used. Only applies when no cache is used.
+
     ```python
     >>> from transformers import RecurrentGemmaModel, RecurrentGemmaConfig
 
@@ -123,6 +126,7 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         attention_bias: str | None = False,
         w_init_variance_scale: float | None = 0.01,
         tie_word_embeddings: bool | None = True,
+        use_associative_scan: bool = True,
         **kwargs,
     ):
         self.num_hidden_layers = num_hidden_layers
@@ -152,7 +156,7 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
         self.rope_parameters = rope_parameters
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
-
+        self.use_associative_scan = use_associative_scan
         super().__init__(**kwargs)
 
     @property
