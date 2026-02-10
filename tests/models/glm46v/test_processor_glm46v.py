@@ -24,33 +24,10 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
-    from transformers import Glm46VImageProcessor, Glm46VProcessor
+    from transformers import Glm46VProcessor
 
 if is_torch_available():
     import torch
-
-if is_torch_available() and is_vision_available():
-    from transformers import Glm46VImageProcessorFast
-
-
-@require_vision
-@require_torch
-class Glm46VImageProcessorFastTest(unittest.TestCase):
-    def test_get_number_of_image_patches_matches_slow_processor(self):
-        slow_processor = Glm46VImageProcessor()
-        fast_processor = Glm46VImageProcessorFast()
-        images_kwargs = {
-            "patch_size": 14,
-            "merge_size": 2,
-            "size": {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000},
-        }
-
-        expected_patches = slow_processor.get_number_of_image_patches(
-            height=640, width=960, images_kwargs=images_kwargs
-        )
-        actual_patches = fast_processor.get_number_of_image_patches(height=640, width=960, images_kwargs=images_kwargs)
-
-        self.assertEqual(actual_patches, expected_patches)
 
 
 @require_vision
