@@ -568,7 +568,9 @@ class JambaMambaMixer(nn.Module):
         cache_params: HybridMambaAttentionDynamicCache | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
-        if self.config.use_mamba_kernels and (not is_fast_path_available or "cuda" not in self.x_proj.weight.device.type):
+        if self.config.use_mamba_kernels and (
+            not is_fast_path_available or "cuda" not in self.x_proj.weight.device.type
+        ):
             logger.warning_once(
                 "Fast Mamba kernels are not available. Make sure that they are installed "
                 "and that the mamba module is on a CUDA device. Turning off the fast path "
