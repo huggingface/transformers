@@ -422,7 +422,7 @@ class JetMoeDecoderLayer(LlamaDecoderLayer):
 @auto_docstring
 class JetMoePreTrainedModel(MixtralPreTrainedModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(JetMoeTopKGating, index=4),
+        "router_logits": [OutputRecorder(JetMoeAttention, index=2), OutputRecorder(JetMoeTopKGating, index=4)],
         "hidden_states": JetMoeDecoderLayer,
         "attentions": OutputRecorder(JetMoeAttention, index=1),
     }

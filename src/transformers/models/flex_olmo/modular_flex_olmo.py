@@ -31,6 +31,7 @@ from ..olmoe.modeling_olmoe import (
     OlmoeForCausalLM,
     OlmoeMLP,
     OlmoeSparseMoeBlock,
+    OlmoeTopKRouter,
 )
 
 
@@ -214,6 +215,10 @@ class FlexOlmoAttention(Olmo2Attention):
     pass
 
 
+class FlexOlmoTopKRouter(OlmoeTopKRouter):
+    pass
+
+
 class FlexOlmoSparseMoeBlock(OlmoeSparseMoeBlock):
     pass
 
@@ -265,7 +270,7 @@ class FlexOlmoDecoderLayer(OlmoeDecoderLayer):
 # of the transformers library. For example, it uses the newer mechanisms of recording submodule outputs.
 class FlexOlmoPreTrainedModel(MixtralPreTrainedModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(FlexOlmoTopKRouter, index=1),  # noqa
+        "router_logits": OutputRecorder(FlexOlmoTopKRouter, index=0),
         "hidden_states": FlexOlmoDecoderLayer,
         "attentions": FlexOlmoAttention,
     }
