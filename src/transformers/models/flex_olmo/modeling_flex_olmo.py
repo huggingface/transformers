@@ -426,7 +426,7 @@ class FlexOlmoPreTrainedModel(PreTrainedModel):
     )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(FlexOlmoTopKRouter, index=1),  # noqa
         "hidden_states": FlexOlmoDecoderLayer,
         "attentions": FlexOlmoAttention,
     }

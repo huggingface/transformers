@@ -577,7 +577,7 @@ class JetMoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # TopK gating fails fullgraph compilation at "expert_size = expert_size.tolist()"
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="gate", index=1),
+        "router_logits": OutputRecorder(JetMoeTopKGating, index=4),
         "hidden_states": JetMoeDecoderLayer,
         "attentions": OutputRecorder(JetMoeAttention, index=1),
     }
@@ -768,6 +768,8 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         self.aux_loss_coef = config.aux_loss_coef
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.tie_word_embeddings = config.tie_word_embeddings
+        self.num_experts = (config.num_local_experts,)
+        self.num_experts_per_tok = config.num_experts_per_tok
 
         # Initialize weights and apply final processing
         self.post_init()
