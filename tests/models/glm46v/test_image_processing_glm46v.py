@@ -42,10 +42,14 @@ class Glm46VImageProcessorFastTest(unittest.TestCase):
         for height, width, images_kwargs, expected in test_cases:
             with self.subTest(height=height, width=width, images_kwargs=images_kwargs):
                 self.assertEqual(
-                    slow_processor.get_number_of_image_patches(height=height, width=width, images_kwargs=images_kwargs),
+                    slow_processor.get_number_of_image_patches(
+                        height=height, width=width, images_kwargs=images_kwargs
+                    ),
                     expected,
                 )
                 self.assertEqual(
-                    fast_processor.get_number_of_image_patches(height=height, width=width, images_kwargs=images_kwargs),
+                    fast_processor.get_number_of_image_patches(
+                        height=height, width=width, images_kwargs=images_kwargs
+                    ),
                     expected,
                 )
