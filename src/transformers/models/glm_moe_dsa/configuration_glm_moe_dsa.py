@@ -162,6 +162,7 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         qk_rope_head_dim: int | None = 64,
         v_head_dim: int | None = 256,
         qk_nope_head_dim: int | None = 192,
+        qk_head_dim: int | None = 256,
         n_group: int | None = 1,
         topk_group: int | None = 1,
         num_experts_per_tok: int | None = 8,
@@ -220,7 +221,8 @@ class GlmMoeDsaConfig(PreTrainedConfig):
             )
         layer_type_validation(self.mlp_layer_types, self.num_hidden_layers, attention=False)
 
-        self.qk_head_dim = index_head_dim
+        self.qk_head_dim = qk_head_dim
+        self.index_head_dim = index_head_dim
         self.n_group = n_group
         self.topk_group = topk_group
         self.norm_topk_prob = norm_topk_prob

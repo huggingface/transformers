@@ -211,6 +211,7 @@ class GlmMoeDsaAttention(nn.Module):
         self.qk_nope_head_dim = config.qk_nope_head_dim
         self.qk_head_dim = config.qk_head_dim
         self.index_topk = config.index_topk
+        self.index_head_dim = config.index_head_dim
 
         self.is_causal = True
 
@@ -243,10 +244,11 @@ class GlmMoeDsaAttention(nn.Module):
         )
 
         # Indexer components for sparse attention
-        self.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-        self.wk = nn.Linear(config.hidden_size, self.qk_head_dim, bias=config.attention_bias)
-        self.k_norm = nn.LayerNorm(self.qk_head_dim, eps=1e-6)
+        self.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.index_head_dim, bias=False)
+        self.wk = nn.Linear(config.hidden_size, self.index_head_dim, bias=config.attention_bias)
+        self.k_norm = nn.LayerNorm(self.index_head_dim, eps=1e-6)
         self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
+        self.indexer_softmax_scaling = self.index_head_dim ** (-0.5)
 
         self.scaling = self.qk_head_dim ** (-0.5)
         if self.config.rope_parameters.get("rope_type", "default") != "default":
