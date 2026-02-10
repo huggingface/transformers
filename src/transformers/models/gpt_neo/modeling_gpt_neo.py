@@ -118,9 +118,8 @@ class GPTNeoSelfAttention(nn.Module):
         mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
         attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-            attn_weights = attn_weights + causal_mask
+        if attention_mask is not None:
+            attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
         attn_weights = attn_weights.to(value.dtype)
@@ -208,9 +207,6 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         value = value.transpose(1, 2).view(bsz, tgt_len, self.num_heads, self.head_dim)
 
         attn_dropout = self.config.attention_dropout if self.training else 0.0
-
-        if attention_mask is not None:  # no matter the length, we just slice it
-            attention_mask = attention_mask[:, :, :, : key.shape[-2]]
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need

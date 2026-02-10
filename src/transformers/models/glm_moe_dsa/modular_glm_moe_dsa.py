@@ -24,9 +24,7 @@ from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...models.llama.modeling_llama import (
-    apply_rotary_pos_emb,
-)
+from ...models.llama.modeling_llama import apply_rotary_pos_emb
 from ...processing_utils import Unpack
 from ...utils import logging
 from ...utils.import_utils import is_tracing

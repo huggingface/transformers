@@ -45,9 +45,9 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.generic import check_model_inputs, is_flash_attention_requested, maybe_autocast
+from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
-from ...utils.output_capturing import OutputRecorder
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_qwen3_5_moe import Qwen3_5MoeConfig, Qwen3_5MoeTextConfig, Qwen3_5MoeVisionConfig
 
 
@@ -700,8 +700,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -980,7 +979,7 @@ class Qwen3_5MoePreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3_5MoeSparseMoeBlock, index=1),
+        "router_logits": OutputRecorder(Qwen3_5MoeTopKRouter, index=0),
         "hidden_states": Qwen3_5MoeDecoderLayer,
         "attentions": Qwen3_5MoeAttention,
     }
@@ -1311,7 +1310,8 @@ class Qwen3_5MoeVisionModel(Qwen3_5MoePreTrainedModel):
         patch_pos_embeds = torch.cat(patch_pos_embeds_permute)
         return patch_pos_embeds
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Args:
@@ -1414,6 +1414,7 @@ class Qwen3_5MoeCausalLMOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
     aux_loss: torch.FloatTensor | None = None
 
 
@@ -1430,7 +1431,8 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -1825,11 +1827,8 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
         )
 
         return Qwen3_5MoeModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            **outputs,
             rope_deltas=self.rope_deltas,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
 
 
@@ -2187,6 +2186,7 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMi
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
+            router_logits=outputs.router_logits,
         )
 
     def prepare_inputs_for_generation(

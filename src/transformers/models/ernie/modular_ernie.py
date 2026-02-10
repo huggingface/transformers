@@ -33,7 +33,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..bert.modeling_bert import (
     BertCrossAttention,
     BertEmbeddings,
@@ -189,7 +190,8 @@ class ErnieModel(BertModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

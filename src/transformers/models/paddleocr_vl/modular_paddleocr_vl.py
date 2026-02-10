@@ -63,7 +63,8 @@ from ...utils import (
     torch_compilable_check,
     torch_int,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..ernie4_5.configuration_ernie4_5 import Ernie4_5Config
 from ..ernie4_5.modeling_ernie4_5 import (
     Ernie4_5DecoderLayer,
@@ -801,7 +802,8 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
     def __init__(self, config: PaddleOCRTextConfig):
         super().__init__(config)
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -1032,7 +1034,8 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values: torch.FloatTensor,

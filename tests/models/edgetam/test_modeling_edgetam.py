@@ -356,6 +356,10 @@ class EdgeTamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_generate_compilation_all_outputs(self):
         pass
 
+    @unittest.skip("Cannot set `output_attentions` for timm models.")
+    def test_capture_outputs_decorator(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "yonigozlan/EdgeTAM-hf"

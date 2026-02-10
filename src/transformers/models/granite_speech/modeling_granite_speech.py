@@ -33,7 +33,8 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_granite_speech import GraniteSpeechConfig, GraniteSpeechEncoderConfig
 
@@ -303,7 +304,8 @@ class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
         self.num_layers = config.num_layers
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:

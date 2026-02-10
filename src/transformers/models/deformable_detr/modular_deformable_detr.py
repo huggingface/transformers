@@ -35,8 +35,8 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import can_return_tuple, check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..detr.image_processing_detr_fast import DetrImageProcessorFast
 from ..detr.modeling_detr import (
     DetrConvEncoder,
@@ -684,7 +684,8 @@ class DeformableDetrEncoder(DetrEncoder):
         "attentions": OutputRecorder(DeformableDetrMultiscaleDeformableAttention, layer_name="self_attn", index=1),
     }
 
-    @check_model_inputs()
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         inputs_embeds=None,
@@ -802,7 +803,8 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         inputs_embeds=None,

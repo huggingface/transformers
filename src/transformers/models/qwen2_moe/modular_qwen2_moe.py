@@ -34,8 +34,8 @@ from ...modeling_layers import (
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma.modeling_gemma import GemmaMLP
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm
@@ -164,7 +164,8 @@ class Qwen2MoeModel(MixtralModel):
         self.norm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen2MoeRotaryEmbedding(config=config)
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
