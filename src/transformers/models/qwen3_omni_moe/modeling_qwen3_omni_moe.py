@@ -1620,7 +1620,7 @@ class Qwen3OmniMoeThinkerTextPreTrainedModel(PreTrainedModel):
     )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3OmniMoeThinkerTextTopKRouter, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(Qwen3OmniMoeThinkerTextTopKRouter, index=0),
         "hidden_states": Qwen3OmniMoeThinkerTextDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
     }
@@ -1671,7 +1671,7 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3OmniMoePreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeThinkerTextDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
-        "router_logits": OutputRecorder(Qwen3OmniMoeThinkerTextSparseMoeBlock, index=1),
+        "router_logits": OutputRecorder(Qwen3OmniMoeThinkerTextTopKRouter, index=0),
     }
 
     def __init__(self, config: Qwen3OmniMoeTextConfig):
@@ -1907,7 +1907,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeThinkerTextDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
-        "router_logits": OutputRecorder(Qwen3OmniMoeThinkerTextSparseMoeBlock, index=1),
+        "router_logits": OutputRecorder(Qwen3OmniMoeThinkerTextTopKRouter, index=0),
     }
 
     def __init__(self, config):
@@ -2784,6 +2784,27 @@ class Qwen3OmniMoeTalkerTextMLP(nn.Module):
         return down_proj
 
 
+class Qwen3OmniMoeTalkerTextTopKRouter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_experts
+        self.norm_topk_prob = config.norm_topk_prob
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
+        router_logits = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
+        if self.norm_topk_prob:
+            router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
+        router_top_value = router_top_value.to(router_logits.dtype)
+        router_scores = router_top_value
+        return router_logits, router_scores, router_indices
+
+
 @use_experts_implementation
 class Qwen3OmniMoeTalkerTextExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
@@ -2822,27 +2843,6 @@ class Qwen3OmniMoeTalkerTextExperts(nn.Module):
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
         return final_hidden_states
-
-
-class Qwen3OmniMoeTalkerTextTopKRouter(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
-        self.norm_topk_prob = config.norm_topk_prob
-        self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
-
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
-        router_logits = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
-        if self.norm_topk_prob:
-            router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
-        router_top_value = router_top_value.to(router_logits.dtype)
-        router_scores = router_top_value
-        return router_logits, router_scores, router_indices
 
 
 class Qwen3OmniMoeTalkerTextSparseMoeBlock(nn.Module):
@@ -2932,7 +2932,7 @@ class Qwen3OmniMoeTalkerModel(Qwen3OmniMoePreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeTalkerDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
-        "router_logits": OutputRecorder(Qwen3OmniMoeTalkerTextSparseMoeBlock, index=1),
+        "router_logits": OutputRecorder(Qwen3OmniMoeTalkerTextTopKRouter, index=0),
     }
 
     def __init__(self, config: Qwen3OmniMoeTalkerTextConfig):
@@ -3069,7 +3069,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
     _no_split_modules = ["Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration"]
     _can_record_outputs = {
         "attentions": Qwen3OmniMoeThinkerTextAttention,
-        "router_logits": OutputRecorder(Qwen3OmniMoeTalkerTextSparseMoeBlock, index=1),
+        "router_logits": OutputRecorder(Qwen3OmniMoeTalkerTextTopKRouter, index=0),
     }
 
     def __init__(self, config: Qwen3OmniMoeTalkerConfig):

@@ -44,7 +44,7 @@ from ..llama.modeling_llama import (
     LlamaForTokenClassification,
 )
 from ..mixtral.modeling_mixtral import MixtralForCausalLM
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeSparseMoeBlock
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeSparseMoeBlock, Qwen2MoeTopKRouter
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeAttention,
     Qwen3MoeDecoderLayer,
@@ -647,6 +647,10 @@ class Qwen3NextExperts(Qwen2MoeExperts):
     pass
 
 
+class Qwen3NextTopKRouter(Qwen2MoeTopKRouter):
+    pass
+
+
 class Qwen3NextSparseMoeBlock(Qwen2MoeSparseMoeBlock):
     pass
 
@@ -731,7 +735,7 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3NextSparseMoeBlock, index=1),
+        "router_logits": OutputRecorder(Qwen3NextTopKRouter, index=0),
         "hidden_states": Qwen3NextDecoderLayer,
         "attentions": Qwen3NextAttention,
     }

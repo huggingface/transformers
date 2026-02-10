@@ -27,7 +27,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
-from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3NaiveMoe
 from ..glm4.modeling_glm4 import Glm4Attention
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
@@ -382,7 +381,7 @@ class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Glm4vMoeTextDecoderLayer,
         "attentions": Glm4vMoeTextAttention,
-        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "router_logits": Glm4vMoeTextTopkRouter,
     }
 
     def _init_weights(self, module):
@@ -498,6 +497,11 @@ class Glm4vMoeModelOutputWithPast(Qwen3VLMoeModelOutputWithPast):
 
 
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_experts = config.text_config.num_local_experts
+        self.num_experts_per_tok = config.text_config.num_experts_per_tok
+
     @auto_docstring
     @can_return_tuple
     def forward(

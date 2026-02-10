@@ -374,7 +374,7 @@ class Qwen3MoePreTrainedModel(PreTrainedModel):
     )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3MoeTopKRouter, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(Qwen3MoeTopKRouter, index=0),
         "hidden_states": Qwen3MoeDecoderLayer,
         "attentions": Qwen3MoeAttention,
     }

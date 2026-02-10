@@ -40,7 +40,6 @@ from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig, Qwen3VLVisionConfig
 from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLCausalLMOutputWithPast,
     Qwen3VLForConditionalGeneration,
-    Qwen3VLModel,
     Qwen3VLModelOutputWithPast,
     Qwen3VLTextAttention,
     Qwen3VLTextModel,
@@ -439,10 +438,6 @@ class Qwen3VLMoeModelOutputWithPast(Qwen3VLModelOutputWithPast):
     router_logits: tuple[torch.FloatTensor] | None = None
 
 
-class Qwen3VLMoeModel(Qwen3VLModel):
-    pass
-
-
 class Qwen3VLMoeCausalLMOutputWithPast(Qwen3VLCausalLMOutputWithPast):
     router_logits: tuple[torch.FloatTensor] | None = None
     aux_loss: torch.FloatTensor | None = None
@@ -572,7 +567,7 @@ __all__ = [
     "Qwen3VLMoeTextConfig",
     "Qwen3VLMoeVisionModel",
     "Qwen3VLMoeForConditionalGeneration",
-    "Qwen3VLMoeModel",
+    "Qwen3VLMoeModel",  # noqa
     "Qwen3VLMoePreTrainedModel",
     "Qwen3VLMoeTextModel",
 ]

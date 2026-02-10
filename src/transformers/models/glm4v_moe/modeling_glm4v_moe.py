@@ -47,7 +47,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.generic import can_return_tuple, is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import capture_outputs
 from .configuration_glm4v_moe import Glm4vMoeConfig, Glm4vMoeTextConfig, Glm4vMoeVisionConfig
 
 
@@ -426,7 +426,7 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Glm4vMoeTextDecoderLayer,
         "attentions": Glm4vMoeTextAttention,
-        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "router_logits": Glm4vMoeTextTopkRouter,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     input_modalities = ("text", "image", "video")
@@ -1610,6 +1610,8 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         super().__init__(config)
         self.model = Glm4vMoeModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.num_experts = config.text_config.num_local_experts
+        self.num_experts_per_tok = config.text_config.num_experts_per_tok
 
         self.post_init()
 

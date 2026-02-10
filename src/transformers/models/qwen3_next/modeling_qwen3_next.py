@@ -980,7 +980,7 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3NextSparseMoeBlock, index=1),
+        "router_logits": OutputRecorder(Qwen3NextTopKRouter, index=0),
         "hidden_states": Qwen3NextDecoderLayer,
         "attentions": Qwen3NextAttention,
     }
