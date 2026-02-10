@@ -51,3 +51,39 @@ def is_fsdp_enabled():
         )
 
     return False
+
+
+def should_skip_non_rank0_weight_loading():
+    """
+    Determine if non-rank0 processes should skip weight loading in FSDP with CPU RAM efficient loading.
+
+    This function checks the FSDP sharding strategy to decide if it's safe to skip weight loading
+    on non-rank0 processes:
+
+    - FULL_SHARD and SHARD_GRAD_OP: Safe to skip, as only rank 0 needs to load weights
+    - HYBRID_SHARD and HYBRID_SHARD_ZERO2: Not safe to skip, as multiple data parallel groups
+      may need weights
+
+    Returns:
+        bool: True if non-rank0 should skip weight loading, False otherwise
+    """
+    if not is_fsdp_enabled():
+        return False
+
+    if is_torch_available():
+        import torch
+
+        if not torch.distributed.is_available() or not torch.distributed.is_initialized():
+            return False
+
+        # Check if we're on rank 0 - if so, we should always load weights
+        if int(os.environ.get("LOCAL_RANK", "-1")) == 0:
+            return False
+
+        # Check sharding strategy from environment if available
+        # HYBRID_SHARD (4) and HYBRID_SHARD_ZERO2 (5) require all ranks to load weights
+        sharding_strategy = os.environ.get("FSDP_SHARDING_STRATEGY", "1")  # Default to FULL_SHARD (1)
+        if sharding_strategy in ["4", "5"]:  # HYBRID_SHARD or HYBRID_SHARD_ZERO2
+            return False
+
+    return True

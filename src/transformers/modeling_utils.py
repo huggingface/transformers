@@ -473,10 +473,36 @@ def remove_tied_weights_from_state_dict(
 
 
 def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor: torch.Tensor):
-    """Cast a single parameter or buffer `param_name` into the `model`, with value `tensor`."""
+    """Cast a single parameter or buffer `param_name` into the `model`, with value `tensor`.
+
+    Note on `_is_hf_initialized` flag:
+    This flag is used to mark parameters that have already been initialized or loaded with proper weights,
+    so they won't be re-initialized by `_initialize_missing_keys()`. This is particularly important in
+    FSDP (Fully Sharded Data Parallel) scenarios:
+
+    1. During normal model loading, parameters loaded from state_dict are automatically marked as initialized.
+    2. For missing keys, parameters are created with empty tensors and should be initialized with proper
+       weight distributions via `_initialize_missing_keys()`.
+    3. In FSDP with CPU RAM efficient loading (for FULL_SHARD and SHARD_GRAD_OP strategies), non-rank0
+       processes create empty CPU tensors that will be synced from rank0. These should be marked as initialized
+       to avoid expensive random initialization that would be immediately overwritten by FSDP's weight sync.
+
+    The `_is_hf_initialized` flag is checked in:
+    - `_initialize_missing_keys()`: Only initializes parameters without this flag
+    - `_move_missing_keys_from_meta_to_device()`: Moves missing keys (without the flag) to their devices
+    - `_tie_weights()`: Marks tied weights as initialized to avoid re-initialization
+    """
     parent, param_type = get_module_from_name(model, param_name)
     if param_type in parent._parameters and not isinstance(tensor, nn.Parameter):
         tensor = nn.Parameter(tensor, requires_grad=tensor.is_floating_point())
+        # In FSDP CPU RAM efficient loading mode (for FULL_SHARD and SHARD_GRAD_OP strategies),
+        # non-rank0 processes create empty tensors that will be synced from rank0. Mark these as
+        # initialized to avoid expensive random initialization that would be immediately overwritten
+        # during FSDP's weight synchronization.
+        from .integrations import should_skip_non_rank0_weight_loading
+
+        if should_skip_non_rank0_weight_loading():
+            tensor._is_hf_initialized = True
     # We need to use setattr here, as we set non-persistent buffers as well with this function (`load_state_dict`
     # does not allow to do it)
     setattr(parent, param_type, tensor)
