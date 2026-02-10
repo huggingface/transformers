@@ -41,7 +41,6 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_python import PreTokenizedInput, TextInput
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -1260,10 +1259,6 @@ class AriaModel(LlavaModel):
         )
         return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
 
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring(
-        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
-    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -1290,8 +1285,6 @@ class AriaModel(LlavaModel):
 
         return image_outputs
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

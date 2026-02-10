@@ -32,7 +32,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, is_grouped_mm_available, logging
-from ...utils.generic import OutputRecorder
+from ...utils.output_capturing import OutputRecorder
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralForCausalLM,

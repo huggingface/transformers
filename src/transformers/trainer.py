@@ -2101,7 +2101,10 @@ class Trainer:
                 self._load_from_checkpoint(resume_from_checkpoint)
             # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
             state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
-            if state.train_batch_size is not None:
+            # Only restore the checkpoint's train_batch_size when using auto_find_batch_size,
+            # as that feature needs to resume with the automatically-found batch size.
+            # Otherwise, use the current args batch size to allow users to change batch configuration.
+            if state.train_batch_size is not None and args.auto_find_batch_size:
                 self._train_batch_size = state.train_batch_size
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
@@ -2294,6 +2297,8 @@ class Trainer:
                     model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
                         self.model, self.optimizer, self.lr_scheduler
                     )
+                else:
+                    model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
             else:
                 model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
         else:
@@ -3919,8 +3924,20 @@ class Trainer:
         outputs = model(**inputs)
         loss = outputs.loss
 
-        sp_group = self.accelerator.torch_device_mesh["sp"].get_group()
-        sp_world_size = pc.sp_size
+        # Prefer DeepSpeed SP groups when using Ulysses; otherwise fall back to torch device mesh.
+        if pc.sp_backend == "deepspeed" and pc.sp_size > 1:
+            from deepspeed.utils import groups
+
+            sp_group = groups._get_sequence_parallel_group()
+            sp_world_size = groups._get_sequence_parallel_world_size()
+        elif self.accelerator.torch_device_mesh is not None:
+            sp_group = self.accelerator.torch_device_mesh["sp"].get_group()
+            sp_world_size = pc.sp_size
+        else:
+            raise ValueError(
+                "Sequence parallelism is enabled but no SP process group is available. "
+                "Ensure torch_device_mesh is initialized or sp_backend='deepspeed' with sp_size > 1."
+            )
         # differentiable weighted per-shard-loss aggregation across ranks
         losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
         # special dealing with SFT that has prompt tokens that aren't used in loss computation

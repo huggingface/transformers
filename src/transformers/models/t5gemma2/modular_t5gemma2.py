@@ -44,7 +44,8 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import check_model_inputs
+from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoModel
 from ..gemma3.configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 from ..gemma3.modeling_gemma3 import (

@@ -18,8 +18,6 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
-from transformers.utils.generic import OutputRecorder, check_model_inputs
-
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...configuration_utils import PreTrainedConfig
@@ -38,6 +36,8 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import check_model_inputs
+from ...utils.output_capturing import OutputRecorder
 from ..glm.modeling_glm import GlmAttention, GlmRotaryEmbedding, apply_rotary_pos_emb
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, eager_attention_forward
 from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right

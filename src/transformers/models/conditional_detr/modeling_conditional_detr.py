@@ -34,7 +34,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring
-from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.output_capturing import OutputRecorder
 from .configuration_conditional_detr import ConditionalDetrConfig
 
 
@@ -1124,14 +1125,11 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
         hidden_states = inputs_embeds
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        # expand attention_mask
-        if attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                input_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-            )
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+        )
 
         for encoder_layer in self.layers:
             # we add spatial_position_embeddings as extra input to the encoder_layer

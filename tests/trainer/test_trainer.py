@@ -3473,6 +3473,49 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # We should be back to 14 again, picking up based upon the last ran Trainer
         self.assertEqual(trainer._train_batch_size, previous_batch_size)
 
+    def test_resume_training_with_different_batch_size(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/43708
+        # When resuming from checkpoint without auto_find_batch_size, user's new batch size should be used
+        train_dataset = RegressionDataset(length=64)
+
+        config = RegressionModelConfig(a=0, b=2)
+        model = RegressionRandomPreTrainedModel(config)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+
+        # First training run with batch_size=2
+        args = RegressionTrainingArguments(
+            tmp_dir,
+            do_train=True,
+            max_steps=2,
+            save_steps=1,
+            per_device_train_batch_size=2,
+            auto_find_batch_size=False,
+        )
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.train()
+
+        # Verify the checkpoint saved with batch_size=2
+        checkpoint = os.path.join(tmp_dir, "checkpoint-1")
+        state = TrainerState.load_from_json(os.path.join(checkpoint, "trainer_state.json"))
+        self.assertEqual(state.train_batch_size, 2)
+
+        # Resume with a different batch_size=4 (without auto_find_batch_size)
+        # The trainer should use the new batch_size, not the checkpoint's
+        args2 = RegressionTrainingArguments(
+            tmp_dir,
+            do_train=True,
+            max_steps=4,
+            save_steps=1,
+            per_device_train_batch_size=4,
+            auto_find_batch_size=False,
+        )
+        trainer2 = Trainer(model, args2, train_dataset=train_dataset)
+        trainer2.train(resume_from_checkpoint=checkpoint)
+
+        # The trainer should be using the new batch size (4), not the checkpoint's (2)
+        self.assertEqual(trainer2._train_batch_size, 4 * max(trainer2.args.n_gpu, 1))
+
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):
         train_dataset = RegressionDataset(length=128)
