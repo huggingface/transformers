@@ -992,6 +992,34 @@ def main():
             logging.info(_format_table(headers, table_rows, row_styles))
             logging.info("")
 
+    # Model class match summary
+    class_entries = grouped.get("class", [])
+    if class_entries:
+        total_classes = len(class_entries)
+        model_class_matches: dict[str, set[str]] = {}
+        for query_name, data in class_entries:
+            for identifier, _score in data.get("embedding", []):
+                try:
+                    relative_path, _ = identifier.split(":", 1)
+                except ValueError:
+                    continue
+                model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
+                model_class_matches.setdefault(model_id, set()).add(query_name)
+
+        sorted_models = sorted(
+            model_class_matches.items(),
+            key=lambda x: len(x[1]),
+            reverse=True,
+        )
+        logging.info(_colorize_heading("Model class match summary"))
+        logging.info("")
+        logging.info(f"Total classes: {total_classes}")
+        logging.info("")
+        logging.info("Models with most matched classes:")
+        for model_id, matched in sorted_models[:15]:
+            pct = 100.0 * len(matched) / total_classes
+            logging.info(f"  {model_id:25s}: {len(matched):2d}/{total_classes} classes ({pct:5.1f}%)")
+        logging.info("")
 
 if __name__ == "__main__":
     main()
