@@ -28,7 +28,7 @@ from ...generation.logits_process import (
     BarkEosPrioritizerLogitsProcessor,
     SuppressTokensLogitsProcessor,
 )
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
@@ -39,7 +39,6 @@ from ...utils import (
     is_torch_accelerator_available,
     logging,
 )
-from ...utils.generic import is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -471,7 +470,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             raise ValueError("You have to specify either input_ids or input_embeds")
 
         input_shape = input_embeds.size()[:-1]
-        batch_size = input_embeds.shape[0]
         seq_length = input_shape[-1]
 
         if self.gradient_checkpointing and self.training:
@@ -499,18 +497,11 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         position_ids = position_ids.to(self.position_embeds_layer.weight.device)
         position_embeds = self.position_embeds_layer(position_ids)  # position embeddings of shape (1, t, n_embd)
 
-        # Attention mask.
-        if attention_mask is not None:
-            if batch_size <= 0:
-                raise ValueError("batch_size has to be defined and > 0")
-            if is_flash_attention_requested(self.config):
-                attention_mask = attention_mask if 0 in attention_mask else None
-            else:
-                attention_mask = attention_mask.view(batch_size, -1)
-                # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
-                # from_seq_length is 1 to easily broadcast
-                attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
-                attention_mask = attention_mask.to(input_embeds.device)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=input_embeds,
+            attention_mask=attention_mask,
+        )
 
         hidden_states = self.drop(input_embeds + position_embeds)
         output_shape = input_shape + (hidden_states.size(-1),)
@@ -1090,7 +1081,6 @@ class BarkFineModel(BarkPreTrainedModel):
             input_embeds = input_embeds[:, :, :, : codebook_idx + 1].sum(dim=-1)
 
         input_shape = input_embeds.size()[:-1]
-        batch_size = input_embeds.shape[0]
         seq_length = input_shape[1]
 
         input_embeds = input_embeds.to(self.position_embeds_layer.weight.device)
@@ -1104,17 +1094,11 @@ class BarkFineModel(BarkPreTrainedModel):
         position_ids = position_ids.to(self.position_embeds_layer.weight.device)
         position_embeds = self.position_embeds_layer(position_ids)  # position embeddings of shape (1, t, n_embd)
 
-        # Attention mask.
-        if attention_mask is not None:
-            if batch_size <= 0:
-                raise ValueError("batch_size has to be defined and > 0")
-            if is_flash_attention_requested(self.config):
-                attention_mask = attention_mask if 0 in attention_mask else None
-            else:
-                # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
-                # from_seq_length is 1 to easily broadcast
-                attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
-                attention_mask = attention_mask.to(input_embeds.device)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=input_embeds,
+            attention_mask=attention_mask,
+        )
 
         hidden_states = self.drop(input_embeds + position_embeds)
         output_shape = input_shape + (hidden_states.size(-1),)

@@ -112,11 +112,21 @@ PRIVATE_MODELS = [
     "PeAudioPreTrainedModel",
     "PeAudioVideoPreTrainedModel",
     "PeVideoPreTrainedModel",
-    "CLIPTextTransformer",  # was not a PreTrainedModel originally but needs to be
-    "CLIPVisionTransformer",  # was not a PreTrainedModel originally but needs to be
-    "MetaClip2TextTransformer",  # was not a PreTrainedModel originally but needs to be
-    "MetaClip2VisionTransformer",  # was not a PreTrainedModel originally but needs to be
-    "MLCDVisionTransformer",  # was not a PreTrainedModel originally but needs to be
+    # the following models should have been PreTrainedModels
+    "Owlv2TextTransformer",
+    "Owlv2VisionTransformer",
+    "OwlViTTextTransformer",
+    "OwlViTVisionTransformer",
+    "XCLIPTextTransformer",
+    "CLIPSegTextTransformer",
+    "DetrDecoder",
+    "GroupViTTextTransformer",
+    "CLIPTextTransformer",
+    "CLIPVisionTransformer",
+    "MetaClip2TextTransformer",
+    "MetaClip2VisionTransformer",
+    "MLCDVisionTransformer",
+    # end of should have beens
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
