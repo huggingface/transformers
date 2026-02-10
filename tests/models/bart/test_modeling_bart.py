@@ -456,10 +456,7 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             self.assertLessEqual(
                 current,
                 baseline * 1.1 + 1,
-                msg=(
-                    f"{step_name} peak memory regression: "
-                    f"current={current}, baseline={baseline}"
-                ),
+                msg=(f"{step_name} peak memory regression: current={current}, baseline={baseline}"),
             )
 
         init_config = self.model_tester.get_config()
