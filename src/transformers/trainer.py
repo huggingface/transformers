@@ -61,6 +61,7 @@ from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
 from .image_processing_utils import BaseImageProcessor
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
+from .integrations.liger import apply_liger_kernel
 from .integrations.neftune import activate_neftune, deactivate_neftune
 from .integrations.peft import MIN_PEFT_VERSION
 from .integrations.tpu import tpu_spmd_dataloader
@@ -132,6 +133,8 @@ from .trainer_utils import (
     set_seed,
     sort_checkpoints,
     speed_metrics,
+    unwrap_peft_model,
+    validate_quantization_for_training,
 )
 from .training_args import OptimizerNames, ParallelMode, TrainingArguments
 from .utils import (
@@ -153,7 +156,6 @@ from .utils import (
     is_accelerate_available,
     is_datasets_available,
     is_in_notebook,
-    is_liger_kernel_available,
     is_peft_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
@@ -354,9 +356,9 @@ class Trainer:
           model hasn't been wrapped, then `self.model_wrapped` is the same as `self.model`.
         - **is_model_parallel** -- Whether or not a model has been switched to a model parallel mode (different from
           data parallelism, this means some of the model layers are split on different GPUs).
-        - **place_model_on_device** -- Whether or not to automatically place the model on the device - it will be set
-          to `False` if model parallel or deepspeed is used, or if the default
-          `TrainingArguments.place_model_on_device` is overridden to return `False` .
+        - **place_model_on_device** -- Whether or not to automatically place the model on the device. Defaults to
+          `True` unless model parallel, DeepSpeed, FSDP, full fp16/bf16 eval, or SageMaker MP is active. Can be
+          explicitly set via `TrainingArguments.place_model_on_device`.
         - **is_in_train** -- Whether or not a model is currently running `train` (e.g. when `evaluate` is called while
           in `train`)
 
@@ -385,49 +387,44 @@ class Trainer:
         optimizer_cls_and_kwargs: tuple[type[torch.optim.Optimizer], dict[str, Any]] | None = None,
         preprocess_logits_for_metrics: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] | None = None,
     ):
+        # Init flow:
+        #   1. Args & seed               – defaults, determinism
+        #   2. Accelerator & logging     – accelerator, memory tracker, log level, device setup
+        #   3. Model resolution          – model / model_init, Liger Kernel, quantization checks
+        #   4. Distributed strategy      – model-parallel, FSDP, SageMaker MP flags
+        #   5. Device placement          – move model to device, model wrapping
+        #   6. Model introspection       – loss kwargs, label names, label smoother
+        #   7. Store init arguments      – data, callables, optimizer, scheduler, validation
+        #   8. Callbacks                 – reporting integrations, JIT checkpoint, progress bar
+        #   9. Hub & output              – repo init, output directory
+        #  10. Training state            – TrainerState, TrainerControl, internal bookkeeping
+        #  11. Finalize                  – use_cache, XLA FSDPv2 mesh, memory tracker stop
+
+        # ---- 1. Args & seed --------------------------------------------------------
         if args is None:
             output_dir = "tmp_trainer"
             logger.info(f"No `TrainingArguments` passed, using `output_dir={output_dir}`.")
             args = TrainingArguments(output_dir=output_dir)
-        if args.batch_eval_metrics and compute_metrics is not None:
-            if "compute_result" not in inspect.signature(compute_metrics).parameters:
-                raise ValueError(
-                    "When using `batch_eval_metrics`, your `compute_metrics` function must take a `compute_result`"
-                    " boolean argument which will be triggered after the last batch of the eval set to signal that the"
-                    " summary statistics should be returned by the function."
-                )
-        if args.eval_strategy is not None and args.eval_strategy != "no" and eval_dataset is None:
-            raise ValueError(
-                f"You have set `args.eval_strategy` to {args.eval_strategy} but you didn't pass an `eval_dataset` to `Trainer`. Either set `args.eval_strategy` to `no` or pass an `eval_dataset`. "
-            )
-        if args.save_strategy == SaveStrategy.BEST or args.load_best_model_at_end:
-            if args.metric_for_best_model is None:
-                raise ValueError(
-                    "`args.metric_for_best_model` must be provided when using 'best' save_strategy or if `args.load_best_model_at_end` is set to `True`."
-                )
-
         self.args = args
-        self.compute_loss_func = compute_loss_func
-        # Seed must be set before instantiating the model when using model
+        # Seed must be set before instantiating the model when using model_init
         enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
 
-        self.hp_name = None
+        # ---- 2. Accelerator & logging ----------------------------------------------
+        # `create_accelerator_and_postprocess` reads self.model and self.args,
+        # and may set self.deepspeed — store temporary refs before calling it.
         self.deepspeed = None
-        self.is_in_train = False
         self.model = model
         self.create_accelerator_and_postprocess()
 
-        # memory metrics - must set up as early as possible
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
         self._memory_tracker.start()
 
-        # set the correct log level depending on the node
         log_level = args.get_process_log_level()
         logging.set_verbosity(log_level)
 
-        # force device and distributed setup init explicitly
-        args._setup_devices
+        args._setup_devices  # force device and distributed setup init explicitly
 
+        # ---- 3. Model resolution ----------------------------------------------------
         if model is None:
             if model_init is not None:
                 self.model_init = model_init
@@ -436,12 +433,7 @@ class Trainer:
                 raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument")
         else:
             if model_init is not None:
-                warnings.warn(
-                    "`Trainer` requires either a `model` or `model_init` argument, but not both. `model_init` will"
-                    " overwrite your model when calling the `train` method. This will become a fatal error in the next"
-                    " release.",
-                    FutureWarning,
-                )
+                raise ValueError("`Trainer` requires either a `model` or `model_init` argument, but not both.")
             self.model_init = model_init
 
         if model.__class__.__name__ in MODEL_MAPPING_NAMES:
@@ -452,6 +444,12 @@ class Trainer:
                 "https://huggingface.co/docs/transformers/model_doc/auto"
             )
 
+        if self.args.use_liger_kernel:
+            apply_liger_kernel(model, self.args.liger_kernel_config)
+
+        validate_quantization_for_training(model)
+
+        # ---- 4. Distributed strategy ------------------------------------------------
         self.is_model_parallel = False
         if getattr(model, "hf_device_map", None) is not None:
             devices = [device for device in set(model.hf_device_map.values()) if device not in ["cpu", "disk"]]
@@ -459,60 +457,6 @@ class Trainer:
                 self.is_model_parallel = True
             elif len(devices) == 1:
                 self.is_model_parallel = self.args.device != torch.device(devices[0])
-
-        if self.args.use_liger_kernel:
-            if is_liger_kernel_available():
-                from liger_kernel.transformers import _apply_liger_kernel_to_instance
-
-                # Prepare kernel config - use provided config or default (empty dict for default behavior)
-                kernel_config = self.args.liger_kernel_config if self.args.liger_kernel_config is not None else {}
-
-                if isinstance(model, PreTrainedModel):
-                    # Patch the model with liger kernels. Use the specified or default kernel configurations.
-                    _apply_liger_kernel_to_instance(model=model, **kernel_config)
-                elif hasattr(model, "get_base_model") and isinstance(model.get_base_model(), PreTrainedModel):
-                    # Patch the base model with liger kernels where model is a PeftModel. Use the specified or default kernel configurations.
-                    _apply_liger_kernel_to_instance(model=model.get_base_model(), **kernel_config)
-                else:
-                    logger.warning(
-                        "The model is not an instance of PreTrainedModel. No liger kernels will be applied."
-                    )
-            else:
-                raise ImportError(
-                    "You have set `use_liger_kernel` to `True` but liger-kernel >= 0.3.0 is not available. "
-                    "Please install it with `pip install liger-kernel`"
-                )
-
-        _is_quantized_and_base_model = getattr(model, "is_quantized", False) and not getattr(
-            model, "_hf_peft_config_loaded", False
-        )
-        _quantization_method_supports_training = (
-            getattr(model, "hf_quantizer", None) is not None and model.hf_quantizer.is_trainable
-        )
-
-        _is_model_quantized_and_qat_trainable = getattr(model, "hf_quantizer", None) is not None and getattr(
-            model.hf_quantizer, "is_qat_trainable", False
-        )
-
-        # Filter out quantized + compiled models
-        if _is_quantized_and_base_model and hasattr(model, "_orig_mod"):
-            raise ValueError(
-                "You cannot fine-tune quantized model with `torch.compile()` make sure to pass a non-compiled model when fine-tuning a quantized model with PEFT"
-            )
-
-        # At this stage the model is already loaded
-        if _is_quantized_and_base_model and not _is_peft_model(model) and not _is_model_quantized_and_qat_trainable:
-            raise ValueError(
-                "You cannot perform fine-tuning on purely quantized models. Please attach trainable adapters on top of"
-                " the quantized model to correctly perform fine-tuning. Please see: https://huggingface.co/docs/transformers/peft"
-                " for more details"
-            )
-        elif _is_quantized_and_base_model and not _quantization_method_supports_training:
-            raise ValueError(
-                f"The model you are trying to fine-tune is quantized with {model.hf_quantizer.quantization_config.quant_method}"
-                " but that quantization method do not support training. Please open an issue on GitHub: https://github.com/huggingface/transformers"
-                f" to request the support for training support for {model.hf_quantizer.quantization_config.quant_method}"
-            )
 
         self.is_fsdp_xla_enabled = args.fsdp_config["xla"]
         if len(args.fsdp) > 0:
@@ -523,35 +467,23 @@ class Trainer:
             if not args.fsdp_config["xla"] and args.parallel_mode != ParallelMode.DISTRIBUTED:
                 raise ValueError("Using fsdp only works in distributed training.")
 
-        # one place to sort out whether to place the model on device or not
-        # postpone switching model to cuda when:
-        # 1. MP - since we are trying to fit a much bigger than 1 gpu model
-        # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway,
-        #    and we only use deepspeed for training at the moment
-        # 3. full bf16 or fp16 eval - since the model needs to be cast to the right dtype first
-        # 4. FSDP - same as MP
-        self.place_model_on_device = args.place_model_on_device
-        if (
+        # Postpone switching model to cuda when MP, DeepSpeed, full bf16/fp16 eval, or FSDP
+        if args.place_model_on_device is not None:
+            self.place_model_on_device = args.place_model_on_device
+        elif (
             self.is_model_parallel
             or self.is_deepspeed_enabled
-            or ((args.fp16_full_eval or args.bf16_full_eval) and not args.do_train)
+            or (args.fp16_full_eval or args.bf16_full_eval)
             or self.is_fsdp_xla_enabled
             or self.is_fsdp_enabled
+            or is_sagemaker_mp_enabled()
         ):
             self.place_model_on_device = False
+        else:
+            self.place_model_on_device = True
 
-        default_collator = (
-            DataCollatorWithPadding(processing_class)
-            if processing_class is not None
-            and isinstance(processing_class, (PreTrainedTokenizerBase, SequenceFeatureExtractor))
-            else default_data_collator
-        )
-        self.data_collator = data_collator if data_collator is not None else default_collator
-        self.train_dataset = train_dataset
-        self.eval_dataset = eval_dataset
-        self.processing_class = processing_class
-
-        # Bnb Quantized models doesn't support `.to` operation.
+        # ---- 5. Device placement ----------------------------------------------------
+        # Bnb Quantized models don't support `.to` operation.
         if (
             self.place_model_on_device
             and getattr(model, "quantization_method", None) != QuantizationMethod.BITS_AND_BYTES
@@ -562,23 +494,13 @@ class Trainer:
         if self.is_model_parallel:
             self.args._n_gpu = 1
 
-        # later use `self.model is self.model_wrapped` to check if it's wrapped or not
+        # `self.model is self.model_wrapped` is used later to check if it's wrapped
         self.model_wrapped = model
         self.model = model
 
-        # Just in case the model was wrapped outside of the `Trainer`
-        unwrapped_model = self.accelerator.unwrap_model(model)
-        # We also unwrap peft model
-        if _is_peft_model(unwrapped_model):
-            if hasattr(unwrapped_model, "get_base_model"):
-                unwrapped_model = unwrapped_model.get_base_model()
-            elif hasattr(unwrapped_model, "base_model") and hasattr(unwrapped_model.base_model, "model"):
-                unwrapped_model = unwrapped_model.base_model.model
-            else:
-                raise AttributeError("Cannot extract base model safely from this PEFT wrapper.")
+        # ---- 6. Model introspection -------------------------------------------------
+        unwrapped_model = unwrap_peft_model(self.accelerator.unwrap_model(model))
 
-        # Check if the model has explicit setup for loss kwargs,
-        # if not, check if `**kwargs` are in model.forward
         if hasattr(unwrapped_model, "accepts_loss_kwargs"):
             self.model_accepts_loss_kwargs = unwrapped_model.accepts_loss_kwargs
         else:
@@ -587,20 +509,154 @@ class Trainer:
                 k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values()
             )
 
-        # Override for Sequence Parallelism: SP computes its own good_tokens count, so skip num_items_in_batch calculation
+        # Sequence Parallelism computes its own good_tokens count
         pc = getattr(self.accelerator, "parallelism_config", None)
         if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
             self.model_accepts_loss_kwargs = False
 
+        model_to_inspect = unwrap_peft_model(self.model)
+        default_label_names = find_labels(model_to_inspect.__class__)
+        self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
+        self.can_return_loss = can_return_loss(model_to_inspect.__class__)
+
+        if self.args.label_smoothing_factor != 0:
+            if getattr(self.model.config, "problem_type", None) == "multi_label_classification":
+                warnings.warn(
+                    "Label smoothing is not compatible with multi-label classification. "
+                    "Disabling label smoothing for this training run.",
+                    UserWarning,
+                )
+                self.label_smoother = None
+            else:
+                self.label_smoother = LabelSmoother(epsilon=self.args.label_smoothing_factor)
+        else:
+            self.label_smoother = None
+
+        # ---- 7. Store init arguments ------------------------------------------------
+        # Data
+        default_collator = (
+            DataCollatorWithPadding(processing_class)
+            if processing_class is not None
+            and isinstance(processing_class, (PreTrainedTokenizerBase, SequenceFeatureExtractor))
+            else default_data_collator
+        )
+        self.data_collator = data_collator if data_collator is not None else default_collator
+        self.train_dataset = train_dataset
+        self.eval_dataset = eval_dataset
+        self.processing_class = processing_class
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
+        # Callables
+        self.compute_loss_func = compute_loss_func
         self.compute_metrics = compute_metrics
         self.preprocess_logits_for_metrics = preprocess_logits_for_metrics
+
+        # Optimizer & scheduler
         self.optimizer, self.lr_scheduler = optimizers
         self.optimizer_cls_and_kwargs = optimizer_cls_and_kwargs
+
+        self._validate_args()
+
+        # ---- 8. Callbacks -----------------------------------------------------------
+        default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
+
+        if self.args.enable_jit_checkpoint:
+            from .trainer_jit_checkpoint import JITCheckpointCallback
+
+            jit_callback = JITCheckpointCallback()
+            default_callbacks = default_callbacks + [jit_callback]
+            jit_callback.set_trainer(self)
+
+        callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
+        self.callback_handler = CallbackHandler(
+            callbacks, self.model, self.processing_class, self.optimizer, self.lr_scheduler
+        )
+        self.add_callback(PrinterCallback if self.args.disable_tqdm else DEFAULT_PROGRESS_CALLBACK)
+
+        # ---- 9. Hub & output ---------------------------------------------------------
+        self.hub_model_id = None  # Set by init_hf_repo() when push_to_hub is enabled
+        if self.args.push_to_hub:
+            self.init_hf_repo()
+        if self.args.should_save:
+            os.makedirs(self.args.output_dir, exist_ok=True)
+
+        # ---- 10. Training state -----------------------------------------------------
+        self.control = TrainerControl()
+        self.state = TrainerState(
+            is_local_process_zero=self.is_local_process_zero(),
+            is_world_process_zero=self.is_world_process_zero(),
+            stateful_callbacks=[
+                cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
+            ],
+        )
+        self.is_in_train = False  # True between train() entry and exit
+        self.hp_name = None  # Set by hyperparameter_search() to label the trial
+        self.hp_search_backend = None  # Set by hyperparameter_search() (optuna / ray / wandb)
+        # Per-process FLOP counter; accumulated into self.state.total_flos then reset
+        self.current_flos = 0
+        # Set True by _setup_loggers() on first call to self.log()
+        self._loggers_initialized = False
+        # Lazily filled by _set_signature_columns_if_needed(); caches model.forward param names
+        self._signature_columns = None
+        # Effective batch size; may be reduced by find_executable_batch_size
+        self._train_batch_size = args.train_batch_size
+        # Guards one-time LR scheduler creation in create_optimizer_and_scheduler
+        self._created_lr_scheduler = False
+
+        self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
+
+        # ---- 11. Finalize -----------------------------------------------------------
+        if getattr(self.model, "config", None) is not None:
+            self.model.config.use_cache = self.args.use_cache
+
+        self.is_fsdp_xla_v2_enabled = args.fsdp_config.get("xla_fsdp_v2", False)
+        if self.is_fsdp_xla_v2_enabled:
+            if not IS_XLA_FSDPV2_POST_2_2:
+                raise ValueError("FSDPv2 requires `torch_xla` 2.2 or higher.")
+            num_devices = xr.global_runtime_device_count()
+            xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
+        self.is_fsdp_xla_v1_enabled = self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled
+
+        self._memory_tracker.stop_and_update_metrics()
+
+    def _validate_args(self):
+        """Validate constructor arguments and fail fast on incompatible combinations."""
+        args = self.args
+
+        # --- SageMaker Model Parallel mixed-precision validation ---
+        if is_sagemaker_mp_enabled():
+            if args.bf16:
+                raise ValueError("SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead ")
+            if args.fp16 != smp.state.cfg.fp16:
+                logger.warning(
+                    f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
+                    f"but FP16 provided in trainer argument is {args.fp16}, "
+                    f"setting to {smp.state.cfg.fp16}"
+                )
+                args.fp16 = smp.state.cfg.fp16
+
+        # --- Training-argument validations ---
+        if args.batch_eval_metrics and self.compute_metrics is not None:
+            if "compute_result" not in inspect.signature(self.compute_metrics).parameters:
+                raise ValueError(
+                    "When using `batch_eval_metrics`, your `compute_metrics` function must take a `compute_result`"
+                    " boolean argument which will be triggered after the last batch of the eval set to signal that the"
+                    " summary statistics should be returned by the function."
+                )
+        if args.eval_strategy is not None and args.eval_strategy != "no" and self.eval_dataset is None:
+            raise ValueError(
+                f"You have set `args.eval_strategy` to {args.eval_strategy} but you didn't pass an `eval_dataset` to `Trainer`. Either set `args.eval_strategy` to `no` or pass an `eval_dataset`. "
+            )
+        if args.save_strategy == SaveStrategy.BEST or args.load_best_model_at_end:
+            if args.metric_for_best_model is None:
+                raise ValueError(
+                    "`args.metric_for_best_model` must be provided when using 'best' save_strategy or if `args.load_best_model_at_end` is set to `True`."
+                )
+
+        # --- Optimizer validations ---
         if self.optimizer_cls_and_kwargs is not None and self.optimizer is not None:
             raise RuntimeError("Passing both `optimizers` and `optimizer_cls_and_kwargs` arguments is incompatible.")
-        if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
+        if self.model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
             raise RuntimeError(
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument. "
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
@@ -627,129 +683,23 @@ class Trainer:
                 "Passing `optimizers` is not allowed if PyTorch FSDP is enabled. "
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
-        default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
 
-        # Add JIT checkpoint callback if enabled
-        if self.args.enable_jit_checkpoint:
-            from .trainer_jit_checkpoint import JITCheckpointCallback
-
-            jit_callback = JITCheckpointCallback()
-            default_callbacks = default_callbacks + [jit_callback]
-            # Set trainer reference for JIT callback after initialization
-            jit_callback.set_trainer(self)
-
-        callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
-        self.callback_handler = CallbackHandler(
-            callbacks, self.model, self.processing_class, self.optimizer, self.lr_scheduler
-        )
-        self.add_callback(PrinterCallback if self.args.disable_tqdm else DEFAULT_PROGRESS_CALLBACK)
-
-        # Will be set to True by `self._setup_loggers()` on first call to `self.log()`.
-        self._loggers_initialized = False
-
-        # Create distant repo and output directory if needed
-        self.hub_model_id = None
-        if self.args.push_to_hub:
-            self.init_hf_repo()
-        if self.args.should_save:
-            os.makedirs(self.args.output_dir, exist_ok=True)
-
+        # --- Dataset validations ---
         if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
             raise TypeError("The `data_collator` should be a simple callable (function, class with `__call__`).")
-
         if args.max_steps > 0 and args.num_train_epochs > 0:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
-
-        if train_dataset is not None and not has_length(train_dataset) and args.max_steps <= 0:
+        if self.train_dataset is not None and not has_length(self.train_dataset) and args.max_steps <= 0:
             raise ValueError(
                 "The train_dataset does not implement __len__, max_steps has to be specified. "
                 "The number of steps needs to be known in advance for the learning rate scheduler."
             )
-
         if (
-            train_dataset is not None
-            and isinstance(train_dataset, torch.utils.data.IterableDataset)
+            self.train_dataset is not None
+            and isinstance(self.train_dataset, torch.utils.data.IterableDataset)
             and args.group_by_length
         ):
             raise ValueError("the `--group_by_length` option is only available for `Dataset`, not `IterableDataset")
-
-        self._signature_columns = None
-
-        # Mixed precision setup for SageMaker Model Parallel
-        if is_sagemaker_mp_enabled():
-            # BF16 + model parallelism in SageMaker: currently not supported, raise an error
-            if args.bf16:
-                raise ValueError("SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead ")
-            if args.fp16 != smp.state.cfg.fp16:
-                logger.warning(
-                    f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
-                    f"but FP16 provided in trainer argument is {args.fp16}, "
-                    f"setting to {smp.state.cfg.fp16}"
-                )
-                args.fp16 = smp.state.cfg.fp16
-
-        # Label smoothing
-        if self.args.label_smoothing_factor != 0:
-            self.label_smoother = LabelSmoother(epsilon=self.args.label_smoothing_factor)
-        else:
-            self.label_smoother = None
-
-        # Check for multi-label classification incompatibility
-        if self.args.label_smoothing_factor > 0:
-            if getattr(self.model.config, "problem_type", None) == "multi_label_classification":
-                warnings.warn(
-                    "Label smoothing is not compatible with multi-label classification. "
-                    "Disabling label smoothing for this training run.",
-                    UserWarning,
-                )
-                self.label_smoother = None
-
-        self.control = TrainerControl()
-
-        self.state = TrainerState(
-            is_local_process_zero=self.is_local_process_zero(),
-            is_world_process_zero=self.is_world_process_zero(),
-            stateful_callbacks=[
-                cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
-            ],
-        )
-        # Internal variable to count flos in each process, will be accumulated in `self.state.total_flos` then
-        # returned to 0 every time flos need to be logged
-        self.current_flos = 0
-        self.hp_search_backend = None
-
-        model_to_inspect = self.model
-        if _is_peft_model(self.model):
-            if hasattr(self.model, "get_base_model"):
-                model_to_inspect = self.model.get_base_model()
-            else:
-                # PeftMixedModel do not provide a `get_base_model` method
-                model_to_inspect = self.model.base_model.model
-        default_label_names = find_labels(model_to_inspect.__class__)
-        self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
-        self.can_return_loss = can_return_loss(model_to_inspect.__class__)
-        self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
-
-        # Internal variables to help with automatic batch size reduction
-        self._train_batch_size = args.train_batch_size
-        self._created_lr_scheduler = False
-
-        # Set use_cache for the model
-        if getattr(self.model, "config", None) is not None:
-            self.model.config.use_cache = self.args.use_cache
-
-        # very last
-        self._memory_tracker.stop_and_update_metrics()
-
-        self.is_fsdp_xla_v2_enabled = args.fsdp_config.get("xla_fsdp_v2", False)
-        if self.is_fsdp_xla_v2_enabled:
-            if not IS_XLA_FSDPV2_POST_2_2:
-                raise ValueError("FSDPv2 requires `torch_xla` 2.2 or higher.")
-            # Prepare the SPMD mesh that is going to be used by the data loader and the FSDPv2 wrapper.
-            # Tensor axis is just a placeholder where it will not be used in FSDPv2.
-            num_devices = xr.global_runtime_device_count()
-            xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
-        self.is_fsdp_xla_v1_enabled = self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled
 
     def add_callback(self, callback):
         """
@@ -1642,14 +1592,9 @@ class Trainer:
         if self.neftune_noise_alpha is not None:
             self.neftune_hook_handle = activate_neftune(self.model, self.neftune_noise_alpha, self.accelerator)
 
-        # do_train is not a reliable argument, as it might not be set and .train() still called, so
-        # the following is a workaround:
-        if (
-            (args.fp16_full_eval or args.bf16_full_eval)
-            and not args.do_train
-            and not self.is_model_parallel
-            and self.model_init is None
-        ):
+        # When fp16/bf16 full eval is enabled, __init__ skips device placement so that
+        # evaluation_loop can cast dtype and move in one step. Move the model now for training.
+        if (args.fp16_full_eval or args.bf16_full_eval) and not self.is_model_parallel and self.model_init is None:
             self._move_model_to_device(self.model, args.device)
 
         # This might change the seed so needs to run first.

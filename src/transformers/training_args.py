@@ -1433,6 +1433,12 @@ class TrainingArguments:
             "help": "When using torch.distributed.launch (Deprecated), it will pass `local_rank` in the script, so we need this for the parser. To get the local rank, prefer using the property `local_process_index`"
         },
     )
+    place_model_on_device: bool | None = field(
+        default=None,
+        metadata={
+            "help": "Whether to automatically place the model on the device. When `None` (default), the Trainer decides."
+        },
+    )
 
     def __post_init__(self):
         # ── 1. Defaults & Normalization ──
@@ -1967,13 +1973,6 @@ class TrainingArguments:
         log_level_main_node = logging.get_verbosity() if log_level == -1 else log_level
         log_level_replica_node = logging.get_verbosity() if log_level_replica == -1 else log_level_replica
         return log_level_main_node if self.should_log else log_level_replica_node
-
-    @property
-    def place_model_on_device(self):
-        """
-        Can be subclassed and overridden for some specific integrations.
-        """
-        return not is_sagemaker_mp_enabled()
 
     @property
     def _no_sync_in_gradient_accumulation(self):
