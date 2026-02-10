@@ -228,15 +228,13 @@ class ImagesKwargs(TypedDict, total=False):
 
     Attributes:
         do_convert_rgb (`bool`):
-            Whether to convert the video to RGB format.
+            Whether to convert the image to RGB format.
         do_resize (`bool`, *optional*):
             Whether to resize the image.
         size (`dict[str, int]`, *optional*):
             Resize the shorter side of the input to `size["shortest_edge"]`.
         crop_size (`dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
-        do_convert_rgb (`bool`):
-            Whether to convert the video to RGB format.
         resample (`PILImageResampling`, *optional*):
             Resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*):

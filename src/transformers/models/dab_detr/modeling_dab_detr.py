@@ -22,7 +22,7 @@ from torch import Tensor, nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -919,10 +919,11 @@ class DabDetrEncoder(DabDetrPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        # expand attention_mask
-        if attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+        )
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1048,7 +1049,6 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
-            input_shape = inputs_embeds.size()[:-1]
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1061,9 +1061,11 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and memory_key_padding_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            memory_key_padding_mask = _prepare_4d_attention_mask(
-                memory_key_padding_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            memory_key_padding_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=memory_key_padding_mask,
+                encoder_hidden_states=encoder_hidden_states,
             )
 
         for layer_id, decoder_layer in enumerate(self.layers):
