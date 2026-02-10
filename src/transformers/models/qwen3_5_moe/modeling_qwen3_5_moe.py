@@ -2030,7 +2030,7 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMi
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Qwen3_5MoeConfig
-
+ 
     def __init__(self, config):
         super().__init__(config)
         self.model = Qwen3_5MoeModel(config)
