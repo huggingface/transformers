@@ -525,12 +525,6 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
             init.copy_(module.inv_freq, buffer_value)
             init.copy_(module.original_inv_freq, buffer_value)
 
-    def _update_causal_mask(self, module):
-        raise AttributeError("No need to inherit it!")
-
-    def _prepare_4d_causal_attention_mask_with_cache_position(self, module):
-        raise AttributeError("No need to inherit it!")
-
 
 class BltLocalEncoder(BltPreTrainedModel):
     config: BltLocalEncoderConfig
