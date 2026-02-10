@@ -116,12 +116,16 @@ class RagRetrieverTest(TestCase):
         dataset.add_faiss_index("embeddings", string_factory="Flat", metric_type=faiss.METRIC_INNER_PRODUCT)
         return dataset
 
-    def get_dummy_canonical_hf_index_retriever(self):
+    def get_dummy_canonical_hf_index_retriever(self, retrieval_batch_size: int | None = None):
         dataset = self.get_dummy_dataset()
+        config_kwargs = {}
+        if retrieval_batch_size is not None:
+            config_kwargs["retrieval_batch_size"] = retrieval_batch_size
         config = RagConfig(
             retrieval_vector_size=self.retrieval_vector_size,
             question_encoder=DPRConfig().to_dict(),
             generator=BartConfig().to_dict(),
+            **config_kwargs,
         )
         with patch("transformers.models.rag.retrieval_rag.load_dataset") as mock_load_dataset:
             mock_load_dataset.return_value = dataset
@@ -244,6 +248,21 @@ class RagRetrieverTest(TestCase):
             out = retriever.retrieve(hidden_states, n_docs=1)
             self.assertTrue(out is not None)
 
+    def test_retrieve_respects_retrieval_batch_size(self):
+        n_docs = 1
+        retriever = self.get_dummy_canonical_hf_index_retriever(retrieval_batch_size=1)
+        hidden_states = np.array(
+            [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
+        )
+
+        with patch.object(retriever.index, "get_top_docs", wraps=retriever.index.get_top_docs) as mock_get_top_docs:
+            retrieved_doc_embeds, doc_ids, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
+
+        self.assertEqual(mock_get_top_docs.call_count, len(hidden_states))
+        self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
+        self.assertEqual(doc_ids.shape, (2, n_docs))
+        self.assertEqual(len(doc_dicts), 2)
+
     @require_torch
     @require_tokenizers
     @require_sentencepiece
@@ -284,6 +303,22 @@ class RagRetrieverTest(TestCase):
         self.assertIsInstance(context_input_ids, torch.Tensor)
         self.assertIsInstance(context_attention_mask, torch.Tensor)
         self.assertIsInstance(retrieved_doc_embeds, torch.Tensor)
+
+        out = retriever(
+            question_input_ids,
+            hidden_states,
+            prefix=None,
+            n_docs=n_docs,
+            return_tensors="np",
+        )
+        context_input_ids, context_attention_mask, retrieved_doc_embeds = (
+            out["context_input_ids"],
+            out["context_attention_mask"],
+            out["retrieved_doc_embeds"],
+        )
+        self.assertIsInstance(context_input_ids, np.ndarray)
+        self.assertIsInstance(context_attention_mask, np.ndarray)
+        self.assertIsInstance(retrieved_doc_embeds, np.ndarray)
 
     @require_torch
     @require_tokenizers
