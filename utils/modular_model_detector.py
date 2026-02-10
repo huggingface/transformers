@@ -1006,8 +1006,26 @@ def main():
                 model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
                 model_class_matches.setdefault(model_id, set()).add(query_name)
 
+        # Filter out models whose matched‑class set is strictly contained in another model's set.
+        # let C_m be the set of classes matched by model m. If there exists a model n such that
+        # C_m ⊂ C_n, then m is considered redundant and removed.
+        # This de-emphasizes models that are "covered" by a more "core" model like Llama.
+        model_items = list(model_class_matches.items())
+        redundant_models: set[str] = set()
+        for i, (model_i, classes_i) in enumerate(model_items):
+            if not classes_i:
+                continue
+            for j, (model_j, classes_j) in enumerate(model_items):
+                if i == j:
+                    continue
+                if classes_i.issubset(classes_j) and len(classes_j) > len(classes_i):
+                    redundant_models.add(model_i)
+                    break
+
+        filtered_items = [(m, cls_set) for m, cls_set in model_items if m not in redundant_models]
+
         sorted_models = sorted(
-            model_class_matches.items(),
+            filtered_items,
             key=lambda x: len(x[1]),
             reverse=True,
         )
