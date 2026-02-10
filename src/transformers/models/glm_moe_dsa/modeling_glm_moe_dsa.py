@@ -243,17 +243,20 @@ class GlmMoeDsaAttention(nn.Module):
             bias=config.attention_bias,
         )
 
-        # Indexer components for sparse attention
-        self.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.index_head_dim, bias=False)
-        self.wk = nn.Linear(config.hidden_size, self.index_head_dim, bias=config.attention_bias)
-        self.k_norm = nn.LayerNorm(self.index_head_dim, eps=1e-6)
-        self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
+        # Indexer submodule for sparse attention
+        # Wrapped in nn.Module so checkpoint keys match: self_attn.indexer.wq_b, etc.
+        self.indexer = nn.Module()
+        self.indexer.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.index_head_dim, bias=False)
+        self.indexer.wk = nn.Linear(config.hidden_size, self.index_head_dim, bias=config.attention_bias)
+        self.indexer.k_norm = nn.LayerNorm(self.index_head_dim, eps=1e-6)
+        self.indexer.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.indexer_softmax_scaling = self.index_head_dim ** (-0.5)
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_parameters.get("rope_type", "default") != "default":
-            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_parameters["factor"]
+        rope_params = self.config.rope_parameters or {}
+        if rope_params.get("rope_type", "default") != "default":
+            mscale_all_dim = rope_params.get("mscale_all_dim", 0)
+            scaling_factor = rope_params["factor"]
             if mscale_all_dim:
                 mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
                 self.scaling = self.scaling * mscale * mscale
@@ -559,6 +562,9 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        # Skip normal_ initialization for FP8 quantized weights which don't support it
+        if isinstance(module, nn.Linear) and hasattr(module, "weight") and module.weight.dtype == torch.float8_e4m3fn:
+            return
         super()._init_weights(module)
         if isinstance(module, GlmMoeDsaTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)

@@ -164,7 +164,6 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         qk_rope_head_dim: int | None = 64,
         v_head_dim: int | None = 256,
         qk_nope_head_dim: int | None = 192,
-        qk_head_dim: int | None = 256,
         n_group: int | None = 1,
         topk_group: int | None = 1,
         num_experts_per_tok: int | None = 8,
@@ -205,20 +204,6 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         self.num_key_value_heads = num_key_value_heads
         self.initializer_range = initializer_range
         self.index_topk = index_topk
-        self.mlp_layer_types = mlp_layer_types
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-
-        # Default to MoE from the fourth layer and on
-        if mlp_layer_types is None:
-            mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (self.num_hidden_layers - 3)
-        layer_type_validation(mlp_layer_types, self.num_hidden_layers, attention=False)
-        self.mlp_layer_types = mlp_layer_types
-
-        self.qk_head_dim = qk_head_dim
         self.index_head_dim = index_head_dim
         self.n_group = n_group
         self.topk_group = topk_group
@@ -232,12 +217,57 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
 
-        PreTrainedConfig.__init__(self, **kwargs)
+        super().__init__(
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            moe_intermediate_size=moe_intermediate_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            num_key_value_heads=num_key_value_heads,
+            n_shared_experts=n_shared_experts,
+            n_routed_experts=n_routed_experts,
+            routed_scaling_factor=routed_scaling_factor,
+            kv_lora_rank=kv_lora_rank,
+            q_lora_rank=q_lora_rank,
+            qk_rope_head_dim=qk_rope_head_dim,
+            v_head_dim=v_head_dim,
+            qk_nope_head_dim=qk_nope_head_dim,
+            n_group=n_group,
+            topk_group=topk_group,
+            num_experts_per_tok=num_experts_per_tok,
+            norm_topk_prob=norm_topk_prob,
+            hidden_act=hidden_act,
+            max_position_embeddings=max_position_embeddings,
+            initializer_range=initializer_range,
+            rms_norm_eps=rms_norm_eps,
+            use_cache=use_cache,
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            rope_parameters=rope_parameters,
+            rope_interleave=rope_interleave,
+            mlp_layer_types=mlp_layer_types,
+            attention_bias=attention_bias,
+            attention_dropout=attention_dropout,
+            **kwargs,
+        )
+        del self.pretraining_tp
+
+        # Override parent's mlp_layer_types: GLM-MoE-DSA uses dense for first 3 layers
+        if mlp_layer_types is None:
+            self.mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (
+                self.num_hidden_layers - 3
+            )
+        else:
+            self.mlp_layer_types = mlp_layer_types
+        layer_type_validation(self.mlp_layer_types, self.num_hidden_layers, attention=False)
+
+        # Override parent's qk_head_dim: use qk_nope_head_dim + qk_rope_head_dim
+        self.qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
+        self.index_head_dim = index_head_dim
 
 
 class GlmMoeDsaRMSNorm(Glm4MoeRMSNorm):
@@ -303,17 +333,20 @@ class GlmMoeDsaAttention(nn.Module):
             bias=config.attention_bias,
         )
 
-        # Indexer components for sparse attention
-        self.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.index_head_dim, bias=False)
-        self.wk = nn.Linear(config.hidden_size, self.index_head_dim, bias=config.attention_bias)
-        self.k_norm = nn.LayerNorm(self.index_head_dim, eps=1e-6)
-        self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
+        # Indexer submodule for sparse attention
+        # Wrapped in nn.Module so checkpoint keys match: self_attn.indexer.wq_b, etc.
+        self.indexer = nn.Module()
+        self.indexer.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.index_head_dim, bias=False)
+        self.indexer.wk = nn.Linear(config.hidden_size, self.index_head_dim, bias=config.attention_bias)
+        self.indexer.k_norm = nn.LayerNorm(self.index_head_dim, eps=1e-6)
+        self.indexer.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.indexer_softmax_scaling = self.index_head_dim ** (-0.5)
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_parameters.get("rope_type", "default") != "default":
-            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_parameters["factor"]
+        rope_params = self.config.rope_parameters or {}
+        if rope_params.get("rope_type", "default") != "default":
+            mscale_all_dim = rope_params.get("mscale_all_dim", 0)
+            scaling_factor = rope_params["factor"]
             if mscale_all_dim:
                 mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
                 self.scaling = self.scaling * mscale * mscale
@@ -422,7 +455,12 @@ class GlmMoeDsaDecoderLayer(Glm4MoeLiteDecoderLayer):
 
 
 class GlmMoeDsaPreTrainedModel(Glm4MoePreTrainedModel):
-    pass
+    @torch.no_grad()
+    def _init_weights(self, module):
+        # Skip normal_ initialization for FP8 quantized weights which don't support it
+        if isinstance(module, nn.Linear) and hasattr(module, "weight") and module.weight.dtype == torch.float8_e4m3fn:
+            return
+        super()._init_weights(module)
 
 
 class GlmMoeDsaModel(Glm4MoeModel):

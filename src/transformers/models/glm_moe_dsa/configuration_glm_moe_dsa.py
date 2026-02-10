@@ -162,7 +162,6 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         qk_rope_head_dim: int | None = 64,
         v_head_dim: int | None = 256,
         qk_nope_head_dim: int | None = 192,
-        qk_head_dim: int | None = 256,
         n_group: int | None = 1,
         topk_group: int | None = 1,
         num_experts_per_tok: int | None = 8,
@@ -203,25 +202,6 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.initializer_range = initializer_range
         self.index_topk = index_topk
-        self.mlp_layer_types = mlp_layer_types
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-
-        # Default to MoE from the fourth layer and on
-        if mlp_layer_types is None:
-            mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (self.num_hidden_layers - 3)
-        layer_type_validation(mlp_layer_types, self.num_hidden_layers, attention=False)
-        self.mlp_layer_types = mlp_layer_types
-        if self.mlp_layer_types is None:
-            self.mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (
-                self.num_hidden_layers - 3
-            )
-        layer_type_validation(self.mlp_layer_types, self.num_hidden_layers, attention=False)
-
-        self.qk_head_dim = qk_head_dim
         self.index_head_dim = index_head_dim
         self.n_group = n_group
         self.topk_group = topk_group
@@ -233,10 +213,6 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -259,6 +235,8 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
         self.qk_nope_head_dim = qk_nope_head_dim
+
+        # Override parent's qk_head_dim: use qk_nope_head_dim + qk_rope_head_dim
         self.qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
         self.head_dim = qk_rope_head_dim
         self.n_group = n_group
@@ -281,6 +259,15 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
+
+        # Override parent's mlp_layer_types: GLM-MoE-DSA uses dense for first 3 layers
+        if mlp_layer_types is None:
+            self.mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (
+                self.num_hidden_layers - 3
+            )
+        else:
+            self.mlp_layer_types = mlp_layer_types
+        self.index_head_dim = index_head_dim
 
 
 __all__ = ["GlmMoeDsaConfig"]
