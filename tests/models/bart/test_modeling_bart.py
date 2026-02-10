@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch BART model."""
 
 import copy
+import gc
 import tempfile
 import unittest
 import unittest.mock
@@ -23,9 +24,11 @@ import timeout_decorator  # noqa
 
 from transformers import BartConfig, is_torch_available
 from transformers.testing_utils import (
+    backend_torch_accelerator_module,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
     slow,
     torch_device,
@@ -429,6 +432,60 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @slow
+    @require_torch_accelerator
+    def test_memory_regression_init_forward_backward(self):
+        torch_accelerator_module = backend_torch_accelerator_module(torch_device)
+
+        def measure_peak_bytes(step_fn):
+            gc.collect()
+            torch_accelerator_module.empty_cache()
+            torch_accelerator_module.reset_peak_memory_stats()
+            start = torch_accelerator_module.memory_allocated()
+            step_fn()
+            if hasattr(torch_accelerator_module, "synchronize"):
+                torch_accelerator_module.synchronize()
+            peak = torch_accelerator_module.max_memory_allocated()
+            return max(peak - start, 0)
+
+        def assert_regression_guard(step_name, step_fn):
+            baseline = measure_peak_bytes(step_fn)
+            current = measure_peak_bytes(step_fn)
+            # Keep tolerance from issue discussion (<=110%).
+            self.assertLessEqual(
+                current,
+                baseline * 1.1 + 1,
+                msg=(
+                    f"{step_name} peak memory regression: "
+                    f"current={current}, baseline={baseline}"
+                ),
+            )
+
+        init_config = self.model_tester.get_config()
+
+        def init_step():
+            model = BartForConditionalGeneration(init_config).to(torch_device)
+            del model
+
+        assert_regression_guard("init", init_step)
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = BartForConditionalGeneration(config).to(torch_device)
+        model.train()
+        labels = inputs_dict["decoder_input_ids"]
+
+        def forward_step():
+            with torch.no_grad():
+                model(**inputs_dict)
+
+        def forward_backward_step():
+            model.zero_grad(set_to_none=True)
+            loss = model(**inputs_dict, labels=labels).loss
+            loss.backward()
+
+        assert_regression_guard("forward", forward_step)
+        assert_regression_guard("forward_backward", forward_backward_step)
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
