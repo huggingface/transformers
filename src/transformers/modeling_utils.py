@@ -2312,6 +2312,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if getattr(module, "_is_hf_initialized", False):
             return
 
+        if (
+            (weight := getattr(module, "weight", None)) is not None
+            and getattr(weight, "_is_hf_initialized", False)
+            and not list(module.named_buffers())
+        ):
+            module._is_hf_initialized = True
+            return
+
         self._init_weights(module)
         module._is_hf_initialized = True
 
@@ -4202,6 +4210,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         missing keys from meta device to their expected device, reinitializing missing weights according to proper
         distributions, tying the weights and logging the loading report."""
         try:
+            # Adjust `all_tied_weights_keys` before marking them as initialized
+            model._adjust_tied_keys_with_tied_pointers(loading_info.missing_and_mismatched())
+
             # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
             model.mark_tied_weights_as_initialized()
 
@@ -4416,6 +4427,35 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     @classmethod
     def is_backend_compatible(cls):
         return cls._supports_attention_backend
+
+    def _adjust_tied_keys_with_tied_pointers(self, missing_keys: list[str]) -> None:
+        """
+        Adds keys to `self.all_tied_weights_keys` by checking if any group of params
+        share the same data ptr. It helps us support remote code where the weight tying is
+        done in old-T5 style, by manually assigning the same module to different param names.
+        If we don't add them back in `self.all_tied_weights_keys`, they will be re-initialized
+        and all params in tied group get random weights.
+        """
+        param_pointers = defaultdict(list)
+        for param_name, param_value in self.state_dict().items():
+            param_pointers[param_value.data_ptr()].append(param_name)
+
+        # Filter out params that are already in `self.all_tied_weights_keys` or if all
+        # are missing params. Missing param groups share the same data ptr by being on `meta`
+        tied_param_names = [
+            names
+            for names in param_pointers.values()
+            if len(names) > 1
+            and not any(name in self.all_tied_weights_keys.keys() for name in names)
+            and not all(name in missing_keys for name in names)
+        ]
+
+        # Create a dummy mapping, it doesn't matter which one is source/target
+        # because they are already tied
+        tied_weights_keys_by_pointers = {
+            param_name: group[0] for group in tied_param_names for param_name in group[1:]
+        }
+        self.all_tied_weights_keys.update(tied_weights_keys_by_pointers)
 
     def _move_missing_keys_from_meta_to_device(
         self,
