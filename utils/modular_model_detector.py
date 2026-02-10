@@ -997,6 +997,8 @@ def main():
     if class_entries:
         total_classes = len(class_entries)
         model_class_matches: dict[str, set[str]] = {}
+        # Mean embedding score
+        model_class_scores: dict[str, dict[str, float]] = {}
         for query_name, data in class_entries:
             for identifier, _score in data.get("embedding", []):
                 try:
@@ -1005,6 +1007,9 @@ def main():
                     continue
                 model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
                 model_class_matches.setdefault(model_id, set()).add(query_name)
+                per_model_scores = model_class_scores.setdefault(model_id, {})
+                if query_name not in per_model_scores or _score > per_model_scores[query_name]:
+                    per_model_scores[query_name] = _score
 
         # Filter out models whose matched‑class set is strictly contained in another model's set.
         # let C_m be the set of classes matched by model m. If there exists a model n such that
@@ -1036,7 +1041,12 @@ def main():
         logging.info("Models with most matched classes:")
         for model_id, matched in sorted_models[:15]:
             pct = 100.0 * len(matched) / total_classes
-            logging.info(f"  {model_id:25s}: {len(matched):2d}/{total_classes} classes ({pct:5.1f}%)")
+            scores_for_model = model_class_scores.get(model_id, {})
+            mean_score = sum(scores_for_model.values()) / len(scores_for_model) if scores_for_model else 0.0
+            logging.info(
+                f"  {model_id:25s}: {len(matched):2d}/{total_classes} classes ({pct:5.1f}%), "
+                f"mean score {mean_score:.4f}"
+            )
         logging.info("")
 
 if __name__ == "__main__":
