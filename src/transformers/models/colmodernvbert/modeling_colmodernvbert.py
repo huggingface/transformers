@@ -129,9 +129,6 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ColModernVBertForRetrievalOutput:
-        output_attentions = kwargs.pop("output_attentions", self.config.output_attentions)
-        output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
-
         if pixel_values is not None:
             pixel_values = pixel_values.to(dtype=self.dtype)
 
@@ -139,8 +136,6 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             **kwargs,
         )
 
