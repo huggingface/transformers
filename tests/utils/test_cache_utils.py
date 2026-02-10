@@ -1256,3 +1256,21 @@ class SyntheticCacheTest(unittest.TestCase):
 
         self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [20.0, 30.0, 40.0])
         self.assertEqual(returned_1[0][0, 0, :, 0].tolist(), [10.0, 20.0, 30.0, 40.0])
+
+    def test_quantized_cache_reset(self):
+        """Test that reset clears quantized data between generations."""
+        if not is_optimum_quanto_available():
+            self.skipTest("quanto is not available")
+        from transformers.cache_utils import QuantoQuantizedLayer
+
+        layer = QuantoQuantizedLayer(nbits=4, residual_length=2, q_group_size=16)
+        k1 = torch.randn(1, 4, 4, 64)
+        v1 = torch.randn(1, 4, 4, 64)
+        layer.update(k1, v1)
+
+        layer.reset()
+
+        k2 = torch.randn(1, 4, 2, 64)
+        v2 = torch.randn(1, 4, 2, 64)
+        keys_out, _ = layer.update(k2, v2)
+        self.assertEqual(keys_out.shape[-2], 2, "Stale quantized data leaked through reset()")

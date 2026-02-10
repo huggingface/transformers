@@ -541,6 +541,14 @@ class QuantizedLayer(DynamicLayer):
             self._quantized_values = self._quantize(value_states.contiguous(), axis=self.axis_value)
             return key_states, value_states
 
+        # After reset, quantized data is cleared
+        if self._quantized_keys is None:
+            self._quantized_keys = self._quantize(key_states.contiguous(), axis=self.axis_key)
+            self._quantized_values = self._quantize(value_states.contiguous(), axis=self.axis_value)
+            self.keys = torch.tensor([], dtype=key_states.dtype, device=key_states.device)
+            self.values = torch.tensor([], dtype=key_states.dtype, device=key_states.device)
+            return key_states, value_states
+
         dequant_keys = self._dequantize(self._quantized_keys)
         dequant_values = self._dequantize(self._quantized_values)
         keys_to_return = torch.cat([dequant_keys, self.keys, key_states], dim=-2)
@@ -561,6 +569,11 @@ class QuantizedLayer(DynamicLayer):
 
     @abstractmethod
     def _dequantize(self, q_tensor): ...
+
+    def reset(self) -> None:
+        super().reset()
+        self._quantized_keys = None
+        self._quantized_values = None
 
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
