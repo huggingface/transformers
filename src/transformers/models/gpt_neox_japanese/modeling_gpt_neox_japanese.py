@@ -285,8 +285,7 @@ class GPTNeoXJapaneseAttention(nn.Module):
 
         attention_scores = attention_scores.view(batch_size, num_attention_heads, query_length, -1)
         if attention_mask is not None:
-            causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-            attention_scores = attention_scores + causal_mask
+            attention_scores = attention_scores + attention_mask
 
         attn_weights = nn.functional.softmax(attention_scores, dim=-1)
         attn_weights = self.attention_dropout(attn_weights)
