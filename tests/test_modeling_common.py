@@ -5566,11 +5566,15 @@ class ModelTesterMixin:
                 if "router_logits" in recordable_outputs:
                     return_all["output_router_logits"] = True
 
+                # Merge them (SwitchTransformers provides `output_router_logits` in `inputs` as well so we need to avoid
+                # passing it twice)
+                all_inputs = {**inputs, **return_all}
+
                 # If we don't trigger the exception of the new set, then all good
                 with patch.object(CompileableContextVar, "set", new=new_set):
                     with patch.object(CompileableContextVar, "reset", new=new_reset):
                         with torch.no_grad():
-                            _ = model(**inputs, **return_all)
+                            _ = model(**all_inputs)
 
 
 global_rng = random.Random()

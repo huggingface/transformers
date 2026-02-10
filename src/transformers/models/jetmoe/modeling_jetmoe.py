@@ -768,7 +768,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         self.aux_loss_coef = config.aux_loss_coef
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.tie_word_embeddings = config.tie_word_embeddings
-        self.num_experts = (config.num_local_experts,)
+        self.num_experts = config.num_local_experts
         self.num_experts_per_tok = config.num_experts_per_tok
 
         # Initialize weights and apply final processing
@@ -798,6 +798,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
