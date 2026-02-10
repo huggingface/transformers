@@ -272,6 +272,8 @@ class ViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     height=height, width=width, images_kwargs=images_kwargs
                 )
                 self.assertEqual(
-                    fast_processor.get_number_of_image_patches(height=height, width=width, images_kwargs=images_kwargs),
+                    fast_processor.get_number_of_image_patches(
+                        height=height, width=width, images_kwargs=images_kwargs
+                    ),
                     expected,
                 )
