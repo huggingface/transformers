@@ -171,6 +171,9 @@ class Glm46VImageProcessorFast(BaseImageProcessorFast):
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        return Glm46VImageProcessor.get_number_of_image_patches(self, height, width, images_kwargs)
+
     @auto_docstring
     def preprocess(
         self,
@@ -178,9 +181,6 @@ class Glm46VImageProcessorFast(BaseImageProcessorFast):
         **kwargs: Unpack[Glm46VImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
-
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
-        return Glm46VImageProcessor.get_number_of_image_patches(self, height, width, images_kwargs)
 
 
 __all__ = ["Glm46VImageProcessorFast"]

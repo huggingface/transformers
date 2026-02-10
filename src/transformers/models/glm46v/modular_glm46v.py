@@ -139,8 +139,7 @@ class Glm46VImageProcessor(Glm4vImageProcessor):
 
 
 class Glm46VImageProcessorFast(Glm4vImageProcessorFast):
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
-        return Glm46VImageProcessor.get_number_of_image_patches(self, height, width, images_kwargs)
+    pass
 
 
 class Glm46VVideoProcessor(Glm4vVideoProcessor):
