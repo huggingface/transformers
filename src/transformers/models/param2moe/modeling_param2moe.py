@@ -20,6 +20,7 @@
 """PyTorch Param2MoE model."""
 import math
 import warnings
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -28,6 +29,7 @@ from torch import nn
 
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
+from transformers.generation.utils import GenerationMixin
 from transformers.modeling_attn_mask_utils import (
     AttentionMaskConverter,
     _prepare_4d_attention_mask,
@@ -39,6 +41,7 @@ from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_u
 from transformers.modeling_utils import PreTrainedModel
 from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
 from transformers.utils import (
+    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
@@ -47,10 +50,8 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from transformers.utils.import_utils import is_torch_fx_available
+
 from .configuration_param2moe import Param2MoEConfig
-from transformers.generation.utils import GenerationMixin
-from dataclasses import dataclass
-from transformers.utils import ModelOutput
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -434,7 +435,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->Param2MoE 
+# Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->Param2MoE
 class Param2MoEAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
