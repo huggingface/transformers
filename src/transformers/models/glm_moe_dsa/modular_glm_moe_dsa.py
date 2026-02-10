@@ -20,7 +20,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...cache_utils import Cache
-from ...configuration_utils import layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -247,8 +247,7 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings
 
-        super().__init__(**kwargs)
-        del self.pretraining_tp
+        PreTrainedConfig.__init__(self, **kwargs)
 
 
 class GlmMoeDsaRMSNorm(Glm4MoeRMSNorm):
