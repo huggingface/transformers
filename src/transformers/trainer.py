@@ -156,7 +156,6 @@ from .utils import (
     is_accelerate_available,
     is_datasets_available,
     is_in_notebook,
-    is_liger_kernel_available,
     is_peft_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
