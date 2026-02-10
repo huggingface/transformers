@@ -242,6 +242,24 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
+    def test_chunkwise_shape_calculation(self):
+        config = self.model_tester.get_config()
+
+        config.chunkwise_kernel = "chunkwise--native_autograd"
+
+        model = xLSTMModel(config)
+        model.to(torch_device)
+        model.train(False)
+
+        batch_size, seq_length = 2, config.chunk_size * 2
+        input_ids = ids_tensor([batch_size, seq_length], config.vocab_size)
+
+        with torch.no_grad():
+            outputs = model(input_ids)
+
+        expected_shape = (batch_size, seq_length, config.hidden_size)
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
 
 @require_torch
 @slow

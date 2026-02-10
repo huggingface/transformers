@@ -27,7 +27,6 @@ from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import meshgrid
 from ...utils import (
     ModelOutput,
     TensorType,
@@ -752,7 +751,7 @@ class DeformableDetrEncoder(DetrEncoder):
         """
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes_list):
-            ref_y, ref_x = meshgrid(
+            ref_y, ref_x = torch.meshgrid(
                 torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
                 torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
                 indexing="ij",
@@ -1044,7 +1043,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
-            grid_y, grid_x = meshgrid(
+            grid_y, grid_x = torch.meshgrid(
                 torch.linspace(
                     0,
                     height - 1,

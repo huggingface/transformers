@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import Cache, is_torch_available
+from transformers import Cache, GlmMoeDsaConfig, is_torch_available
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -78,6 +78,12 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
         for layer in past_key_values.layers:
             self.assertEqual(layer.keys.shape, expected_key_shape)
             self.assertEqual(layer.values.shape, expected_value_shape)
+
+    def test_default_mlp_layer_types(self):
+        config = GlmMoeDsaConfig(num_hidden_layers=8)
+        self.assertEqual(
+            config.mlp_layer_types, ["dense", "dense", "dense", "sparse", "sparse", "sparse", "sparse", "sparse"]
+        )
 
 
 @require_torch_accelerator

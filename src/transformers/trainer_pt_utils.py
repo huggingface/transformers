@@ -71,10 +71,7 @@ def get_dataloader_sampler(dataloader):
 
 def atleast_1d(tensor_or_array: torch.Tensor | np.ndarray):
     if isinstance(tensor_or_array, torch.Tensor):
-        if hasattr(torch, "atleast_1d"):
-            tensor_or_array = torch.atleast_1d(tensor_or_array)
-        elif tensor_or_array.ndim < 1:
-            tensor_or_array = tensor_or_array[None]
+        tensor_or_array = torch.atleast_1d(tensor_or_array)
     else:
         tensor_or_array = np.atleast_1d(tensor_or_array)
     return tensor_or_array

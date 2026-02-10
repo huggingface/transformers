@@ -27,7 +27,7 @@ from ... import initialization as init
 from ...activations import ACT2FN, get_activation
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig, GenerationMixin
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -923,9 +923,11 @@ class ClvpEncoder(ClvpPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         # expand attention_mask and create position_ids if needed
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+        )
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -1069,23 +1071,32 @@ class ClvpDecoder(ClvpPreTrainedModel):
                 )
                 use_cache = False
 
+        if inputs_embeds is None:
+            inputs_embeds = self.input_embeds_layer(input_ids)
+
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        if cache_position is None:
+            cache_position = torch.arange(
+                past_key_values_length, past_key_values_length + input_shape[-1], device=inputs_embeds.device
+            )
         if position_ids is None:
             position_ids = torch.arange(
                 past_key_values_length, input_shape[-1] + past_key_values_length, dtype=torch.long, device=device
             )
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
-        if inputs_embeds is None:
-            inputs_embeds = self.input_embeds_layer(input_ids)
         position_embeds = self.position_embeds_layer(position_ids)
         inputs_embeds = inputs_embeds + position_embeds
 
-        attention_mask = _prepare_4d_causal_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
+        attention_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
         )
 
         hidden_states = inputs_embeds
