@@ -72,6 +72,8 @@ PRIVATE_MODELS = [
     "Qwen2_5_VisionTransformerPretrainedModel",
     "Qwen3VLVisionModel",
     "Qwen3VLMoeVisionModel",
+    "Qwen3_5VisionModel",
+    "Qwen3_5MoeVisionModel",
     "SwitchTransformersStack",
     "SiglipTextTransformer",
     "Siglip2TextTransformer",
@@ -110,11 +112,21 @@ PRIVATE_MODELS = [
     "PeAudioPreTrainedModel",
     "PeAudioVideoPreTrainedModel",
     "PeVideoPreTrainedModel",
-    "CLIPTextTransformer",  # was not a PreTrainedModel originally but needs to be
-    "CLIPVisionTransformer",  # was not a PreTrainedModel originally but needs to be
-    "MetaClip2TextTransformer",  # was not a PreTrainedModel originally but needs to be
-    "MetaClip2VisionTransformer",  # was not a PreTrainedModel originally but needs to be
-    "MLCDVisionTransformer",  # was not a PreTrainedModel originally but needs to be
+    # the following models should have been PreTrainedModels
+    "Owlv2TextTransformer",
+    "Owlv2VisionTransformer",
+    "OwlViTTextTransformer",
+    "OwlViTVisionTransformer",
+    "XCLIPTextTransformer",
+    "CLIPSegTextTransformer",
+    "DetrDecoder",
+    "GroupViTTextTransformer",
+    "CLIPTextTransformer",
+    "CLIPVisionTransformer",
+    "MetaClip2TextTransformer",
+    "MetaClip2VisionTransformer",
+    "MLCDVisionTransformer",
+    # end of should have beens
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -176,6 +188,8 @@ IGNORE_NON_TESTED = (
         "Qwen3VLMoeModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLMoeForConditionalGeneration.
         "Qwen3VLTextModel",  # Building part of bigger (tested) model.
         "Qwen3VLMoeTextModel",  # Building part of bigger (tested) model.
+        "Qwen3_5TextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3_5ForConditionalGeneration.
+        "Qwen3_5MoeTextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3_5MoeForConditionalGeneration.
         "Qwen2_5OmniForConditionalGeneration",  # Not a regular model. Testted in Qwen2_5OmniModelIntergrationTest
         "Qwen2_5OmniTalkerForConditionalGeneration",  #  Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
         "Qwen2_5OmniTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.

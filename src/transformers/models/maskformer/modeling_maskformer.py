@@ -24,13 +24,15 @@ from torch import Tensor, nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
     is_accelerate_available,
     is_scipy_available,
@@ -554,6 +556,7 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Args:
@@ -625,7 +628,10 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class DetrDecoder(nn.Module):
+class DetrDecoder(PreTrainedModel):
+    config: DetrConfig
+    base_model_prefix = "model"
+
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`DetrDecoderLayer`].
 
@@ -641,8 +647,8 @@ class DetrDecoder(nn.Module):
     """
 
     def __init__(self, config: DetrConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
+
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
 
@@ -651,6 +657,8 @@ class DetrDecoder(nn.Module):
         self.layernorm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
+
+        self.post_init()
 
     def forward(
         self,
@@ -663,6 +671,7 @@ class DetrDecoder(nn.Module):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Args:
@@ -707,14 +716,13 @@ class DetrDecoder(nn.Module):
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
-            input_shape = inputs_embeds.size()[:-1]
 
-        # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(
-                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-            )
+        encoder_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=encoder_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+        )
 
         # optional intermediate hidden states
         intermediate = () if self.config.auxiliary_loss else None
@@ -741,6 +749,7 @@ class DetrDecoder(nn.Module):
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 output_attentions=output_attentions,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
