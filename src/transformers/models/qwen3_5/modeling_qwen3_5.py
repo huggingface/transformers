@@ -1703,11 +1703,8 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
         )
 
         return Qwen3_5ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            **outputs,
             rope_deltas=self.rope_deltas,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
 
 

@@ -49,6 +49,7 @@ from ..glm4v.modeling_glm4v import (
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeCausalLMOutputWithPast,
+    Qwen3VLMoeModelOutputWithPast,
     load_balancing_loss_func,
 )
 
@@ -492,6 +493,10 @@ class Glm4vMoeTextModel(Glm4vTextModel):
         )
 
 
+class Glm4vMoeModelOutputWithPast(Qwen3VLMoeModelOutputWithPast):
+    pass
+
+
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
     @auto_docstring
     @can_return_tuple
@@ -555,6 +560,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
+            router_logits=outputs.router_logits,
         )
 
 
