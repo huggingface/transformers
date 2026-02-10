@@ -220,26 +220,12 @@ class GlmMoeDsaConfig(PreTrainedConfig):
             )
         layer_type_validation(self.mlp_layer_types, self.num_hidden_layers, attention=False)
 
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_attention_heads = num_attention_heads
-        self.n_shared_experts = n_shared_experts
-        self.n_routed_experts = n_routed_experts
-        self.routed_scaling_factor = routed_scaling_factor
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
-        self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_head_dim = index_head_dim
-        self.head_dim = qk_rope_head_dim
         self.n_group = n_group
         self.topk_group = topk_group
-        self.num_experts_per_tok = num_experts_per_tok
         self.norm_topk_prob = norm_topk_prob
         self.rope_interleave = rope_interleave
-        self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.attention_bias = attention_bias
