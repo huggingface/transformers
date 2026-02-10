@@ -60,8 +60,8 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.generic import check_model_inputs, maybe_autocast
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..ernie4_5_moe.configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 from ..ernie4_5_moe.modeling_ernie4_5_moe import (
     Ernie4_5_MoeAttention,
@@ -748,7 +748,8 @@ class Ernie4_5_VL_MoeTextModel(Ernie4_5_MoeModel):
         super().__init__(config)
         self.rotary_emb = Ernie4_5_VL_MoeTextRotaryEmbedding(config=config)
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -889,7 +890,8 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPret
     def get_device(self):
         raise AttributeError("Ernie 4.5 VL Moe does not need this!")
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:

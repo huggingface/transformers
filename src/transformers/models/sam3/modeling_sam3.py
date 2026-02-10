@@ -38,7 +38,12 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested
+from ...utils.generic import (
+    TransformersKwargs,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_sam3 import (
     Sam3Config,
@@ -301,7 +306,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -809,7 +813,8 @@ class Sam3ViTModel(Sam3PreTrainedModel):
     def get_input_embeddings(self) -> Sam3ViTPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -1393,7 +1398,8 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
             spatial_shapes,
         )
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         vision_features: list[torch.Tensor],
@@ -1688,7 +1694,8 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         rpb_matrix = rpb_matrix.permute(0, 3, 1, 2).contiguous()  # [batch_size, num_heads, num_queries, height*width]
         return rpb_matrix
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         vision_features: torch.Tensor,
@@ -2004,7 +2011,8 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         decoder_queries: torch.Tensor,

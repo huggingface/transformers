@@ -26,7 +26,8 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..flex_olmo.modeling_flex_olmo import FlexOlmoAttention
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeRotaryEmbedding,
@@ -271,7 +272,8 @@ class MiniMaxM2PreTrainedModel(MixtralPreTrainedModel):
 
 
 class MiniMaxM2Model(MixtralModel):
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

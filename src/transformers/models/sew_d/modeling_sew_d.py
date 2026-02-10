@@ -27,7 +27,6 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, get_torch_context_manager_or_global_device
-from ...pytorch_utils import softmax_backward_data
 from ...utils import auto_docstring, logging
 from .configuration_sew_d import SEWDConfig
 
@@ -496,7 +495,7 @@ class XSoftmax(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         (output,) = ctx.saved_tensors
-        inputGrad = softmax_backward_data(ctx, grad_output, output)
+        inputGrad = torch._softmax_backward_data(grad_output, output, ctx.dim, output.dtype)
         return inputGrad, None, None
 
     @staticmethod

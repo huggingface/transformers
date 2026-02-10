@@ -390,11 +390,13 @@ class DacResidualVectorQuantizer(nn.Module):
         n_codebooks = np.where(dims <= latents.shape[1])[0].max(axis=0, keepdims=True)[0]
         for i in range(n_codebooks):
             hidden_dim_j, hidden_dim_k = dims[i], dims[i + 1]
-            quantized_latents_i, codes_i = self.quantizers[i].decode_latents(latents[:, hidden_dim_j:hidden_dim_k, :])
+            latent_chunk = latents[:, hidden_dim_j:hidden_dim_k, :]
+            quantized_latents_i, codes_i = self.quantizers[i].decode_latents(latent_chunk)
             quantized_latents.append(quantized_latents_i)
             codes.append(codes_i)
 
-            quantized_representation_i = self.quantizers[i].out_proj(quantized_latents_i)
+            quantized_with_ste = latent_chunk + (quantized_latents_i - latent_chunk)
+            quantized_representation_i = self.quantizers[i].out_proj(quantized_with_ste)
             quantized_representation = quantized_representation + quantized_representation_i
 
         return quantized_representation, torch.cat(quantized_latents, dim=1)

@@ -28,7 +28,8 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (
@@ -558,7 +559,8 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
         del self.deepstack_visual_indexes
         del self.deepstack_merger_list
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Args:
@@ -798,11 +800,8 @@ class Qwen3_5Model(Qwen3VLModel):
         )
 
         return Qwen3_5ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            **outputs,
             rope_deltas=self.rope_deltas,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
 
 
