@@ -390,7 +390,7 @@ jobs:
             # Model CI
             if [[ "$model_ci_result" != "skipped" && "$model_ci_result" != "cancelled" ]]; then
               if [[ "$model_infrastructure_ok" == "false" ]]; then
-                echo "⚠️ **Model CI Infrastructure Error**"
+                echo "⚠️ **Model CI failed to report results**"
                 echo ''
                 infrastructure_error=true
               fi
@@ -399,7 +399,7 @@ jobs:
             # Quantization CI
             if [[ "$quantization_ci_result" != "skipped" && "$quantization_ci_result" != "cancelled" ]]; then
               if [[ "$quant_infrastructure_ok" == "false" ]]; then
-                echo "⚠️ **Quantization CI Infrastructure Error**"
+                echo "⚠️ **Quantization CI failed to report results**"
                 echo ''
                 infrastructure_error=true
               fi
