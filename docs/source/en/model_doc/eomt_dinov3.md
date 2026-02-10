@@ -43,7 +43,7 @@ Tips:
   combined with the upstream DINOv3 backbones. The conversion utilities in the
   [official repository](https://github.com/tue-mps/eomt) describe this workflow in detail.
 
-This model was contributed by [NielsRogge](https://huggingface.co/NielsRogge).
+This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/tue-mps/eomt).
 
 ## Usage examples
