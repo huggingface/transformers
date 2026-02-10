@@ -1483,7 +1483,6 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertForMultipleChoice"),
         ("mobilebert", "MobileBertForMultipleChoice"),
         ("modernbert", "ModernBertForMultipleChoice"),
-        ("modernvbert", "ModernVBertForMultipleChoice"),
         ("mpnet", "MPNetForMultipleChoice"),
         ("mra", "MraForMultipleChoice"),
         ("nystromformer", "NystromformerForMultipleChoice"),
