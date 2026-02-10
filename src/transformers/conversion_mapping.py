@@ -52,6 +52,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "ernie4_5_moe": "qwen2_moe",
     "glm4_moe": "qwen2_moe",
     "glm4_moe_lite": "qwen2_moe",
+    "glm_moe_dsa": "qwen2_moe",
     "glm4v_moe": "qwen2_moe",
     "longcat_flash": "qwen2_moe",
     "solar_open": "qwen2_moe",
@@ -59,6 +60,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen3_omni_moe": "qwen2_moe",
     "qwen3_omni_moe_thinker": "qwen2_moe",
     "qwen3_next": "qwen2_moe",
+    "qwen3_5_moe": "qwen2_moe",
     "hunyuan_v1_moe": "qwen2_moe",
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
@@ -70,6 +72,9 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "qwen3_5_text": [
+            WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
+        ],
         "t5gemma2": [
             WeightRenaming(r"(?<!vision_model\.)encoder.embed_tokens.", "encoder.text_model.embed_tokens."),
             WeightRenaming(r"(?<!vision_model\.)encoder.norm.", "encoder.text_model.norm."),
@@ -350,6 +355,9 @@ def _build_checkpoint_conversion_mapping():
     ]
     mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
     mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
+
+    mapping["qwen3_5_moe_text"] = mapping["qwen3_5_text"].copy()
+    mapping["qwen3_5_moe_text"] += mapping["qwen2_moe"].copy()
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:

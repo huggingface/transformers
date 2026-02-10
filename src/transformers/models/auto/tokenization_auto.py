@@ -258,6 +258,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("qwen2_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen2_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_5", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_5_moe", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_next", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_omni_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
@@ -645,12 +647,15 @@ class AutoTokenizer:
             != tokenizer_config_class.replace("Fast", "")
         ):
             # new model, but we ignore it unless the model type is the same
-            try:
-                return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-            except Exception:
-                return tokenizer_class_from_name(tokenizer_config_class).from_pretrained(
-                    pretrained_model_name_or_path, *inputs, **kwargs
-                )
+            if TokenizersBackend is not None:
+                try:
+                    return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                except Exception as e:
+                    logger.debug(f"Failed to use TokenizersBackend: {e}")
+
+            return tokenizer_class_from_name(tokenizer_config_class).from_pretrained(
+                pretrained_model_name_or_path, *inputs, **kwargs
+            )
 
         if "_commit_hash" in tokenizer_config:
             kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]

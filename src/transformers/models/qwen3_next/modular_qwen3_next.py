@@ -29,11 +29,12 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import check_model_inputs
 from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_flash_linear_attention_available,
 )
+from ...utils.output_capturing import OutputRecorder
 from ..bamba.modeling_bamba import apply_mask_to_padding_states, apply_rotary_pos_emb
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..gemma3.modeling_gemma3 import Gemma3RMSNorm

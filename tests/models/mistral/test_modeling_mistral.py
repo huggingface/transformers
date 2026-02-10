@@ -228,7 +228,7 @@ class MistralIntegrationTest(unittest.TestCase):
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
-        set_seed(0)
+        set_seed(42)
         generated_ids = model.generate(
             input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=model
         )
