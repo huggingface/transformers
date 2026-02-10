@@ -134,6 +134,8 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
             The dropout ratio for the attention probabilities.
         index_topk (`int`, *optional*, defaults to 2048):
             Number of top tokens selected by the indexer for retrieval/attention in each step.
+        index_head_dim (`int`, *optional*, defaults to 128):
+            Head dimension for the indexer projections.
 
     ```python
     >>> from transformers import Glm4MoeLiteModel, Glm4MoeLiteConfig
@@ -181,8 +183,28 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
         index_topk: int | None = 2048,
+        index_head_dim: int | None = 128,
         **kwargs,
     ):
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.moe_intermediate_size = moe_intermediate_size
+        self.num_attention_heads = num_attention_heads
+        self.n_shared_experts = n_shared_experts
+        self.n_routed_experts = n_routed_experts
+        self.routed_scaling_factor = routed_scaling_factor
+        self.kv_lora_rank = kv_lora_rank
+        self.q_lora_rank = q_lora_rank
+        self.qk_rope_head_dim = qk_rope_head_dim
+        self.v_head_dim = v_head_dim
+        self.qk_nope_head_dim = qk_nope_head_dim
+        self.head_dim = qk_rope_head_dim
+        self.num_experts_per_tok = num_experts_per_tok
+        self.num_key_value_heads = num_key_value_heads
+        self.initializer_range = initializer_range
+        self.index_topk = index_topk
+        self.mlp_layer_types = mlp_layer_types
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -205,7 +227,7 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
         self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
+        self.qk_head_dim = index_head_dim
         self.head_dim = qk_rope_head_dim
         self.n_group = n_group
         self.topk_group = topk_group
@@ -290,11 +312,12 @@ class GlmMoeDsaAttention(nn.Module):
             config.hidden_size,
             bias=config.attention_bias,
         )
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=1e-6)
 
         # Indexer components for sparse attention
         self.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
         self.wk = nn.Linear(config.hidden_size, self.qk_head_dim, bias=config.attention_bias)
-        self.k_norm = GlmMoeDsaRMSNorm(self.qk_head_dim)
+        self.k_norm = self.LayerNorm(self.qk_head_dim)
         self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
 
         self.scaling = self.qk_head_dim ** (-0.5)

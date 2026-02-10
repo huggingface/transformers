@@ -241,11 +241,12 @@ class GlmMoeDsaAttention(nn.Module):
             config.hidden_size,
             bias=config.attention_bias,
         )
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=1e-6)
 
         # Indexer components for sparse attention
         self.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
         self.wk = nn.Linear(config.hidden_size, self.qk_head_dim, bias=config.attention_bias)
-        self.k_norm = GlmMoeDsaRMSNorm(self.qk_head_dim)
+        self.k_norm = self.LayerNorm(self.qk_head_dim)
         self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
 
         self.scaling = self.qk_head_dim ** (-0.5)
