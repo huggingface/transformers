@@ -219,7 +219,6 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         # General config
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.index_topk = index_topk
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.attention_bias = attention_bias
