@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
+
 import asyncio
 import base64
 import copy
@@ -357,74 +359,71 @@ class TimedModel:
         return not hasattr(self, "model") or self.model is None
 
 
-class Serve:
-    # Defining a class to help with internal state but in practice it's just a method to call
-    # TODO: refactor into a proper module with helpers + 1 main method
-    def __init__(
-        self,
-        continuous_batching: Annotated[
-            bool, typer.Option(help="Whether to use continuous batching for chat completions.")
-        ] = False,
-        device: Annotated[
-            str,
-            typer.Option(
-                help="Device to use for inference; will default to `auto` and place the model on an accelerator if available."
-            ),
-        ] = "auto",
-        dtype: Annotated[
-            str | None,
-            typer.Option(
-                help="Override the default `torch.dtype` and load the model under this dtype. If `'auto'` is passed, the dtype will be automatically derived from the model's weights."
-            ),
-        ] = "auto",
-        trust_remote_code: Annotated[
-            bool, typer.Option(help="Whether to trust remote code when loading a model.")
-        ] = False,
-        attn_implementation: Annotated[
-            str | None,
-            typer.Option(
-                help="Which attention implementation to use; you can run --attn_implementation=flash_attention_2, in which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
-            ),
-        ] = None,
-        quantization: Annotated[
-            str | None,
-            typer.Option(help="Which quantization method to use. choices: 'bnb-4bit', 'bnb-8bit'"),
-        ] = None,
-        host: Annotated[str, typer.Option(help="Interface the server will listen to.")] = "localhost",
-        port: Annotated[int, typer.Option(help="Port the server will listen to.")] = 8000,
-        model_timeout: Annotated[
-            int, typer.Option(help="Time in seconds after which a model will be removed from memory.")
-        ] = 300,
-        log_level: Annotated[
-            str, typer.Option(help="Logging level as a string. Example: 'info' or 'warning'.")
-        ] = "info",
-        default_seed: Annotated[
-            int | None, typer.Option(help="The default seed for torch, should be an integer.")
-        ] = None,
-        enable_cors: Annotated[
-            bool,
-            typer.Option(
-                help="Whether to enable CORS. Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled."
-            ),
-        ] = False,
-        input_validation: Annotated[bool, typer.Option(help="Whether to turn on strict input validation.")] = False,
-        force_model: Annotated[
-            str | None,
-            typer.Option(
-                help="Name of the model to be forced on all requests. This is useful for testing Apps that don't allow changing models in the request."
-            ),
-        ] = None,
-        non_blocking: Annotated[
-            bool, typer.Option(hidden=True, help="Whether to run the server in a separate thread.")
-        ] = False,
-    ) -> None:
-        if not serve_dependencies_available:
-            raise ImportError(
-                "Missing dependencies for the serving CLI. Please install with `pip install transformers[serving]`"
-            )
+if serve_dependencies_available:
 
-        # Save input arguments
-        self.continuous_batching = continuous_batching
+    class Serve:
+        # Defining a class to help with internal state but in practice it's just a method to call
+        # TODO: refactor into a proper module with helpers + 1 main method
+        def __init__(
+            self,
+            continuous_batching: Annotated[
+                bool, typer.Option(help="Whether to use continuous batching for chat completions.")
+            ] = False,
+            device: Annotated[
+                str,
+                typer.Option(
+                    help="Device to use for inference; will default to `auto` and place the model on an accelerator if available."
+                ),
+            ] = "auto",
+            dtype: Annotated[
+                str | None,
+                typer.Option(
+                    help="Override the default `torch.dtype` and load the model under this dtype. If `'auto'` is passed, the dtype will be automatically derived from the model's weights."
+                ),
+            ] = "auto",
+            trust_remote_code: Annotated[
+                bool, typer.Option(help="Whether to trust remote code when loading a model.")
+            ] = False,
+            attn_implementation: Annotated[
+                str | None,
+                typer.Option(
+                    help="Which attention implementation to use; you can run --attn_implementation=flash_attention_2, in which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
+                ),
+            ] = None,
+            quantization: Annotated[
+                str | None,
+                typer.Option(help="Which quantization method to use. choices: 'bnb-4bit', 'bnb-8bit'"),
+            ] = None,
+            host: Annotated[str, typer.Option(help="Interface the server will listen to.")] = "localhost",
+            port: Annotated[int, typer.Option(help="Port the server will listen to.")] = 8000,
+            model_timeout: Annotated[
+                int, typer.Option(help="Time in seconds after which a model will be removed from memory.")
+            ] = 300,
+            log_level: Annotated[
+                str, typer.Option(help="Logging level as a string. Example: 'info' or 'warning'.")
+            ] = "info",
+            default_seed: Annotated[
+                int | None, typer.Option(help="The default seed for torch, should be an integer.")
+            ] = None,
+            enable_cors: Annotated[
+                bool,
+                typer.Option(
+                    help="Whether to enable CORS. Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled."
+                ),
+            ] = False,
+            input_validation: Annotated[bool, typer.Option(help="Whether to turn on strict input validation.")] = False,
+            force_model: Annotated[
+                str | None,
+                typer.Option(
+                    help="Name of the model to be forced on all requests. This is useful for testing Apps that don't allow changing models in the request."
+                ),
+            ] = None,
+            non_blocking: Annotated[
+                bool, typer.Option(hidden=True, help="Whether to run the server in a separate thread.")
+            ] = False,
+        ) -> None:
+            # Save input arguments
+            self.continuous_batching = continuous_batching
         self.device = device
         self.dtype = dtype
         self.trust_remote_code = trust_remote_code
@@ -1893,9 +1892,19 @@ class Serve:
 
         return audio_model, audio_processor
 
+else:
+
+    class Serve:
+        def __init__(self, *args, **kwargs):
+            raise ImportError(
+                "Serving functionality requires additional dependencies. "
+                "Please install them with: pip install transformers[serve]"
+            )
+
 
 # set docstring separately to make it look nice (Typer doesn't play well with the class command)
-Serve.__doc__ = """
+if serve_dependencies_available:
+    Serve.__doc__ = """
 Run a FastAPI server to serve models on-demand with an OpenAI compatible API.
 
 Models will be loaded and unloaded automatically based on usage and a timeout.
@@ -1908,7 +1917,7 @@ The server will expose the following endpoints:
     - GET /v1/models: Lists available models for 3rd party tools.
 
 Requires FastAPI and Uvicorn to be installed.
-"""
+    """
 
 if __name__ == "__main__":
     serve = Serve()
