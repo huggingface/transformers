@@ -191,9 +191,7 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
 
         # Default to MoE from the fourth layer and on
         if mlp_layer_types is None:
-            mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (
-                self.num_hidden_layers - 3
-            )
+            mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (self.num_hidden_layers - 3)
         layer_type_validation(mlp_layer_types, self.num_hidden_layers, attention=False)
         self.mlp_layer_types = mlp_layer_types
 
