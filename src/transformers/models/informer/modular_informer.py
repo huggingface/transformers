@@ -19,7 +19,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, EncoderDecoderCache
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -448,10 +448,11 @@ class InformerEncoder(TimeSeriesTransformerEncoder):
         hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+        )
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None

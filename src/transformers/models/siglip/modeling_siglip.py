@@ -23,7 +23,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -35,7 +35,7 @@ from ...utils import (
     can_return_tuple,
     torch_int,
 )
-from ...utils.generic import check_model_inputs, is_flash_attention_requested
+from ...utils.generic import check_model_inputs
 from .configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 
 
@@ -504,13 +504,11 @@ class SiglipTextTransformer(SiglipPreTrainedModel):
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
         # note: SigLIP's text model does not use a causal mask, unlike the original CLIP model.
-        # expand attention_mask
-        uses_flash_attention = is_flash_attention_requested(self.config)
-        if uses_flash_attention:
-            attention_mask = None
-        elif attention_mask is not None and not uses_flash_attention:
-            # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,

@@ -971,14 +971,11 @@ class DetrEncoder(DetrPreTrainedModel):
         hidden_states = inputs_embeds
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        # expand attention_mask
-        if attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                input_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-            )
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+        )
 
         for encoder_layer in self.layers:
             # we add spatial_position_embeddings as extra input to the encoder_layer
@@ -1057,21 +1054,18 @@ class DetrDecoder(DetrPreTrainedModel):
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
 
-        # expand decoder attention mask (for self-attention on object queries)
         if attention_mask is not None:
-            # [batch_size, num_queries] -> [batch_size, 1, num_queries, num_queries]
             attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                input_embeds=hidden_states,
                 attention_mask=attention_mask,
             )
 
         # expand encoder attention mask (for cross-attention on encoder outputs)
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                input_embeds=hidden_states,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )

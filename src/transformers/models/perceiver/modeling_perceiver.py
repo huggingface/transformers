@@ -30,7 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, meshgrid
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_perceiver import PerceiverConfig
 
@@ -2512,7 +2512,7 @@ def build_linear_positions(index_dims, output_range=(-1.0, 1.0)):
         return torch.linspace(start=output_range[0], end=output_range[1], steps=n_xels_per_dim, dtype=torch.float32)
 
     dim_ranges = [_linspace(n_xels_per_dim) for n_xels_per_dim in index_dims]
-    array_index_grid = meshgrid(*dim_ranges, indexing="ij")
+    array_index_grid = torch.meshgrid(*dim_ranges, indexing="ij")
 
     return torch.stack(array_index_grid, dim=-1)
 
