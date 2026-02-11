@@ -545,48 +545,6 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-
-            wte = model.get_input_embeddings()
-            inputs["input_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)[0]
-
-    # override as the input arg is called "input_embeds", not "inputs_embeds"
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            with torch.no_grad():
-                out_ids = model(**inputs)[0]
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-
-            wte = model.get_input_embeddings()
-            inputs["input_embeds"] = wte(input_ids)
-            with torch.no_grad():
-                out_embeds = model(**inputs)[0]
-
-            torch.testing.assert_close(out_embeds, out_ids)
-
     @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
@@ -635,48 +593,6 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-
-            wte = model.get_input_embeddings()
-            inputs["input_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)[0]
-
-    # override as the input arg is called "input_embeds", not "inputs_embeds"
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            with torch.no_grad():
-                out_ids = model(**inputs)[0]
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-
-            wte = model.get_input_embeddings()
-            inputs["input_embeds"] = wte(input_ids)
-            with torch.no_grad():
-                out_embeds = model(**inputs)[0]
-
-            torch.testing.assert_close(out_embeds, out_ids)
-
     @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
@@ -717,26 +633,6 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], set())
-
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-
-            wte = model.get_input_embeddings()[inputs_dict["codebook_idx"]]
-
-            inputs["input_embeds"] = wte(input_ids[:, :, inputs_dict["codebook_idx"]])
-
-            with torch.no_grad():
-                model(**inputs)[0]
 
     @unittest.skip(reason="FineModel relies on codebook idx and does not return same logits")
     def test_inputs_embeds_matches_input_ids(self):

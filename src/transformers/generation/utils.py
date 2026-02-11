@@ -502,10 +502,10 @@ class GenerationMixin(ContinuousMixin):
         as it needs a different implementation to be exportable.
 
         If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        - Exception 1: when passing input_embeds, input_ids may be missing entries
+        - Exception 1: when passing inputs_embeds, input_ids may be missing entries
         - Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         - Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
-        - Exception 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
+        - Exception 4: If inputs_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
           generate the first token for each sequence. Later use the generated Input ids for continuation.
 
         The current implementation does not rely on ``self`` and could be
@@ -704,7 +704,7 @@ class GenerationMixin(ContinuousMixin):
                 attention_mask = causal_mask_creation_function(
                     config=self.config,
                     # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
-                    input_embeds=torch.empty((batch_size, sequence_length), dtype=self.dtype),
+                    inputs_embeds=torch.empty((batch_size, sequence_length), dtype=self.dtype),
                     attention_mask=attention_mask,
                     cache_position=cache_position,
                     past_key_values=past_key_values,

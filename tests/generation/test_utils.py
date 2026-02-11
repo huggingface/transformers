@@ -1393,12 +1393,14 @@ class GenerationTesterMixin:
             }
 
             # Traditional way of generating text, with `return_dict_in_generate` to return the past key values.
-            input_embeds = model.get_input_embeddings()(input_ids)
-            outputs = model.generate(inputs_embeds=input_embeds, max_new_tokens=4, **generation_kwargs)
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+            outputs = model.generate(inputs_embeds=inputs_embeds, max_new_tokens=4, **generation_kwargs)
 
             # Let's generate again, but passing the past key values in between (3 + 1 = 4 tokens)
-            initial_output = model.generate(inputs_embeds=input_embeds, max_new_tokens=3, **generation_kwargs)
-            continued_embeds = torch.cat([input_embeds, model.get_input_embeddings()(initial_output.sequences)], dim=1)
+            initial_output = model.generate(inputs_embeds=inputs_embeds, max_new_tokens=3, **generation_kwargs)
+            continued_embeds = torch.cat(
+                [inputs_embeds, model.get_input_embeddings()(initial_output.sequences)], dim=1
+            )
             cached_output = model.generate(
                 inputs_embeds=continued_embeds,
                 max_new_tokens=1,
