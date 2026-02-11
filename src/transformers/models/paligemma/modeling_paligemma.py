@@ -588,8 +588,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
         return model_inputs
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     @staticmethod
+    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def create_masks_for_generate(
         config: PreTrainedConfig,
         inputs_embeds: torch.Tensor,
