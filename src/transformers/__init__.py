@@ -258,10 +258,10 @@ _import_structure = {
         "Mxfp4Config",
         "QuantoConfig",
         "QuarkConfig",
+        "SinqConfig",
         "SpQRConfig",
         "TorchAoConfig",
         "VptqConfig",
-        "SinqConfig",
     ],
     "video_utils": [],
 }

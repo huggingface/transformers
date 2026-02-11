@@ -1937,7 +1937,7 @@ class SinqConfig(QuantizationConfigMixin):
         group_size: int = 64,
         tiling_mode: str = "1D",
         method: str = "sinq",  # "sinq" | "asinq"
-        modules_to_not_convert: Optional[list[str]] = None,
+        modules_to_not_convert: list[str] | None = None,
         **kwargs: Any,
     ):
         self.quant_method = QuantizationMethod.SINQ

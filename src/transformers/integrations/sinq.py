@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from transformers.utils import is_torch_available, logging
 
@@ -32,8 +31,8 @@ if is_torch_available():
 
 def replace_with_sinq_linear(
     model: torch.nn.Module,
-    modules_to_not_convert: Optional[list[str]] = None,
-    quant_config: Optional[dict] = None,
+    modules_to_not_convert: list[str] | None = None,
+    quant_config: dict | None = None,
     compute_dtype: torch.dtype = None,
     device: str = "cuda:0",
     pre_quantized: bool = False,
@@ -96,7 +95,7 @@ class SinqQuantize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, Any],
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
         missing_keys=None,
         **kwargs,
@@ -139,7 +138,7 @@ class SinqDeserialize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, Any],
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
