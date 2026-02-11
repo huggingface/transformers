@@ -64,6 +64,10 @@ class Conv1dCacheLayer:
             device=hidden_states.device,
             dtype=hidden_states.dtype,
         )
+
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.cache)
+
         self.is_initialized = True
 
     def update(self, hidden_states, conv_module=None):
@@ -80,15 +84,14 @@ class Conv1dCacheLayer:
             if shortfall > 0:
                 padding_states = torch.cat([self.cache[:, :, -shortfall:], hidden_states], dim=-1)
             else:
-                padding_states = hidden_states[:, :, -self.left_pad :].clone()
+                padding_states = hidden_states[:, :, -self.left_pad :]
         else:
             padding_states = torch.empty(
                 hidden_states.shape[0], self.in_channels, 0, dtype=hidden_states.dtype, device=hidden_states.device
             )
 
-        # update the cache
         current_cache = self.cache.clone()
-        self.cache = padding_states
+        self.cache.copy_(padding_states)
 
         return current_cache
 
