@@ -267,9 +267,9 @@ if TYPE_CHECKING:
     )
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers
+    from .sinq import SinqDeserialize, SinqQuantize
     from .spqr import replace_with_spqr_linear
     from .vptq import replace_with_vptq_linear
-    from .sinq import SinqQuantize, SinqDeserialize
 
     try:
         if not is_torch_available():

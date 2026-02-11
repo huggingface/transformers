@@ -23,7 +23,7 @@ import os
 from dataclasses import dataclass, is_dataclass
 from enum import Enum
 from inspect import Parameter, signature
-from typing import Any, Optional, Union, List, Dict
+from typing import Any, Optional, Union
 
 from packaging import version
 
@@ -2112,7 +2112,7 @@ class SinqConfig(QuantizationConfigMixin):
         tiling_mode (`str`, default "1D"):
             Tiling mode for SINQ (typically "1D"; "2D" if supported in your backend).
         method (`str`, default "sinq"):
-            "sinq"  – calibration-free weight-only SINQ  
+            "sinq"  – calibration-free weight-only SINQ
             "asinq" – A-SINQ (activation-aware), not supported in Hugging Face. Please refer to the official SINQ repository.
         modules_to_not_convert (`list[str]`, *optional*):
             List of module names/prefixes to keep in full precision.
@@ -2127,7 +2127,7 @@ class SinqConfig(QuantizationConfigMixin):
         group_size: int = 64,
         tiling_mode: str = "1D",
         method: str = "sinq",  # "sinq" | "asinq"
-        modules_to_not_convert: Optional[List[str]] = None,
+        modules_to_not_convert: Optional[list[str]] = None,
         **kwargs: Any,
     ):
         self.quant_method = QuantizationMethod.SINQ
@@ -2139,17 +2139,16 @@ class SinqConfig(QuantizationConfigMixin):
 
         self.modules_to_not_convert = modules_to_not_convert
 
-        self._extra_kwargs: Dict[str, Any] = dict(kwargs)
+        self._extra_kwargs: dict[str, Any] = dict(kwargs)
 
         self.post_init()
 
     def post_init(self):
-        
         self.nbits = int(self.nbits)
         self.group_size = int(self.group_size)
         self.tiling_mode = str(self.tiling_mode)
         self.method = str(self.method).lower()
-        
+
         # Validation
         if not isinstance(self.nbits, int):
             raise TypeError("`nbits` must be convertible to an int")
@@ -2161,6 +2160,5 @@ class SinqConfig(QuantizationConfigMixin):
             raise ValueError(f"`method` must be either 'sinq' or 'asinq', got {self.method}")
         if self.group_size is not None and self.group_size % 8 != 0:
             logger.warning(
-                f"SINQ: group_size={self.group_size} is not a multiple of 8; "
-                "this may be rejected by the backend."
+                f"SINQ: group_size={self.group_size} is not a multiple of 8; this may be rejected by the backend."
             )

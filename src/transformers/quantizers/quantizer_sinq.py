@@ -13,20 +13,21 @@
 # limitations under the License.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, Union, Dict, Any, List
+from typing import TYPE_CHECKING
 
 import torch
-import torch.nn as nn
 
-from .base import HfQuantizer
-from .quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import logging
 from ..utils.quantization_config import SinqConfig
+from .base import HfQuantizer
+from .quantizers_utils import get_module_from_name
+
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 logger = logging.get_logger(__name__)
+
 
 class SinqHfQuantizer(HfQuantizer):
     """
@@ -50,14 +51,27 @@ class SinqHfQuantizer(HfQuantizer):
         self._normalized_device_str: str | None = None
         self._do_param_level_sinq: bool = False
 
-    def is_serializable(self, safe_serialization: Optional[bool] = None) -> bool:
+    def is_serializable(self) -> bool:
         return True
 
     @property
     def is_trainable(self) -> bool:
         return True
 
-    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+    def update_device_map(self, device_map):
+        if device_map is None:
+            if torch.cuda.is_available():
+                device_map = {"": torch.cuda.current_device()}
+            else:
+                device_map = {"": "cpu"}
+            logger.info(
+                "The device_map was not initialized. "
+                f"Setting device_map to {device_map}. "
+                "If you want to use the model for inference, please set device_map='auto'"
+            )
+        return device_map
+
+    def update_dtype(self, dtype: torch.dtype) -> torch.dtype:
         if dtype is None:
             dtype = torch.bfloat16
         self.dtype = dtype
@@ -65,15 +79,14 @@ class SinqHfQuantizer(HfQuantizer):
 
     def validate_environment(self, *args, **kwargs) -> None:
         from ..utils import is_sinq_available
+
         if not is_sinq_available():
-            raise ImportError(
-                "The 'sinq' package is not installed. Please install it with: pip install sinq"
-            )
+            raise ImportError("The 'sinq' package is not installed. Please install it with: pip install sinq")
 
         if not torch.cuda.is_available():
             raise RuntimeError("SINQ currently expects a CUDA device (for GemLite backend).")
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
 
         if isinstance(device_map, dict):
             device_map_values = set(device_map.values())
@@ -82,9 +95,9 @@ class SinqHfQuantizer(HfQuantizer):
                     "SinqHfQuantizer: multi-GPU device_map detected, but SINQ currently supports only a single CUDA "
                     f"device. Got {sorted(device_map_values)}. Please use device_map=None."
                 )
-        
+
         if self.quantization_config.method == "asinq" and not self.pre_quantized:
-                raise ValueError(
+            raise ValueError(
                 "You are using `method='asinq'` in the quantization config. Right now the calibrated version of SINQ"
                 " is not supported in Hugging Face, please refer and use the official SINQ repository "
                 "`to quantized a model with this method. "
@@ -108,7 +121,7 @@ class SinqHfQuantizer(HfQuantizer):
             method=method,
         )
 
-    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
+    def param_needs_quantization(self, model: PreTrainedModel, param_name: str, **kwargs) -> bool:
         """
         Called per-parameter to decide whether to run `SinqQuantize` on it.
 
@@ -135,13 +148,10 @@ class SinqHfQuantizer(HfQuantizer):
 
         if tensor_name != "weight":
             return False
-        module_name = param_name.rsplit(".", 1)[0] if param_name.endswith((".weight", ".bias")) else param_name
-        if not should_convert_module(module_name, self.modules_to_not_convert):
-            return False
 
         # Check if it's an unquantized SINQLinear
         is_sinq = isinstance(module, SINQLinear)
-        is_ready = getattr(module, 'ready', True)
+        is_ready = getattr(module, "ready", True)
         result = is_sinq and not is_ready
         return result
 
@@ -182,10 +192,10 @@ class SinqHfQuantizer(HfQuantizer):
                 )
             ]
         return []
-    
+
     def _process_model_before_weight_loading(
         self,
-        model: "PreTrainedModel",
+        model: PreTrainedModel,
         device_map,
         keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
@@ -203,40 +213,32 @@ class SinqHfQuantizer(HfQuantizer):
         )
 
         # Enable param-level quantization for SINQ method
-        self._do_param_level_sinq = (
-            self.quantization_config.method == "sinq" and not self.pre_quantized
-        )
-
-        # if not self.pre_quantized and self.quantization_config.method == "asinq":
-        #     raise ValueError("A-SINQ is not supported in HuggingFace integration")
+        self._do_param_level_sinq = self.quantization_config.method == "sinq" and not self.pre_quantized
 
         sinq_quant_dict = None if self.pre_quantized else self._build_sinq_quant_dict(self.quantization_config)
 
-        # Extract device from device_map.
-        if device_map is None:
-            device_str = "cuda:0" if torch.cuda.is_available() else "cpu"
-        elif isinstance(device_map, dict):
+        # Extract device from device_map (guaranteed to be set by update_device_map)
+        if isinstance(device_map, dict):
             first_device = next(iter(device_map.values()), 0)
             if isinstance(first_device, int):
                 device_str = f"cuda:{first_device}"
             else:
                 device_str = str(first_device)
         else:
-            # device_map is a string like "auto", "balanced", etc.
             device_str = "cuda:0" if torch.cuda.is_available() else "cpu"
 
         model = replace_with_sinq_linear(
-                model,
-                modules_to_not_convert=self.modules_to_not_convert,
-                quant_config=sinq_quant_dict,
-                compute_dtype=self.dtype,
-                device=device_str,
-                pre_quantized=self.pre_quantized,
-            )
+            model,
+            modules_to_not_convert=self.modules_to_not_convert,
+            quant_config=sinq_quant_dict,
+            compute_dtype=self.dtype,
+            device=device_str,
+            pre_quantized=self.pre_quantized,
+        )
 
     def _process_model_after_weight_loading(
         self,
-        model: "PreTrainedModel",
+        model: PreTrainedModel,
         **kwargs,
     ):
         """
@@ -248,7 +250,6 @@ class SinqHfQuantizer(HfQuantizer):
            - We skip moving SINQLinear's W_q/meta to avoid memory duplication
         2. Patch HF save/load methods for SINQ serialization
         """
-        from sinq.sinqlinear_hf import SINQLinear
         from sinq.hf_io import patch_hf_pretrained_io
 
         # Patch HF save/load methods for SINQ serialization

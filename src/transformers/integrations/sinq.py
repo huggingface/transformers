@@ -15,12 +15,13 @@
 
 from __future__ import annotations
 
-from typing import Optional, Dict, Any
+from typing import Any, Optional
 
 from transformers.utils import is_torch_available, logging
 
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
+
 
 logger = logging.get_logger(__name__)
 
@@ -28,14 +29,15 @@ if is_torch_available():
     import torch
     import torch.nn as nn
 
+
 def replace_with_sinq_linear(
-    model: "torch.nn.Module",
-    modules_to_not_convert: Optional[List[str]] = None,
+    model: torch.nn.Module,
+    modules_to_not_convert: Optional[list[str]] = None,
     quant_config: Optional[dict] = None,
-    compute_dtype: "torch.dtype" = None,
+    compute_dtype: torch.dtype = None,
     device: str = "cuda:0",
     pre_quantized: bool = False,
-) -> "torch.nn.Module":
+) -> torch.nn.Module:
     """
     Replace nn.Linear modules with empty SINQLinear modules.
 
@@ -78,6 +80,7 @@ def replace_with_sinq_linear(
 
     return model
 
+
 class SinqQuantize(ConversionOps):
     """
     Param-level ConversionOp for SINQ (from FP weights).
@@ -87,18 +90,17 @@ class SinqQuantize(ConversionOps):
       - We just call quantize() on it with the loaded weight tensor
     """
 
-    def __init__(self, hf_quantizer: "SinqHfQuantizer"):
+    def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
     def convert(
         self,
-        input_dict: Dict[str, Any],
-        model: Optional["torch.nn.Module"] = None,
+        input_dict: dict[str, Any],
+        model: Optional[torch.nn.Module] = None,
         full_layer_name: str | None = None,
         missing_keys=None,
         **kwargs,
-    ) -> Dict[str, "torch.Tensor"]:
-
+    ) -> dict[str, torch.Tensor]:
         _, values = next(iter(input_dict.items()))
         weight_tensor = values[0] if isinstance(values, list) else values
 
@@ -112,6 +114,7 @@ class SinqQuantize(ConversionOps):
         module._is_hf_initialized = True
 
         return {}
+
 
 class SinqDeserialize(ConversionOps):
     """
@@ -130,24 +133,23 @@ class SinqDeserialize(ConversionOps):
     The returned dict is {} because we load directly into the module.
     """
 
-    def __init__(self, hf_quantizer: "SinqHfQuantizer"):
+    def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
     def convert(
         self,
-        input_dict: Dict[str, Any],
-        model: Optional["torch.nn.Module"] = None,
+        input_dict: dict[str, Any],
+        model: Optional[torch.nn.Module] = None,
         full_layer_name: str | None = None,
         **kwargs,
-    ) -> Dict[str, "torch.Tensor"]:
-
+    ) -> dict[str, torch.Tensor]:
         for k, v in list(input_dict.items()):
             if isinstance(v, list):
                 input_dict[k] = v[0]
 
-        W_q = input_dict.get(".W_q", None)
-        meta = input_dict.get(".meta", None)
-        bias = input_dict.get(".bias", None)
+        W_q = input_dict.get(".W_q")
+        meta = input_dict.get(".meta")
+        bias = input_dict.get(".bias")
 
         # Fallback path: if W_q or meta is missing, this is not a valid SINQ checkpoint.
         # Return the tensor as-is so standard HF weight loading can handle it.
