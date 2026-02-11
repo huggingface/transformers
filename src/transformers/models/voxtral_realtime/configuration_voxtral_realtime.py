@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..mistral.configuration_mistral import MistralConfig
 

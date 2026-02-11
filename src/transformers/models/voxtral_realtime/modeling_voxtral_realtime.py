@@ -39,7 +39,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
 from ...utils.generic import check_model_inputs, maybe_autocast
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_voxtral_realtime import (
@@ -469,7 +469,7 @@ class VoxtralRealtimePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, TimeEmbedding):
+        if isinstance(module, VoxtralRealtimeTimeEmbedding):
             inv_freq = torch.exp(-math.log(module.theta) * torch.arange(module.dim // 2).float() / (module.dim // 2))
             init.copy_(module.inv_freq, inv_freq)
 
@@ -488,7 +488,6 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
         config: VoxtralRealtimeEncoderConfig
     """
 
-    # Ignore copy
     config: VoxtralRealtimeEncoderConfig
     main_input_name = "input_features"
     input_modalities = "audio"
@@ -980,7 +979,7 @@ class VoxtralRealtimeTextForCausalLM(VoxtralRealtimeTextPreTrainedModel, Generat
         )
 
 
-class TimeEmbedding(nn.Module):
+class VoxtralRealtimeTimeEmbedding(nn.Module):
     """Sinusoidal Embedding for encoding time"""
 
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
@@ -990,11 +989,10 @@ class TimeEmbedding(nn.Module):
         inv_freq = torch.exp(-math.log(self.theta) * torch.arange(self.dim // 2).float() / (self.dim // 2))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, t: torch.Tensor) -> torch.Tensor:
-        t = t[..., None]  # (B,) -> (B, 1) or (B, T) -> (B, T, 1)
-        inv_freq = self.inv_freq.to(device=t.device, dtype=t.dtype)
-        emb = t * inv_freq  # (B, 1) x (D/2,) -> (B, D/2) or (B, T, 1) x (D/2,) -> (B, T, D/2)
-        return torch.cat((emb.cos(), emb.sin()), dim=-1)  # (B, D) or (B, T, D)
+    def forward(self, time_tensor: torch.Tensor) -> torch.Tensor:
+        inv_freq = self.inv_freq.to(device=time_tensor.device, dtype=time_tensor.dtype)
+        emb = time_tensor * inv_freq
+        return torch.cat((emb.cos(), emb.sin()))
 
 
 class VoxtralRealtimeMultiModalProjector(nn.Module):
@@ -1025,7 +1023,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.multi_modal_projector = VoxtralRealtimeMultiModalProjector(config)
-        self.time_embedding = TimeEmbedding(config.text_config.hidden_size)
+        self.time_embedding = VoxtralRealtimeTimeEmbedding(config.text_config.hidden_size)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1154,13 +1152,13 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
             )
             inputs_embeds += audio_outputs.pooler_output.to(inputs_embeds.device)
 
-        time_tensor = torch.full(
-            (1,),
-            fill_value=self.config.num_delay_tokens,
+        time_tensor = torch.tensor(
+            [self.config.num_delay_tokens],
             device=inputs_embeds.device,
             dtype=inputs_embeds.dtype,
         )
         t_cond = self.time_embedding(time_tensor)
+        t_cond = t_cond[None, ...]  # broadcastable to batch size
 
         outputs: BaseModelOutputWithPast = self.language_model(
             attention_mask=attention_mask,
@@ -1174,8 +1172,8 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
             t_cond=t_cond,
             **kwargs,
         )
-        outputs["encoder_past_key_values"] = audio_outputs.past_key_values
-        outputs["padding_cache"] = audio_outputs.padding_cache
+        outputs.encoder_past_key_values = audio_outputs.past_key_values
+        outputs.padding_cache = audio_outputs.padding_cache
         return outputs
 
     def prepare_inputs_for_generation(

@@ -42,7 +42,7 @@ from ...models.voxtral.modeling_voxtral import (
     VoxtralPreTrainedModel,
 )
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import check_model_inputs
 from .configuration_voxtral_realtime import VoxtralRealtimeEncoderConfig
 
@@ -298,7 +298,7 @@ class VoxtralRealtimePreTrainedModel(VoxtralPreTrainedModel, PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
-        if isinstance(module, TimeEmbedding):
+        if isinstance(module, VoxtralRealtimeTimeEmbedding):
             inv_freq = torch.exp(-math.log(module.theta) * torch.arange(module.dim // 2).float() / (module.dim // 2))
             init.copy_(module.inv_freq, inv_freq)
 
@@ -317,7 +317,6 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
         config: VoxtralRealtimeEncoderConfig
     """
 
-    # Ignore copy
     config: VoxtralRealtimeEncoderConfig
     main_input_name = "input_features"
     input_modalities = "audio"
@@ -473,7 +472,7 @@ class VoxtralRealtimeTextDecoderLayer(MistralDecoderLayer):
 class VoxtralRealtimeTextForCausalLM(MistralForCausalLM): ...
 
 
-class TimeEmbedding(nn.Module):
+class VoxtralRealtimeTimeEmbedding(nn.Module):
     """Sinusoidal Embedding for encoding time"""
 
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
@@ -483,17 +482,16 @@ class TimeEmbedding(nn.Module):
         inv_freq = torch.exp(-math.log(self.theta) * torch.arange(self.dim // 2).float() / (self.dim // 2))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, t: torch.Tensor) -> torch.Tensor:
-        t = t[..., None]  # (B,) -> (B, 1) or (B, T) -> (B, T, 1)
-        inv_freq = self.inv_freq.to(device=t.device, dtype=t.dtype)
-        emb = t * inv_freq  # (B, 1) x (D/2,) -> (B, D/2) or (B, T, 1) x (D/2,) -> (B, T, D/2)
-        return torch.cat((emb.cos(), emb.sin()), dim=-1)  # (B, D) or (B, T, D)
+    def forward(self, time_tensor: torch.Tensor) -> torch.Tensor:
+        inv_freq = self.inv_freq.to(device=time_tensor.device, dtype=time_tensor.dtype)
+        emb = time_tensor * inv_freq
+        return torch.cat((emb.cos(), emb.sin()))
 
 
 class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
-        self.time_embedding = TimeEmbedding(config.text_config.hidden_size)
+        self.time_embedding = VoxtralRealtimeTimeEmbedding(config.text_config.hidden_size)
 
     @can_return_tuple
     @auto_docstring(
@@ -568,13 +566,11 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
             )
             inputs_embeds += audio_outputs.pooler_output.to(inputs_embeds.device)
 
-        time_tensor = torch.full(
-            (1,),
-            fill_value=self.config.num_delay_tokens,
-            device=inputs_embeds.device,
-            dtype=inputs_embeds.dtype,
+        time_tensor = torch.tensor(
+            [self.config.num_delay_tokens], device=inputs_embeds.device, dtype=inputs_embeds.dtype,
         )
         t_cond = self.time_embedding(time_tensor)
+        t_cond = t_cond[None, ...]  # broadcastable to batch size
 
         outputs: BaseModelOutputWithPast = self.language_model(
             attention_mask=attention_mask,
@@ -588,8 +584,8 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
             t_cond=t_cond,
             **kwargs,
         )
-        outputs["encoder_past_key_values"] = audio_outputs.past_key_values
-        outputs["padding_cache"] = audio_outputs.padding_cache
+        outputs.encoder_past_key_values = audio_outputs.past_key_values
+        outputs.padding_cache = audio_outputs.padding_cache
         return outputs
 
     def prepare_inputs_for_generation(
