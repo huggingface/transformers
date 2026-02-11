@@ -826,7 +826,7 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
         self.background_color = tuple(background_color)
         self.high_res_background_color = tuple(high_res_background_color)
 
-    def _further_process_kwargs(
+    def _standardize_kwargs(
         self,
         size: SizeDict | None = None,
         high_res_size: SizeDict | None = None,

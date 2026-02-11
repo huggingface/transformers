@@ -16,12 +16,8 @@
 import numpy as np
 import torch
 
-from ...image_processing_utils import (
-    BaseImageProcessor,
-    BatchFeature,
-    PilBackend,
-    TorchVisionBackend,
-)
+from ...image_processing_backends import PilBackend, TorchVisionBackend
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import get_resize_output_image_size
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,

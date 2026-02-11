@@ -74,7 +74,6 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
     patch_size = 16
     max_num_patches = 256
     valid_kwargs = Siglip2ImageProcessorKwargs
-    unused_kwargs = ["size", "do_center_crop", "crop_size"]
 
     def __init__(self, **kwargs: Unpack[Siglip2ImageProcessorKwargs]):
         super().__init__(**kwargs)

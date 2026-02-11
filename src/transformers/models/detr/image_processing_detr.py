@@ -32,6 +32,7 @@ from ...image_transforms import (
     rescale,
     resize,
     rgb_to_id,
+    safe_squeeze,
     to_channel_dimension_format,
 )
 from ...image_utils import (
@@ -167,19 +168,6 @@ def get_resize_output_image_size(
         return size
 
     return get_size_with_aspect_ratio(image_size, size, max_size)
-
-
-def safe_squeeze(arr: np.ndarray, axis: int | None = None) -> np.ndarray:
-    """
-    Squeezes an array, but only if the axis specified has dim 1.
-    """
-    if axis is None:
-        return arr.squeeze()
-
-    try:
-        return arr.squeeze(axis=axis)
-    except ValueError:
-        return arr
 
 
 def normalize_annotation(annotation: dict, image_size: tuple[int, int]) -> dict:

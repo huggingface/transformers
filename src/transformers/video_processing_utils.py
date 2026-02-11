@@ -25,11 +25,7 @@ from huggingface_hub import create_repo, is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from .dynamic_module_utils import custom_object_save
-from .image_processing_utils import (
-    BatchFeature,
-    get_size_dict,
-)
-from .image_processing_utils_fast import BaseImageProcessorFast
+from .image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from .image_utils import (
     ChannelDimension,
     SizeDict,
@@ -147,7 +143,7 @@ BASE_VIDEO_PROCESSOR_DOCSTRING = r"""
     BASE_VIDEO_PROCESSOR_DOCSTRING,
 )
 @requires(backends=("vision", "torchvision"))
-class BaseVideoProcessor(BaseImageProcessorFast):
+class BaseVideoProcessor(BaseImageProcessor):
     _auto_class = None
 
     resample = None
@@ -387,7 +383,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         )
         videos = self._prepare_input_videos(videos=videos, input_data_format=input_data_format, device=device)
 
-        kwargs = self._further_process_kwargs(**kwargs)
+        kwargs = self._standardize_kwargs(**kwargs)
         self._validate_preprocess_kwargs(**kwargs)
 
         # Pop kwargs that are not needed in _preprocess

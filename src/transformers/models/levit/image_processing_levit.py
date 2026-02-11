@@ -15,11 +15,8 @@
 
 import numpy as np
 
-from ...image_processing_utils import (
-    BaseImageProcessor,
-    PilBackend,
-    TorchVisionBackend,
-)
+from ...image_processing_backends import PilBackend, TorchVisionBackend
+from ...image_processing_utils import BaseImageProcessor
 from ...image_transforms import get_resize_output_image_size
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,

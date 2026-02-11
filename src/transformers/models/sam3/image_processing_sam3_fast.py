@@ -417,7 +417,7 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Sam3FastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    def _further_process_kwargs(
+    def _standardize_kwargs(
         self,
         size: SizeDict | None = None,
         mask_size: SizeDict | None = None,

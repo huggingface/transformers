@@ -60,7 +60,7 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = Pix2StructImageProcessorKwargs
     model_input_names = ["flattened_patches", "attention_mask"]
 
-    def _further_process_kwargs(
+    def _standardize_kwargs(
         self,
         patch_size: dict[str, int] | None = None,
         **kwargs,
@@ -69,7 +69,7 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
         Process custom Pix2Struct kwargs, specifically converting patch_size to SizeDict.
         """
         # Call super to handle standard kwargs processing (like converting patch_size to SizeDict)
-        kwargs = super()._further_process_kwargs(**kwargs)
+        kwargs = super()._standardize_kwargs(**kwargs)
         kwargs["patch_size"] = SizeDict(**get_size_dict(size=patch_size, param_name="patch_size"))
 
         return kwargs

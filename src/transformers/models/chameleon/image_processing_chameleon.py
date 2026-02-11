@@ -16,11 +16,8 @@
 import numpy as np
 import PIL.Image
 
-from ...image_processing_utils import (
-    BaseImageProcessor,
-    PilBackend,
-    TorchVisionBackend,
-)
+from ...image_processing_backends import PilBackend, TorchVisionBackend
+from ...image_processing_utils import BaseImageProcessor
 from ...image_utils import (
     ImageInput,
     PILImageResampling,

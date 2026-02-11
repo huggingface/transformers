@@ -15,11 +15,8 @@
 
 from typing import TYPE_CHECKING
 
-from ...image_processing_utils import (
-    BaseImageProcessor,
-    BatchFeature,
-    TorchVisionBackend,
-)
+from ...image_processing_backends import TorchVisionBackend
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,

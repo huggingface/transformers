@@ -34,6 +34,7 @@ from ...image_transforms import (
     rescale,
     resize,
     rgb_to_id,
+    safe_squeeze,
     to_channel_dimension_format,
 )
 from ...image_utils import (
@@ -140,20 +141,6 @@ def get_image_size_for_max_height_width(
     new_height = int(height * min_scale)
     new_width = int(width * min_scale)
     return new_height, new_width
-
-
-# Copied from transformers.models.detr.image_processing_detr.safe_squeeze
-def safe_squeeze(arr: np.ndarray, axis: int | None = None) -> np.ndarray:
-    """
-    Squeezes an array, but only if the axis specified has dim 1.
-    """
-    if axis is None:
-        return arr.squeeze()
-
-    try:
-        return arr.squeeze(axis=axis)
-    except ValueError:
-        return arr
 
 
 # Copied from transformers.models.detr.image_processing_detr.normalize_annotation

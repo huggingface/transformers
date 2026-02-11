@@ -18,9 +18,8 @@ from ...image_processing_utils_fast import (
     SizeDict,
     get_image_size_for_max_height_width,
     get_max_height_width,
-    safe_squeeze,
 )
-from ...image_transforms import center_to_corners_format, corners_to_center_format
+from ...image_transforms import center_to_corners_format, corners_to_center_format, safe_squeeze
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,

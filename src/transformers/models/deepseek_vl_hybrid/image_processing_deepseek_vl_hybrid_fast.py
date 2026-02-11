@@ -236,7 +236,7 @@ class DeepseekVLHybridImageProcessorFast(BaseImageProcessorFast):
             tensor_type=return_tensors,
         )
 
-    def _further_process_kwargs(
+    def _standardize_kwargs(
         self,
         size: SizeDict | None = None,
         high_res_size: SizeDict | None = None,

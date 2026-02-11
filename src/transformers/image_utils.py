@@ -17,7 +17,7 @@ import os
 from collections.abc import Iterable
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Union
+from typing import Any, Union
 
 import httpx
 import numpy as np
@@ -401,6 +401,28 @@ def get_image_size_for_max_height_width(
     new_height = int(height * min_scale)
     new_width = int(width * min_scale)
     return new_height, new_width
+
+
+def max_across_indices(values: Iterable[Any]) -> list[Any]:
+    """
+    Return the maximum value across all indices of an iterable of values.
+    """
+    return [max(values_i) for values_i in zip(*values)]
+
+
+def get_max_height_width(
+    images: list[Union["torch.Tensor", np.ndarray]], input_data_format: str | ChannelDimension = ChannelDimension.FIRST
+) -> list[int]:
+    """
+    Get the maximum height and width across all images in a batch.
+    """
+    if input_data_format == ChannelDimension.FIRST:
+        _, max_height, max_width = max_across_indices([img.shape for img in images])
+    elif input_data_format == ChannelDimension.LAST:
+        max_height, max_width, _ = max_across_indices([img.shape for img in images])
+    else:
+        raise ValueError(f"Invalid channel dimension format: {input_data_format}")
+    return (max_height, max_width)
 
 
 def is_valid_annotation_coco_detection(annotation: dict[str, list | tuple]) -> bool:

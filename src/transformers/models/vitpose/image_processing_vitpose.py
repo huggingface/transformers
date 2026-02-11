@@ -19,12 +19,8 @@ from typing import TYPE_CHECKING, Union
 
 import numpy as np
 
-from ...image_processing_utils import (
-    BaseImageProcessor,
-    BatchFeature,
-    PilBackend,
-    TorchVisionBackend,
-)
+from ...image_processing_backends import PilBackend, TorchVisionBackend
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -54,7 +50,7 @@ if is_torchvision_available():
 
 if is_scipy_available():
     from scipy.linalg import inv
-    from scipy.ndimage import affine_transform
+    from scipy.ndimage import affine_transform, gaussian_filter
 
 if TYPE_CHECKING:
     from .modeling_vitpose import VitPoseEstimatorOutput
@@ -74,6 +70,7 @@ class VitPoseImageProcessorKwargs(ImagesKwargs, total=False):
     normalize_factor: float | None
 
 
+# inspired by https://github.com/ViTAE-Transformer/ViTPose/blob/d5216452796c90c6bc29f5c5ec0bdba94366768a/mmpose/datasets/datasets/base/kpt_2d_sview_rgb_img_top_down_dataset.py#L132
 def box_to_center_and_scale(
     box: tuple | list | np.ndarray,
     image_width: int,
@@ -81,20 +78,63 @@ def box_to_center_and_scale(
     normalize_factor: float = 200.0,
     padding_factor: float = 1.25,
 ):
-    """Encodes a bounding box in COCO format into (center, scale)."""
+    """
+    Encodes a bounding box in COCO format into (center, scale).
+
+    Args:
+        box (`Tuple`, `List`, or `np.ndarray`):
+            Bounding box in COCO format (top_left_x, top_left_y, width, height).
+        image_width (`int`):
+            Image width.
+        image_height (`int`):
+            Image height.
+        normalize_factor (`float`):
+            Width and height scale factor.
+        padding_factor (`float`):
+            Bounding box padding factor.
+
+    Returns:
+        tuple: A tuple containing center and scale.
+
+        - `np.ndarray` [float32](2,): Center of the bbox (x, y).
+        - `np.ndarray` [float32](2,): Scale of the bbox width & height.
+    """
+
     top_left_x, top_left_y, width, height = box[:4]
     aspect_ratio = image_width / image_height
     center = np.array([top_left_x + width * 0.5, top_left_y + height * 0.5], dtype=np.float32)
+
     if width > aspect_ratio * height:
-        height = width / aspect_ratio
+        height = width * 1.0 / aspect_ratio
     elif width < aspect_ratio * height:
         width = height * aspect_ratio
-    scale = np.array([width / normalize_factor, height / normalize_factor], dtype=np.float32) * padding_factor
+
+    scale = np.array([width / normalize_factor, height / normalize_factor], dtype=np.float32)
+    scale = scale * padding_factor
+
     return center, scale
 
 
 def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, size_target: np.ndarray):
-    """Calculate the transformation matrix under the constraint of unbiased."""
+    """
+    Calculate the transformation matrix under the constraint of unbiased. Paper ref: Huang et al. The Devil is in the
+    Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
+
+    Source: https://github.com/open-mmlab/mmpose/blob/master/mmpose/core/post_processing/post_transforms.py
+
+    Args:
+        theta (`float`):
+            Rotation angle in degrees.
+        size_input (`np.ndarray`):
+            Size of input image [width, height].
+        size_dst (`np.ndarray`):
+            Size of output image [width, height].
+        size_target (`np.ndarray`):
+            Size of ROI in input plane [w, h].
+
+    Returns:
+        `np.ndarray`: A matrix for transformation.
+    """
     theta = np.deg2rad(theta)
     matrix = np.zeros((2, 3), dtype=np.float32)
     scale_x = size_dst[0] / size_target[0]
@@ -113,9 +153,16 @@ def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, 
 
 
 def scipy_warp_affine(src, M, size):
-    """Implement cv2.warpAffine using scipy."""
+    """
+    This function implements cv2.warpAffine function using affine_transform in scipy. See https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.affine_transform.html and https://docs.opencv.org/4.x/d4/d61/tutorial_warp_affine.html for more details.
+
+    Note: the original implementation of cv2.warpAffine uses cv2.INTER_LINEAR.
+    """
     channels = [src[..., i] for i in range(src.shape[-1])]
+
+    # Convert to a 3x3 matrix used by SciPy
     M_scipy = np.vstack([M, [0, 0, 1]])
+    # If you have a matrix for the ‘push’ transformation, use its inverse (numpy.linalg.inv) in this function.
     M_inv = inv(M_scipy)
     M_inv[0, 0], M_inv[0, 1], M_inv[1, 0], M_inv[1, 1], M_inv[0, 2], M_inv[1, 2] = (
         M_inv[1, 1],
@@ -125,32 +172,80 @@ def scipy_warp_affine(src, M, size):
         M_inv[1, 2],
         M_inv[0, 2],
     )
+
     new_src = [affine_transform(channel, M_inv, output_shape=size, order=1) for channel in channels]
     new_src = np.stack(new_src, axis=-1)
     return new_src
 
 
-def get_keypoint_predictions(heatmaps: np.ndarray):
-    """Get keypoint predictions from heatmaps."""
-    batch_size, num_keypoints, height, width = heatmaps.shape
-    coords = np.zeros((batch_size, num_keypoints, 2), dtype=np.float32)
-    scores = np.zeros((batch_size, num_keypoints, 1), dtype=np.float32)
-    for i in range(batch_size):
-        for j in range(num_keypoints):
-            heatmap = heatmaps[i, j]
-            idx = np.argmax(heatmap)
-            y, x = idx // width, idx % width
-            coords[i, j, 0] = x
-            coords[i, j, 1] = y
-            scores[i, j, 0] = heatmap[y, x]
-    return coords, scores
+def get_keypoint_predictions(heatmaps: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Get keypoint predictions from score maps.
+
+    Args:
+        heatmaps (`np.ndarray` of shape `(batch_size, num_keypoints, height, width)`):
+            Model predicted heatmaps.
+
+    Returns:
+        tuple: A tuple containing aggregated results.
+
+        - coords (`np.ndarray` of shape `(batch_size, num_keypoints, 2)`):
+            Predicted keypoint location.
+        - scores (`np.ndarray` of shape `(batch_size, num_keypoints, 1)`):
+            Scores (confidence) of the keypoints.
+    """
+    if not isinstance(heatmaps, np.ndarray):
+        raise TypeError("Heatmaps should be np.ndarray")
+    if heatmaps.ndim != 4:
+        raise ValueError("Heatmaps should be 4-dimensional")
+
+    batch_size, num_keypoints, _, width = heatmaps.shape
+    heatmaps_reshaped = heatmaps.reshape((batch_size, num_keypoints, -1))
+    idx = np.argmax(heatmaps_reshaped, 2).reshape((batch_size, num_keypoints, 1))
+    scores = np.amax(heatmaps_reshaped, 2).reshape((batch_size, num_keypoints, 1))
+
+    preds = np.tile(idx, (1, 1, 2)).astype(np.float32)
+    preds[:, :, 0] = preds[:, :, 0] % width
+    preds[:, :, 1] = preds[:, :, 1] // width
+
+    preds = np.where(np.tile(scores, (1, 1, 2)) > 0.0, preds, -1)
+    return preds, scores
 
 
-def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.ndarray, kernel: int = 11):
-    """Post-process keypoint predictions using DARK method."""
+def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.ndarray, kernel: int = 3) -> np.ndarray:
+    """DARK post-pocessing. Implemented by unbiased_data_processing.
+
+    Paper references:
+    - Huang et al. The Devil is in the Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
+    - Zhang et al. Distribution-Aware Coordinate Representation for Human Pose Estimation (CVPR 2020).
+
+    Args:
+        coords (`np.ndarray` of shape `(num_persons, num_keypoints, 2)`):
+            Initial coordinates of human pose.
+        batch_heatmaps (`np.ndarray` of shape `(batch_size, num_keypoints, height, width)`):
+            Batched heatmaps as predicted by the model.
+            A batch_size of 1 is used for the bottom up paradigm where all persons share the same heatmap.
+            A batch_size of `num_persons` is used for the top down paradigm where each person has its own heatmaps.
+        kernel (`int`, *optional*, defaults to 3):
+            Gaussian kernel size (K) for modulation.
+
+    Returns:
+        `np.ndarray` of shape `(num_persons, num_keypoints, 2)` ):
+            Refined coordinates.
+    """
     batch_size, num_keypoints, height, width = batch_heatmaps.shape
-    num_coords = batch_size * num_keypoints
-    coords = coords.reshape(num_coords, 2)
+    num_coords = coords.shape[0]
+    if not (batch_size == 1 or batch_size == num_coords):
+        raise ValueError("The batch size of heatmaps should be 1 or equal to the batch size of coordinates.")
+    radius = int((kernel - 1) // 2)
+    batch_heatmaps = np.array(
+        [
+            [gaussian_filter(heatmap, sigma=0.8, radius=(radius, radius), axes=(0, 1)) for heatmap in heatmaps]
+            for heatmaps in batch_heatmaps
+        ]
+    )
+    batch_heatmaps = np.clip(batch_heatmaps, 0.001, 50)
+    batch_heatmaps = np.log(batch_heatmaps)
+
     batch_heatmaps_pad = np.pad(batch_heatmaps, ((0, 0), (0, 0), (1, 1), (1, 1)), mode="edge").flatten()
     index = coords[..., 0] + 1 + (coords[..., 1] + 1) * (width + 2)
     index += (width + 2) * (height + 2) * np.arange(0, batch_size * num_keypoints).reshape(-1, num_keypoints)
@@ -177,25 +272,71 @@ def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.nd
 
 
 def transform_preds(coords: np.ndarray, center: np.ndarray, scale: np.ndarray, output_size: np.ndarray) -> np.ndarray:
-    """Get final keypoint predictions from heatmaps and apply scaling and translation."""
+    """Get final keypoint predictions from heatmaps and apply scaling and
+    translation to map them back to the image.
+
+    Note:
+        num_keypoints: K
+
+    Args:
+        coords (`np.ndarray` of shape `(num_keypoints, ndims)`):
+
+            * If ndims=2, corrds are predicted keypoint location.
+            * If ndims=4, corrds are composed of (x, y, scores, tags)
+            * If ndims=5, corrds are composed of (x, y, scores, tags,
+              flipped_tags)
+
+        center (`np.ndarray` of shape `(2,)`):
+            Center of the bounding box (x, y).
+        scale (`np.ndarray` of shape `(2,)`):
+            Scale of the bounding box wrt original image of width and height.
+        output_size (`np.ndarray` of shape `(2,)`):
+            Size of the destination heatmaps in (height, width) format.
+
+    Returns:
+        np.ndarray: Predicted coordinates in the images.
+    """
     if coords.shape[1] not in (2, 4, 5):
         raise ValueError("Coordinates need to have either 2, 4 or 5 dimensions.")
+    if len(center) != 2:
+        raise ValueError("Center needs to have 2 elements, one for x and one for y.")
+    if len(scale) != 2:
+        raise ValueError("Scale needs to consist of a width and height")
+    if len(output_size) != 2:
+        raise ValueError("Output size needs to consist of a height and width")
+
+    # Recover the scale which is normalized by a factor of 200.
     scale = scale * 200.0
+
+    # We use unbiased data processing
     scale_y = scale[1] / (output_size[0] - 1.0)
     scale_x = scale[0] / (output_size[1] - 1.0)
+
     target_coords = np.ones_like(coords)
     target_coords[:, 0] = coords[:, 0] * scale_x + center[0] - scale[0] * 0.5
     target_coords[:, 1] = coords[:, 1] * scale_y + center[1] - scale[1] * 0.5
+
     return target_coords
 
 
-def coco_to_pascal_voc(boxes: np.ndarray) -> np.ndarray:
-    """Convert COCO format boxes to Pascal VOC format."""
-    x_min = boxes[:, 0] - boxes[:, 2] * 0.5
-    y_min = boxes[:, 1] - boxes[:, 3] * 0.5
-    x_max = boxes[:, 0] + boxes[:, 2] * 0.5
-    y_max = boxes[:, 1] + boxes[:, 3] * 0.5
-    return np.stack([x_min, y_min, x_max, y_max], axis=1)
+def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
+    """
+    Converts bounding boxes from the COCO format to the Pascal VOC format.
+
+    In other words, converts from (top_left_x, top_left_y, width, height) format
+    to (top_left_x, top_left_y, bottom_right_x, bottom_right_y).
+
+    Args:
+        bboxes (`np.ndarray` of shape `(batch_size, 4)):
+            Bounding boxes in COCO format.
+
+    Returns:
+        `np.ndarray` of shape `(batch_size, 4) in Pascal VOC format.
+    """
+    bboxes[:, 2] = bboxes[:, 2] + bboxes[:, 0] - 1
+    bboxes[:, 3] = bboxes[:, 3] + bboxes[:, 1] - 1
+
+    return bboxes
 
 
 class VitPoseTorchVisionBackend(TorchVisionBackend):

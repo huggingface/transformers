@@ -17,12 +17,8 @@ from typing import Union
 
 import numpy as np
 
-from ...image_processing_utils import (
-    BaseImageProcessor,
-    BatchFeature,
-    PilBackend,
-    TorchVisionBackend,
-)
+from ...image_processing_backends import PilBackend, TorchVisionBackend
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import (
     flip_channel_order as np_flip_channel_order,
 )

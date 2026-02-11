@@ -166,7 +166,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
 
         return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
 
-    def _further_process_kwargs(
+    def _standardize_kwargs(
         self,
         size: SizeDict | None = None,
         mask_size: SizeDict | None = None,

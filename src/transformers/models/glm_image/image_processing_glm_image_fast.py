@@ -116,7 +116,7 @@ class GlmImageImageProcessorFast(BaseImageProcessorFast):
 
         super().__init__(size=size, **kwargs)
 
-    def _further_process_kwargs(
+    def _standardize_kwargs(
         self,
         size: SizeDict | None = None,
         min_pixels: int | None = None,
@@ -137,7 +137,7 @@ class GlmImageImageProcessorFast(BaseImageProcessorFast):
         else:
             size = {**self.size}
 
-        return super()._further_process_kwargs(size=size, **kwargs)
+        return super()._standardize_kwargs(size=size, **kwargs)
 
     @auto_docstring
     def preprocess(

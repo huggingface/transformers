@@ -364,7 +364,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
             }
         )
 
-    def _further_process_kwargs(
+    def _standardize_kwargs(
         self,
         patch_size: dict[str, int] | None = None,
         **kwargs,
@@ -372,7 +372,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         """
         Process Fuyu-specific kwargs before validation.
         """
-        kwargs = super()._further_process_kwargs(**kwargs)
+        kwargs = super()._standardize_kwargs(**kwargs)
         if patch_size is not None:
             patch_size = SizeDict(**get_size_dict(patch_size, param_name="patch_size"))
         kwargs["patch_size"] = patch_size

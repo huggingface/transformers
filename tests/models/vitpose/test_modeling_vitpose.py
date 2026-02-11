@@ -309,7 +309,6 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
         assert torch.allclose(heatmaps[0, 0, :3, :3], expected_slice, atol=1e-4)
 
         pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)
-        print(pose_results)
 
         expected_bbox = torch.tensor([391.9900, 190.0800, 391.1575, 189.3034])
         expected_keypoints = torch.tensor(

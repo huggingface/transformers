@@ -17,11 +17,10 @@ from typing import Union
 
 import numpy as np
 
+from ...image_processing_backends import PilBackend, TorchVisionBackend
 from ...image_processing_utils import (
     BaseImageProcessor,
     BatchFeature,
-    PilBackend,
-    TorchVisionBackend,
     divide_to_patches,
     get_patch_output_size,
     group_images_by_shape,

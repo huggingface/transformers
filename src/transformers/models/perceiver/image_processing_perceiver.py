@@ -15,12 +15,8 @@
 
 import numpy as np
 
-from ...image_processing_utils import (
-    BaseImageProcessor,
-    BatchFeature,
-    PilBackend,
-    TorchVisionBackend,
-)
+from ...image_processing_backends import PilBackend, TorchVisionBackend
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,

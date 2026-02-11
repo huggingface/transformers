@@ -197,7 +197,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
     def map_pixels(self, image: "torch.Tensor") -> "torch.Tensor":
         return (1 - 2 * LOGIT_LAPLACE_EPS) * image + LOGIT_LAPLACE_EPS
 
-    def _further_process_kwargs(
+    def _standardize_kwargs(
         self,
         size: SizeDict | None = None,
         crop_size: SizeDict | None = None,

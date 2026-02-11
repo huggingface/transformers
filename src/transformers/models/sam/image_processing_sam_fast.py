@@ -106,7 +106,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             image, size=SizeDict(height=output_height, width=output_width), interpolation=interpolation, **kwargs
         )
 
-    def _further_process_kwargs(
+    def _standardize_kwargs(
         self,
         size: SizeDict | None = None,
         pad_size: SizeDict | None = None,

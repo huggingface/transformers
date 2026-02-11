@@ -68,7 +68,7 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         ):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-    def _further_process_kwargs(
+    def _standardize_kwargs(
         self,
         size: SizeDict | None = None,
         **kwargs,
@@ -80,7 +80,7 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-        return super()._further_process_kwargs(size=size, **kwargs)
+        return super()._standardize_kwargs(size=size, **kwargs)
 
     def _preprocess(
         self,
