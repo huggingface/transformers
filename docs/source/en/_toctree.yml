@@ -33,6 +33,8 @@
     sections:
     - local: fast_tokenizers
       title: Tokenizers
+    - local: custom_tokenizers
+      title: Customizing tokenizers
     - local: image_processors
       title: Image processors
     - local: video_processors
