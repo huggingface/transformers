@@ -265,7 +265,7 @@ Expand each modality below to see a few example models for various use cases.
 <details>
 <summary>Audio</summary>
 
-- Audio classification with [Whisper](https://huggingface.co/openai/whisper-large-v3-turbo)
+- Audio classification with [CLAP](https://huggingface.co/laion/clap-htsat-fused)
 - Automatic speech recognition with [Parakeet](https://huggingface.co/nvidia/parakeet-ctc-1.1b), [Whisper](https://huggingface.co/openai/whisper-large-v3-turbo), and [GLM-ASR](https://huggingface.co/zai-org/GLM-ASR-Nano-2512)
 - Keyword spotting with [Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-ks)
 - Speech to speech generation with [Moshi](https://huggingface.co/kyutai/moshiko-pytorch-bf16)
