@@ -318,12 +318,11 @@ class GlmMoeDsaAttention(nn.Module):
         )
 
         # Indexer submodule for sparse attention
-        # Useless for now, as sparse attention is not fully implemented
-        self.indexer_wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.index_head_dim, bias=False)
-        self.indexer_wk = nn.Linear(config.hidden_size, self.index_head_dim, bias=config.attention_bias)
-        self.indexer_k_norm = nn.LayerNorm(self.index_head_dim, eps=1e-6)
-        self.indexer_weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
-        self.indexer_softmax_scaling = self.index_head_dim ** (-0.5)
+        self.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.index_head_dim, bias=False)
+        self.wk = nn.Linear(config.hidden_size, self.index_head_dim, bias=config.attention_bias)
+        self.k_norm = nn.LayerNorm(self.index_head_dim, eps=1e-6)
+        self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
+        self.softmax_scaling = self.index_head_dim ** (-0.5)
 
         self.scaling = self.qk_head_dim ** (-0.5)
         rope_params = self.config.rope_parameters or {}
