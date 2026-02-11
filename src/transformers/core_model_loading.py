@@ -18,9 +18,10 @@ from __future__ import annotations
 import math
 import os
 import re
+import traceback
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, MutableMapping, MutableSet
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
@@ -32,17 +33,15 @@ import torch
 
 from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
-from .utils import is_env_variable_true, is_torch_greater_or_equal, logging
+from .utils import is_env_variable_true, logging
+from .utils.loading_report import LoadStateDictInfo
 
 
 _torch_distributed_available = torch.distributed.is_available()
-_is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
-if _is_dtensor_available:
-    from torch.distributed.tensor import DTensor, Replicate
 
 if TYPE_CHECKING:
     from .integrations.tensor_parallel import TensorParallelLayer
-    from .modeling_utils import PreTrainedModel
+    from .modeling_utils import LoadStateDictConfig, PreTrainedModel
     from .quantizers import HfQuantizer
 
 
@@ -440,6 +439,74 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
         return ErnieFuseAndSplitTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
 
 
+class Force16BytesAlignment(ConversionOps):
+    """
+    Ensures that the given tensor is 16-bytes aligned in memory and clones it if not.
+    This garantees 16-bytes alignmenet for kernels / implementations that use TMA or SIMD instructions like torch._grouped_mm.
+    """
+
+    @torch.no_grad()
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        tensor = tensor.clone() if tensor.data_ptr() % 16 != 0 else tensor
+        return {target_pattern: tensor}
+
+    def get_target_pattern(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
+    ) -> str:
+        if len(input_dict) != 1:
+            raise ValueError("Undefined Operation encountered!")
+        # Here it's the first operation of a chain, so return the source
+        if len(target_patterns) > 1:
+            if len(source_patterns) == 1:
+                return source_patterns[0]
+            else:
+                raise ValueError("Undefined Operation encountered!")
+        # Here it's the only operation, or the last operation in a chain, so we return the target
+        else:
+            return target_patterns[0]
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Force16BytesAlignment()
+
+
+def process_target_pattern(pattern: str) -> tuple[str, str | None]:
+    """
+    Process a target pattern for reverse mapping (when targets become sources).
+
+    This handles several edge cases in checkpoint conversion mappings:
+    - Removes `^` prefix and `$` suffix (start/end of string anchors)
+    - Removes negative lookahead/lookbehind assertions
+    - Detects capturing groups and replaces them with `\\1` backreference
+
+    Args:
+        pattern: The target pattern to process for reverse mapping.
+
+    Returns:
+        A tuple of (processed_pattern, captured_group) where captured_group is
+        the original capturing group found (e.g., "(encoder|decoder)") or None.
+    """
+    # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
+    pattern = pattern.removeprefix("^")
+    # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
+    pattern = pattern.removesuffix("$")
+    # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
+    # Qwen2.5, Sam3, Ernie4.5 VL MoE!
+    pattern = re.sub(r"\(\?.+\)", "", pattern)
+    # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
+    capturing_group_match = re.search(r"\(.+?\)", pattern)
+    captured_group = None
+    if capturing_group_match:
+        captured_group = capturing_group_match.group(0)
+        pattern = pattern.replace(captured_group, r"\1", 1)
+    return pattern, captured_group
+
+
 @dataclass(slots=True)
 class WeightTransform:
     source_patterns: str | list[str] = field(init=True)
@@ -452,32 +519,50 @@ class WeightTransform:
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
 
-    def __post_init__(self):
-        if isinstance(self.source_patterns, str):
-            self.source_patterns = [self.source_patterns]
-        if isinstance(self.target_patterns, str):
-            self.target_patterns = [self.target_patterns]
+    def __setattr__(self, name, value):
+        if name in ("source_patterns", "target_patterns"):
+            # We do not allow to re-set the patterns, as they are linked between each other and changing one
+            # without the other can mess-up with the capturing groups/compiled sources
+            if hasattr(self, name):
+                raise ValueError(f"Cannot assign to field {name}, you should create a new instance")
+            # Switch str to list
+            elif isinstance(value, str):
+                value = [value]
+        object.__setattr__(self, name, value)
 
+    def __post_init__(self):
         # Due to how our `_checkpoint_conversion_mapping` mappings are written, we need a few exceptions here
         # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
         # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
+
+        # Process target_patterns: detect capturing groups and replace with \1
+        # Store the original capturing group patterns for reverse mapping
+        target_capturing_groups: list[str] = []
         for i, pattern in enumerate(self.target_patterns):
-            # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
-            pattern = pattern.removeprefix("^")
-            # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
-            pattern = pattern.removesuffix("$")
-            # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
-            # Qwen2.5, Sam3, Ernie4.5 VL MoE!
-            pattern = re.sub(r"\(\?.+\)", "", pattern)
-            # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
-            if r"(.+)" in pattern:
-                pattern = pattern.replace(r"(.+)", r"\1")
-            self.target_patterns[i] = pattern
+            self.target_patterns[i], captured_group = process_target_pattern(pattern)
+            if captured_group is not None:
+                target_capturing_groups.append(captured_group)
+
+        # Validate that we only have one unique capturing group pattern across all targets
+        # This ensures deterministic reverse mapping when sources have \1 backreferences
+        unique_capturing_groups = set(target_capturing_groups)
+        if len(unique_capturing_groups) > 1:
+            raise ValueError(
+                f"Multiple different capturing groups found in target_patterns: {unique_capturing_groups}. "
+                f"All target patterns must use the same capturing group pattern."
+            )
+        unique_capturing_group = unique_capturing_groups.pop() if unique_capturing_groups else None
 
         # We also need to check capturing groups in the sources during reverse mapping (e.g. timm_wrapper, sam3)
         for i, pattern in enumerate(self.source_patterns):
             if r"\1" in pattern:
-                pattern = pattern.replace(r"\1", r"(.+)")
+                if unique_capturing_group is None:
+                    raise ValueError(
+                        f"Source pattern '{pattern}' contains \\1 backreference, but no capturing groups "
+                        f"found in target_patterns."
+                    )
+                # Use the unique capturing group from target_patterns for all sources
+                pattern = pattern.replace(r"\1", unique_capturing_group, 1)
             self.source_patterns[i] = pattern
 
         # Construct the regex we will use to rename keys from the sources to the targets
@@ -553,7 +638,7 @@ class WeightTransform:
             tensors = self.collected_tensors.pop(key)
             # Async loading
             if isinstance(tensors[0], Future):
-                tensors = [future.result() for future in tensors]
+                tensors = [future.result() for future in tensors if future.result() is not None]
             # Sync loading
             elif callable(tensors[0]):
                 tensors = [func() for func in tensors]
@@ -573,8 +658,7 @@ class WeightRenaming(WeightTransform):
         model=None,
         config=None,
         hf_quantizer=None,
-        missing_keys: MutableSet[str] | None = None,
-        conversion_errors: MutableMapping[str, str] | None = None,
+        loading_info: LoadStateDictInfo | None = None,
     ):
         # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
         # attribute during the whole process
@@ -587,7 +671,7 @@ class WeightRenaming(WeightTransform):
 
         if hf_quantizer is not None and self.quantization_operation is not None:
             with log_conversion_errors(
-                layer_name, conversion_errors, (len(collected_tensors), layer_name), self.quantization_operation
+                layer_name, loading_info, (len(collected_tensors), layer_name), self.quantization_operation
             ):
                 collected_tensors = self.quantization_operation.convert(
                     collected_tensors,
@@ -596,10 +680,10 @@ class WeightRenaming(WeightTransform):
                     full_layer_name=target_key,
                     model=model,
                     config=config,
-                    missing_keys=missing_keys,
+                    missing_keys=loading_info.missing_keys if loading_info else None,
                 )
 
-        return collected_tensors, conversion_errors
+        return collected_tensors
 
 
 # List of classes that are known to be able to use m:n
@@ -630,15 +714,14 @@ class WeightConverter(WeightTransform):
         model=None,
         config=None,
         hf_quantizer=None,
-        missing_keys: MutableSet[str] | None = None,
-        conversion_errors: MutableMapping[str, str] | None = None,
+        loading_info: LoadStateDictInfo | None = None,
     ):
         # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
-        # attribute during the whole process
+        # attribute during the whole proces
         collected_tensors = self.materialize_tensors()
 
         for op in self.operations:
-            with log_conversion_errors(layer_name, conversion_errors, (len(collected_tensors), layer_name), op):
+            with log_conversion_errors(layer_name, loading_info, (len(collected_tensors), layer_name), op):
                 collected_tensors = op.convert(
                     collected_tensors,
                     source_patterns=self.source_patterns,
@@ -647,7 +730,7 @@ class WeightConverter(WeightTransform):
                     full_layer_name=layer_name,
                     model=model,
                     config=config,
-                    missing_keys=missing_keys,
+                    missing_keys=loading_info.missing_keys if loading_info else None,
                 )
 
         # Tensors are returned from ops with the target patterns, we need to expand them to full name.
@@ -666,7 +749,7 @@ class WeightConverter(WeightTransform):
 
         if hf_quantizer is not None and self.quantization_operation is not None:
             with log_conversion_errors(
-                layer_name, conversion_errors, (len(collected_tensors), layer_name), self.quantization_operation
+                layer_name, loading_info, (len(collected_tensors), layer_name), self.quantization_operation
             ):
                 collected_tensors = self.quantization_operation.convert(
                     collected_tensors,
@@ -675,9 +758,9 @@ class WeightConverter(WeightTransform):
                     full_layer_name=layer_name,
                     config=config,
                     model=model,
-                    missing_keys=missing_keys,
+                    missing_keys=loading_info.missing_keys if loading_info else None,
                 )
-        return collected_tensors, conversion_errors
+        return collected_tensors
 
 
 # For I/O bound operations (i.e. here reading files), it is better to have fewer threads, e.g. 4 is a good default.
@@ -740,7 +823,7 @@ def dot_natural_key(s: str):
 @contextmanager
 def log_conversion_errors(
     first_target_key: str,
-    conversion_errors: MutableMapping[str, str] | None,
+    loading_info: LoadStateDictInfo | None,
     extras: Any = None,
     op: list[ConversionOps] | ConversionOps | None = None,
 ):
@@ -750,7 +833,7 @@ def log_conversion_errors(
         yield
     except Exception as e:
         # During reverse mapping, we do not log and skip errors
-        if conversion_errors is None:
+        if loading_info is None:
             raise e
 
         def _format_op_name(curr_op: list[ConversionOps] | ConversionOps | None) -> str | None:
@@ -764,19 +847,23 @@ def log_conversion_errors(
             return curr_op.__class__.__name__
 
         op_name = _format_op_name(op)
+
+        tb_str = "".join(traceback.format_exception(type(e), e, e.__traceback__))
         if isinstance(extras, tuple) and len(extras) == 2:
             length, target_keys = extras
             descriptor = f"{op_name} " if op_name else ""
-            conversion_errors[first_target_key] = (
-                f"{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {length}"
+            loading_info.conversion_errors[first_target_key] = (
+                f"{tb_str}{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {length}"
             )
         elif isinstance(extras, str):
             suffix = f" via {op_name}" if op_name else ""
-            conversion_errors[first_target_key] = f"{e}\nError{suffix} when processing parameter {extras}"
+            loading_info.conversion_errors[first_target_key] = (
+                f"{tb_str}{e}\nError{suffix} when processing parameter {extras}"
+            )
         elif extras is None and op_name:
-            conversion_errors[first_target_key] = f"{op_name}: {e}"
+            loading_info.conversion_errors[first_target_key] = f"{op_name}: {e}"
         else:
-            conversion_errors[first_target_key] = f"{extras} |Error: {e}"
+            loading_info.conversion_errors[first_target_key] = f"{extras} |Error: {e}"
 
         # Raise a specific Exception that we can catch easily
         raise SkipParameters()
@@ -786,9 +873,7 @@ def set_param_for_module(
     model: PreTrainedModel,
     target_name: str,
     param_value: torch.Tensor,
-    mismatch_keys: MutableSet[tuple[str, torch.Size, torch.Size]],
-    missing_keys: MutableSet[str],
-    unexpected_keys: MutableSet[str],
+    loading_info: LoadStateDictInfo,
     distributed_operation: TensorParallelLayer | None,
     hf_quantizer: HfQuantizer,
 ):
@@ -797,26 +882,23 @@ def set_param_for_module(
 
     ref = getattr(module_obj, param_name)
     if ref is None:
-        unexpected_keys.add(target_name)
+        loading_info.unexpected_keys.add(target_name)
     else:
         if not isinstance(param_value, torch.nn.Parameter):
-            if distributed_operation is not None:
-                if getattr(distributed_operation, "use_dtensor", False):
-                    param_value = DTensor.from_local(
-                        param_value,
-                        distributed_operation.device_mesh,
-                        getattr(distributed_operation, "shard", Replicate()),
-                        run_check=False,
-                        shape=ref.size(),
-                        stride=ref.stride(),
-                    )
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
         # Remove from missing keys (it's either mismatched, or all good)
-        missing_keys.discard(target_name)
-        if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
-            mismatch_keys.add((target_name, param_value.shape, ref.shape))
+        loading_info.missing_keys.discard(target_name)
+
+        # Determine expected shape: for TP, use sharded shape; otherwise, use full shape
+        if distributed_operation is not None:
+            expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
+        else:
+            expected_shape = ref.shape
+
+        if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
+            loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
         else:
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
@@ -826,7 +908,7 @@ def set_param_for_module(
 def offload_and_maybe_resave_param(
     target_name: str,
     param: torch.Tensor,
-    missing_keys: MutableSet[str],
+    loading_info: LoadStateDictInfo,
     disk_offload_folder: str,
     disk_offload_index: dict,
     applied_ops: WeightConverter | WeightRenaming,
@@ -835,7 +917,7 @@ def offload_and_maybe_resave_param(
     WeightConverter operations have been applied, it will resave the new parameter. Otherwise, it will use the original
     `disk_offload_index` for this given param."""
     # We need to remove from missing keys
-    missing_keys.discard(target_name)
+    loading_info.missing_keys.discard(target_name)
     # If not already offloaded, or if we applied any special Operation except Renaming, we need to re-save
     if target_name not in disk_offload_index or isinstance(applied_ops, WeightConverter):
         disk_offload_index = offload_weight(param, target_name, disk_offload_folder, disk_offload_index)
@@ -890,16 +972,9 @@ def rename_source_key(
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
-    weight_mapping: list[WeightConverter | WeightRenaming] | None,
+    load_config: LoadStateDictConfig,
     tp_plan: dict[str, str] | None,
-    hf_quantizer: HfQuantizer | None,
-    dtype: torch.dtype | None = None,
-    device_map: dict | None = None,
-    dtype_plan: dict | None = None,
-    device_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
     disk_offload_index: dict | None = None,
-    disk_offload_folder: str | None = None,
-    offload_buffers: bool = False,
 ):
     r"""
     We build a mapping from the keys obtained by renaming each of the checkpoint keys according to the weight_mapping rules.
@@ -989,16 +1064,25 @@ def convert_and_load_state_dict_in_model(
     """
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
-    device_map = device_map or {"": "cpu"}
-    dtype_plan = dtype_plan or {}
-    weight_mapping = weight_mapping or []
+    device_map = load_config.device_map or {"": "cpu"}
+    hf_quantizer = load_config.hf_quantizer
+    dtype = load_config.dtype
+    device_mesh = load_config.device_mesh
+    disk_offload_folder = load_config.disk_offload_folder
+    offload_buffers = load_config.offload_buffers
+    dtype_plan = load_config.dtype_plan or {}
+    weight_mapping = load_config.weight_mapping or []
     meta_model_state_dict = model.state_dict()
     model_buffers = {k for k, _ in model.named_buffers()}
 
-    missing_keys = set(meta_model_state_dict.keys())
-    conversion_errors = {}
-    mismatch_keys = set()
-    unexpected_keys = set()
+    # We start from all missing keys, and we will remove/add them from the proper containers as loading advances
+    loading_info = LoadStateDictInfo(
+        missing_keys=set(meta_model_state_dict.keys()),
+        unexpected_keys=set(),
+        mismatched_keys=set(),
+        conversion_errors={},
+        error_msgs=[],
+    )
 
     # We use threading by default, if not explicitly deactivated via env variable. If we have to offload,
     # we cannot use it either to control the memory as we are under memory constraints, so we need to be sequential
@@ -1028,7 +1112,7 @@ def convert_and_load_state_dict_in_model(
         )
 
         # 2. finally, collect the tensor into the proper converter
-        if renamed_key in missing_keys:
+        if renamed_key in meta_model_state_dict:
             empty_param = meta_model_state_dict.get(renamed_key)
             # If we enter here, we have a WeightConverter operation to perform
             if source_pattern is not None:
@@ -1071,7 +1155,11 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation = tp_layer(
                             device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
                         )
-                    shard_index = len(mapping.collected_tensors.get(original_key, []))
+                    shard_index = (
+                        len(mapping.collected_tensors.get(source_pattern, []))
+                        if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
+                        else None
+                    )
                     future_or_tensor = spawn_tp_materialize(
                         thread_pool,
                         tensor,
@@ -1089,9 +1177,9 @@ def convert_and_load_state_dict_in_model(
         elif source_pattern is not None:  # add all target keys as unexpected
             mapping = pattern_to_converter[source_pattern]
             for k in mapping.target_patterns:
-                unexpected_keys.add(renamed_key.replace(mapping.target_patterns[0], k))
+                loading_info.unexpected_keys.add(renamed_key.replace(mapping.target_patterns[0], k))
         else:
-            unexpected_keys.add(renamed_key)
+            loading_info.unexpected_keys.add(renamed_key)
 
     try:
         total_entries = len(param_name_to_load)
@@ -1101,13 +1189,12 @@ def convert_and_load_state_dict_in_model(
                 pbar.set_postfix({"Materializing param": first_param_name})
                 pbar.refresh()
                 try:
-                    realized_value, conversion_errors = mapping.convert(
+                    realized_value = mapping.convert(
                         first_param_name,
                         model=model,
                         config=model.config,
                         hf_quantizer=hf_quantizer,
-                        missing_keys=missing_keys,
-                        conversion_errors=conversion_errors,
+                        loading_info=loading_info,
                     )
                     for target_name, param in realized_value.items():
                         param = param[0] if isinstance(param, list) else param
@@ -1115,16 +1202,14 @@ def convert_and_load_state_dict_in_model(
                         # Offloading support
                         if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
                             disk_offload_index = offload_and_maybe_resave_param(
-                                target_name, param, missing_keys, disk_offload_folder, disk_offload_index, mapping
+                                target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
                             )
                         else:
                             set_param_for_module(
                                 model,
                                 target_name,
                                 param,
-                                mismatch_keys,
-                                missing_keys,
-                                unexpected_keys,
+                                loading_info,
                                 mapping.distributed_operation,
                                 hf_quantizer,
                             )
@@ -1143,7 +1228,7 @@ def convert_and_load_state_dict_in_model(
 
     # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
     model._weight_conversions = weight_mapping
-    return missing_keys, unexpected_keys, mismatch_keys, disk_offload_index, conversion_errors
+    return loading_info, disk_offload_index
 
 
 def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
@@ -1190,7 +1275,7 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     new_state_dict = {}
     for first_param_name, reversed_converter in conversion_mapping.items():
         # Apply the reverse converter
-        realized_value, _ = reversed_converter.convert(first_param_name, model=model, config=model.config)
+        realized_value = reversed_converter.convert(first_param_name, model=model, config=model.config)
         for target_name, param in realized_value.items():
             param = param[0] if isinstance(param, list) else param
             new_state_dict[target_name] = param

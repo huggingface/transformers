@@ -22,7 +22,7 @@ from torch.nn import functional as F
 
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -317,19 +317,21 @@ class MptModel(MptPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
 
         # Compute alibi tensor: check build_alibi_tensor documentation
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        seq_length_with_past = seq_length + past_key_values_length
-        if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_length_with_past), device=hidden_states.device)
-        else:
-            attention_mask = attention_mask.to(hidden_states.device)
-
         alibi = self.build_mpt_alibi_tensor(self.num_heads, self.config.max_seq_len, device=hidden_states.device)
 
-        causal_mask = _prepare_4d_causal_attention_mask(
-            attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
-        )
-        causal_mask = causal_mask.bool()
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        if cache_position is None:
+            cache_position = torch.arange(
+                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
+            )
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+        ).to(torch.bool)
 
         for block in self.blocks:
             if output_hidden_states:

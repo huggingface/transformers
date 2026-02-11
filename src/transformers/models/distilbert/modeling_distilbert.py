@@ -48,7 +48,8 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_distilbert import DistilBertConfig
 
 
@@ -137,7 +138,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -186,9 +186,9 @@ class DistilBertSelfAttention(nn.Module):
         key_layer = self.k_lin(hidden_states).view(*hidden_shape).transpose(1, 2)
         value_layer = self.v_lin(hidden_states).view(*hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -381,7 +381,8 @@ class DistilBertModel(DistilBertPreTrainedModel):
     def set_input_embeddings(self, new_embeddings: nn.Embedding):
         self.embeddings.word_embeddings = new_embeddings
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

@@ -38,9 +38,6 @@ INIT_SERVICE_KWARGS = [
 class BaseImageProcessor(ImageProcessingMixin):
     valid_kwargs = ImagesKwargs
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
     @property
     def is_fast(self) -> bool:
         """

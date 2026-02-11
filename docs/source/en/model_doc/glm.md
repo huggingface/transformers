@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2024-06-18 and added to Hugging Face Transformers on 2024-10-18.*
 
-# GLM
+# GLM-4
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">

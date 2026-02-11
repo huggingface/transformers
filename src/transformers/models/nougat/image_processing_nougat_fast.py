@@ -16,7 +16,7 @@
 from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -102,7 +102,7 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
             gray_threshold (`int`, *optional*, defaults to `200`)
                 Value below which pixels are considered to be gray.
         """
-        data = F.rgb_to_grayscale(image, num_output_channels=1)
+        data = tvF.rgb_to_grayscale(image, num_output_channels=1)
 
         max_val = torch.max(data)
         min_val = torch.min(data)
@@ -176,7 +176,7 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
 
         new_size = (height, width)
 
-        return F.resize(image, new_size, interpolation=F.InterpolationMode.BICUBIC)
+        return tvF.resize(image, new_size, interpolation=tvF.InterpolationMode.BICUBIC)
 
     def pad_images(
         self,
@@ -205,13 +205,13 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
         pad_right = delta_width - pad_left
 
         padding = (pad_left, pad_top, pad_right, pad_bottom)
-        return F.pad(image, padding)
+        return tvF.pad(image, padding)
 
     def resize(
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -229,14 +229,14 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `torch.Tensor`: The resized image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BICUBIC
+        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BICUBIC
 
         shortest_edge = min(size["height"], size["width"])
 
         new_size = get_resize_output_image_size(
             image, size=shortest_edge, default_to_square=False, input_data_format=ChannelDimension.FIRST
         )
-        return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+        return tvF.resize(image, new_size, interpolation=interpolation, antialias=antialias)
 
     def _preprocess(
         self,
@@ -246,7 +246,7 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
         do_align_long_axis: bool,
         do_thumbnail: bool,
         do_pad: bool,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

@@ -21,6 +21,8 @@ from collections import OrderedDict
 from collections.abc import Iterator
 from typing import Any, TypeVar
 
+from huggingface_hub import repo_exists
+
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import (
@@ -416,21 +418,21 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
 
         num_channels = kwargs.pop("num_channels", config.num_channels)
         features_only = kwargs.pop("features_only", config.features_only)
-        use_pretrained_backbone = kwargs.pop("use_pretrained_backbone", config.use_pretrained_backbone)
         out_indices = kwargs.pop("out_indices", config.out_indices)
         config = TimmBackboneConfig(
             backbone=pretrained_model_name_or_path,
             num_channels=num_channels,
             features_only=features_only,
-            use_pretrained_backbone=use_pretrained_backbone,
             out_indices=out_indices,
         )
-        return super().from_config(config, **kwargs)
+        # Always load a pretrained model when `from_pretrained` is called
+        kwargs.pop("use_pretrained_backbone", None)
+        return super().from_config(config, pretrained=True, **kwargs)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        use_timm_backbone = kwargs.pop("use_timm_backbone", False)
-        if use_timm_backbone:
+        kwargs.pop("use_timm_backbone", None)
+        if not repo_exists(pretrained_model_name_or_path):
             return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)

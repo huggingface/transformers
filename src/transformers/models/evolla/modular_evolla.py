@@ -33,7 +33,8 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..esm.modeling_esm import (
     EsmAttention,
     EsmEmbeddings,
@@ -222,7 +223,8 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.Tensor | None,
@@ -765,7 +767,8 @@ class EvollaModel(EvollaPreTrainedModel):
         self.embed_tokens = value
 
     @auto_docstring
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -824,7 +827,11 @@ class EvollaModel(EvollaPreTrainedModel):
                 attention_mask=protein_attention_mask,
             )
             protein_feats = protein_outputs.sequence_compressor_output
-            protein_batch_mask = torch.tensor([True] * protein_input_ids.shape[0], device=protein_input_ids.device)
+            protein_batch_mask = torch.ones(
+                protein_input_ids.shape[0],
+                device=protein_input_ids.device,
+                dtype=torch.bool,
+            )
 
         causal_mask = create_causal_mask(
             config=self.config,

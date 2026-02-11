@@ -14,6 +14,7 @@
 """PyTorch KOSMOS-2 model."""
 
 import math
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -72,6 +73,21 @@ def _make_causal_mask(
     if past_key_values_length > 0:
         mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+
+
+@dataclass
+@auto_docstring
+class BaseModelOutputWithProjectionAttentions(BaseModelOutputWithPooling):
+    r"""
+    projection_attentions (`tuple(torch.FloatTensor)`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
+
+        Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
+        the weighted average in the self-attention heads.
+    """
+
+    projection_attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -319,9 +335,9 @@ class Kosmos2VisionAttention(nn.Module):
         else:
             self.is_causal = causal_attention_mask is not None
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -371,8 +387,8 @@ class Kosmos2VisionEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        causal_attention_mask: torch.Tensor,
         output_attentions: bool | None = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor]:
         """
         Args:
@@ -390,8 +406,8 @@ class Kosmos2VisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -408,7 +424,6 @@ class Kosmos2VisionEncoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->Kosmos2Vision
 class Kosmos2VisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -429,10 +444,10 @@ class Kosmos2VisionEncoder(nn.Module):
         self,
         inputs_embeds,
         attention_mask: torch.Tensor | None = None,
-        causal_attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
+        **kwargs,
     ) -> tuple | BaseModelOutput:
         r"""
         Args:
@@ -442,13 +457,6 @@ class Kosmos2VisionEncoder(nn.Module):
                 than the model's internal embedding lookup matrix.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            causal_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Causal mask for the text model. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
@@ -479,8 +487,8 @@ class Kosmos2VisionEncoder(nn.Module):
             layer_outputs = encoder_layer(
                 hidden_states,
                 attention_mask,
-                causal_attention_mask,
                 output_attentions=output_attentions,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -491,7 +499,7 @@ class Kosmos2VisionEncoder(nn.Module):
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
-        return BaseModelOutput(
+        return BaseModelOutputWithProjectionAttentions(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
@@ -756,10 +764,9 @@ class KosmosTextAttention(nn.Module):
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
-        attention_interface: Callable = eager_attention_forward
-
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1119,7 +1126,7 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Kosmos2VisionEncoderLayer", "Kosmos2TextBlock"]
     _supports_attention_backend = True
-    _supports_flash_attn = True
+    _supports_flash_attn = False  # cuda device errors
     _supports_sdpa = True
 
     @torch.no_grad()
@@ -1207,7 +1214,7 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
         interpolate_pos_encoding: bool = False,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithProjectionAttentions:
         return self.model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -1492,36 +1499,37 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.model.embed_tokens = value
 
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        return_attentions: bool | None = False,
         interpolate_pos_encoding: bool | None = False,
-    ):
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithProjectionAttentions:
+        if "return_attentions" in kwargs:
+            warnings.warn(
+                "`return_attentions` is deprecated and will be removed in a future version. Please use `return_dict`"
+                " and access `projection_attentions` from the returned `ModelOutput` instead.",
+                FutureWarning,
+            )
+            kwargs.pop("return_attentions", None)
 
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            return_attentions (`bool`, *optional*, defaults to `False`):
-                Whether to return `projection_attentions` or not.
-            interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-                Whether to interpolate positional embeddings or not.
-        """
-        vision_model_output = self.vision_model(
+        vision_output: BaseModelOutputWithProjectionAttentions = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
+            **kwargs,
         )
         # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
-        image_embeds = self.vision_model.model.post_layernorm(vision_model_output[0])
+        image_embeds = self.vision_model.model.post_layernorm(vision_output[0])
         # normalized features
         image_embeds = nn.functional.normalize(image_embeds, dim=-1)
         image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+        vision_output.pooler_output = image_embeds
+        vision_output.projection_attentions = projection_attentions
 
-        if return_attentions:
-            return image_embeds, projection_attentions
-        return image_embeds
+        return vision_output
 
     @can_return_tuple
     @auto_docstring
@@ -1556,14 +1564,16 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Kosmos2Model
 
         >>> model = Kosmos2Model.from_pretrained("microsoft/kosmos-2-patch14-224")
         >>> processor = AutoProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
 
         >>> url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> text = (
         ...     "<grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863>"
@@ -1593,9 +1603,11 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         if image_embeds is None:
             if pixel_values is None:
                 raise ValueError("You have to specify either `pixel_values` or `image_embeds`.")
-            image_embeds, projection_attentions = self.get_image_features(
-                pixel_values, return_attentions=True, interpolate_pos_encoding=interpolate_pos_encoding
+            image_features = self.get_image_features(
+                pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
             )
+            image_embeds = image_features.pooler_output
+            projection_attentions = image_features.projection_attentions
 
         outputs = self.text_model(
             input_ids=input_ids,
@@ -1694,14 +1706,16 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Kosmos2ForConditionalGeneration
 
         >>> model = Kosmos2ForConditionalGeneration.from_pretrained("microsoft/kosmos-2-patch14-224")
         >>> processor = AutoProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
 
         >>> url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> prompt = "<grounding> An image of"
 

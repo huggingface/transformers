@@ -15,7 +15,7 @@ import math
 from functools import lru_cache
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -23,6 +23,7 @@ from ...image_processing_utils_fast import (
     group_images_by_shape,
     reorder_images,
 )
+from ...image_transforms import split_to_tiles
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -292,7 +293,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         tile_size: int,
         use_thumbnail: bool,
         thumbnail_size: tuple[int],
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: "tvF.InterpolationMode" = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -305,19 +306,12 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         grid_width, grid_height, target_width, target_height, total_patches = self._get_grid_layout(
             height, width, min_tiles=min_tiles, max_tiles=max_tiles, tile_size=tile_size
         )
-        resized_image = F.resize(
+        resized_image = tvF.resize(
             image, (target_height, target_width), interpolation=interpolation, antialias=antialias
         )
 
         # split the image into patches
-        processed_images = (
-            resized_image.unfold(2, size=tile_size, step=tile_size)
-            .unfold(3, size=tile_size, step=tile_size)
-            .contiguous()
-            .view(batch_size, num_channels, -1, tile_size, tile_size)
-            .permute(2, 0, 1, 3, 4)
-            .reshape(batch_size, -1, num_channels, tile_size, tile_size)
-        )
+        processed_images = split_to_tiles(resized_image, num_tiles_height=grid_height, num_tiles_width=grid_width)
 
         # Re-order processed images to a nested image structure, so it can be reordered back correctly
         # Note that the images can't be stacked because the thumbnail image is of bigger size than patches
@@ -326,7 +320,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
 
         if use_thumbnail and grid_width * grid_height != 1:
             total_patches += 1
-            thumbnail_image = F.resize(image, thumbnail_size, interpolation=interpolation, antialias=antialias)
+            thumbnail_image = tvF.resize(image, thumbnail_size, interpolation=interpolation, antialias=antialias)
             for i in range(batch_size):
                 processed_images[i] = list(processed_images[i]) + list(thumbnail_image[i][None, ...])
 
@@ -396,7 +390,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         encoder_patch_size: int,
         tile_size: int,
         max_pixels_tolerance: float,
-        interpolation: "F.InterpolationMode",
+        interpolation: "tvF.InterpolationMode",
     ) -> "torch.Tensor":
         batch_size, _, height, width = images.shape
         do_image_splitting = not min_tiles == max_tiles == 1
@@ -431,7 +425,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
             )
         else:
             num_rows = num_cols = 1
-            images = F.resize(images, (new_height, new_width), interpolation=interpolation)
+            images = tvF.resize(images, (new_height, new_width), interpolation=interpolation)
             # Make a list and treat it as single crop per image so it can be re-grouped back correctly
             images = [[image] for image in images]
 
@@ -444,7 +438,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         size: SizeDict,
-        interpolation: "F.InterpolationMode",
+        interpolation: "tvF.InterpolationMode",
         do_resize: bool,
         do_rescale: bool,
         rescale_factor: float,

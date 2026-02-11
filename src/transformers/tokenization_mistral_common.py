@@ -268,6 +268,15 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         if kwargs and not set(kwargs.keys()).issubset(_VALID_INIT_KWARGS):
             raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported to init `MistralCommonBackend`.")
 
+        self.init_kwargs = {
+            "tokenizer_path": tokenizer_path,
+            "mode": mode,
+            "model_max_length": model_max_length,
+            "padding_side": padding_side,
+            "truncation_side": truncation_side,
+            "model_input_names": model_input_names,
+            "clean_up_tokenization_spaces": clean_up_tokenization_spaces,
+        }
         self._tokenizer_path = Path(tokenizer_path)
         self._mode = self._get_validation_mode(mode)
 
@@ -1579,6 +1588,18 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         if mode not in [ValidationMode.finetuning, ValidationMode.test]:
             raise ValueError(_invalid_mode_msg)
         return mode
+
+    def __repr__(self) -> str:
+        # MistralCommonBackend does not implement added_tokens_decoder, so we need a custom repr
+        return (
+            f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
+            f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length},"
+            f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
+            f" special_tokens={self.special_tokens_map}"
+        )
+
+    def added_tokens_decoder(self):
+        raise NotImplementedError("`MistralCommonBackend` does not implement `added_tokens_decoder`.")
 
     def add_special_tokens(
         self,
