@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team and the Swiss AI Initiative. All rights reserved.
 #
 # This code is based on HuggingFace's LLaMA implementation in this library.

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 WeChatAI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@ import itertools
 import json
 import os
 import unicodedata
-from typing import Optional, Union
 
 from ...tokenization_python import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...tokenization_utils_base import (
@@ -172,21 +170,21 @@ class RoCBertTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, list[TextInput]],
-        text_pair: Optional[Union[TextInput, list[TextInput]]] = None,
-        text_target: Optional[Union[TextInput, list[TextInput]]] = None,
+        text: TextInput | list[TextInput],
+        text_pair: TextInput | list[TextInput] | None = None,
+        text_target: TextInput | list[TextInput] | None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy = None,
+        max_length: int | None = None,
+        max_target_length: int | None = None,
         stride: int = 0,
         is_split_into_words: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -297,19 +295,19 @@ class RoCBertTokenizer(PreTrainedTokenizer):
 
     def encode_plus(
         self,
-        text: Union[TextInput, PreTokenizedInput, EncodedInput],
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, EncodedInput]] = None,
+        text: TextInput | PreTokenizedInput | EncodedInput,
+        text_pair: TextInput | PreTokenizedInput | EncodedInput | None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy = None,
+        max_length: int | None = None,
         stride: int = 0,
         is_split_into_words: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -350,25 +348,23 @@ class RoCBertTokenizer(PreTrainedTokenizer):
 
     def batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[
-            list[TextInput],
-            list[TextInputPair],
-            list[PreTokenizedInput],
-            list[PreTokenizedInputPair],
-            list[EncodedInput],
-            list[EncodedInputPair],
-        ],
+        batch_text_or_text_pairs: list[TextInput]
+        | list[TextInputPair]
+        | list[PreTokenizedInput]
+        | list[PreTokenizedInputPair]
+        | list[EncodedInput]
+        | list[EncodedInputPair],
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy = None,
+        max_length: int | None = None,
         stride: int = 0,
         is_split_into_words: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -434,19 +430,19 @@ class RoCBertTokenizer(PreTrainedTokenizer):
 
     def _encode_plus(
         self,
-        text: Union[TextInput, PreTokenizedInput, EncodedInput],
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, EncodedInput]] = None,
+        text: TextInput | PreTokenizedInput | EncodedInput,
+        text_pair: TextInput | PreTokenizedInput | EncodedInput | None = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
         is_split_into_words: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -534,19 +530,19 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         ids: list[int],
         shape_ids: list[int],
         pronunciation_ids: list[int],
-        pair_ids: Optional[list[int]] = None,
-        pair_shape_ids: Optional[list[int]] = None,
-        pair_pronunciation_ids: Optional[list[int]] = None,
+        pair_ids: list[int] | None = None,
+        pair_shape_ids: list[int] | None = None,
+        pair_pronunciation_ids: list[int] | None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -713,12 +709,12 @@ class RoCBertTokenizer(PreTrainedTokenizer):
 
     def _pad(
         self,
-        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
-        max_length: Optional[int] = None,
+        encoded_inputs: dict[str, EncodedInput] | BatchEncoding,
+        max_length: int | None = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_attention_mask: bool | None = None,
     ) -> dict:
         # Load from model defaults
         if return_attention_mask is None:
@@ -775,25 +771,23 @@ class RoCBertTokenizer(PreTrainedTokenizer):
 
     def _batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[
-            list[TextInput],
-            list[TextInputPair],
-            list[PreTokenizedInput],
-            list[PreTokenizedInputPair],
-            list[EncodedInput],
-            list[EncodedInputPair],
-        ],
+        batch_text_or_text_pairs: list[TextInput]
+        | list[TextInputPair]
+        | list[PreTokenizedInput]
+        | list[PreTokenizedInputPair]
+        | list[EncodedInput]
+        | list[EncodedInputPair],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
         is_split_into_words: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -882,19 +876,19 @@ class RoCBertTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def _batch_prepare_for_model(
         self,
-        batch_ids_pairs: list[Union[PreTokenizedInputPair, tuple[list[int], None]]],
-        batch_shape_ids_pairs: list[Union[PreTokenizedInputPair, tuple[list[int], None]]],
-        batch_pronunciation_ids_pairs: list[Union[PreTokenizedInputPair, tuple[list[int], None]]],
+        batch_ids_pairs: list[PreTokenizedInputPair | tuple[list[int], None]],
+        batch_shape_ids_pairs: list[PreTokenizedInputPair | tuple[list[int], None]],
+        batch_pronunciation_ids_pairs: list[PreTokenizedInputPair | tuple[list[int], None]],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[str] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
@@ -971,7 +965,7 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         """Converts a token (str) in an shape_id using the shape vocab."""
         return self.word_shape.get(token, self.word_shape.get(self.unk_token))
 
-    def convert_tokens_to_shape_ids(self, tokens: Union[str, list[str]]) -> Union[int, list[int]]:
+    def convert_tokens_to_shape_ids(self, tokens: str | list[str]) -> int | list[int]:
         if tokens is None:
             return None
 
@@ -984,7 +978,7 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         """Converts a token (str) in an shape_id using the shape vocab."""
         return self.word_pronunciation.get(token, self.word_pronunciation.get(self.unk_token))
 
-    def convert_tokens_to_pronunciation_ids(self, tokens: Union[str, list[str]]) -> Union[int, list[int]]:
+    def convert_tokens_to_pronunciation_ids(self, tokens: str | list[str]) -> int | list[int]:
         if tokens is None:
             return None
 
@@ -1005,9 +999,9 @@ class RoCBertTokenizer(PreTrainedTokenizer):
     def build_inputs_with_special_tokens(
         self,
         token_ids_0: list[int],
-        token_ids_1: Optional[list[int]] = None,
-        cls_token_id: Optional[int] = None,
-        sep_token_id: Optional[int] = None,
+        token_ids_1: list[int] | None = None,
+        cls_token_id: int | None = None,
+        sep_token_id: int | None = None,
     ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
@@ -1032,7 +1026,7 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -1059,7 +1053,7 @@ class RoCBertTokenizer(PreTrainedTokenizer):
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
         return [1] + ([0] * len(token_ids_0)) + [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str, str, str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str, str, str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(

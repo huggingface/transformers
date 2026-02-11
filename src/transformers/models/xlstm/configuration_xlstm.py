@@ -15,8 +15,6 @@
 
 """xLSTM configuration."""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import is_xlstm_available, logging
 
@@ -155,9 +153,9 @@ class xLSTMConfig(PreTrainedConfig):
         self,
         vocab_size: int = 50304,
         hidden_size: int = 4096,
-        embedding_dim: Optional[int] = None,
-        num_hidden_layers: Optional[int] = 32,
-        num_blocks: Optional[int] = None,
+        embedding_dim: int | None = None,
+        num_hidden_layers: int | None = 32,
+        num_blocks: int | None = None,
         num_heads: int = 8,
         use_bias: bool = False,
         norm_reduction_force_float32: bool = True,
@@ -233,13 +231,11 @@ class xLSTMConfig(PreTrainedConfig):
         self.eos_token_id = eos_token_id
         self.max_inference_chunksize = max_inference_chunksize
 
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
     @property
     def qk_dim(self):

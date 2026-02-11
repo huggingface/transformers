@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "5.0.0.dev0"
+__version__ = "5.2.0.dev0"
 
 import importlib
 import sys
@@ -133,7 +133,6 @@ _import_structure = {
         "is_wandb_available",
     ],
     "loss": [],
-    "modelcard": ["ModelCard"],
     "pipelines": [
         "AnyToAnyPipeline",
         "AudioClassificationPipeline",
@@ -148,7 +147,6 @@ _import_structure = {
         "ImageSegmentationPipeline",
         "ImageTextToTextPipeline",
         "ImageToImagePipeline",
-        "ImageToTextPipeline",
         "JsonPipelineDataFormat",
         "KeypointMatchingPipeline",
         "MaskGenerationPipeline",
@@ -158,14 +156,11 @@ _import_structure = {
         "Pipeline",
         "PipelineDataFormat",
         "QuestionAnsweringPipeline",
-        "SummarizationPipeline",
         "TableQuestionAnsweringPipeline",
-        "Text2TextGenerationPipeline",
         "TextClassificationPipeline",
         "TextGenerationPipeline",
         "TextToAudioPipeline",
         "TokenClassificationPipeline",
-        "TranslationPipeline",
         "VideoClassificationPipeline",
         "VisualQuestionAnsweringPipeline",
         "ZeroShotAudioClassificationPipeline",
@@ -179,8 +174,6 @@ _import_structure = {
     "testing_utils": [],
     "tokenization_python": ["PreTrainedTokenizer", "PythonBackend"],
     "tokenization_utils": [],
-    "tokenization_utils_fast": [],
-    "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
     "tokenization_utils_base": [
         "AddedToken",
         "BatchEncoding",
@@ -188,6 +181,8 @@ _import_structure = {
         "PreTrainedTokenizerBase",
         "TokenSpan",
     ],
+    "tokenization_utils_fast": [],
+    "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
     "trainer_callback": [
         "DefaultFlowCallback",
         "EarlyStoppingCallback",
@@ -244,6 +239,8 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
+    "utils.import_utils": ["requires_backends"],
+    "utils.kernel_config": ["KernelConfig"],
     "utils.quantization_config": [
         "AqlmConfig",
         "AutoRoundConfig",
@@ -254,21 +251,19 @@ _import_structure = {
         "EetqConfig",
         "FbgemmFp8Config",
         "FineGrainedFP8Config",
+        "FPQuantConfig",
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
         "Mxfp4Config",
         "QuantoConfig",
         "QuarkConfig",
-        "FPQuantConfig",
         "SpQRConfig",
         "TorchAoConfig",
         "VptqConfig",
         "SinqConfig",
     ],
     "video_utils": [],
-    "utils.kernel_config": ["KernelConfig"],
-    "utils.import_utils": ["requires_backends"],
 }
 
 # tokenizers-backed objects
@@ -284,8 +279,8 @@ except OptionalDependencyNotAvailable:
 else:
     # Fast tokenizers structure
     _import_structure["tokenization_utils_tokenizers"] = [
-        "TokenizersBackend",
         "PreTrainedTokenizerFast",
+        "TokenizersBackend",
     ]
 
 
@@ -364,15 +359,6 @@ else:
         "StaticSlidingWindowLayer",
         "QuantoQuantizedLayer",
         "HQQQuantizedLayer",
-        "SlidingWindowLayer",
-        "ChunkedSlidingLayer",
-        "HQQQuantizedCache",
-        "HybridCache",
-        "HybridChunkedCache",
-        "OffloadedCache",
-        "OffloadedStaticCache",
-        "QuantoQuantizedCache",
-        "SlidingWindowCache",
         "Cache",
         "DynamicCache",
         "EncoderDecoderCache",
@@ -397,6 +383,7 @@ else:
             "EncoderRepetitionPenaltyLogitsProcessor",
             "EosTokenCriteria",
             "EpsilonLogitsWarper",
+            "MinPLogitsWarper",
             "EtaLogitsWarper",
             "ExponentialDecayLengthPenalty",
             "ForcedBOSTokenLogitsProcessor",
@@ -410,7 +397,6 @@ else:
             "MaxTimeCriteria",
             "MinLengthLogitsProcessor",
             "MinNewTokensLengthLogitsProcessor",
-            "MinPLogitsWarper",
             "NoBadWordsLogitsProcessor",
             "NoRepeatNGramLogitsProcessor",
             "PrefixConstrainedLogitsProcessor",
@@ -454,6 +440,7 @@ else:
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
+    _import_structure["backbone_utils"] = ["BackboneConfigMixin", "BackboneMixin"]
     _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update", "RopeParameters"]
     _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
     _import_structure["masking_utils"] = ["AttentionMaskInterface"]
@@ -482,21 +469,15 @@ else:
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # All modeling imports
+    # Models
+    from .backbone_utils import BackboneConfigMixin, BackboneMixin
     from .cache_utils import Cache as Cache
-    from .cache_utils import ChunkedSlidingLayer as ChunkedSlidingLayer
     from .cache_utils import DynamicCache as DynamicCache
     from .cache_utils import DynamicLayer as DynamicLayer
     from .cache_utils import EncoderDecoderCache as EncoderDecoderCache
-    from .cache_utils import HQQQuantizedCache as HQQQuantizedCache
     from .cache_utils import HQQQuantizedLayer as HQQQuantizedLayer
-    from .cache_utils import HybridCache as HybridCache
-    from .cache_utils import OffloadedCache as OffloadedCache
-    from .cache_utils import OffloadedStaticCache as OffloadedStaticCache
     from .cache_utils import QuantizedCache as QuantizedCache
-    from .cache_utils import QuantoQuantizedCache as QuantoQuantizedCache
     from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
-    from .cache_utils import SlidingWindowCache as SlidingWindowCache
-    from .cache_utils import SlidingWindowLayer as SlidingWindowLayer
     from .cache_utils import StaticCache as StaticCache
     from .cache_utils import StaticLayer as StaticLayer
     from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
@@ -632,9 +613,6 @@ if TYPE_CHECKING:
     from .integrations.executorch import convert_and_export_with_cache as convert_and_export_with_cache
     from .masking_utils import AttentionMaskInterface as AttentionMaskInterface
     from .model_debugging_utils import model_addition_debugger_context as model_addition_debugger_context
-
-    # Model Cards
-    from .modelcard import ModelCard as ModelCard
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
     from .modeling_rope_utils import ROPE_INIT_FUNCTIONS as ROPE_INIT_FUNCTIONS
     from .modeling_rope_utils import RopeParameters as RopeParameters
@@ -679,7 +657,6 @@ if TYPE_CHECKING:
     from .pipelines import ImageSegmentationPipeline as ImageSegmentationPipeline
     from .pipelines import ImageTextToTextPipeline as ImageTextToTextPipeline
     from .pipelines import ImageToImagePipeline as ImageToImagePipeline
-    from .pipelines import ImageToTextPipeline as ImageToTextPipeline
     from .pipelines import JsonPipelineDataFormat as JsonPipelineDataFormat
     from .pipelines import KeypointMatchingPipeline as KeypointMatchingPipeline
     from .pipelines import MaskGenerationPipeline as MaskGenerationPipeline
@@ -689,14 +666,11 @@ if TYPE_CHECKING:
     from .pipelines import Pipeline as Pipeline
     from .pipelines import PipelineDataFormat as PipelineDataFormat
     from .pipelines import QuestionAnsweringPipeline as QuestionAnsweringPipeline
-    from .pipelines import SummarizationPipeline as SummarizationPipeline
     from .pipelines import TableQuestionAnsweringPipeline as TableQuestionAnsweringPipeline
-    from .pipelines import Text2TextGenerationPipeline as Text2TextGenerationPipeline
     from .pipelines import TextClassificationPipeline as TextClassificationPipeline
     from .pipelines import TextGenerationPipeline as TextGenerationPipeline
     from .pipelines import TextToAudioPipeline as TextToAudioPipeline
     from .pipelines import TokenClassificationPipeline as TokenClassificationPipeline
-    from .pipelines import TranslationPipeline as TranslationPipeline
     from .pipelines import VideoClassificationPipeline as VideoClassificationPipeline
     from .pipelines import VisualQuestionAnsweringPipeline as VisualQuestionAnsweringPipeline
     from .pipelines import ZeroShotAudioClassificationPipeline as ZeroShotAudioClassificationPipeline

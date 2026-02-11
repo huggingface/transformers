@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +18,8 @@ import unittest
 
 from transformers.testing_utils import (
     backend_empty_cache,
+    is_torch_bf16_available_on_device,
+    is_torch_fp16_available_on_device,
     slow,
     torch_device,
 )
@@ -548,3 +549,60 @@ class Sam3VideoModelIntegrationTest(unittest.TestCase):
 
         model = Sam3VideoModel.from_pretrained("facebook/sam3", config=config).to(torch_device).eval()
         self.assertEqual(model.config.image_size, 560)
+
+    def test_inference_with_different_dtypes(self):
+        """Test that inference works correctly for float32, bfloat16, and float16 dtypes."""
+        raw_video = prepare_video()
+        dtypes_to_test = [
+            (torch.float32, None),  # float32 is always available
+            (torch.bfloat16, is_torch_bf16_available_on_device),
+            (torch.float16, is_torch_fp16_available_on_device),
+        ]
+
+        for dtype, availability_check in dtypes_to_test:
+            with self.subTest(dtype=dtype):
+                # Skip if dtype is not available on device
+                if availability_check is not None and not availability_check(torch_device):
+                    self.skipTest(f"{dtype} not supported on {torch_device}")
+
+                # Load model with specific dtype
+                video_model = Sam3VideoModel.from_pretrained("facebook/sam3", torch_dtype=dtype).to(torch_device)
+                video_model.eval()
+
+                # Initialize inference session
+                inference_session = self.processor.init_video_session(
+                    video=raw_video,
+                    inference_device=torch_device,
+                    processing_device="cpu",
+                    video_storage_device="cpu",
+                    dtype=dtype,
+                )
+
+                # Add text prompt
+                text = "person"
+                inference_session = self.processor.add_text_prompt(
+                    inference_session=inference_session,
+                    text=text,
+                )
+
+                # Run inference on first frame
+                outputs_per_frame = {}
+                model_outputs_per_frame = {}
+                max_frame_num_to_track = 2
+                for model_outputs in video_model.propagate_in_video_iterator(
+                    inference_session=inference_session,
+                    max_frame_num_to_track=max_frame_num_to_track,
+                ):
+                    processed_outputs = self.processor.postprocess_outputs(inference_session, model_outputs)
+                    outputs_per_frame[model_outputs.frame_idx] = processed_outputs
+                    model_outputs_per_frame[model_outputs.frame_idx] = model_outputs
+
+                    # Verify dtype is maintained in model outputs
+                    if len(model_outputs.object_ids) > 0:
+                        first_obj_id = model_outputs.object_ids[0]
+                        raw_mask = model_outputs.obj_id_to_mask[first_obj_id]
+                        self.assertEqual(raw_mask.dtype, dtype)
+
+                # Verify we processed frames
+                self.assertGreaterEqual(len(outputs_per_frame), 1)
+                self.assertLessEqual(len(outputs_per_frame), max_frame_num_to_track + 1)

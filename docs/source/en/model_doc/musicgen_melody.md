@@ -266,6 +266,7 @@ Tips:
 ## MusicgenMelodyProcessor
 
 [[autodoc]] MusicgenMelodyProcessor
+    - __call__
     - get_unconditional_inputs
 
 ## MusicgenMelodyFeatureExtractor

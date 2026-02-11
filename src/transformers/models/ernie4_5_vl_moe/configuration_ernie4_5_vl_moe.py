@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_ernie4_5_vl_moe.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Baidu and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -136,8 +135,6 @@ class Ernie4_5_VL_MoeTextConfig(PreTrainedConfig):
             relevant if `config.is_decoder=True`.
         use_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in any of the projections including mlp and attention for example.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
@@ -159,6 +156,12 @@ class Ernie4_5_VL_MoeTextConfig(PreTrainedConfig):
             allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
     """
 
     model_type = "ernie4_5_vl_moe_text"
@@ -199,7 +202,6 @@ class Ernie4_5_VL_MoeTextConfig(PreTrainedConfig):
         rms_norm_eps=1e-5,
         use_cache=True,
         use_bias=False,
-        tie_word_embeddings=True,
         rope_parameters=None,
         mlp_layer_types=None,
         moe_intermediate_size=None,
@@ -209,6 +211,9 @@ class Ernie4_5_VL_MoeTextConfig(PreTrainedConfig):
         moe_norm_min=1e-12,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
+        pad_token_id=None,
+        eos_token_id=None,
+        bos_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -240,10 +245,11 @@ class Ernie4_5_VL_MoeTextConfig(PreTrainedConfig):
         self.moe_norm_min = moe_norm_min
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope_section"}, **kwargs
-        )
+        super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
 
 class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
@@ -273,6 +279,8 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
             The video token index to encode the end of video.
         video_token_id (`int`, *optional*, defaults to 103367):
             The video token index to encode the video prompt.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Ernie4_5_VL_MoeForConditionalGeneration, Ernie4_5_VL_MoeConfig
@@ -301,6 +309,7 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
         video_start_token_id=101306,
         video_end_token_id=101307,
         video_token_id=103367,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -323,6 +332,7 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
         self.video_start_token_id = video_start_token_id
         self.video_end_token_id = video_end_token_id
         self.video_token_id = video_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

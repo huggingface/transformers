@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +14,6 @@
 """
 Feature extractor class for SeamlessM4T
 """
-
-from typing import Optional, Union
 
 import numpy as np
 
@@ -143,15 +140,15 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        padding: Union[bool, str, PaddingStrategy] = True,
-        pad_to_multiple_of: Optional[int] = 2,
-        max_length: Optional[int] = None,
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        padding: bool | str | PaddingStrategy = True,
+        pad_to_multiple_of: int | None = 2,
+        max_length: int | None = None,
         truncation: bool = False,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        sampling_rate: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        do_normalize_per_mel_bins: Optional[bool] = True,
+        return_tensors: str | TensorType | None = None,
+        sampling_rate: int | None = None,
+        return_attention_mask: bool | None = None,
+        do_normalize_per_mel_bins: bool | None = True,
         **kwargs,
     ) -> BatchFeature:
         """

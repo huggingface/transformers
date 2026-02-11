@@ -76,12 +76,12 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         orig_image_input = self.prepare_image_inputs()
         orig_image = np.array(orig_image_input).transpose(2, 0, 1)
 
-        inputs = processor(text=input_str, images=orig_image, do_resize=False, return_tensors="np")
+        inputs = processor(text=input_str, images=orig_image, do_resize=False, return_tensors="pt")
         normalized_image_input = inputs.pixel_values
-        unnormalized_images = processor.postprocess(normalized_image_input, return_tensors="np")["pixel_values"]
+        unnormalized_images = processor.postprocess(normalized_image_input, return_tensors="pt")["pixel_values"]
 
         # For an image where pixels go from 0 to 255 the diff can be 1 due to some numerical precision errors when scaling and unscaling
-        self.assertTrue(np.abs(orig_image - unnormalized_images).max() >= 1)
+        self.assertTrue(np.abs(orig_image - unnormalized_images.numpy()).max() >= 1)
 
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):

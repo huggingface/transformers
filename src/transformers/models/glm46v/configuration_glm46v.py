@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_glm46v.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -51,6 +50,8 @@ class Glm46VConfig(PreTrainedConfig):
             The video start token index to encode the start of video.
         video_end_token_id (`int`, *optional*, defaults to 151362):
             The video end token index to encode the end of video.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
 
     ```python
     >>> from transformers import Glm46VForConditionalGeneration, Glm46VConfig
@@ -79,6 +80,7 @@ class Glm46VConfig(PreTrainedConfig):
         image_end_token_id=151340,
         video_start_token_id=151361,
         video_end_token_id=151362,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -99,6 +101,7 @@ class Glm46VConfig(PreTrainedConfig):
         self.video_end_token_id = video_end_token_id
         self.image_start_token_id = image_start_token_id
         self.image_end_token_id = image_end_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

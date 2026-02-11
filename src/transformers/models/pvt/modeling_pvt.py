@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Authors: Wenhai Wang, Enze Xie, Xiang Li, Deng-Ping Fan,
 # Kaitao Song, Ding Liang, Tong Lu, Ping Luo, Ling Shao and The HuggingFace Inc. team.
 # All rights reserved.
@@ -19,7 +18,6 @@
 import collections
 import math
 from collections.abc import Iterable
-from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -56,7 +54,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class PvtDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -77,8 +75,8 @@ class PvtPatchEmbeddings(nn.Module):
     def __init__(
         self,
         config: PvtConfig,
-        image_size: Union[int, Iterable[int]],
-        patch_size: Union[int, Iterable[int]],
+        image_size: int | Iterable[int],
+        patch_size: int | Iterable[int],
         stride: int,
         num_channels: int,
         hidden_size: int,
@@ -257,8 +255,8 @@ class PvtFFN(nn.Module):
         self,
         config: PvtConfig,
         in_features: int,
-        hidden_features: Optional[int] = None,
-        out_features: Optional[int] = None,
+        hidden_features: int | None = None,
+        out_features: int | None = None,
     ):
         super().__init__()
         out_features = out_features if out_features is not None else in_features
@@ -379,10 +377,10 @@ class PvtEncoder(nn.Module):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[tuple, BaseModelOutput]:
+        output_attentions: bool | None = False,
+        output_hidden_states: bool | None = False,
+        return_dict: bool | None = True,
+    ) -> tuple | BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -455,11 +453,11 @@ class PvtModel(PvtPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -508,13 +506,13 @@ class PvtForImageClassification(PvtPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor],
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor | None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, ImageClassifierOutput]:
+    ) -> tuple | ImageClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,

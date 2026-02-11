@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,10 +15,10 @@
 
 import itertools
 import math
-from typing import Optional, Union
+from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -158,18 +157,18 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
         images: list[list["torch.Tensor"]],
         do_resize: bool,
         size: SizeDict,
-        do_pan_and_scan: Optional[bool],
-        pan_and_scan_min_crop_size: Optional[int],
-        pan_and_scan_max_num_crops: Optional[int],
-        pan_and_scan_min_ratio_to_activate: Optional[float],
-        interpolation: Optional["F.InterpolationMode"],
+        do_pan_and_scan: bool | None,
+        pan_and_scan_min_crop_size: int | None,
+        pan_and_scan_max_num_crops: int | None,
+        pan_and_scan_min_ratio_to_activate: float | None,
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched processing

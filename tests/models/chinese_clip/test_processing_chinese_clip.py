@@ -56,7 +56,7 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-        return tokenizer_class(vocab_file=vocab_file)
+        return tokenizer_class.from_pretrained(cls.tmpdirname)
 
     @classmethod
     def _setup_image_processor(cls):

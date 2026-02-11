@@ -181,11 +181,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 [[autodoc]] LEDForConditionalGeneration
     - forward
 
-## LEDForSequenceClassification
-
-[[autodoc]] LEDForSequenceClassification
-    - forward
-
 ## LEDForQuestionAnswering
 
 [[autodoc]] LEDForQuestionAnswering
