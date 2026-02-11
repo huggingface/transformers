@@ -357,7 +357,6 @@ class Trainer:
         save_state,
     )
 
-
     # ---- Initialization & Validation ----
 
     def __init__(
@@ -827,7 +826,6 @@ class Trainer:
             and "SHARDED_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)
         ):
             raise ValueError("save_only_model option is not compatible with FSDP state dict type 'SHARDED_STATE_DICT'")
-
 
     # ---- Data Loading ----
 
@@ -2361,7 +2359,7 @@ class Trainer:
 
         dp_world_size = args.world_size // self.get_tp_size() // self.get_cp_size() // self.get_sp_size()
         return self._train_batch_size * args.gradient_accumulation_steps * dp_world_size
-    
+
     def get_sp_size(self) -> int:
         """Get the sequence parallel size"""
         if getattr(self.accelerator, "parallelism_config", None) is None:
@@ -2939,7 +2937,6 @@ class Trainer:
                     f"consider changing the `metric_for_best_model` via the TrainingArguments."
                 ) from exc
         return metrics
-
 
     # ---- Checkpoint Saving ----
 
@@ -3817,7 +3814,6 @@ class Trainer:
             return 6 * inputs[main_input].numel() * self.model.num_parameters(exclude_embeddings=True)
         return 0
 
-
     # ---- Hub Integration ----
 
     def init_hf_repo(self, token: str | None = None):
@@ -4070,7 +4066,6 @@ class Trainer:
             logger.info("Waiting for the current checkpoint push to be finished, this might take a couple of minutes.")
             self.push_in_progress.wait_until_done()
 
-
     # ---- Hyperparameter Search ----
 
     def hyperparameter_search(
@@ -4254,7 +4249,6 @@ class Trainer:
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
 
-
     # ---- Callbacks ----
 
     def add_callback(self, callback):
@@ -4294,7 +4288,6 @@ class Trainer:
                first case, will remove the first member of that class found in the list of callbacks.
         """
         self.callback_handler.remove_callback(callback)
-
 
     # ---- Utilities ----
 
