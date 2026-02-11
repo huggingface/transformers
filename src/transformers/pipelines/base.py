@@ -715,14 +715,11 @@ SUPPORTED_PEFT_TASKS = {
     "feature-extraction": ["PeftModelForFeatureExtraction", "PeftModel"],
     "summarization": ["PeftModelForSeq2SeqLM"],
     "table-question-answering": ["PeftModelForQuestionAnswering"],
-    "text2text-generation": ["PeftModelForSeq2SeqLM"],
     "text-classification": ["PeftModelForSequenceClassification"],
     "sentiment-analysis": ["PeftModelForSequenceClassification"],
     "text-generation": ["PeftModelForCausalLM"],
     "token-classification": ["PeftModelForTokenClassification"],
     "ner": ["PeftModelForTokenClassification"],
-    "translation": ["PeftModelForSeq2SeqLM"],
-    "translation_xx_to_yy": ["PeftModelForSeq2SeqLM"],
     "zero-shot-classification": ["PeftModelForSequenceClassification"],
 }
 
