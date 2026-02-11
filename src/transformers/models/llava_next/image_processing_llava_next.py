@@ -13,7 +13,7 @@
 # limitations under the License.
 """Image processor class for LLaVa-NeXT."""
 
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
 
@@ -77,7 +77,7 @@ class LlavaNextTorchVisionBackend(TorchVisionBackend):
         self,
         image: "torch.Tensor",
         target_resolution: tuple,
-        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]],
+        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None,
         input_data_format: ChannelDimension,
     ) -> "torch.Tensor":
         """Resizes an image to a target resolution while maintaining aspect ratio."""
@@ -107,7 +107,7 @@ class LlavaNextTorchVisionBackend(TorchVisionBackend):
         grid_pinpoints: list[list[int]],
         size: tuple,
         patch_size: int,
-        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]],
+        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None,
     ) -> list["torch.Tensor"]:
         """Process an image with variable resolutions by dividing it into patches."""
         if not isinstance(grid_pinpoints, list):
@@ -154,7 +154,7 @@ class LlavaNextTorchVisionBackend(TorchVisionBackend):
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
-        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]],
+        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -338,7 +338,7 @@ class LlavaNextPilBackend(PilBackend):
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
-        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]],
+        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

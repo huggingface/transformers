@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -30,9 +30,6 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import GLPNImageProcessor
-
-    if is_torchvision_available():
-        from transformers import GLPNImageProcessorFast
 
 
 class GLPNImageProcessingTester:
@@ -110,7 +107,6 @@ class GLPNImageProcessingTester:
 @require_vision
 class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = GLPNImageProcessor if is_vision_available() else None
-    fast_image_processing_class = GLPNImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -118,101 +114,113 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size_divisor"))
-        self.assertTrue(hasattr(image_processing, "resample"))
-        self.assertTrue(hasattr(image_processing, "do_rescale"))
+        for backend_name in self.image_processors_backends_list:
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size_divisor"))
+            self.assertTrue(hasattr(image_processing, "resample"))
+            self.assertTrue(hasattr(image_processing, "do_rescale"))
 
     def test_call_pil(self):
         # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
-        for image in image_inputs:
-            self.assertIsInstance(image, Image.Image)
-        # Test not batched input (GLPNImageProcessor doesn't support batching)
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
-        self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
+        for backend_name in self.image_processors_backends_list:
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            # create random PIL images
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            for image in image_inputs:
+                self.assertIsInstance(image, Image.Image)
+            # Test not batched input (GLPNImageProcessor doesn't support batching)
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
 
     def test_call_numpy(self):
         # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random numpy tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, np.ndarray)
+        for backend_name in self.image_processors_backends_list:
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            # create random numpy tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, np.ndarray)
 
-        # Test not batched input (GLPNImageProcessor doesn't support batching)
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
-        self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
+            # Test not batched input (GLPNImageProcessor doesn't support batching)
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
 
     def test_call_pytorch(self):
         # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random PyTorch tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, torch.Tensor)
+        for backend_name in self.image_processors_backends_list:
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            # create random PyTorch tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, torch.Tensor)
 
-        # Test not batched input (GLPNImageProcessor doesn't support batching)
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
-        self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
+            # Test not batched input (GLPNImageProcessor doesn't support batching)
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
 
     def test_call_numpy_4_channels(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random numpy tensors
-        self.image_processing_class.num_channels = 4
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, np.ndarray)
+        for backend_name in self.image_processors_backends_list:
+            # Initialize image_processing
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            # create random numpy tensors
+            self.image_processing_class.num_channels = 4
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, np.ndarray)
 
-        # Test not batched input (GLPNImageProcessor doesn't support batching)
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
-        self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
-        self.image_processing_class.num_channels = 3
+            # Test not batched input (GLPNImageProcessor doesn't support batching)
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
+            self.image_processing_class.num_channels = 3
 
-    # override as glpn image processors don't support heterogeneous batching
+    # Override as GLPN image processors don't support heterogeneous batching (use equal_resolution=True)
     @require_vision
     @require_torch
     def test_slow_fast_equivalence_batched(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+        if len(self.image_processors_backends_list) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
-        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
-        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
+        # Create processors for each backend
+        encodings = {}
+        for backend_name in self.image_processors_backends_list:
+            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        # Compare all backends to the first one (reference backend)
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_encoding = encodings[reference_backend].pixel_values
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].pixel_values)
 
-    def test_post_process_depth_equivalence(self):
-        # Check that both processors produce equivalent post-processed depth maps
-        if self.fast_image_processing_class is None:
-            self.skipTest("TorchVision not available")
+    @require_vision
+    @require_torch
+    def test_backends_equivalence_post_process_depth(self):
+        """Check that all backends produce equivalent post-processed depth maps."""
+        if len(self.image_processors_backends_list) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         outputs = self.image_processor_tester.prepare_depth_outputs()
-        slow = self.image_processing_class(**self.image_processor_dict)
-        fast = self.fast_image_processing_class(**self.image_processor_dict)
-
-        # target_sizes simulate resized inference outputs
         target_sizes = [(240, 320)] * self.image_processor_tester.batch_size
-        processed_slow = slow.post_process_depth_estimation(outputs, target_sizes=target_sizes)
-        processed_fast = fast.post_process_depth_estimation(outputs, target_sizes=target_sizes)
 
-        # Compare per-sample predicted depth tensors
-        for pred_slow, pred_fast in zip(processed_slow, processed_fast):
-            depth_slow = pred_slow["predicted_depth"]
-            depth_fast = pred_fast["predicted_depth"]
-            torch.testing.assert_close(depth_fast, depth_slow, atol=1e-1, rtol=1e-3)
-            self.assertLessEqual(torch.mean(torch.abs(depth_fast.float() - depth_slow.float())).item(), 5e-3)
+        # Create processors and run post-processing for each backend
+        processed = {}
+        for backend_name in self.image_processors_backends_list:
+            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            processed[backend_name] = image_processor.post_process_depth_estimation(outputs, target_sizes=target_sizes)
+
+        # Compare all backends to the first one (reference backend)
+        backend_names = list(processed.keys())
+        reference_backend = backend_names[0]
+        for backend_name in backend_names[1:]:
+            for pred_ref, pred_other in zip(processed[reference_backend], processed[backend_name]):
+                depth_ref = pred_ref["predicted_depth"].float()
+                depth_other = pred_other["predicted_depth"].float()
+                self._assert_tensors_equivalence(depth_ref, depth_other)

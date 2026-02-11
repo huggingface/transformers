@@ -13,38 +13,32 @@
 # limitations under the License.
 """Image processor class for GLPN."""
 
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
-from ...utils.import_utils import requires
+import numpy as np
+
+from ...image_processing_utils import (
+    BaseImageProcessor,
+    BatchFeature,
+    PilBackend,
+    TorchVisionBackend,
+)
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import (
+    ImageInput,
+    PILImageResampling,
+    SizeDict,
+)
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torchvision_available, logging, requires_backends
 
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
-import numpy as np
-import PIL.Image
-
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import resize, to_channel_dimension_format
-from ...image_utils import (
-    ChannelDimension,
-    PILImageResampling,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    is_torch_available,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
-from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, filter_out_non_signature_kwargs, logging, requires_backends
-
-
-if is_torch_available():
+if is_torchvision_available():
     import torch
-
+    from torchvision.transforms.v2 import functional as tvF
 
 logger = logging.get_logger(__name__)
 
@@ -57,235 +51,165 @@ class GLPNImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     size_divisor: int
-    resample: PILImageResampling
 
 
-@requires(backends=("vision",))
-class GLPNImageProcessor(BaseImageProcessor):
-    r"""
-    Constructs a GLPN image processor.
+class GLPNTorchVisionBackend(TorchVisionBackend):
+    """TorchVision backend for GLPN with size_divisor resize."""
 
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions, rounding them down to the closest multiple of
-            `size_divisor`. Can be overridden by `do_resize` in `preprocess`.
-        size_divisor (`int`, *optional*, defaults to 32):
-            When `do_resize` is `True`, images are resized so their height and width are rounded down to the closest
-            multiple of `size_divisor`. Can be overridden by `size_divisor` in `preprocess`.
-        resample (`PIL.Image` resampling filter, *optional*, defaults to `Resampling.BILINEAR`):
-            Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.). Can be
-            overridden by `do_rescale` in `preprocess`.
-        rescale_factor (`float`, *optional*, defaults to `1 / 255`):
-            The scaling factor to apply to the pixel values. Can be overridden by `rescale_factor` in `preprocess`.
-    """
-
-    model_input_names = ["pixel_values"]
-    valid_kwargs = GLPNImageProcessorKwargs
-
-    def __init__(
+    def resize(
         self,
-        do_resize: bool = True,
+        image: "torch.Tensor",
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         size_divisor: int = 32,
-        resample=PILImageResampling.BILINEAR,
-        do_rescale: bool = True,
-        rescale_factor: float | None = 1 / 255,
         **kwargs,
-    ) -> None:
-        self.do_resize = do_resize
-        self.do_rescale = do_rescale
-        self.size_divisor = size_divisor
-        self.resample = resample
-        self.rescale_factor = rescale_factor
-        super().__init__(**kwargs)
+    ) -> "torch.Tensor":
+        """Resize so height and width are rounded down to the closest multiple of size_divisor."""
+        height, width = image.shape[-2:]
+        new_h = height // size_divisor * size_divisor
+        new_w = width // size_divisor * size_divisor
+        return super().resize(
+            image,
+            SizeDict(height=new_h, width=new_w),
+            resample=resample,
+            **kwargs,
+        )
+
+    def preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        size_divisor: int = 32,
+        **kwargs,
+    ) -> BatchFeature:
+        """Custom preprocessing for GLPN."""
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(stacked_images, size, resample, size_divisor=size_divisor)
+            stacked_images = self._rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
+
+class GLPNPilBackend(PilBackend):
+    """PIL backend for GLPN with size_divisor resize."""
 
     def resize(
         self,
         image: np.ndarray,
-        size_divisor: int,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        size_divisor: int = 32,
         **kwargs,
     ) -> np.ndarray:
-        """
-        Resize the image, rounding the (height, width) dimensions down to the closest multiple of size_divisor.
-
-        If the image is of dimension (3, 260, 170) and size_divisor is 32, the image will be resized to (3, 256, 160).
-
-        Args:
-            image (`np.ndarray`):
-                The image to resize.
-            size_divisor (`int`):
-                The image is resized so its height and width are rounded down to the closest multiple of
-                `size_divisor`.
-            resample:
-                `PIL.Image` resampling filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
-            data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the output image. If `None`, the channel dimension format of the input
-                image is used. Can be one of:
-                - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the input image. If not set, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-
-        Returns:
-            `np.ndarray`: The resized image.
-        """
-        height, width = get_image_size(image, channel_dim=input_data_format)
-        # Rounds the height and width down to the closest multiple of size_divisor
+        """Resize so height and width are rounded down to the closest multiple of size_divisor."""
+        height, width = image.shape[-2:]
         new_h = height // size_divisor * size_divisor
         new_w = width // size_divisor * size_divisor
-        image = resize(
-            image,
-            (new_h, new_w),
-            resample=resample,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
-        )
-        return image
+        return super().resize(image, SizeDict(height=new_h, width=new_w), resample, **kwargs)
 
-    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
-        images: Union["PIL.Image.Image", TensorType, list["PIL.Image.Image"], list[TensorType]],
-        do_resize: bool | None = None,
-        size_divisor: int | None = None,
-        resample=None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        return_tensors: TensorType | str | None = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
+        images: list[np.ndarray],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        size_divisor: int = 32,
+        **kwargs,
     ) -> BatchFeature:
-        """
-        Preprocess the given images.
+        """Custom preprocessing for GLPN."""
+        processed_images = []
+        for image in images:
+            if do_resize:
+                image = self.resize(image, size, resample, size_divisor=size_divisor)
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+            processed_images.append(image)
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
-        Args:
-            images (`PIL.Image.Image` or `TensorType` or `list[np.ndarray]` or `list[TensorType]`):
-                Images to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_normalize=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the input such that the (height, width) dimensions are a multiple of `size_divisor`.
-            size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
-                When `do_resize` is `True`, images are resized so their height and width are rounded down to the
-                closest multiple of `size_divisor`.
-            resample (`PIL.Image` resampling filter, *optional*, defaults to `self.resample`):
-                `PIL.Image` resampling filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
-                an effect if `do_resize` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.).
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - `None`: Return a list of `np.ndarray`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                    - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        size_divisor = size_divisor if size_divisor is not None else self.size_divisor
-        resample = resample if resample is not None else self.resample
 
-        images = make_flat_list_of_images(images)
+@auto_docstring(custom_intro="Constructs a GLPN image processor.")
+class GLPNImageProcessor(BaseImageProcessor):
+    valid_kwargs = GLPNImageProcessorKwargs
 
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
+    _backend_classes = {
+        "torchvision": GLPNTorchVisionBackend,
+        "pil": GLPNPilBackend,
+    }
 
-        # Here, the rescale() method uses a constant rescale_factor. It does not need to be validated
-        # with a rescale_factor.
-        validate_preprocess_arguments(
-            do_resize=do_resize,
-            size=size_divisor,  # Here, size_divisor is used as a parameter for optimal resizing instead of size.
-            resample=resample,
-        )
+    do_resize = True
+    do_rescale = True
+    rescale_factor = 1 / 255
+    resample = PILImageResampling.BILINEAR
+    size_divisor = 32
 
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(img) for img in images]
+    def __init__(self, **kwargs: Unpack[GLPNImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
-        if do_rescale and is_scaled_image(images[0]):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
+    def _validate_preprocess_kwargs(self, **kwargs):
+        # pop `do_resize` to not raise an error as `size` is not used (we use size_divisor)
+        kwargs.pop("do_resize", None)
+        return super()._validate_preprocess_kwargs(**kwargs)
 
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        if do_resize:
-            images = [
-                self.resize(image, size_divisor=size_divisor, resample=resample, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        if do_rescale:
-            images = [
-                self.rescale(image, scale=rescale_factor, input_data_format=input_data_format) for image in images
-            ]
-
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        data = {"pixel_values": images}
-        return BatchFeature(data=data, tensor_type=return_tensors)
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[GLPNImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     def post_process_depth_estimation(
         self,
         outputs: "DepthEstimatorOutput",
-        target_sizes: TensorType | list[tuple[int, int]] | None | None = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None = None,
     ) -> list[dict[str, TensorType]]:
         """
-        Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
+        Convert raw model outputs to final depth predictions.
         Only supports PyTorch.
-
-        Args:
-            outputs ([`DepthEstimatorOutput`]):
-                Raw outputs of the model.
-            target_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
-                (height, width) of each image in the batch. If left to None, predictions will not be resized.
-
-        Returns:
-            `list[dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
-            predictions.
         """
         requires_backends(self, "torch")
-
         predicted_depth = outputs.predicted_depth
-
-        if (target_sizes is not None) and (len(predicted_depth) != len(target_sizes)):
+        if target_sizes is not None and len(predicted_depth) != len(target_sizes):
             raise ValueError(
                 "Make sure that you pass in as many target sizes as the batch dimension of the predicted depth"
             )
-
         results = []
         target_sizes = [None] * len(predicted_depth) if target_sizes is None else target_sizes
         for depth, target_size in zip(predicted_depth, target_sizes):
             if target_size is not None:
                 depth = depth[None, None, ...]
                 depth = torch.nn.functional.interpolate(depth, size=target_size, mode="bicubic", align_corners=False)
-                depth = depth.squeeze()
-
+                depth = depth.squeeze(0).squeeze(0)
             results.append({"predicted_depth": depth})
-
         return results
 
 
-__all__ = ["GLPNImageProcessor"]
+__all__ = ["GLPNImageProcessor", "GLPNImageProcessorKwargs"]

@@ -1,4 +1,4 @@
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,30 +13,31 @@
 # limitations under the License.
 """Image processor class for EfficientNet."""
 
+from functools import lru_cache
+from typing import Optional
+
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import rescale, resize, to_channel_dimension_format
+from ...image_processing_utils import (
+    BaseImageProcessor,
+    BatchFeature,
+    PilBackend,
+    TorchVisionBackend,
+)
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
-    ChannelDimension,
-    ImageInput,
     PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
+    SizeDict,
 )
-from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
 
 
-if is_vision_available():
-    import PIL
-
+if is_torchvision_available():
+    import torch
+    from torchvision.transforms.v2 import functional as tvF
 
 logger = logging.get_logger(__name__)
 
@@ -53,322 +54,186 @@ class EfficientNetImageProcessorKwargs(ImagesKwargs, total=False):
     include_top: bool
 
 
-class EfficientNetImageProcessor(BaseImageProcessor):
-    r"""
-    Constructs a EfficientNet image processor.
+class EfficientNetTorchVisionBackend(TorchVisionBackend):
+    """TorchVision backend for EfficientNet with rescale offset and include_top."""
 
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
-            `do_resize` in `preprocess`.
-        size (`dict[str, int]` *optional*, defaults to `{"height": 346, "width": 346}`):
-            Size of the image after `resize`. Can be overridden by `size` in `preprocess`.
-        resample (`PILImageResampling` filter, *optional*, defaults to `Resampling.BICUBIC`):
-            Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
-        do_center_crop (`bool`, *optional*, defaults to `False`):
-            Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the image
-            is padded with 0's and then center cropped. Can be overridden by `do_center_crop` in `preprocess`.
-        crop_size (`dict[str, int]`, *optional*, defaults to `{"height": 289, "width": 289}`):
-            Desired output size when applying center-cropping. Can be overridden by `crop_size` in `preprocess`.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
-            `preprocess` method.
-        rescale_offset (`bool`, *optional*, defaults to `False`):
-            Whether to rescale the image between [-scale_range, scale_range] instead of [0, scale_range]. Can be
-            overridden by the `rescale_factor` parameter in the `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
-            parameter in the `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-        include_top (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image again. Should be set to True if the inputs are used for image classification.
-    """
-
-    model_input_names = ["pixel_values"]
-    valid_kwargs = EfficientNetImageProcessorKwargs
-
-    def __init__(
+    def rescale(
         self,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_center_crop: bool = False,
-        crop_size: dict[str, int] | None = None,
-        rescale_factor: int | float = 1 / 255,
-        rescale_offset: bool = False,
-        do_rescale: bool = True,
-        do_normalize: bool = True,
+        image: "torch.Tensor",
+        scale: float,
+        offset: bool = False,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """Rescale by scale; if offset=True then image = image * scale - 1."""
+        rescaled = image * scale
+        if offset:
+            rescaled -= 1
+        return rescaled
+
+    @lru_cache(maxsize=10)
+    def _fuse_mean_std_and_rescale_factor(
+        self,
+        do_normalize: bool | None = None,
         image_mean: float | list[float] | None = None,
         image_std: float | list[float] | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        device: Optional["torch.device"] = None,
+        rescale_offset: bool | None = False,
+    ) -> tuple:
+        if do_rescale and do_normalize and not rescale_offset:
+            image_mean = torch.tensor(image_mean, device=device) * (1.0 / rescale_factor)
+            image_std = torch.tensor(image_std, device=device) * (1.0 / rescale_factor)
+            do_rescale = False
+        return image_mean, image_std, do_rescale
+
+    def _rescale_and_normalize_efficientnet(
+        self,
+        images: "torch.Tensor",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float],
+        image_std: float | list[float],
+        rescale_offset: bool = False,
+    ) -> "torch.Tensor":
+        image_mean, image_std, do_rescale = self._fuse_mean_std_and_rescale_factor(
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            device=images.device,
+            rescale_offset=rescale_offset,
+        )
+        # We can't fuse rescale and normalize when we need to apply the offset (rescale_offset=True)
+        if do_rescale:
+            images = self.rescale(images, rescale_factor, offset=rescale_offset)
+        if do_normalize:
+            images = self.normalize(images.to(dtype=torch.float32), image_mean, image_std)
+        return images
+
+    def preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        rescale_offset: bool = False,
         include_top: bool = True,
         **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-        size = size if size is not None else {"height": 346, "width": 346}
-        size = get_size_dict(size)
-        crop_size = crop_size if crop_size is not None else {"height": 289, "width": 289}
-        crop_size = get_size_dict(crop_size, param_name="crop_size")
+    ) -> BatchFeature:
+        """Custom preprocessing for EfficientNet."""
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(stacked_images, size, resample)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        self.do_resize = do_resize
-        self.size = size
-        self.resample = resample
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.rescale_offset = rescale_offset
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self.include_top = include_top
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            stacked_images = self._rescale_and_normalize_efficientnet(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std, rescale_offset
+            )
+            if include_top:
+                stacked_images = self.normalize(stacked_images, 0, image_std)
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
-    def resize(
-        self,
-        image: np.ndarray,
-        size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Resize an image to `(size["height"], size["width"])`.
 
-        Args:
-            image (`np.ndarray`):
-                Image to resize.
-            size (`dict[str, int]`):
-                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
-            data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-
-        Returns:
-            `np.ndarray`: The resized image.
-        """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        output_size = (size["height"], size["width"])
-        return resize(
-            image,
-            size=output_size,
-            resample=resample,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
-        )
+class EfficientNetPilBackend(PilBackend):
+    """PIL backend for EfficientNet with rescale offset and include_top."""
 
     def rescale(
         self,
         image: np.ndarray,
-        scale: int | float,
-        offset: bool = True,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-        **kwargs,
-    ):
-        """
-        Rescale an image by a scale factor.
-
-        If `offset` is `True`, the image has its values rescaled by `scale` and then offset by 1. If `scale` is
-        1/127.5, the image is rescaled between [-1, 1].
-            image = image * scale - 1
-
-        If `offset` is `False`, and `scale` is 1/255, the image is rescaled between [0, 1].
-            image = image * scale
-
-        Args:
-            image (`np.ndarray`):
-                Image to rescale.
-            scale (`int` or `float`):
-                Scale to apply to the image.
-            offset (`bool`, *optional*):
-                Whether to scale the image in both negative and positive directions.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
-        """
-        rescaled_image = rescale(
-            image, scale=scale, data_format=data_format, input_data_format=input_data_format, **kwargs
-        )
-
+        scale: float,
+        offset: bool = False,
+    ) -> np.ndarray:
+        """Rescale by scale; if offset=True then image = image * scale - 1."""
+        rescaled = super().rescale(image, scale=scale)
         if offset:
-            rescaled_image = rescaled_image - 1
+            rescaled -= 1
+        return rescaled
 
-        return rescaled_image
-
-    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
-        images: ImageInput,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        resample=None,
-        do_center_crop: bool | None = None,
-        crop_size: dict[str, int] | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        rescale_offset: bool | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        include_top: bool | None = None,
-        return_tensors: str | TensorType | None = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> PIL.Image.Image:
-        """
-        Preprocess an image or batch of images.
+        images: list[np.ndarray],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        rescale_offset: bool = False,
+        include_top: bool = True,
+        **kwargs,
+    ) -> BatchFeature:
+        """Custom preprocessing for EfficientNet."""
+        processed_images = []
+        for image in images:
+            if do_resize:
+                image = self.resize(image=image, size=size, resample=resample)
+            if do_center_crop:
+                image = self.center_crop(image, crop_size)
+            if do_rescale:
+                image = self.rescale(image, rescale_factor, offset=rescale_offset)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+            if include_top:
+                image = self.normalize(image, 0, image_std)
+            processed_images.append(image)
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after `resize`.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                PILImageResampling filter to use if resizing the image Only has an effect if `do_resize` is set to
-                `True`.
-            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-                Whether to center crop the image.
-            crop_size (`dict[str, int]`, *optional*, defaults to `self.crop_size`):
-                Size of the image after center crop. If one edge the image is smaller than `crop_size`, it will be
-                padded with zeros and then cropped
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            rescale_offset (`bool`, *optional*, defaults to `self.rescale_offset`):
-                Whether to rescale the image between [-scale_range, scale_range] instead of [0, scale_range].
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation.
-            include_top (`bool`, *optional*, defaults to `self.include_top`):
-                Rescales the image again for image classification if set to True.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - `None`: Return a list of `np.ndarray`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                    - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        rescale_offset = rescale_offset if rescale_offset is not None else self.rescale_offset
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        include_top = include_top if include_top is not None else self.include_top
 
-        size = size if size is not None else self.size
-        size = get_size_dict(size)
-        crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, param_name="crop_size")
+@auto_docstring(custom_intro="Constructs an EfficientNet image processor.")
+class EfficientNetImageProcessor(BaseImageProcessor):
+    _backend_classes = {
+        "torchvision": EfficientNetTorchVisionBackend,
+        "pil": EfficientNetPilBackend,
+    }
 
-        images = make_flat_list_of_images(images)
+    resample = PILImageResampling.BICUBIC
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    size = {"height": 346, "width": 346}
+    crop_size = {"height": 289, "width": 289}
+    do_resize = True
+    do_center_crop = False
+    do_rescale = True
+    rescale_factor = 1 / 255
+    rescale_offset = False
+    do_normalize = True
+    include_top = True
+    valid_kwargs = EfficientNetImageProcessorKwargs
 
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if do_rescale and is_scaled_image(images[0]):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        if do_resize:
-            images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        if do_center_crop:
-            images = [
-                self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
-            ]
-
-        if do_rescale:
-            images = [
-                self.rescale(
-                    image=image, scale=rescale_factor, offset=rescale_offset, input_data_format=input_data_format
-                )
-                for image in images
-            ]
-
-        if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        if include_top:
-            images = [
-                self.normalize(image=image, mean=0, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        data = {"pixel_values": images}
-        return BatchFeature(data=data, tensor_type=return_tensors)
+    def __init__(self, **kwargs: Unpack[EfficientNetImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
 
 __all__ = ["EfficientNetImageProcessor"]

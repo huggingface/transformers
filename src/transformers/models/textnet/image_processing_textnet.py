@@ -15,339 +15,214 @@
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import (
-    convert_to_rgb,
-    get_resize_output_image_size,
-    resize,
-    to_channel_dimension_format,
+from ...image_processing_utils import (
+    BaseImageProcessor,
+    BatchFeature,
+    PilBackend,
+    TorchVisionBackend,
 )
+from ...image_transforms import get_resize_output_image_size, group_images_by_shape, reorder_images
+from ...image_transforms import resize as np_resize
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_kwargs,
-    validate_preprocess_arguments,
+    SizeDict,
 )
-from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, is_vision_available, logging
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, logging
 
+
+if is_torch_available():
+    import torch
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 logger = logging.get_logger(__name__)
 
-if is_vision_available():
-    import PIL
-
 
 class TextNetImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
+        Ensures height and width are rounded to a multiple of this value after resizing.
+    """
+
     size_divisor: int
 
 
-class TextNetImageProcessor(BaseImageProcessor):
-    r"""
-    Constructs a TextNet image processor.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
-            `do_resize` in the `preprocess` method.
-        size (`dict[str, int]` *optional*, defaults to `{"shortest_edge": 640}`):
-            Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
-            the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
-            method.
-        size_divisor (`int`, *optional*, defaults to 32):
-            Ensures height and width are rounded to a multiple of this value after resizing.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-            Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
-        do_center_crop (`bool`, *optional*, defaults to `False`):
-            Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
-            `preprocess` method.
-        crop_size (`dict[str, int]` *optional*, defaults to 224):
-            Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
-            method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
-            the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
-            method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-            Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-    """
-
-    model_input_names = ["pixel_values"]
-    valid_kwargs = TextNetImageProcessorKwargs
-
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        size_divisor: int = 32,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        do_center_crop: bool = False,
-        crop_size: dict[str, int] | None = None,
-        do_rescale: bool = True,
-        rescale_factor: int | float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = IMAGENET_DEFAULT_MEAN,
-        image_std: float | list[float] | None = IMAGENET_DEFAULT_STD,
-        do_convert_rgb: bool = True,
-        **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": 640}
-        size = get_size_dict(size, default_to_square=False)
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        crop_size = get_size_dict(crop_size, param_name="crop_size")
-
-        self.do_resize = do_resize
-        self.size = size
-        self.size_divisor = size_divisor
-        self.resample = resample
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
-        self.do_convert_rgb = do_convert_rgb
-
-        self._valid_processor_keys = [
-            "images",
-            "do_resize",
-            "size",
-            "size_divisor",
-            "resample",
-            "do_center_crop",
-            "crop_size",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_convert_rgb",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
+class TextNetTorchVisionBackend(TorchVisionBackend):
+    """TorchVision backend for TextNet with size_divisor resize."""
 
     def resize(
         self,
-        image: np.ndarray,
-        size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
+        image: "torch.Tensor",
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        size_divisor: int = 32,
         **kwargs,
-    ) -> np.ndarray:
-        """
-        Resize an image. The shortest edge of the image is resized to size["shortest_edge"] , with the longest edge
-        resized to keep the input aspect ratio. Both the height and width are resized to be divisible by 32.
-
-        Args:
-            image (`np.ndarray`):
-                Image to resize.
-            size (`dict[str, int]`):
-                Size of the output image.
-            size_divisor (`int`, *optional*, defaults to `32`):
-                Ensures height and width are rounded to a multiple of this value after resizing.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-                Resampling filter to use when resiizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
-            default_to_square (`bool`, *optional*, defaults to `False`):
-                The value to be passed to `get_size_dict` as `default_to_square` when computing the image size. If the
-                `size` argument in `get_size_dict` is an `int`, it determines whether to default to a square image or
-                not.Note that this attribute is not used in computing `crop_size` via calling `get_size_dict`.
-        """
-        if "shortest_edge" in size:
-            size = size["shortest_edge"]
-        elif "height" in size and "width" in size:
-            size = (size["height"], size["width"])
-        else:
-            raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
-
-        height, width = get_resize_output_image_size(
-            image, size=size, input_data_format=input_data_format, default_to_square=False
-        )
-        if height % self.size_divisor != 0:
-            height += self.size_divisor - (height % self.size_divisor)
-        if width % self.size_divisor != 0:
-            width += self.size_divisor - (width % self.size_divisor)
-
-        return resize(
+    ) -> "torch.Tensor":
+        """Resize to shortest_edge then round up to be divisible by size_divisor."""
+        if not size.shortest_edge:
+            raise ValueError(f"Size must contain 'shortest_edge' key. Got {size.keys()}")
+        new_size = get_resize_output_image_size(
             image,
-            size=(height, width),
+            size=size.shortest_edge,
+            default_to_square=False,
+            input_data_format=ChannelDimension.FIRST,
+        )
+        height, width = new_size
+        # Round up to be divisible by size_divisor
+        if height % size_divisor != 0:
+            height += size_divisor - (height % size_divisor)
+        if width % size_divisor != 0:
+            width += size_divisor - (width % size_divisor)
+        return super().resize(
+            image,
+            SizeDict(height=height, width=width),
             resample=resample,
-            data_format=data_format,
-            input_data_format=input_data_format,
             **kwargs,
         )
 
     def preprocess(
         self,
-        images: ImageInput,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        size_divisor: int | None = None,
-        resample: PILImageResampling | None = None,
-        do_center_crop: bool | None = None,
-        crop_size: int | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_convert_rgb: bool | None = None,
-        return_tensors: str | TensorType | None = None,
-        data_format: ChannelDimension | None = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        size_divisor: int = 32,
         **kwargs,
-    ) -> PIL.Image.Image:
-        """
-        Preprocess an image or batch of images.
+    ) -> BatchFeature:
+        """Custom preprocessing for TextNet."""
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(stacked_images, size, resample, size_divisor=size_divisor)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
-                the longest edge resized to keep the input aspect ratio.
-            size_divisor (`int`, *optional*, defaults to `32`):
-                Ensures height and width are rounded to a multiple of this value after resizing.
-            resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
-                has an effect if `do_resize` is set to `True`.
-            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-                Whether to center crop the image.
-            crop_size (`dict[str, int]`, *optional*, defaults to `self.crop_size`):
-                Size of the center crop. Only has an effect if `do_center_crop` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-                `True`.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                - Unset: Return a list of `np.ndarray`.
-                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
-        size = get_size_dict(size, param_name="size", default_to_square=False)
-        size_divisor = size_divisor if size_divisor is not None else self.size_divisor
-        resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
-        crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, param_name="crop_size", default_to_square=True)
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            stacked_images = self._rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
-        images = make_flat_list_of_images(images)
+class TextNetPilBackend(PilBackend):
+    """PIL backend for TextNet with size_divisor resize."""
 
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_resize=do_resize,
-            size=size,
+    def resize(
+        self,
+        image: np.ndarray,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        size_divisor: int = 32,
+        **kwargs,
+    ) -> np.ndarray:
+        """Resize to shortest_edge then round up to be divisible by size_divisor."""
+        if not size.shortest_edge:
+            raise ValueError(f"Size must contain 'shortest_edge' key. Got {size.keys()}")
+        height, width = get_resize_output_image_size(
+            image,
+            size=size.shortest_edge,
+            default_to_square=False,
+            input_data_format=ChannelDimension.FIRST,
+        )
+        # Round up to be divisible by size_divisor
+        if height % size_divisor != 0:
+            height += size_divisor - (height % size_divisor)
+        if width % size_divisor != 0:
+            width += size_divisor - (width % size_divisor)
+        return np_resize(
+            image,
+            size=(height, width),
             resample=resample,
+            data_format=ChannelDimension.FIRST,
+            input_data_format=ChannelDimension.FIRST,
         )
 
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        all_images = []
+    def preprocess(
+        self,
+        images: list[np.ndarray],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        size_divisor: int = 32,
+        **kwargs,
+    ) -> BatchFeature:
+        """Custom preprocessing for TextNet."""
+        processed_images = []
         for image in images:
             if do_resize:
-                image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-
+                image = self.resize(image, size, resample, size_divisor=size_divisor)
             if do_center_crop:
-                image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
-
+                image = self.center_crop(image, crop_size)
             if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-
+                image = self.rescale(image, rescale_factor)
             if do_normalize:
-                image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
-                )
-
-            all_images.append(image)
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            for image in all_images
-        ]
-
-        data = {"pixel_values": images}
-        return BatchFeature(data=data, tensor_type=return_tensors)
+                image = self.normalize(image, image_mean, image_std)
+            processed_images.append(image)
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
-__all__ = ["TextNetImageProcessor"]
+@auto_docstring(custom_intro="Constructs a TextNet image processor.")
+class TextNetImageProcessor(BaseImageProcessor):
+    valid_kwargs = TextNetImageProcessorKwargs
+
+    _backend_classes = {
+        "torchvision": TextNetTorchVisionBackend,
+        "pil": TextNetPilBackend,
+    }
+
+    resample = PILImageResampling.BILINEAR
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
+    size = {"shortest_edge": 640}
+    default_to_square = False
+    crop_size = {"height": 224, "width": 224}
+    do_resize = True
+    do_center_crop = False
+    do_rescale = True
+    do_normalize = True
+    do_convert_rgb = True
+    size_divisor = 32
+
+    def __init__(self, **kwargs: Unpack[TextNetImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[TextNetImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+
+__all__ = ["TextNetImageProcessor", "TextNetImageProcessorKwargs"]

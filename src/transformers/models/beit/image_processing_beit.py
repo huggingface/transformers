@@ -13,7 +13,7 @@
 # limitations under the License.
 """Image processor class for BEiT."""
 
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
 
@@ -207,7 +207,7 @@ class BeitImageProcessor(BaseImageProcessor):
         segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""

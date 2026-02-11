@@ -15,188 +15,168 @@
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import get_image_size, pad, to_channel_dimension_format
+from ...image_processing_utils import (
+    BaseImageProcessor,
+    BatchFeature,
+    PilBackend,
+    TorchVisionBackend,
+)
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_transforms import pad as np_pad
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
+    PILImageResampling,
+    SizeDict,
 )
-from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, filter_out_non_signature_kwargs, logging
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
 
+
+if is_torchvision_available():
+    import torch
+    from torchvision.transforms.v2 import functional as tvF
 
 logger = logging.get_logger(__name__)
 
 
 class Swin2SRImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
+        The size to make the height and width divisible by when padding.
+    """
+
     size_divisor: int
 
 
-class Swin2SRImageProcessor(BaseImageProcessor):
-    r"""
-    Constructs a Swin2SR image processor.
+class Swin2SRTorchVisionBackend(TorchVisionBackend):
+    """TorchVision backend for Swin2SR with custom pad."""
 
-    Args:
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
-            parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
-            `preprocess` method.
-    """
-
-    model_input_names = ["pixel_values"]
-    valid_kwargs = Swin2SRImageProcessorKwargs
-
-    def __init__(
+    def pad(
         self,
-        do_rescale: bool = True,
-        rescale_factor: int | float = 1 / 255,
-        do_pad: bool = True,
+        images: "torch.Tensor",
+        pad_size: SizeDict | None,
         size_divisor: int = 8,
         **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
+    ) -> "torch.Tensor":
+        """Pad images to make height and width divisible by size_divisor using symmetric padding."""
+        height, width = images.shape[-2:]
+        pad_height = (height // size_divisor + 1) * size_divisor - height
+        pad_width = (width // size_divisor + 1) * size_divisor - width
+        return tvF.pad(images, (0, 0, pad_width, pad_height), padding_mode="symmetric")
 
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_pad = do_pad
-        pad_size = kwargs.get("pad_size")
-        self.size_divisor = size_divisor if size_divisor is not None else pad_size
+    def preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        size_divisor: int = 8,
+        **kwargs,
+    ) -> BatchFeature:
+        """Custom preprocessing for Swin2SR."""
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_rescale:
+                stacked_images = self.rescale(stacked_images, rescale_factor)
+            if do_pad:
+                stacked_images = self.pad(stacked_images, pad_size=pad_size, size_divisor=size_divisor)
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
+
+class Swin2SRPilBackend(PilBackend):
+    """PIL backend for Swin2SR with custom pad."""
 
     def pad(
         self,
         image: np.ndarray,
-        size: int,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-    ):
-        """
-        Pad an image to make the height and width divisible by `size`.
-
-        Args:
-            image (`np.ndarray`):
-                Image to pad.
-            size (`int`):
-                The size to make the height and width divisible by.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            input_data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-
-        Returns:
-            `np.ndarray`: The padded image.
-        """
-        old_height, old_width = get_image_size(image, input_data_format)
-        pad_height = (old_height // size + 1) * size - old_height
-        pad_width = (old_width // size + 1) * size - old_width
-
-        return pad(
+        pad_size: SizeDict | None,
+        size_divisor: int = 8,
+        **kwargs,
+    ) -> np.ndarray:
+        """Pad image to make height and width divisible by size_divisor using symmetric padding."""
+        height, width = image.shape[-2:]
+        pad_height = (height // size_divisor + 1) * size_divisor - height
+        pad_width = (width // size_divisor + 1) * size_divisor - width
+        return np_pad(
             image,
-            ((0, pad_height), (0, pad_width)),
+            padding=((0, pad_height), (0, pad_width)),
             mode="symmetric",
-            data_format=data_format,
-            input_data_format=input_data_format,
+            data_format=ChannelDimension.FIRST,
+            input_data_format=ChannelDimension.FIRST,
         )
 
-    @filter_out_non_signature_kwargs()
+    def preprocess(
+        self,
+        images: list[np.ndarray],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        size_divisor: int = 8,
+        **kwargs,
+    ) -> BatchFeature:
+        """Custom preprocessing for Swin2SR."""
+        processed_images = []
+        for image in images:
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_pad:
+                image = self.pad(image, pad_size=pad_size, size_divisor=size_divisor)
+            processed_images.append(image)
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
+
+@auto_docstring(custom_intro="Constructs a Swin2SR image processor.")
+class Swin2SRImageProcessor(BaseImageProcessor):
+    valid_kwargs = Swin2SRImageProcessorKwargs
+
+    _backend_classes = {
+        "torchvision": Swin2SRTorchVisionBackend,
+        "pil": Swin2SRPilBackend,
+    }
+
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_pad = True
+    size_divisor = 8
+
+    def __init__(self, **kwargs: Unpack[Swin2SRImageProcessorKwargs]):
+        # Handle legacy pad_size parameter
+        pad_size = kwargs.pop("pad_size", None)
+        kwargs.setdefault("size_divisor", pad_size)
+        super().__init__(**kwargs)
+
     def preprocess(
         self,
         images: ImageInput,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_pad: bool | None = None,
-        size_divisor: int | None = None,
-        return_tensors: str | TensorType | None = None,
-        data_format: str | ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-    ):
-        """
-        Preprocess an image or batch of images.
-
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_pad (`bool`, *optional*, defaults to `True`):
-                Whether to pad the image to make the height and width divisible by `window_size`.
-            size_divisor (`int`, *optional*, defaults to 32):
-                The size of the sliding window for the local attention.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                - Unset: Return a list of `np.ndarray`.
-                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_pad = do_pad if do_pad is not None else self.do_pad
-        size_divisor = size_divisor if size_divisor is not None else self.size_divisor
-
-        images = make_flat_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-        )
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if do_rescale and is_scaled_image(images[0]):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        if do_pad:
-            images = [self.pad(image, size=size_divisor, input_data_format=input_data_format) for image in images]
-
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        data = {"pixel_values": images}
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        **kwargs: Unpack[Swin2SRImageProcessorKwargs],
+    ) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
 
-__all__ = ["Swin2SRImageProcessor"]
+__all__ = ["Swin2SRImageProcessor", "Swin2SRImageProcessorKwargs"]

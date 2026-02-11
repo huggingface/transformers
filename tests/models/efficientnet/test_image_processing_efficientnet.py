@@ -19,11 +19,7 @@ import numpy as np
 
 from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import (
-    is_torch_available,
-    is_torchvision_available,
-    is_vision_available,
-)
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -33,9 +29,6 @@ if is_torch_available():
 
 if is_vision_available():
     from transformers import EfficientNetImageProcessor
-
-    if is_torchvision_available():
-        from transformers import EfficientNetImageProcessorFast
 
 
 class EfficientNetImageProcessorTester:
@@ -100,7 +93,6 @@ class EfficientNetImageProcessorTester:
 @require_vision
 class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = EfficientNetImageProcessor if is_vision_available() else None
-    fast_image_processing_class = EfficientNetImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -111,8 +103,8 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
-            image_processing = image_processing_class(**self.image_processor_dict)
+        for backend_name in self.image_processors_backends_list:
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
             self.assertTrue(hasattr(image_processing, "do_normalize"))
@@ -120,46 +112,46 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue(hasattr(image_processing, "size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+        for backend_name in self.image_processors_backends_list:
+            image_processor = self.image_processing_class.from_dict(self.image_processor_dict, backend=backend_name)
             self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
+            image_processor = self.image_processing_class.from_dict(
+                self.image_processor_dict, size=42, backend=backend_name
+            )
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_rescale(self):
         # EfficientNet optionally rescales between -1 and 1 instead of the usual 0 and 1
-        image = np.arange(0, 256, 1, dtype=np.uint8).reshape(1, 8, 32)
+        image_np = np.arange(0, 256, 1, dtype=np.uint8).reshape(1, 8, 32)
 
-        for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class(**self.image_processor_dict)
-            if image_processing_class == EfficientNetImageProcessorFast:
-                image = torch.from_numpy(image)
-
+        for backend_name in self.image_processors_backends_list:
+            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            backend = image_processor._backend_instance
+            if backend_name == "torchvision":
+                image = torch.from_numpy(image_np)
                 # Scale between [-1, 1] with rescale_factor 1/127.5 and rescale_offset=True
-                rescaled_image = image_processor.rescale(image, scale=1 / 127.5, offset=True)
+                rescaled_image = backend.rescale(image, scale=1 / 127.5, offset=True)
                 expected_image = (image * (1 / 127.5)) - 1
                 self.assertTrue(torch.allclose(rescaled_image, expected_image))
-
-                # Scale between [0, 1] with rescale_factor 1/255 and rescale_offset=True
-                rescaled_image = image_processor.rescale(image, scale=1 / 255, offset=False)
+                # Scale between [0, 1] with rescale_factor 1/255 and rescale_offset=False
+                rescaled_image = backend.rescale(image, scale=1 / 255, offset=False)
                 expected_image = image / 255.0
                 self.assertTrue(torch.allclose(rescaled_image, expected_image))
-
             else:
-                rescaled_image = image_processor.rescale(image, scale=1 / 127.5, dtype=np.float64)
-                expected_image = (image * (1 / 127.5)).astype(np.float64) - 1
-                self.assertTrue(np.allclose(rescaled_image, expected_image))
-
-                rescaled_image = image_processor.rescale(image, scale=1 / 255, offset=False, dtype=np.float64)
-                expected_image = (image / 255.0).astype(np.float64)
-                self.assertTrue(np.allclose(rescaled_image, expected_image))
+                image = image_np
+                rescaled_image = backend.rescale(image, scale=1 / 127.5, offset=True)
+                expected_image = (image.astype(np.float64) * (1 / 127.5)) - 1
+                self.assertTrue(np.allclose(rescaled_image, expected_image, rtol=1e-5, atol=1e-5))
+                rescaled_image = backend.rescale(image, scale=1 / 255, offset=False)
+                expected_image = image.astype(np.float64) / 255.0
+                self.assertTrue(np.allclose(rescaled_image, expected_image, rtol=1e-5, atol=1e-5))
 
     @require_vision
     @require_torch
     def test_rescale_normalize(self):
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+        if self.image_processing_class is None or "torchvision" not in self.image_processors_backends_list:
+            self.skipTest(reason="Skipping rescale_normalize test as torchvision backend is not available")
 
         image = torch.arange(0, 256, 1, dtype=torch.uint8).reshape(1, 8, 32).repeat(3, 1, 1)
         image_mean_0 = (0.0, 0.0, 0.0)
@@ -167,10 +159,11 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
         image_mean_1 = (0.5, 0.5, 0.5)
         image_std_1 = (0.5, 0.5, 0.5)
 
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        image_processor = self.image_processing_class(backend="torchvision", **self.image_processor_dict)
+        backend = image_processor._backend_instance
 
         # Rescale between [-1, 1] with rescale_factor=1/127.5 and rescale_offset=True. Then normalize
-        rescaled_normalized = image_processor_fast.rescale_and_normalize(
+        rescaled_normalized = backend._rescale_and_normalize_efficientnet(
             image, True, 1 / 127.5, True, image_mean_0, image_std_0, True
         )
         expected_image = (image * (1 / 127.5)) - 1
@@ -180,7 +173,7 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertTrue(torch.allclose(rescaled_normalized, expected_image, rtol=1e-3))
 
         # Rescale between [0, 1] with rescale_factor=1/255 and rescale_offset=False. Then normalize
-        rescaled_normalized = image_processor_fast.rescale_and_normalize(
+        rescaled_normalized = backend._rescale_and_normalize_efficientnet(
             image, True, 1 / 255, True, image_mean_1, image_std_1, False
         )
         expected_image = image * (1 / 255.0)

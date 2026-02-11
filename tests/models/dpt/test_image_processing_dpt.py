@@ -20,7 +20,6 @@ from datasets import load_dataset
 
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -30,9 +29,6 @@ if is_torch_available():
 
 if is_vision_available():
     from transformers import DPTImageProcessor
-
-    if is_torchvision_available():
-        from transformers import DPTImageProcessorFast
 
 
 class DPTImageProcessingTester:
@@ -107,7 +103,6 @@ def prepare_semantic_batch_inputs():
 @require_vision
 class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = DPTImageProcessor if is_vision_available() else None
-    fast_image_processing_class = DPTImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -118,8 +113,8 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
-            image_processing = image_processing_class(**self.image_processor_dict)
+        for backend_name in self.image_processors_backends_list:
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
             self.assertTrue(hasattr(image_processing, "do_normalize"))
@@ -132,20 +127,21 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_reduce_labels"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
-            image_processing_class = image_processing_class(**self.image_processor_dict)
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+        for backend_name in self.image_processors_backends_list:
+            image_processor = self.image_processing_class.from_dict(self.image_processor_dict, backend=backend_name)
             self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
+            image_processor = self.image_processing_class.from_dict(
+                self.image_processor_dict, size=42, backend=backend_name
+            )
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_padding(self):
-        for image_processing_class in self.image_processor_list:
-            if image_processing_class == DPTImageProcessorFast:
+        for backend_name in self.image_processors_backends_list:
+            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            if backend_name == "torchvision":
                 image = torch.arange(0, 366777, 1, dtype=torch.uint8).reshape(3, 249, 491)
-                image_processor = image_processing_class(**self.image_processor_dict)
-                padded_image = image_processor.pad_image(image, size_divisor=4)
+                padded_image = image_processor._backend_instance.pad_image(image, size_divisor=4)
                 self.assertTrue(padded_image.shape[1] % 4 == 0)
                 self.assertTrue(padded_image.shape[2] % 4 == 0)
                 pixel_values = image_processor.preprocess(
@@ -154,9 +150,9 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertTrue(pixel_values.shape[2] % 4 == 0)
                 self.assertTrue(pixel_values.shape[3] % 4 == 0)
             else:
-                image_processor = image_processing_class(**self.image_processor_dict)
+                image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
                 image = np.random.randn(3, 249, 491)
-                image = image_processor.pad_image(image, size_divisor=4)
+                image = image_processor._backend_instance.pad_image(image, size_divisor=4)
                 self.assertTrue(image.shape[1] % 4 == 0)
                 self.assertTrue(image.shape[2] % 4 == 0)
                 pixel_values = image_processor.preprocess(
@@ -167,8 +163,10 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_keep_aspect_ratio(self):
         size = {"height": 512, "width": 512}
-        for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
+        for backend_name in self.image_processors_backends_list:
+            image_processor = self.image_processing_class(
+                backend=backend_name, size=size, keep_aspect_ratio=True, ensure_multiple_of=32
+            )
 
             image = np.zeros((489, 640, 3))
 
@@ -178,9 +176,9 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Copied from transformers.tests.models.beit.test_image_processing_beit.BeitImageProcessingTest.test_call_segmentation_maps
     def test_call_segmentation_maps(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name in self.image_processors_backends_list:
             # Initialize image_processor
-            image_processor = image_processing_class(**self.image_processor_dict)
+            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
             # create random PyTorch tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
             maps = []
@@ -285,8 +283,8 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
     def test_reduce_labels(self):
-        for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class(**self.image_processor_dict)
+        for backend_name in self.image_processors_backends_list:
+            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
 
             # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
             image, map = prepare_semantic_single_inputs()
@@ -306,33 +304,48 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Compare with non-reduced label to see if it's reduced by 1
             self.assertEqual(encoding["labels"][first_non_zero_coords].item(), first_non_zero_value - 1)
 
-    def test_slow_fast_equivalence(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
+    @require_vision
+    @require_torch
+    def test_backends_equivalence(self):
+        if len(self.image_processors_backends_list) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+        if self.image_processing_class is None:
+            self.skipTest(reason="Skipping backends equivalence test as image processor is not defined")
 
         dummy_image, dummy_map = prepare_semantic_single_inputs()
 
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        # Create processors for each backend
+        encodings = {}
+        for backend_name in self.image_processors_backends_list:
+            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
 
-        image_encoding_slow = image_processor_slow(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
-        image_encoding_fast = image_processor_fast(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
+        # Compare all backends to the first one (reference backend)
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_encoding = encodings[reference_backend]
 
-        self.assertTrue(torch.allclose(image_encoding_slow.pixel_values, image_encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(image_encoding_slow.pixel_values - image_encoding_fast.pixel_values)).item(), 1e-3
-        )
-        self.assertTrue(torch.allclose(image_encoding_slow.labels, image_encoding_fast.labels, atol=1e-1))
+        for backend_name in backend_names[1:]:
+            # Check pixel_values
+            self.assertTrue(
+                torch.allclose(reference_encoding.pixel_values, encodings[backend_name].pixel_values, atol=1e-1)
+            )
+            self.assertLessEqual(
+                torch.mean(torch.abs(reference_encoding.pixel_values - encodings[backend_name].pixel_values)).item(),
+                1e-3,
+            )
+            # Check labels (custom check for DPT)
+            self.assertTrue(torch.allclose(reference_encoding.labels, encodings[backend_name].labels, atol=1e-1))
 
+    @require_vision
+    @require_torch
     def test_slow_fast_equivalence_batched(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
+        if len(self.image_processors_backends_list) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+        if self.image_processing_class is None:
+            self.skipTest(reason="Skipping backends equivalence test as image processor is not defined")
 
         if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
             self.skipTest(
@@ -341,13 +354,23 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         dummy_images, dummy_maps = prepare_semantic_batch_inputs()
 
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        # Create processors for each backend
+        encodings = {}
+        for backend_name in self.image_processors_backends_list:
+            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
 
-        encoding_slow = image_processor_slow(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
-        encoding_fast = image_processor_fast(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
+        # Compare all backends to the first one (reference backend)
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_encoding = encodings[reference_backend]
 
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
+        for backend_name in backend_names[1:]:
+            # Check pixel_values
+            self.assertTrue(
+                torch.allclose(reference_encoding.pixel_values, encodings[backend_name].pixel_values, atol=1e-1)
+            )
+            self.assertLessEqual(
+                torch.mean(torch.abs(reference_encoding.pixel_values - encodings[backend_name].pixel_values)).item(),
+                1e-3,
+            )

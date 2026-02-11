@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import math
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from copy import deepcopy
 from functools import lru_cache, partial
 from typing import Any, Optional, Union
@@ -101,7 +101,7 @@ def validate_fast_preprocess_arguments(
     crop_size: SizeDict | None = None,
     do_resize: bool | None = None,
     size: SizeDict | None = None,
-    resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]] = None,
+    resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None = None,
     return_tensors: str | TensorType | None = None,
     data_format: ChannelDimension = ChannelDimension.FIRST,
 ):
@@ -131,7 +131,7 @@ def validate_fast_preprocess_arguments(
         pass
 
 
-def safe_squeeze(tensor: "torch.Tensor", axis: Optional[int] = None) -> "torch.Tensor":
+def safe_squeeze(tensor: "torch.Tensor", axis: int | None = None) -> "torch.Tensor":
     """
     Squeezes a tensor, but only if the axis specified has dim 1.
     """
@@ -334,7 +334,7 @@ class TorchVisionBackend(ImageProcessingBackend):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]] = None,
+        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -488,7 +488,7 @@ class TorchVisionBackend(ImageProcessingBackend):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]],
+        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -577,7 +577,7 @@ class PilBackend(ImageProcessingBackend):
         disable_grouping: bool | None = False,
         is_nested: bool | None = False,
         **kwargs,
-    ) -> Union[tuple[list[np.ndarray], list[np.ndarray]], list[np.ndarray]]:
+    ) -> tuple[list[np.ndarray], list[np.ndarray]] | list[np.ndarray]:
         """Pad images to specified size using NumPy."""
         if pad_size is not None:
             if not (pad_size.height and pad_size.width):
@@ -624,7 +624,7 @@ class PilBackend(ImageProcessingBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]] = None,
+        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None = None,
         antialias: bool = True,
         **kwargs,
     ) -> np.ndarray:
@@ -722,7 +722,7 @@ class PilBackend(ImageProcessingBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]],
+        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -944,7 +944,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         cls,
         name: str,
         backend_class: ImageProcessingBackend,
-        availability_check: Optional[callable] = None,
+        availability_check: Callable[[], bool] | None = None,
     ):
         """
         Register a new backend for this image processor.
@@ -1122,7 +1122,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         input_data_format: str | ChannelDimension | None = None,
         device: Optional["torch.device"] = None,
         expected_ndims: int = 3,
-    ) -> Union[list["torch.Tensor"], list[np.ndarray]]:
+    ) -> list["torch.Tensor"] | list[np.ndarray]:
         """
         Prepare image-like inputs for processing.
 
@@ -1168,7 +1168,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         image_mean: float | list[float] | None = None,
         image_std: float | list[float] | None = None,
         data_format: ChannelDimension | None = None,
-        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]] = None,
+        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -1211,7 +1211,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         size: SizeDict | None = None,
         do_center_crop: bool | None = None,
         crop_size: SizeDict | None = None,
-        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]] = None,
+        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None = None,
         return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension | None = None,
         **kwargs,
@@ -1279,7 +1279,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         *args,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[ImagesKwargs],
     ) -> BatchFeature:
         """

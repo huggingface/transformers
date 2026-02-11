@@ -13,10 +13,7 @@
 # limitations under the License.
 """Image processor class for LeViT."""
 
-from __future__ import annotations
-
 import numpy as np
-import torch
 
 from ...image_processing_utils import (
     BaseImageProcessor,
@@ -31,8 +28,11 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...utils import auto_docstring, is_torchvision_available, logging
+from ...utils import auto_docstring, is_torch_available, is_torchvision_available, logging
 
+
+if is_torch_available():
+    import torch
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
@@ -47,7 +47,7 @@ class LevitTorchVisionBackend(TorchVisionBackend):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: PILImageResampling | tvF.InterpolationMode | int | None = None,
         **kwargs,
     ) -> "torch.Tensor":
         """Resize: shortest_edge is rescaled to int((256/224) * shortest_edge)."""
@@ -71,7 +71,7 @@ class LevitPilBackend(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: PILImageResampling | tvF.InterpolationMode | int | None = None,
         **kwargs,
     ) -> np.ndarray:
         """Resize: shortest_edge is rescaled to int((256/224) * shortest_edge)."""

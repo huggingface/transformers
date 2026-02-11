@@ -13,39 +13,47 @@
 # limitations under the License.
 """Image processor class for MobileViT."""
 
+from typing import Union
+
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import flip_channel_order, get_resize_output_image_size, resize, to_channel_dimension_format
+from ...image_processing_utils import (
+    BaseImageProcessor,
+    BatchFeature,
+    PilBackend,
+    TorchVisionBackend,
+)
+from ...image_transforms import (
+    flip_channel_order as np_flip_channel_order,
+)
+from ...image_transforms import (
+    group_images_by_shape,
+    reorder_images,
+)
 from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
+    SizeDict,
 )
-from ...processing_utils import ImagesKwargs
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
-    filter_out_non_signature_kwargs,
+    auto_docstring,
     is_torch_available,
-    is_torch_tensor,
-    is_vision_available,
+    is_torchvision_available,
     logging,
+    requires_backends,
 )
-from ...utils.import_utils import requires
 
-
-if is_vision_available():
-    import PIL
 
 if is_torch_available():
     import torch
 
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 logger = logging.get_logger(__name__)
 
@@ -64,450 +72,232 @@ class MobileVitImageProcessorKwargs(ImagesKwargs, total=False):
     do_reduce_labels: bool
 
 
-@requires(backends=("vision",))
+class MobileViTTorchVisionBackend(TorchVisionBackend):
+    """TorchVision backend for MobileViT with flip_channel_order and reduce_label support."""
+
+    def reduce_label(self, labels: list["torch.Tensor"]) -> list["torch.Tensor"]:
+        """Reduce label values by 1, replacing 0 with 255."""
+        for idx in range(len(labels)):
+            label = labels[idx]
+            label = torch.where(label == 0, torch.tensor(255, dtype=label.dtype, device=label.device), label)
+            label = label - 1
+            label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype, device=label.device), label)
+            labels[idx] = label
+        return labels
+
+    def flip_channel_order(self, images: "torch.Tensor") -> "torch.Tensor":
+        """Flip RGB to BGR or vice versa."""
+        if images.ndim == 3:
+            # Single image: (C, H, W)
+            flipped = images.clone()
+            flipped[0:3] = images[[2, 1, 0]]
+            return flipped
+        elif images.ndim == 4:
+            # Batched images: (B, C, H, W)
+            flipped = images.clone()
+            flipped[:, 0:3] = images[:, [2, 1, 0]]
+            return flipped
+        return images
+
+    def preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        do_reduce_labels: bool = False,
+        do_flip_channel_order: bool = True,
+        **kwargs,
+    ) -> BatchFeature:
+        """Custom preprocessing for MobileViT."""
+        if do_reduce_labels:
+            images = self.reduce_label(images)
+
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(stacked_images, size, resample)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            if do_rescale:
+                stacked_images = self.rescale(stacked_images, rescale_factor)
+            if do_flip_channel_order:
+                stacked_images = self.flip_channel_order(stacked_images)
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
+
+class MobileViTPilBackend(PilBackend):
+    """PIL backend for MobileViT with flip_channel_order and reduce_label support."""
+
+    def reduce_label(self, image: np.ndarray) -> np.ndarray:
+        """Reduce label values by 1, replacing 0 with 255."""
+        image[image == 0] = 255
+        image = image - 1
+        image[image == 254] = 255
+        return image
+
+    def flip_channel_order(self, image: np.ndarray) -> np.ndarray:
+        """Flip RGB to BGR or vice versa."""
+        return np_flip_channel_order(
+            image, data_format=ChannelDimension.FIRST, input_data_format=ChannelDimension.FIRST
+        )
+
+    def preprocess(
+        self,
+        images: list[np.ndarray],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        do_reduce_labels: bool = False,
+        do_flip_channel_order: bool = True,
+        **kwargs,
+    ) -> BatchFeature:
+        """Custom preprocessing for MobileViT."""
+        processed_images = []
+        for image in images:
+            if do_reduce_labels:
+                image = self.reduce_label(image)
+            if do_resize:
+                image = self.resize(image, size, resample)
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_center_crop:
+                image = self.center_crop(image, crop_size)
+            if do_flip_channel_order:
+                image = self.flip_channel_order(image)
+            processed_images.append(image)
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
+
+@auto_docstring(custom_intro="Constructs a MobileViT image processor.")
 class MobileViTImageProcessor(BaseImageProcessor):
-    r"""
-    Constructs a MobileViT image processor.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
-            `do_resize` parameter in the `preprocess` method.
-        size (`dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
-            Controls the size of the output image after resizing. Can be overridden by the `size` parameter in the
-            `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Defines the resampling filter to use if resizing the image. Can be overridden by the `resample` parameter
-            in the `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
-            parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
-            `preprocess` method.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
-            Whether to crop the input at the center. If the input size is smaller than `crop_size` along any edge, the
-            image is padded with 0's and then center cropped. Can be overridden by the `do_center_crop` parameter in
-            the `preprocess` method.
-        crop_size (`dict[str, int]`, *optional*, defaults to `{"height": 256, "width": 256}`):
-            Desired output size `(size["height"], size["width"])` when applying center-cropping. Can be overridden by
-            the `crop_size` parameter in the `preprocess` method.
-        do_flip_channel_order (`bool`, *optional*, defaults to `True`):
-            Whether to flip the color channels from RGB to BGR. Can be overridden by the `do_flip_channel_order`
-            parameter in the `preprocess` method.
-        do_reduce_labels (`bool`, *optional*, defaults to `False`):
-            Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0 is
-            used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k). The
-            background label will be replaced by 255. Can be overridden by the `do_reduce_labels` parameter in the
-            `preprocess` method.
-    """
-
-    model_input_names = ["pixel_values"]
     valid_kwargs = MobileVitImageProcessorKwargs
 
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: int | float = 1 / 255,
-        do_center_crop: bool = True,
-        crop_size: dict[str, int] | None = None,
-        do_flip_channel_order: bool = True,
-        do_reduce_labels: bool = False,
-        **kwargs,
-    ) -> None:
+    _backend_classes = {
+        "torchvision": MobileViTTorchVisionBackend,
+        "pil": MobileViTPilBackend,
+    }
+
+    resample = PILImageResampling.BICUBIC
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    size = {"shortest_edge": 224}
+    default_to_square = False
+    crop_size = {"height": 256, "width": 256}
+    do_resize = True
+    do_center_crop = True
+    do_rescale = True
+    do_normalize = None
+    do_convert_rgb = None
+    do_flip_channel_order = True
+    do_reduce_labels = False
+
+    def __init__(self, **kwargs: Unpack[MobileVitImageProcessorKwargs]):
         super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": 224}
-        size = get_size_dict(size, default_to_square=False)
-        crop_size = crop_size if crop_size is not None else {"height": 256, "width": 256}
-        crop_size = get_size_dict(crop_size, param_name="crop_size")
 
-        self.do_resize = do_resize
-        self.size = size
-        self.resample = resample
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
-        self.do_flip_channel_order = do_flip_channel_order
-        self.do_reduce_labels = do_reduce_labels
-
-    # Copied from transformers.models.mobilenet_v1.image_processing_mobilenet_v1.MobileNetV1ImageProcessor.resize
-    def resize(
-        self,
-        image: np.ndarray,
-        size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Resize an image. The shortest edge of the image is resized to size["shortest_edge"], with the longest edge
-        resized to keep the input aspect ratio.
-
-        Args:
-            image (`np.ndarray`):
-                Image to resize.
-            size (`dict[str, int]`):
-                Size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                Resampling filter to use when resiizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
-        """
-        default_to_square = True
-        if "shortest_edge" in size:
-            size = size["shortest_edge"]
-            default_to_square = False
-        elif "height" in size and "width" in size:
-            size = (size["height"], size["width"])
-        else:
-            raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
-
-        output_size = get_resize_output_image_size(
-            image,
-            size=size,
-            default_to_square=default_to_square,
-            input_data_format=input_data_format,
-        )
-        return resize(
-            image,
-            size=output_size,
-            resample=resample,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
-        )
-
-    def flip_channel_order(
-        self,
-        image: np.ndarray,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> np.ndarray:
-        """
-        Flip the color channels from RGB to BGR or vice versa.
-
-        Args:
-            image (`np.ndarray`):
-                The image, represented as a numpy array.
-            data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
-        """
-        return flip_channel_order(image, data_format=data_format, input_data_format=input_data_format)
-
-    # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.reduce_label
-    def reduce_label(self, label: ImageInput) -> np.ndarray:
-        label = to_numpy_array(label)
-        # Avoid using underflow conversion
-        label[label == 0] = 255
-        label = label - 1
-        label[label == 254] = 255
-        return label
-
-    def __call__(self, images, segmentation_maps=None, **kwargs):
-        """
-        Preprocesses a batch of images and optionally segmentation maps.
-
-        Overrides the `__call__` method of the `Preprocessor` class so that both images and segmentation maps can be
-        passed in as positional arguments.
-        """
-        return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
-
-    def _preprocess(
-        self,
-        image: ImageInput,
-        do_reduce_labels: bool,
-        do_resize: bool,
-        do_rescale: bool,
-        do_center_crop: bool,
-        do_flip_channel_order: bool,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling | None = None,
-        rescale_factor: float | None = None,
-        crop_size: dict[str, int] | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-    ):
-        if do_reduce_labels:
-            image = self.reduce_label(image)
-
-        if do_resize:
-            image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-
-        if do_rescale:
-            image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-
-        if do_center_crop:
-            image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
-
-        if do_flip_channel_order:
-            image = self.flip_channel_order(image, input_data_format=input_data_format)
-
-        return image
-
-    def _preprocess_image(
-        self,
-        image: ImageInput,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_center_crop: bool | None = None,
-        crop_size: dict[str, int] | None = None,
-        do_flip_channel_order: bool | None = None,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> np.ndarray:
-        """Preprocesses a single image."""
-        # All transformations expect numpy arrays.
-        image = to_numpy_array(image)
-        if do_rescale and is_scaled_image(image):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image)
-
-        image = self._preprocess(
-            image=image,
-            do_reduce_labels=False,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_flip_channel_order=do_flip_channel_order,
-            input_data_format=input_data_format,
-        )
-
-        image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-
-        return image
-
-    def _preprocess_mask(
-        self,
-        segmentation_map: ImageInput,
-        do_reduce_labels: bool | None = None,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        do_center_crop: bool | None = None,
-        crop_size: dict[str, int] | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> np.ndarray:
-        """Preprocesses a single mask."""
-        segmentation_map = to_numpy_array(segmentation_map)
-        # Add channel dimension if missing - needed for certain transformations
-        if segmentation_map.ndim == 2:
-            added_channel_dim = True
-            segmentation_map = segmentation_map[None, ...]
-            input_data_format = ChannelDimension.FIRST
-        else:
-            added_channel_dim = False
-            if input_data_format is None:
-                input_data_format = infer_channel_dimension_format(segmentation_map, num_channels=1)
-
-        segmentation_map = self._preprocess(
-            image=segmentation_map,
-            do_reduce_labels=do_reduce_labels,
-            do_resize=do_resize,
-            size=size,
-            resample=PILImageResampling.NEAREST,
-            do_rescale=False,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_flip_channel_order=False,
-            input_data_format=input_data_format,
-        )
-        # Remove extra channel dimension if added for processing
-        if added_channel_dim:
-            segmentation_map = segmentation_map.squeeze(0)
-        segmentation_map = segmentation_map.astype(np.int64)
-        return segmentation_map
-
-    @filter_out_non_signature_kwargs()
+    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
         segmentation_maps: ImageInput | None = None,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_center_crop: bool | None = None,
-        crop_size: dict[str, int] | None = None,
-        do_flip_channel_order: bool | None = None,
-        do_reduce_labels: bool | None = None,
-        return_tensors: str | TensorType | None = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> PIL.Image.Image:
+        **kwargs: Unpack[MobileVitImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to preprocess.
         """
-        Preprocess an image or batch of images.
+        return super().preprocess(images, segmentation_maps, **kwargs)
 
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            segmentation_maps (`ImageInput`, *optional*):
-                Segmentation map to preprocess.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing.
-            resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
-                has an effect if `do_resize` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image by rescale factor.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-                Whether to center crop the image.
-            crop_size (`dict[str, int]`, *optional*, defaults to `self.crop_size`):
-                Size of the center crop if `do_center_crop` is set to `True`.
-            do_flip_channel_order (`bool`, *optional*, defaults to `self.do_flip_channel_order`):
-                Whether to flip the channel order of the image.
-            do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
-                Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
-                is used for background, and background itself is not included in all classes of a dataset (e.g.
-                ADE20k). The background label will be replaced by 255.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                    - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        resample = resample if resample is not None else self.resample
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
-        do_flip_channel_order = (
-            do_flip_channel_order if do_flip_channel_order is not None else self.do_flip_channel_order
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        segmentation_maps: ImageInput | None,
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Union[str, "torch.device"] | None = None,
+        **kwargs,
+    ) -> BatchFeature:
+        """Handle extra inputs beyond images."""
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
-
-        size = size if size is not None else self.size
-        size = get_size_dict(size, default_to_square=False)
-        crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, param_name="crop_size")
-
-        do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
-
-        images = make_flat_list_of_images(images)
+        images_kwargs = kwargs.copy()
+        images_kwargs["do_reduce_labels"] = False
+        batch_feature = self._backend_instance.preprocess(images, **images_kwargs)
 
         if segmentation_maps is not None:
-            segmentation_maps = make_flat_list_of_images(segmentation_maps, expected_ndims=2)
-
-        images = make_flat_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-
-        if segmentation_maps is not None and not valid_images(segmentation_maps):
-            raise ValueError(
-                "Invalid segmentation map type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor"
+            processed_segmentation_maps = self._prepare_image_like_inputs(
+                images=segmentation_maps,
+                expected_ndims=2,
+                do_convert_rgb=False,
+                input_data_format=ChannelDimension.FIRST,
             )
 
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-
-        images = [
-            self._preprocess_image(
-                image=img,
-                do_resize=do_resize,
-                size=size,
-                resample=resample,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_center_crop=do_center_crop,
-                crop_size=crop_size,
-                do_flip_channel_order=do_flip_channel_order,
-                data_format=data_format,
-                input_data_format=input_data_format,
+            segmentation_maps_kwargs = kwargs.copy()
+            segmentation_maps_kwargs.update(
+                {
+                    "do_rescale": False,
+                    "do_flip_channel_order": False,
+                    # Nearest interpolation is used for segmentation maps instead of BICUBIC.
+                    "resample": PILImageResampling.NEAREST,
+                }
             )
-            for img in images
-        ]
 
-        data = {"pixel_values": images}
+            processed_segmentation_maps = self._backend_instance.preprocess(
+                images=processed_segmentation_maps, **segmentation_maps_kwargs
+            ).pixel_values
 
-        if segmentation_maps is not None:
-            segmentation_maps = [
-                self._preprocess_mask(
-                    segmentation_map=segmentation_map,
-                    do_reduce_labels=do_reduce_labels,
-                    do_resize=do_resize,
-                    size=size,
-                    do_center_crop=do_center_crop,
-                    crop_size=crop_size,
-                    input_data_format=input_data_format,
-                )
-                for segmentation_map in segmentation_maps
-            ]
+            if is_torchvision_available() and isinstance(processed_segmentation_maps, torch.Tensor):
+                processed_segmentation_maps = processed_segmentation_maps.squeeze(1).to(torch.int64)
+            else:
+                processed_segmentation_maps = processed_segmentation_maps.squeeze(1).astype(np.int64)
+            batch_feature["labels"] = processed_segmentation_maps
 
-            data["labels"] = segmentation_maps
+        return batch_feature
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
-
-    # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->MobileViT
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
-        """
-        Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps.
-
-        Args:
-            outputs ([`MobileViTForSemanticSegmentation`]):
-                Raw outputs of the model.
-            target_sizes (`list[Tuple]` of length `batch_size`, *optional*):
-                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
-                predictions will not be resized.
-
-        Returns:
-            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
-            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
-            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
-        """
+        """Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps."""
+        requires_backends(self, "torch")
         logits = outputs.logits
-
-        # Resize logits and compute semantic segmentation maps
         if target_sizes is not None:
             if len(logits) != len(target_sizes):
                 raise ValueError(
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
-
-            if is_torch_tensor(target_sizes):
+            if isinstance(target_sizes, torch.Tensor):
                 target_sizes = target_sizes.numpy()
-
             semantic_segmentation = []
-
             for idx in range(len(logits)):
                 resized_logits = torch.nn.functional.interpolate(
                     logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
@@ -517,8 +307,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         else:
             semantic_segmentation = logits.argmax(dim=1)
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
-
         return semantic_segmentation
 
 
-__all__ = ["MobileViTImageProcessor"]
+__all__ = ["MobileViTImageProcessor", "MobileVitImageProcessorKwargs"]

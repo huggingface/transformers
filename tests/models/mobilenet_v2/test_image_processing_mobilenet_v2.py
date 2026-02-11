@@ -19,7 +19,7 @@ from datasets import load_dataset
 
 from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 from ...test_processing_common import url_to_local_path
@@ -30,9 +30,6 @@ if is_torch_available():
 
 if is_vision_available():
     from transformers import MobileNetV2ImageProcessor
-
-    if is_torchvision_available():
-        from transformers import MobileNetV2ImageProcessorFast
 
 
 class MobileNetV2ImageProcessingTester:
@@ -103,7 +100,6 @@ def prepare_semantic_batch_inputs():
 @require_vision
 class MobileNetV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = MobileNetV2ImageProcessor if is_vision_available() else None
-    fast_image_processing_class = MobileNetV2ImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -114,8 +110,8 @@ class MobileNetV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class(**self.image_processor_dict)
+        for backend_name in self.image_processors_backends_list:
+            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_resize"))
             self.assertTrue(hasattr(image_processor, "size"))
             self.assertTrue(hasattr(image_processor, "do_center_crop"))
@@ -123,14 +119,14 @@ class MobileNetV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue(hasattr(image_processor, "do_reduce_labels"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+        for backend_name in self.image_processors_backends_list:
+            image_processor = self.image_processing_class.from_dict(self.image_processor_dict, backend=backend_name)
             self.assertEqual(image_processor.size, {"shortest_edge": 20})
             self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
             self.assertEqual(image_processor.do_reduce_labels, False)
 
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size=42, crop_size=84, do_reduce_labels=True
+            image_processor = self.image_processing_class.from_dict(
+                self.image_processor_dict, size=42, crop_size=84, do_reduce_labels=True, backend=backend_name
             )
             self.assertEqual(image_processor.size, {"shortest_edge": 42})
             self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
@@ -138,8 +134,8 @@ class MobileNetV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
     def test_call_segmentation_maps(self):
         # Initialize image_processing
-        for image_processing_class in self.image_processor_list:
-            image_processing = image_processing_class(**self.image_processor_dict)
+        for backend_name in self.image_processors_backends_list:
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
             # create random PyTorch tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
             maps = []
@@ -245,8 +241,8 @@ class MobileNetV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
     def test_reduce_labels(self):
         # Initialize image_processing
-        for image_processing_class in self.image_processor_list:
-            image_processing = image_processing_class(**self.image_processor_dict)
+        for backend_name in self.image_processors_backends_list:
+            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
 
             # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
             image, map = prepare_semantic_single_inputs()
@@ -259,26 +255,31 @@ class MobileNetV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
-    def test_slow_fast_equivalence(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+    def test_backends_equivalence(self):
+        if len(self.image_processors_backends_list) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         # Test with single image
         dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        encodings = {}
+        for backend_name in self.image_processors_backends_list:
+            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
-        encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
-        encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_encoding = encodings[reference_backend].pixel_values
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].pixel_values)
 
         # Test with single image and segmentation map
         image, segmentation_map = prepare_semantic_single_inputs()
+        encodings = {}
+        for backend_name in self.image_processors_backends_list:
+            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            encodings[backend_name] = image_processor(image, segmentation_map, return_tensors="pt")
 
-        encoding_slow = image_processor_slow(image, segmentation_map, return_tensors="pt")
-        encoding_fast = image_processor_fast(image, segmentation_map, return_tensors="pt")
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
-        torch.testing.assert_close(encoding_slow.labels, encoding_fast.labels, atol=1e-1, rtol=1e-3)
+        reference_encoding = encodings[reference_backend]
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_encoding.pixel_values, encodings[backend_name].pixel_values)
+            torch.testing.assert_close(reference_encoding.labels, encodings[backend_name].labels, atol=1e-1, rtol=1e-3)

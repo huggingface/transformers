@@ -17,7 +17,7 @@ import os
 from collections.abc import Iterable
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Optional, Union
+from typing import Union
 
 import httpx
 import numpy as np
@@ -517,7 +517,7 @@ def validate_preprocess_arguments(
     crop_size: dict[str, int] | None = None,
     do_resize: bool | None = None,
     size: dict[str, int] | None = None,
-    resample: Optional[Union["PILImageResampling", "InterpolationMode", int]] = None,
+    resample: Union["PILImageResampling", "InterpolationMode", int] | None = None,
 ):
     """
     Checks validity of typically used arguments in an `ImageProcessor` `preprocess` method.

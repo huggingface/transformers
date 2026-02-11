@@ -13,7 +13,7 @@
 # limitations under the License.
 """Image processor class for LLaVa."""
 
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
 
@@ -91,7 +91,7 @@ class LlavaTorchVisionBackend(TorchVisionBackend):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]],
+        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -195,7 +195,7 @@ class LlavaPilBackend(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: Optional[Union["PILImageResampling", "tvF.InterpolationMode", int]],
+        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
