@@ -1128,8 +1128,8 @@ class PeftHotswapIntegrationTest(unittest.TestCase):
         Test for issue #43746: Only overwrite the pretrained_model_name_or_path if needed with adapter.
 
         This test ensures that when a model has an adapter config and the pretrained_model_name_or_path
-        points to a complete model with an embedded adapter (i.e., it has a config.json file),
-        the path should NOT be overwritten with the base_model_name_or_path.
+        points to a model directory with both a base model and an embedded adapter, the path should NOT
+        be overwritten with the base_model_name_or_path from the adapter config.
 
         The fix is applied in src/transformers/integrations/peft.py in the maybe_load_adapters function.
         """

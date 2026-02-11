@@ -551,8 +551,8 @@ class AutoModelTest(unittest.TestCase):
         Test for issue #43746: Only overwrite the pretrained_model_name_or_path if needed with adapter.
 
         This test ensures that when a model has an adapter config and the pretrained_model_name_or_path
-        points to a complete model with an embedded adapter (i.e., it has a config.json file),
-        the path should NOT be overwritten with the base_model_name_or_path.
+        points to a model directory with both a base model and an embedded adapter, the path should NOT
+        be overwritten with the hub model name embedded in the adapter's config.
 
         The bug was that the path was being unconditionally overwritten, which would cause
         incorrect behavior when loading models with adapters that are embedded within the

@@ -246,7 +246,7 @@ class CommonPipelineTest(unittest.TestCase):
         """
         Test for issue #43746: Only overwrite the pretrained_model_name_or_path if needed with adapter.
 
-        This test ensures that when a pipeline loads from a local directory that contains a complete model
+        This test ensures that when a pipeline loads from a local directory that contains a base model
         with an embedded adapter (i.e., it has a config.json file), the path should NOT be overwritten
         with the base_model_name_or_path from the adapter config. The fix is applied in
         src/transformers/pipelines/__init__.py in the pipeline function.

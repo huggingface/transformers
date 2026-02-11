@@ -955,7 +955,9 @@ def maybe_load_adapters(
         with open(_adapter_model_path, "r", encoding="utf-8") as f:
             _adapter_model_path = pretrained_model_name_or_path
             # Only override the model name/path if the current value doesn't point to a
-            # complete model with an embedded adapter
+            # complete model with an embedded adapter so that local models with embedded
+            # adapters will load from the local base model rather than pull the base
+            # model named in the adapter's config from the hub.
             if not os.path.exists(pretrained_model_name_or_path) or not os.path.exists(
                 os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
             ):

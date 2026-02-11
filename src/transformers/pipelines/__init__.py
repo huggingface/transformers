@@ -730,7 +730,9 @@ def pipeline(
                     adapter_config = json.load(f)
                     adapter_path = model
                     # Only override the model name/path if the current value doesn't point to a
-                    # complete model with an embedded adapter
+                    # complete model with an embedded adapter so that local models with embedded
+                    # adapters will load from the local base model rather than pull the base
+                    # model named in the adapter's config from the hub.
                     if not os.path.exists(model) or not os.path.exists(os.path.join(model, CONFIG_NAME)):
                         model = adapter_config["base_model_name_or_path"]
 
