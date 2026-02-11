@@ -393,7 +393,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 negative_input_ids = torch.cat([negative_input_ids, next_tokens[:, None]], dim=-1)
                 del negative_outputs
 
-                semantic_outputs = self.model.semantic_tokenizer.encode(
+                semantic_outputs = self.model.semantic_tokenizer(
                     audio_chunk,
                     padding_cache=semantic_cache,
                     use_cache=True,

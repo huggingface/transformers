@@ -71,10 +71,9 @@ class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
         hidden_size=128,
         kernel_size=7,
         rms_norm_eps=1e-5,
-        bias=True,
         layer_scale_init_value=1e-6,
         weight_init_value=1e-2,
-        n_filters=32,
+        num_filters=32,
         downsampling_ratios=[2, 2, 4, 5, 5, 8],
         depths=[3, 3, 3, 3, 3, 3, 8],
         hidden_act="gelu",
@@ -87,11 +86,10 @@ class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.kernel_size = kernel_size
         self.rms_norm_eps = rms_norm_eps
-        self.bias = bias
         self.layer_scale_init_value = layer_scale_init_value
         self.ffn_expansion = ffn_expansion
         self.weight_init_value = weight_init_value
-        self.n_filters = n_filters
+        self.num_filters = num_filters
         self.downsampling_ratios = downsampling_ratios
         self.depths = depths
 

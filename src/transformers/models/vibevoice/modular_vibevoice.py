@@ -14,14 +14,14 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional
+import numpy as np
 
 import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...utils import ModelOutput, auto_docstring, can_return_tuple
+from ...utils import auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaMLP
 from ..mimi.modeling_mimi import MimiConv1dPaddingCache
@@ -29,6 +29,7 @@ from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import (
     VibeVoiceAcousticTokenizerModel,
     VibeVoiceAcousticTokenizerPreTrainedModel,
+    VibeVoiceAcousticTokenizerEncoderOutput,
 )
 from .configuration_vibevoice import VibeVoiceConfig, VibeVoiceSemanticTokenizerConfig
 from .generation_vibevoice import VibeVoiceGenerationMixin
@@ -190,16 +191,18 @@ class VibeVoicePreTrainedModel(VibeVoiceAcousticTokenizerPreTrainedModel):
     config: VibeVoiceConfig
     base_model_prefix = "model"
     main_input_name = "input_ids"
-    _no_split_modules = ["VibeVoiceEncoderLayer"]
+    _no_split_modules = None
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_attention_backend = True
+    # TODO (ebezzam) check below
     _supports_cache_class = True
     _supports_flash_attn_2 = True
-    _supports_sdpa = True
     _supports_quantized_cache = True
     _supports_static_cache = True
-    _supports_attention_backend = True
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -209,21 +212,12 @@ class VibeVoicePreTrainedModel(VibeVoiceAcousticTokenizerPreTrainedModel):
             nn.init.constant_(module.latent_bias_factor, 0.0)
 
 
-@dataclass
-@auto_docstring
-class VibeVoiceSemanticTokenizerOutput(ModelOutput):
-    """
-    latents (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Projected latents (continuous representations for semantic tokens) at the output of the encoder.
-    padding_cache (`VibeVoiceConv1dPaddingCache`, *optional*, returned when `use_cache=True` is passed):
-        A [`VibeVoiceConv1dPaddingCache`] instance containing cached convolution states for each layer that
-        can be passed to subsequent forward calls.
-    """
-
-    latents: torch.FloatTensor | None = None
-    padding_cache: Optional["VibeVoiceConv1dPaddingCache"] = None
+class VibeVoiceSemanticTokenizerOutput(VibeVoiceAcousticTokenizerEncoderOutput):
+    pass
 
 
+# TODO after VibeVoice ASR is merged: https://github.com/huggingface/transformers/pull/43625
+# can use the encoder only object `VibeVoiceAsrEncoderModel` from there: 
 @auto_docstring(
     custom_intro="""
     Semantic tokenizer which only encodes audio into semantic tokens, namely no decoding.
@@ -231,19 +225,22 @@ class VibeVoiceSemanticTokenizerOutput(ModelOutput):
 )
 class VibeVoiceSemanticTokenizerModel(VibeVoiceAcousticTokenizerModel):
     config: VibeVoiceSemanticTokenizerConfig
-    base_model_prefix = "vibevoice_semantic_tokenizer"
-    main_input_name = "audio"
-    _no_split_modules = ["VibeVoiceSemanticTokenizerEncoder"]
+    main_input_name = "input_values"
+    input_modalities = "audio"
 
     def __init__(self, config):
         super().__init__(config)
         del self.decoder
 
-    @can_return_tuple
-    @auto_docstring
-    def encode(self, audio, padding_cache=None, use_cache=None):
+    def encode(self, input_values, padding_cache=None, use_cache=None, sample=True):
+        raise NotImplementedError("Encode method is not implemented.")
+
+    def decode(self, latents, padding_cache=None, use_cache=False):
+        raise NotImplementedError("Decode method is not implemented.")
+
+    def forward(self, input_values, padding_cache=None, use_cache=None, **kwargs):
         r"""
-        audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
+        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representations.
         padding_cache (`VibeVoiceConv1dPaddingCache`, *optional*):
             Cache object for streaming mode to maintain convolution states across layers.
@@ -251,23 +248,30 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceAcousticTokenizerModel):
             Whether to use caching for convolution states.
         """
         if use_cache and padding_cache is None:
+            per_layer_padding = [self.encoder.stem.conv.causal_padding]
+            per_layer_in_channels = [self.encoder.stem.conv.conv.in_channels]
+            per_layer_padding.extend([block.mixer.causal_padding for block in self.encoder.stem.stage])
+            per_layer_in_channels.extend([block.mixer.conv.in_channels for block in self.encoder.stem.stage])
+            for layer in self.encoder.conv_layers:
+                per_layer_padding.append(layer.conv.causal_padding)
+                per_layer_in_channels.append(layer.conv.conv.in_channels)
+                per_layer_padding.extend([block.mixer.causal_padding for block in layer.stage])
+                per_layer_in_channels.extend([block.mixer.conv.in_channels for block in layer.stage])
+            per_layer_padding.append(self.encoder.head.causal_padding)
+            per_layer_in_channels.append(self.encoder.head.conv.in_channels)
+
             padding_cache = VibeVoiceConv1dPaddingCache(
-                num_layers=self.encoder.num_conv_layers,
-                per_layer_padding=self.encoder.per_conv_layer_padding,
-                per_layer_padding_mode=self.encoder.per_conv_layer_padding_mode,
-                per_layer_in_channels=self.encoder.per_conv_layer_in_channels,
+                num_layers=len(per_layer_padding),
+                per_layer_padding=per_layer_padding,
+                per_layer_padding_mode=["constant"] * len(per_layer_padding),
+                per_layer_in_channels=per_layer_in_channels,
             )
-        latents = self.encoder(audio, padding_cache=padding_cache)
+        latents = self.encoder(input_values, padding_cache=padding_cache)
+
         return VibeVoiceSemanticTokenizerOutput(
             latents=latents,
             padding_cache=padding_cache if use_cache else None,
         )
-
-    def decode(self, latents, padding_cache=None, use_cache=False):
-        raise NotImplementedError("Decode method is not implemented for VibeVoiceSemanticTokenizerModel.")
-
-    def forward(self, audio, padding_cache=None, use_cache=None, **kwargs):
-        raise NotImplementedError("Forward method is not implemented for VibeVoiceSemanticTokenizerModel.")
 
 
 @auto_docstring(
@@ -315,9 +319,8 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
                 The audio embeddings.
         """
         # adjust padding mask according to tokenizer compression
-        num_audio_tokens = torch.ceil(padding_mask.sum(dim=-1) / self.acoustic_tokenizer.config.hop_length).to(
-            torch.int64
-        )
+        hop_length = np.prod(self.acoustic_tokenizer.config.downsampling_ratios)
+        num_audio_tokens = torch.ceil(padding_mask.sum(dim=-1) / hop_length).to(torch.int64)
         padding_mask = torch.arange(max(num_audio_tokens)) < num_audio_tokens[:, None].cpu()
 
         with torch.no_grad():
