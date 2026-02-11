@@ -21,12 +21,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from transformers.models.sam2.modeling_sam2 import (
-    eager_attention_forward,
-    window_partition,
-)
-from transformers.utils.generic import OutputRecorder
-
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
@@ -37,7 +31,9 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     auto_docstring,
 )
+from ...utils.output_capturing import OutputRecorder
 from ..auto import CONFIG_MAPPING, AutoConfig
+from ..sam2.modeling_sam2 import eager_attention_forward, window_partition
 from ..sam2_video.configuration_sam2_video import (
     Sam2VideoConfig,
     Sam2VideoMaskDecoderConfig,
@@ -536,9 +532,9 @@ class EdgeTamVideoRoPESelfAttention(nn.Module):
         # Apply rotary position encoding for self-attention
         query, key = apply_rotary_pos_emb_2d_self_attn(query, key, cos=cos, sin=sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -612,9 +608,9 @@ class EdgeTamVideoRoPECrossAttention(nn.Module):
             num_k_exclude_rope=num_k_exclude_rope,
         )
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -854,9 +850,9 @@ class EdgeTamVideoPerceiverAttention(nn.Module):
             value = value + pos_encoding
 
         # Apply attention
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, _ = attention_interface(
             self,

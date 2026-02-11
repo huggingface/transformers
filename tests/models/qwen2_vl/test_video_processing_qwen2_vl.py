@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import tempfile
 import unittest
 
@@ -58,7 +59,7 @@ class Qwen2VLVideoProcessingTester:
         max_pixels=100 * 100,
         merge_size=2,
     ):
-        size = size if size is not None else {"shortest_edge": 20}
+        size = size if size is not None else {"shortest_edge": 400, "longest_edge": 10000}
         self.parent = parent
         self.batch_size = batch_size
         self.num_frames = num_frames
@@ -147,18 +148,22 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(video_processing, "image_std"))
         self.assertTrue(hasattr(video_processing, "do_convert_rgb"))
 
-    # OVERRIDDEN BECAUSE QWEN2_VL HAS SPECIAL OUTPUT SHAPES
     def test_video_processor_from_dict_with_kwargs(self):
+        video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)
+        self.assertEqual(video_processor.size, {"shortest_edge": 400, "longest_edge": 10000})
+
+        video_processor = self.fast_video_processing_class.from_dict(
+            self.video_processor_dict, size={"shortest_edge": 100, "longest_edge": 200}
+        )
+        self.assertEqual(video_processor.size, {"shortest_edge": 100, "longest_edge": 200})
+
+    def test_video_processor_to_json_string(self):
         for video_processing_class in self.video_processor_list:
             video_processor = video_processing_class(**self.video_processor_dict)
-            self.assertEqual(video_processor.min_pixels, self.video_processor_tester.min_pixels)
-            self.assertEqual(video_processor.max_pixels, self.video_processor_tester.max_pixels)
-
-            video_processor = video_processing_class.from_dict(
-                self.video_processor_dict, min_pixels=256 * 256, max_pixels=640 * 640
-            )
-            self.assertEqual(video_processor.min_pixels, 256 * 256)
-            self.assertEqual(video_processor.max_pixels, 640 * 640)
+            obj = json.loads(video_processor.to_json_string())
+            for key, value in self.video_processor_dict.items():
+                if key not in ["min_pixels", "max_pixels"]:
+                    self.assertEqual(obj[key], value)
 
     def test_call_pil(self):
         for video_processing_class in self.video_processor_list:

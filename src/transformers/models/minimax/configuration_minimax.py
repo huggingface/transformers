@@ -134,10 +134,9 @@ class MiniMaxConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate": "colwise_rep",  # we need to replicate here to correctly route experts
-        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
-        "layers.*.mlp.experts.down_proj": "local_rowwise",
-        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.gate": "colwise_gather_output",  # we need to replicate here to correctly route experts
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -209,6 +208,10 @@ class MiniMaxConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         self.layer_types = layer_types
         self.block_size = block_size
@@ -226,13 +229,7 @@ class MiniMaxConfig(PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["MiniMaxConfig"]

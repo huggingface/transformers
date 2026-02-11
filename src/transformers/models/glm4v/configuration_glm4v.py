@@ -154,14 +154,15 @@ class Glm4vTextConfig(PreTrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
+
 
     ```python
     >>> from transformers import Glm4vTextModel, Glm4vConfig
@@ -185,8 +186,8 @@ class Glm4vTextConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_up_proj": "colwise_rep",  # we need to replicate here due to the `chunk` operation
-        "layers.*.mlp.down_proj": "rowwise_rep",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.gate_up_proj": "colwise_gather_output",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.down_proj": "rowwise_split_input",  # input is replicated due to the `chunk` operation
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -207,9 +208,9 @@ class Glm4vTextConfig(PreTrainedConfig):
         initializer_range: float | None = 0.02,
         rms_norm_eps: int | None = 1e-05,
         use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
         attention_dropout: float | None = 0.0,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -230,10 +231,9 @@ class Glm4vTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
+        self.pad_token_id = pad_token_id
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope_section"}, **kwargs
-        )
+        super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
 
 class Glm4vConfig(PreTrainedConfig):
@@ -264,6 +264,8 @@ class Glm4vConfig(PreTrainedConfig):
             The video start token index to encode the start of video.
         video_end_token_id (`int`, *optional*, defaults to 151342):
             The video end token index to encode the end of video.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig
@@ -292,6 +294,7 @@ class Glm4vConfig(PreTrainedConfig):
         image_end_token_id=151340,
         video_start_token_id=151341,
         video_end_token_id=151342,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -310,6 +313,7 @@ class Glm4vConfig(PreTrainedConfig):
         self.video_end_token_id = video_end_token_id
         self.image_start_token_id = image_start_token_id
         self.image_end_token_id = image_end_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

@@ -14,8 +14,12 @@
 import torch
 import torch.nn as nn
 
-from transformers.models.depth_anything.configuration_depth_anything import DepthAnythingConfig
-from transformers.models.depth_anything.modeling_depth_anything import (
+from ...modeling_outputs import DepthEstimatorOutput
+from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring
+from ...utils.generic import torch_int
+from ..depth_anything.configuration_depth_anything import DepthAnythingConfig
+from ..depth_anything.modeling_depth_anything import (
     DepthAnythingDepthEstimationHead,
     DepthAnythingFeatureFusionLayer,
     DepthAnythingFeatureFusionStage,
@@ -23,11 +27,6 @@ from transformers.models.depth_anything.modeling_depth_anything import (
     DepthAnythingNeck,
     DepthAnythingReassembleStage,
 )
-from transformers.utils.generic import torch_int
-
-from ...modeling_outputs import DepthEstimatorOutput
-from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring
 
 
 class PromptDepthAnythingConfig(DepthAnythingConfig):
@@ -252,16 +251,19 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/image.jpg?raw=true"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
         >>> model = AutoModelForDepthEstimation.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
 
         >>> prompt_depth_url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
-        >>> prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)
+        >>> with httpx.stream("GET", prompt_depth_url) as response:
+        ...     prompt_depth = Image.open(BytesIO(response.read()))
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt", prompt_depth=prompt_depth)

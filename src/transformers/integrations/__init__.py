@@ -20,7 +20,6 @@ _import_structure = {
     "aqlm": ["replace_with_aqlm_linear"],
     "awq": [
         "post_init_awq_exllama_modules",
-        "post_init_awq_ipex_modules",
         "replace_quantization_scales",
         "replace_with_awq_linear",
     ],
@@ -117,6 +116,7 @@ _import_structure = {
         "run_hp_search_ray",
         "run_hp_search_wandb",
     ],
+    "liger": ["apply_liger_kernel"],
     "moe": [
         "batched_mm_experts_forward",
         "grouped_mm_experts_forward",
@@ -130,6 +130,11 @@ _import_structure = {
         "quantize_to_mxfp4",
         "replace_with_mxfp4_linear",
         "swizzle_mxfp4",
+    ],
+    "neftune": [
+        "activate_neftune",
+        "deactivate_neftune",
+        "neftune_post_forward_hook",
     ],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
@@ -148,17 +153,11 @@ else:
         "convert_and_export_with_cache",
     ]
 
-try:
-    if not is_torch_greater_or_equal("2.3"):
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tensor_parallel"] = [
-        "shard_and_distribute_module",
-        "ALL_PARALLEL_STYLES",
-        "translate_to_torch_parallel_style",
-    ]
+_import_structure["tensor_parallel"] = [
+    "shard_and_distribute_module",
+    "ALL_PARALLEL_STYLES",
+    "translate_to_torch_parallel_style",
+]
 try:
     if not is_torch_greater_or_equal("2.5"):
         raise OptionalDependencyNotAvailable()
@@ -173,7 +172,6 @@ if TYPE_CHECKING:
     from .aqlm import replace_with_aqlm_linear
     from .awq import (
         post_init_awq_exllama_modules,
-        post_init_awq_ipex_modules,
         replace_quantization_scales,
         replace_with_awq_linear,
     )
@@ -265,6 +263,7 @@ if TYPE_CHECKING:
         run_hp_search_ray,
         run_hp_search_wandb,
     )
+    from .liger import apply_liger_kernel
     from .moe import (
         batched_mm_experts_forward,
         grouped_mm_experts_forward,
@@ -278,6 +277,7 @@ if TYPE_CHECKING:
         replace_with_mxfp4_linear,
         swizzle_mxfp4,
     )
+    from .neftune import activate_neftune, deactivate_neftune, neftune_post_forward_hook
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers
     from .spqr import replace_with_spqr_linear
@@ -291,17 +291,11 @@ if TYPE_CHECKING:
     else:
         from .executorch import TorchExportableModuleWithStaticCache, convert_and_export_with_cache
 
-    try:
-        if not is_torch_greater_or_equal("2.3"):
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tensor_parallel import (
-            ALL_PARALLEL_STYLES,
-            shard_and_distribute_module,
-            translate_to_torch_parallel_style,
-        )
+    from .tensor_parallel import (
+        ALL_PARALLEL_STYLES,
+        shard_and_distribute_module,
+        translate_to_torch_parallel_style,
+    )
 
     try:
         if not is_torch_greater_or_equal("2.5"):

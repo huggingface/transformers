@@ -127,9 +127,8 @@ class DeepseekV2Config(PreTrainedConfig):
         "layers.*.self_attn.q_b_proj": "colwise",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "local_colwise",
-        "layers.*.mlp.experts.down_proj": "local_rowwise",
-        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -213,13 +212,11 @@ class DeepseekV2Config(PreTrainedConfig):
         self.head_dim = qk_rope_head_dim
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["DeepseekV2Config"]

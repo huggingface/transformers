@@ -101,8 +101,6 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
@@ -111,6 +109,8 @@ class Qwen3VLTextConfig(PreTrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token. If unset, the config is treated as not having a dedicated padding token.
 
     ```python
     >>> from transformers import Qwen3VLTextModel, Qwen3VLTextConfig
@@ -143,10 +143,10 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         initializer_range: float | None = 0.02,
         rms_norm_eps: float | None = 1e-6,
         use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -169,9 +169,9 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
+        self.pad_token_id = pad_token_id
 
         super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
             ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
             **kwargs,
         )
@@ -202,7 +202,7 @@ class Qwen3VLConfig(PreTrainedConfig):
         vision_end_token_id (`int`, *optional*, defaults to 151653):
             The token id that marks the end of a vision segment (image or video).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie the word embeddings.
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Qwen3VLForConditionalGeneration, Qwen3VLConfig
@@ -246,7 +246,8 @@ class Qwen3VLConfig(PreTrainedConfig):
         self.video_token_id = video_token_id
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
-        super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["Qwen3VLConfig", "Qwen3VLTextConfig"]

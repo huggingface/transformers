@@ -182,9 +182,9 @@ class DiaCrossAttention(nn.Module):
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 past_key_values.is_updated[self.layer_idx] = True
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -267,7 +267,7 @@ class DiaEncoder(DiaPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -417,14 +417,14 @@ class DiaDecoder(DiaPreTrainedModel):
 
         attention_mask = create_causal_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
         )
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
         )
@@ -566,7 +566,7 @@ class DiaModel(DiaPreTrainedModel):
         bsz, seq_len, channels = (encoder_outputs[0].shape[0], -1, self.config.decoder_config.num_channels)
         if decoder_input_ids is None:
             decoder_input_ids = torch.full(
-                size=(bsz, 1, channels), fill_value=self.config.bos_token_id, device=self.device
+                size=(bsz, 1, channels), fill_value=self.config.decoder_config.bos_token_id, device=self.device
             )
         # Ensure 3D
         if decoder_input_ids.ndim == 2:

@@ -19,11 +19,12 @@ import sys
 from argparse import ArgumentParser
 from collections.abc import Iterator
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from pprint import pformat
 from typing import Any
 
-import requests
+import httpx
 import torch
 import torchvision.transforms as T
 from PIL import Image
@@ -92,9 +93,9 @@ class TrackedStateDict:
 # Image to verify the result
 def prepare_img():
     url = "https://praeclarumjj3.github.io/files/coco.jpeg"
-    img_data = requests.get(url, stream=True).raw
-    im = Image.open(img_data)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @dataclass

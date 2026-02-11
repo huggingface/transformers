@@ -32,8 +32,9 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, meshgrid
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs, logging, torch_int
+from ...processing_utils import Unpack
+from ...pytorch_utils import apply_chunking_to_forward
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
 
 
@@ -427,7 +428,7 @@ class ClapAudioSelfAttention(nn.Module):
         # get pair-wise relative position index for each token inside the window
         coords_h = torch.arange(self.window_size[0])
         coords_w = torch.arange(self.window_size[1])
-        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
+        coords = torch.stack(torch.meshgrid([coords_h, coords_w], indexing="ij"))
         coords_flatten = torch.flatten(coords, 1)
         relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
         relative_coords = relative_coords.permute(1, 2, 0).contiguous()
@@ -1064,8 +1065,7 @@ def eager_attention_forward(
 ):
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -1103,7 +1103,7 @@ class ClapTextSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         output_attentions: bool | None = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.attention_head_size)
@@ -1112,9 +1112,9 @@ class ClapTextSelfAttention(nn.Module):
         key_states = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1159,7 +1159,7 @@ class ClapTextAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         output_attentions: bool | None = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
@@ -1218,7 +1218,7 @@ class ClapTextLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         output_attentions: bool | None = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
             hidden_states,
@@ -1258,7 +1258,7 @@ class ClapTextEncoder(nn.Module):
         output_attentions: bool | None = False,
         output_hidden_states: bool | None = False,
         return_dict: bool | None = True,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -1552,19 +1552,16 @@ class ClapModel(ClapPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`ClapTextModel`].
-
         Examples:
 
         ```python
@@ -1579,29 +1576,30 @@ class ClapModel(ClapPreTrainedModel):
         ...     text_features = model.get_text_features(**inputs)
         ```"""
         text_outputs: BaseModelOutputWithPooling = self.text_model(
-            input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            return_dict=True,
+            **kwargs,
         )
         text_features = self.text_projection(text_outputs.pooler_output)
-        text_features = F.normalize(text_features, dim=-1)
+        text_outputs.pooler_output = F.normalize(text_features, dim=-1)
 
-        return text_features
+        return text_outputs
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_audio_features(
         self,
         input_features: torch.Tensor,
         is_longer: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
             Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
             the features.
-
-        Returns:
-            audio_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The audio embeddings obtained by
-            applying the projection layer to the pooled output of [`ClapAudioModel`].
 
         Examples:
 
@@ -1618,12 +1616,12 @@ class ClapModel(ClapPreTrainedModel):
         ...     audio_features = model.get_audio_features(**inputs)
         ```"""
         audio_outputs: BaseModelOutputWithPooling = self.audio_model(
-            input_features=input_features, is_longer=is_longer
+            input_features=input_features, is_longer=is_longer, return_dict=True, **kwargs
         )
         audio_features = self.audio_projection(audio_outputs.pooler_output)
-        audio_features = F.normalize(audio_features, dim=-1)
+        audio_outputs.pooler_output = F.normalize(audio_features, dim=-1)
 
-        return audio_features
+        return audio_outputs
 
     @can_return_tuple
     @auto_docstring

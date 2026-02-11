@@ -31,7 +31,8 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPModel, CLIPTextEmbeddings, _get_vector_norm
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
@@ -171,10 +172,6 @@ class Aimv2TextConfig(SiglipTextConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        pad_token_id (`int`, *optional*, defaults to 1):
-            The id of the padding token in the vocabulary.
-        bos_token_id (`int`, *optional*, defaults to 49406):
-            The id of the beginning-of-sequence token in the vocabulary.
         eos_token_id (`int`, *optional*, defaults to 49407):
             The id of the end-of-sequence token in the vocabulary.
         max_position_embeddings (`int`, *optional*, defaults to 77):
@@ -196,8 +193,6 @@ class Aimv2TextConfig(SiglipTextConfig):
         qkv_bias: bool = False,
         mlp_bias: bool = False,
         hidden_act: str = "silu",
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = None,
         eos_token_id: int = 49407,
         max_position_embeddings: int = 77,
         initializer_range: bool = 0.02,
@@ -211,8 +206,6 @@ class Aimv2TextConfig(SiglipTextConfig):
             num_attention_heads=num_attention_heads,
             hidden_act=hidden_act,
             max_position_embeddings=max_position_embeddings,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             **kwargs,
         )
@@ -491,7 +484,8 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.patch_embed
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -503,14 +497,16 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Siglip2VisionModel
 
         >>> model = Aimv2VisionModel.from_pretrained("apple/aimv2-large-patch14-native")
         >>> processor = AutoProcessor.from_pretrained("apple/aimv2-large-patch14-native")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -566,7 +562,8 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.token_embedding = value
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -582,7 +579,7 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
         if attention_mask is not None:
             attention_mask = create_causal_mask(
                 config=self.config,
-                input_embeds=hidden_states,
+                inputs_embeds=hidden_states,
                 position_ids=position_ids,
                 attention_mask=attention_mask,
                 cache_position=cache_position,
@@ -646,14 +643,16 @@ class Aimv2Model(CLIPModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Aimv2Model
 
         >>> model = Aimv2Model.from_pretrained("apple/aimv2-large-patch14-224-lit")
         >>> processor = AutoProcessor.from_pretrained("apple/aimv2-large-patch14-224-lit")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(
         ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True

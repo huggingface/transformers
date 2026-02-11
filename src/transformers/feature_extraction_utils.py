@@ -81,7 +81,8 @@ class BatchFeature(UserDict):
         skip_tensor_conversion: list[str] | set[str] | None = None,
     ):
         super().__init__(data)
-        self.convert_to_tensors(tensor_type=tensor_type, skip_tensor_conversion=skip_tensor_conversion)
+        self.skip_tensor_conversion = skip_tensor_conversion
+        self.convert_to_tensors(tensor_type=tensor_type)
 
     def __getitem__(self, item: str) -> Any:
         """
@@ -201,6 +202,9 @@ class BatchFeature(UserDict):
             return self
 
         is_tensor, as_tensor = self._get_is_as_tensor_fns(tensor_type)
+        skip_tensor_conversion = (
+            skip_tensor_conversion if skip_tensor_conversion is not None else self.skip_tensor_conversion
+        )
 
         # Do the tensor conversion in batch
         for key, value in self.items():

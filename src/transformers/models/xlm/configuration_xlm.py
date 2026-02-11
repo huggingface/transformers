@@ -138,6 +138,9 @@ class XLMConfig(PreTrainedConfig):
         "num_attention_heads": "n_heads",
         "num_hidden_layers": "n_layers",
         "n_words": "vocab_size",  # For backward compatibility
+        "bos_index": "bos_token_id",
+        "eos_index": "eos_token_id",
+        "pad_index": "pad_token_id",
     }
 
     def __init__(
@@ -158,9 +161,6 @@ class XLMConfig(PreTrainedConfig):
         embed_init_std=2048**-0.5,
         layer_norm_eps=1e-12,
         init_std=0.02,
-        bos_index=0,
-        eos_index=1,
-        pad_index=2,
         unk_index=3,
         mask_index=5,
         is_encoder=True,
@@ -175,6 +175,8 @@ class XLMConfig(PreTrainedConfig):
         lang_id=0,
         pad_token_id=2,
         bos_token_id=0,
+        eos_token_id=1,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         """Constructs XLMConfig."""
@@ -191,9 +193,6 @@ class XLMConfig(PreTrainedConfig):
         self.n_langs = n_langs
         self.use_lang_emb = use_lang_emb
         self.layer_norm_eps = layer_norm_eps
-        self.bos_index = bos_index
-        self.eos_index = eos_index
-        self.pad_index = pad_index
         self.unk_index = unk_index
         self.mask_index = mask_index
         self.is_encoder = is_encoder
@@ -209,11 +208,15 @@ class XLMConfig(PreTrainedConfig):
         self.end_n_top = end_n_top
         self.mask_token_id = mask_token_id
         self.lang_id = lang_id
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         if "n_words" in kwargs:
             self.n_words = kwargs["n_words"]
 
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = ["XLMConfig"]

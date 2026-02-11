@@ -13,12 +13,7 @@ def get_target_dtype(query: torch.Tensor, module: torch.nn.Module) -> torch.dtyp
     """If the query is in float32, return a target dtype compatible with flash attention. Return None otherwise."""
     if query.dtype == torch.float32:
         if torch.is_autocast_enabled():
-            # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
-            return (
-                torch.get_autocast_dtype("cuda")
-                if hasattr(torch, "get_autocast_dtype")
-                else torch.get_autocast_gpu_dtype()
-            )
+            return torch.get_autocast_dtype("cuda")
         # Handle the case where the model is quantized
         elif hasattr(module.config, "_is_quantized"):
             return module.config.dtype
@@ -42,7 +37,7 @@ def flash_attention_forward(
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False):
         logger.warning_once(
-            "`flash_attention_2` does not support `output_attentions=True`."
+            "Flash Attention does not support `output_attentions=True`."
             " Please set your attention to `eager` if you want any of these features."
         )
 

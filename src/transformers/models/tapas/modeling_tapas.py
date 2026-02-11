@@ -1491,7 +1491,7 @@ def _segment_reduce(values, index, segment_reduce_fn, name):
     new_shape = torch.cat(
         [
             torch.as_tensor(index.batch_shape(), dtype=torch.long, device=device),
-            torch.as_tensor([index.num_segments], dtype=torch.long, device=device),
+            torch.as_tensor(index.num_segments, dtype=torch.long, device=device).unsqueeze(dim=0),
             torch.as_tensor(vector_shape, dtype=torch.long, device=device),
         ],
         dim=0,

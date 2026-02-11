@@ -12,9 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 from collections.abc import Callable
+from typing import Literal
 
 import torch
 from torch import nn
@@ -31,7 +31,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..modernbert.modeling_modernbert import (
     ModernBertEmbeddings,
     ModernBertMLP,
@@ -119,10 +120,11 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         layer_types (`list[str]`, *optional*):
             List of layer types, one for each layer. If not specified, will be automatically generated based on
             `global_attn_every_n_layers`. Should contain "full_attention" or "sliding_attention".
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
+        rope_parameters (`dict`, *optional*):
+            Dictionary mapping attention patterns (`"full_attention"`, `"sliding_attention"`) to `RopeParameters`.
+            Each value should be a dictionary containing `rope_type` and optional scaling parameters.
 
     Examples:
 
@@ -174,9 +176,16 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         local_attention: int | None = 128,
         global_attn_every_n_layers: int | None = 3,
         layer_types: list[str] | None = None,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: dict[Literal["full_attention", "sliding_attention"], RopeParameters] | None = None,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.cls_token_id = cls_token_id
+        self.sep_token_id = sep_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -216,14 +225,7 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         # NOTE: sliding window numbers matches ModernBERT but is only half of it
         self.sliding_window = local_attention // 2 if local_attention else -1
         self.rope_parameters = rope_parameters
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            cls_token_id=cls_token_id,
-            sep_token_id=sep_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
@@ -238,9 +240,15 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
             self.rope_parameters["sliding_attention"].update(rope_scaling)
+
+        # Set default values if not present
+        if self.rope_parameters.get("full_attention") is None:
+            self.rope_parameters["full_attention"] = {"rope_type": "default"}
         self.rope_parameters["full_attention"].setdefault(
             "rope_theta", kwargs.pop("global_rope_theta", self.default_theta["global"])
         )
+        if self.rope_parameters.get("sliding_attention") is None:
+            self.rope_parameters["sliding_attention"] = {"rope_type": "default"}
         self.rope_parameters["sliding_attention"].setdefault(
             "rope_theta", kwargs.pop("local_rope_theta", self.default_theta["local"])
         )
@@ -282,8 +290,7 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     # Use the pre-computed attention mask
-    causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-    attn_weights = attn_weights + causal_mask
+    attn_weights = attn_weights + attention_mask
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
@@ -350,9 +357,9 @@ class ModernBertDecoderAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -490,15 +497,6 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
-    def _check_and_adjust_attn_implementation(self, attn_implementation, is_init_check):
-        raise AttributeError("No need to inherit!")
-
-    def _maybe_set_compile(self):
-        raise AttributeError("No need to inherit!")
-
-    def resize_token_embeddings(self, *args, **kwargs):
-        raise AttributeError("No need to inherit!")
-
 
 @auto_docstring
 class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
@@ -521,7 +519,8 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.tok_embeddings = value
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -566,7 +565,7 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": hidden_states,
+                "inputs_embeds": hidden_states,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,

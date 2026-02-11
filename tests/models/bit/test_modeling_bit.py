@@ -130,6 +130,7 @@ class BitModelTester:
 
         # verify backbone works with out_features=None
         config.out_features = None
+        print(config)
         model = BitBackbone(config=config)
         model.to(torch_device)
         model.eval()
@@ -166,7 +167,6 @@ class BitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = BitModelTester(self)
