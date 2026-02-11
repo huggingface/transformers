@@ -244,12 +244,11 @@ class GlmMoeDsaAttention(nn.Module):
         )
 
         # Indexer submodule for sparse attention
-        # Wrapped in nn.Module so checkpoint keys match: self_attn.indexer.wq_b, etc.
-        self.indexer = nn.Module()
-        self.indexer.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.index_head_dim, bias=False)
-        self.indexer.wk = nn.Linear(config.hidden_size, self.index_head_dim, bias=config.attention_bias)
-        self.indexer.k_norm = nn.LayerNorm(self.index_head_dim, eps=1e-6)
-        self.indexer.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
+        # Useless for now, as sparse attention is not fully implemented
+        self.indexer_wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.index_head_dim, bias=False)
+        self.indexer_wk = nn.Linear(config.hidden_size, self.index_head_dim, bias=config.attention_bias)
+        self.indexer_k_norm = nn.LayerNorm(self.index_head_dim, eps=1e-6)
+        self.indexer_weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.indexer_softmax_scaling = self.index_head_dim ** (-0.5)
 
         self.scaling = self.qk_head_dim ** (-0.5)
@@ -562,9 +561,6 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        # Skip normal_ initialization for FP8 quantized weights which don't support it
-        if isinstance(module, nn.Linear) and hasattr(module, "weight") and module.weight.dtype == torch.float8_e4m3fn:
-            return
         super()._init_weights(module)
         if isinstance(module, GlmMoeDsaTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)

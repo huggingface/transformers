@@ -440,12 +440,7 @@ class GlmMoeDsaDecoderLayer(Glm4MoeLiteDecoderLayer):
 
 
 class GlmMoeDsaPreTrainedModel(Glm4MoePreTrainedModel):
-    @torch.no_grad()
-    def _init_weights(self, module):
-        # Skip normal_ initialization for FP8 quantized weights which don't support it
-        if isinstance(module, nn.Linear) and hasattr(module, "weight") and module.weight.dtype == torch.float8_e4m3fn:
-            return
-        super()._init_weights(module)
+    pass
 
 
 class GlmMoeDsaModel(Glm4MoeModel):
