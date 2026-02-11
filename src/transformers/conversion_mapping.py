@@ -153,6 +153,18 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="mlp.experts.down_proj",
                 operations=[MergeModulelist(dim=0), Transpose(1, 2)],
             ),
+            # In some checkpoints, e.g. `Qwen/Qwen3-VL-30B-A3B-Instruct` the experts are merged but not transposed so
+            # those 2 conversions are explicitly for such formats
+            WeightConverter(
+                source_patterns="mlp.experts.gate_up_proj",
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[Transpose(1, 2)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.down_proj",
+                target_patterns="mlp.experts.down_proj",
+                operations=[Transpose(1, 2)],
+            ),
         ],
         "phimoe": [
             WeightRenaming(".block_sparse_moe.", ".mlp."),
