@@ -254,26 +254,24 @@ class ViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_get_number_of_image_patches_matches_slow_processor(self):
-        if not is_torchvision_available():
-            self.skipTest("Glm4vImageProcessorFast requires torchvision")
-
-        slow_processor = Glm4vImageProcessor()
-        fast_processor = Glm4vImageProcessorFast()
-
         test_cases = [
-            (100, 100, {}),
-            (200, 50, {}),
-            (100, 100, {"patch_size": 28}),
+            (100, 100, {}, 64),
+            (200, 50, {}, 56),
+            (100, 100, {"patch_size": 28}, 16),
         ]
 
-        for height, width, images_kwargs in test_cases:
-            with self.subTest(height=height, width=width, images_kwargs=images_kwargs):
-                expected = slow_processor.get_number_of_image_patches(
-                    height=height, width=width, images_kwargs=images_kwargs
-                )
-                self.assertEqual(
-                    fast_processor.get_number_of_image_patches(
-                        height=height, width=width, images_kwargs=images_kwargs
-                    ),
-                    expected,
-                )
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(**self.image_processor_dict)
+            for height, width, images_kwargs, expected in test_cases:
+                with self.subTest(
+                    image_processing_class=image_processing_class.__name__,
+                    height=height,
+                    width=width,
+                    images_kwargs=images_kwargs,
+                ):
+                    self.assertEqual(
+                        image_processor.get_number_of_image_patches(
+                            height=height, width=width, images_kwargs=images_kwargs
+                        ),
+                        expected,
+                    )
