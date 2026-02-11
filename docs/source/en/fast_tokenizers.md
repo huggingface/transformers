@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Tokenizers
 
-A tokenizer converts text into tensors, the inputs to a model. It normalizes and splits text, applies the tokenization algorithm, adds special tokens, and decodes output ids back into text.
+A tokenizer converts text into tensors, which are the inputs to a model. It normalizes and splits text, applies the tokenization algorithm, adds special tokens, and decodes output ids back into text.
 
 ```py
 from transformers import AutoTokenizer
@@ -38,7 +38,7 @@ Load a tokenizer with the [`AutoTokenizer`] class or a model-specific tokenizer 
 <hfoptions id="tokenizers">
 <hfoption id="AutoTokenizer">
 
-[`AutoTokenizer.from_pretrained`] reads the model config, resolves the correct tokenizer class, and returns an instance of it. You don't need to know the model type beforehand. Most models resolve to a subclass of [`TokenizersBackend`], a fast Rust-based tokenizer from the [Tokenizers](https://huggingface.co/docs/tokenizers/index) library.
+[`AutoTokenizer.from_pretrained`] reads the model config, resolves the correct tokenizer class, and returns an instance of it. You don't need to know the tokenizer class beforehand. Most tokenizers resolve to a subclass of [`TokenizersBackend`], a fast Rust-based tokenizer from the [Tokenizers](https://huggingface.co/docs/tokenizers/index) library.
 
 Loading with [`AutoTokenizer`] is the recommended approach.
 
@@ -51,9 +51,9 @@ tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
 </hfoption>
 <hfoption id="model-specific tokenizer">
 
-A model-specific tokenization class is a pre-configured [`TokenizersBackend`] with the exact tokenization configuration (normalizer, pre-tokenizer, special token conventions, etc.) a model was trained with.
+A model-specific tokenization class is a pre-configured [`TokenizersBackend`] that uses the exact tokenization configuration (normalizer, pre-tokenizer, special token conventions, etc.) a model was trained with.
 
-Use a model-specific class to initialize an empty tokenizer for training or to pass model-specific arguments like `vocab` or `merges`.
+Use a model-specific class to initialize an empty tokenizer for training or to pass model-specific arguments like `vocab` or `merges`. An empty tokenizer is minimal and only contains a model's special tokens like `<pad>`, `<eos>`, or `<bos>`.
 
 ```py
 from transformers import GemmaTokenizer
@@ -111,7 +111,7 @@ tokenizer.decode(outputs["input_ids"], skip_special_tokens=True)
 
 ## Special tokens
 
-Special tokens mark structural boundaries in a sequence, like the beginning-of-sequence or padding positions. Each model defines its own set of special tokens. The tokenizer adds them automatically when you call it.
+Special tokens mark structural boundaries in a sequence, like the beginning-of-sequence or padding positions. Each model defines its own set of special tokens. The tokenizer adds them when you call it.
 
 ```py
 tokenizer.encode("Sphinx of black quartz, judge my vow.")
@@ -120,7 +120,7 @@ tokenizer.decode(outputs["input_ids"])
 ['<bos>Sphinx of black quartz, judge my vow.']
 ```
 
-Register additional named special tokens with the `extra_special_tokens` argument. Multimodal models use these tokens as placeholders for images, video, or audio.
+Register additional named special tokens with the `extra_special_tokens` argument. Multimodal models use them as placeholders for images, video, or audio.
 
 ```py
 from transformers import AutoTokenizer
@@ -149,11 +149,11 @@ tokenizer(
 )
 ```
 
-Batch processing requires all sequences to share the same length. Padding and truncation handle the varying-length sequences for you.
+Batch processing requires all sequences to share the same length. Padding and truncation are strategies to handle varying-length sequences.
 
 ### Padding
 
-Padding appends special tokens so shorter sequences match the longest sequence in a batch. The attention mask marks padding positions as `0` so the model ignores them. Set `padding=True` to pad to the longest sequence, or pass `max_length` to pad to a fixed size.
+Padding appends special tokens so shorter sequences match the longest sequence in a batch. The attention mask marks padding positions as `0` so the model ignores them. Set `padding=True` to pad to the longest sequence or pass `max_length` to pad to a fixed size.
 
 ```py
 from transformers import AutoTokenizer
@@ -189,7 +189,7 @@ tokenizer(
 
 Truncation clips tokens so a sequence fits within a maximum length. Set `truncation=True` and specify `max_length` to enable it.
 
-Padding and truncation work together. Short sequences gain padding tokens while long sequences lose trailing tokens. The result is a packed rectangular tensor.
+Padding and truncation work together. Short sequences gain padding tokens while long sequences lose trailing tokens. Together, they produce a packed rectangular tensor.
 
 ```py
 from transformers import AutoTokenizer
@@ -236,9 +236,9 @@ All backends inherit from [`PreTrainedTokenizerBase`] and share the same APIs fo
 [`AutoTokenizer`] selects the best available backend when you call [`~AutoTokenizer.from_pretrained`].
 
 1. It reads the `tokenizer_config.json` file for the `tokenizer_class` field.
-2. The `tokenizer_class` is matched to a class name in a mapping registry. The resolved class inherits from one of the four backends. For example, [`GemmaTokenizer`] inherits from [`TokenizersBackend`], and [`SiglipTokenizer`] inherits from [`SentencePieceBackend`].
+2. The registry matches `tokenizer_class` to a class name. The resolved class inherits from one of the four backends. For example, [`GemmaTokenizer`] inherits from [`TokenizersBackend`], and [`SiglipTokenizer`] inherits from [`SentencePieceBackend`].
 
-    Some models, like GLM, map directly to [`TokenizersBackend`] because the `tokenizer.json` file fully describes the pipeline. [`GemmaTokenizer`] exists as a subclass because it defines additional model-specific settings in Python that `tokenizer.json` can't capture.
+    Some models, like GLM, map directly to [`TokenizersBackend`] because the `tokenizer.json` file fully describes the pipeline. [`GemmaTokenizer`] exists as a subclass since it defines additional model-specific settings in Python that `tokenizer.json` doesn't capture.
 
     ```py
     TOKENIZER_MAPPING_NAMES = OrderedDict([
@@ -267,6 +267,21 @@ tokenizer.backend
 'tokenizers'
 ```
 
+## Inspect the tokenizer architecture
+
+Inspect a tokenizer's internal components (normalizer, pre-tokenizer, model, decoder) with the `_tokenizer` attribute.
+
+```py
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
+print(tokenizer._tokenizer.normalizer)
+print(tokenizer._tokenizer.pre_tokenizer)
+print(tokenizer._tokenizer.model)
+print(tokenizer._tokenizer.decoder)
+```
+
 ## Resources
 
 - The [Tokenization in Transformers v5](https://huggingface.co/blog/tokenizers) post discusses the motivation behind the new tokenization backends.
+- Review the [migration guide](https://github.com/huggingface/transformers/blob/main/MIGRATION_GUIDE_V5.md#tokenization) for an overview of the tokenization changes.
