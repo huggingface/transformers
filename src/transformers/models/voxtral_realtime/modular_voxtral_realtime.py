@@ -133,7 +133,7 @@ class VoxtralConv1dCacheLayer:
             self.lazy_initialization(hidden_states, conv_module)
         elif not self.is_initialized:
             raise ValueError(
-                "Conv1dCacheLayer is not initialized. Make sure to provide conv_module to the update method."
+                "VoxtralConv1dCacheLayer is not initialized. Make sure to provide conv_module to the update method."
             )
 
         # get the padding states
@@ -160,7 +160,7 @@ class VoxtralRealtimeConv1dPaddingCache:
 
     def update(self, hidden_states, cache_key, conv_module):
         if cache_key not in self.layers:
-            self.layers[cache_key] = Conv1dCacheLayer()
+            self.layers[cache_key] = VoxtralConv1dCacheLayer()
 
         padding_states = self.layers[cache_key].update(hidden_states, conv_module)
         padded_hidden_states = torch.cat([padding_states, hidden_states], dim=-1)
