@@ -40,7 +40,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
-from ...utils.generic import OutputRecorder, TransformersKwargs, is_flash_attention_requested
+from ...utils.generic import TransformersKwargs, is_flash_attention_requested
+from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoModel
 from .configuration_sam2_video import Sam2VideoConfig, Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
 

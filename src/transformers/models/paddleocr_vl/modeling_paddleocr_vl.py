@@ -43,7 +43,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check, torch_int
-from ...utils.generic import check_model_inputs, is_flash_attention_requested, maybe_autocast
+from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_paddleocr_vl import PaddleOCRTextConfig, PaddleOCRVisionConfig, PaddleOCRVLConfig
 
 
@@ -212,8 +213,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -364,7 +364,7 @@ class PaddleOCRAttention(nn.Module):
 
 @use_kernel_forward_from_hub("RMSNorm")
 class PaddleOCRRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         PaddleOCRRMSNorm is equivalent to T5LayerNorm
         """
@@ -372,7 +372,7 @@ class PaddleOCRRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -474,7 +474,8 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -833,6 +834,7 @@ class PaddleOCRVisionEncoder(nn.Module):
         cu_seqlens: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(sequence_length, hidden_size)`, *optional*):
@@ -876,6 +878,7 @@ class PaddleOCRVisionEncoder(nn.Module):
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 position_embeddings=position_embeddings,
+                **kwargs,
             )
 
         return BaseModelOutput(
@@ -884,6 +887,14 @@ class PaddleOCRVisionEncoder(nn.Module):
 
 
 class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
+    config: PaddleOCRVisionConfig
+    main_input_name = "pixel_values"
+    input_modalities = "image"
+    _can_record_outputs = {
+        "hidden_states": PaddleOCRVisionEncoderLayer,
+        "attentions": PaddleOCRVisionAttention,
+    }
+
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__(config)
         self.config = config
@@ -895,13 +906,15 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
 
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         cu_seqlens: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         """
         Args:
@@ -921,6 +934,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
             cu_seqlens=cu_seqlens,
             attention_mask=attention_mask,
             image_grid_thw=image_grid_thw,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
@@ -929,8 +943,6 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=None,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -938,10 +950,6 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
     config: PaddleOCRVisionConfig
     main_input_name = "pixel_values"
     input_modalities = "image"
-    _can_record_outputs = {
-        "hidden_states": PaddleOCRVisionEncoderLayer,
-        "attentions": PaddleOCRVisionAttention,
-    }
 
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__(config)
@@ -951,13 +959,12 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         cu_seqlens: torch.Tensor,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
         Args:
@@ -972,6 +979,7 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
             pixel_values=pixel_values,
             cu_seqlens=cu_seqlens,
             image_grid_thw=image_grid_thw,
+            **kwargs,
         )
 
 

@@ -52,6 +52,7 @@ from transformers import (
     set_seed,
 )
 from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
+from transformers.integrations.neftune import activate_neftune
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     TOKEN,
@@ -108,6 +109,8 @@ from transformers.trainer_utils import (
     HPSearchBackend,
     check_target_module_exists,
     get_last_checkpoint,
+    rotate_checkpoints,
+    sort_checkpoints,
 )
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
@@ -1687,7 +1690,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
-        trainer.model = trainer._activate_neftune(trainer.model)
+        activate_neftune(trainer.model, trainer.args.neftune_noise_alpha)
 
         dummy_input = torch.LongTensor([[1, 0, 1]]).to(torch_device)
 
@@ -3470,6 +3473,49 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # We should be back to 14 again, picking up based upon the last ran Trainer
         self.assertEqual(trainer._train_batch_size, previous_batch_size)
 
+    def test_resume_training_with_different_batch_size(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/43708
+        # When resuming from checkpoint without auto_find_batch_size, user's new batch size should be used
+        train_dataset = RegressionDataset(length=64)
+
+        config = RegressionModelConfig(a=0, b=2)
+        model = RegressionRandomPreTrainedModel(config)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+
+        # First training run with batch_size=2
+        args = RegressionTrainingArguments(
+            tmp_dir,
+            do_train=True,
+            max_steps=2,
+            save_steps=1,
+            per_device_train_batch_size=2,
+            auto_find_batch_size=False,
+        )
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.train()
+
+        # Verify the checkpoint saved with batch_size=2
+        checkpoint = os.path.join(tmp_dir, "checkpoint-1")
+        state = TrainerState.load_from_json(os.path.join(checkpoint, "trainer_state.json"))
+        self.assertEqual(state.train_batch_size, 2)
+
+        # Resume with a different batch_size=4 (without auto_find_batch_size)
+        # The trainer should use the new batch_size, not the checkpoint's
+        args2 = RegressionTrainingArguments(
+            tmp_dir,
+            do_train=True,
+            max_steps=4,
+            save_steps=1,
+            per_device_train_batch_size=4,
+            auto_find_batch_size=False,
+        )
+        trainer2 = Trainer(model, args2, train_dataset=train_dataset)
+        trainer2.train(resume_from_checkpoint=checkpoint)
+
+        # The trainer should be using the new batch size (4), not the checkpoint's (2)
+        self.assertEqual(trainer2._train_batch_size, 4 * max(trainer2.args.n_gpu, 1))
+
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):
         train_dataset = RegressionDataset(length=128)
@@ -3945,11 +3991,38 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.assertTrue(isinstance(trainer.state.total_flos, float))
 
+    def test_checkpoint_sorting(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Create fake checkpoints in non-sorted order
+            for n in [20, 5, 15, 25, 10]:
+                os.makedirs(os.path.join(tmp_dir, f"{PREFIX_CHECKPOINT_DIR}-{n}"))
+
+            # Test sorting by step number (oldest first)
+            sorted_cps = sort_checkpoints(tmp_dir)
+            values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in sorted_cps]
+            self.assertEqual(values, [5, 10, 15, 20, 25])
+
+            # Test with best_model_checkpoint - moved to second-to-last to protect from deletion
+            best = os.path.join(tmp_dir, f"{PREFIX_CHECKPOINT_DIR}-5")
+            sorted_cps = sort_checkpoints(tmp_dir, best_model_checkpoint=best)
+            values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in sorted_cps]
+            self.assertEqual(values, [10, 15, 20, 5, 25])
+
+            # Test with best_model_checkpoint already at end (stays at end)
+            best = os.path.join(tmp_dir, f"{PREFIX_CHECKPOINT_DIR}-25")
+            sorted_cps = sort_checkpoints(tmp_dir, best_model_checkpoint=best)
+            values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in sorted_cps]
+            self.assertEqual(values, [5, 10, 15, 20, 25])
+
     def check_checkpoint_deletion(self, trainer, output_dir, expected):
         # Make fake checkpoints
         for n in [5, 10, 15, 20, 25]:
             os.makedirs(os.path.join(output_dir, f"{PREFIX_CHECKPOINT_DIR}-{n}"), exist_ok=True)
-        trainer._rotate_checkpoints(output_dir=output_dir)
+        rotate_checkpoints(
+            output_dir=output_dir,
+            save_total_limit=trainer.args.save_total_limit,
+            best_model_checkpoint=trainer.state.best_model_checkpoint,
+        )
         glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{PREFIX_CHECKPOINT_DIR}-*")]
         values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in glob_checkpoints]
         self.assertSetEqual(set(values), set(expected))
@@ -5616,6 +5689,28 @@ if is_torch_available():
         "compensation_buffer_dtype": torch.bfloat16,
     }
 
+    # Bitsandbytes optimizer test parameters: (optim_name, mock_attr, expected_kwargs)
+    # Empty list when bitsandbytes is not available triggers skip_on_empty=True
+    _BNB_OPTIMIZER_PARAMS = (
+        [
+            (OptimizerNames.ADAMW_BNB, "AdamW", default_adam_kwargs),
+            (OptimizerNames.ADAMW_8BIT, "AdamW", default_adam_kwargs),
+            (OptimizerNames.PAGED_ADAMW, "AdamW", default_adam_kwargs),
+            (OptimizerNames.PAGED_ADAMW_8BIT, "AdamW", default_adam_kwargs),
+            (OptimizerNames.LION, "Lion", default_lion_kwargs),
+            (OptimizerNames.LION_8BIT, "Lion", default_lion_kwargs),
+            (OptimizerNames.PAGED_LION, "Lion", default_lion_kwargs),
+            (OptimizerNames.PAGED_LION_8BIT, "Lion", default_lion_kwargs),
+            (OptimizerNames.ADEMAMIX, "AdEMAMix", default_ademamix_kwargs),
+            (OptimizerNames.ADEMAMIX_8BIT, "AdEMAMix", default_ademamix_kwargs),
+            (OptimizerNames.PAGED_ADEMAMIX, "AdEMAMix", default_ademamix_kwargs),
+            (OptimizerNames.PAGED_ADEMAMIX_8BIT, "AdEMAMix", default_ademamix_kwargs),
+        ]
+        if is_bitsandbytes_available()
+        else []
+    )
+    _ALL_BNB_OPTIMIZERS = [p[0] for p in _BNB_OPTIMIZER_PARAMS]
+
     optim_test_params = [
         (
             OptimizerNames.ADAMW_TORCH,
@@ -5783,16 +5878,8 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             trainer.train()
 
     def test_fused_adam(self):
-        # Pretend that apex is installed and mock apex.optimizers.FusedAdam exists.
-        # Trainer.get_optimizer_cls_and_kwargs does not use FusedAdam. It only has to return the
-        # class given, so mocking apex.optimizers.FusedAdam should be fine for testing and allow
-        # the test to run without requiring an apex installation.
         mock = Mock()
-        modules = {
-            "apex": mock,
-            "apex.optimizers": mock.optimizers,
-            "apex.optimizers.FusedAdam": mock.optimizers.FusedAdam,
-        }
+        modules = {"apex": mock, "apex.optimizers": mock.optimizers}
         with tempfile.TemporaryDirectory() as tmp_dir:
             with patch.dict("sys.modules", modules):
                 self.check_optim_and_kwargs(
@@ -5804,310 +5891,33 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
     def test_fused_adam_no_apex(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(optim=OptimizerNames.ADAMW_APEX_FUSED, output_dir=tmp_dir)
-
-            # Pretend that apex does not exist, even if installed. By setting apex to None, importing
-            # apex will fail even if apex is installed.
             with patch.dict("sys.modules", {"apex.optimizers": None}):
                 with self.assertRaises(ValueError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
-    @require_bitsandbytes
-    def test_bnb_adam8bit(self):
-        # Pretend that Bits and Bytes is installed and mock bnb.optim.Adam8bit exists.
-        # Trainer.get_optimizer_cls_and_kwargs does not use Adam8bit. It only has to return the
-        # class given, so mocking bnb.optim.Adam8bit should be fine for testing and allow
-        # the test to run without requiring a bnb installation.
+    @parameterized.expand(_BNB_OPTIMIZER_PARAMS, skip_on_empty=True)
+    def test_bnb_optimizer(self, optim_name, mock_attr, expected_kwargs):
         mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
-        }
+        modules = {"bitsandbytes": mock, "bitsandbytes.optim": mock.optim}
         with tempfile.TemporaryDirectory() as tmp_dir:
             with patch.dict("sys.modules", modules):
                 self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir=tmp_dir),
-                    mock.optim.AdamW,
-                    default_adam_kwargs,
+                    TrainingArguments(optim=optim_name, output_dir=tmp_dir),
+                    getattr(mock.optim, mock_attr),
+                    expected_kwargs,
                 )
 
-    @require_bitsandbytes
-    def test_bnb_paged_adam8bit_alias(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
-        }
+    @parameterized.expand(_ALL_BNB_OPTIMIZERS, skip_on_empty=True)
+    def test_bnb_not_available(self, optim_name):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.ADAMW_8BIT, output_dir=tmp_dir),
-                    mock.optim.AdamW,
-                    default_adam_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_paged_adam(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir=tmp_dir),
-                    mock.optim.AdamW,
-                    default_adam_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_paged_adam8bit(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir=tmp_dir),
-                    mock.optim.AdamW,
-                    default_adam_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_ademamix(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.AdEMAMix": mock.optim.AdEMAMix,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.ADEMAMIX, output_dir=tmp_dir),
-                    mock.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_ademamix8bit(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.AdEMAMix": mock.optim.AdEMAMix,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.ADEMAMIX_8BIT, output_dir=tmp_dir),
-                    mock.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_paged_ademamix(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.AdEMAMix": mock.optim.AdEMAMix,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX, output_dir=tmp_dir),
-                    mock.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_paged_ademamix8bit(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.AdEMAMix": mock.optim.AdEMAMix,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX_8BIT, output_dir=tmp_dir),
-                    mock.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_lion(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.Lion": mock.optim.Lion,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.LION, output_dir=tmp_dir),
-                    mock.optim.Lion,
-                    default_lion_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_lion8bit(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.Lion": mock.optim.Lion,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.LION_8BIT, output_dir=tmp_dir),
-                    mock.optim.Lion,
-                    default_lion_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_paged_lion8bit(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.Lion": mock.optim.Lion,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir=tmp_dir),
-                    mock.optim.Lion,
-                    default_lion_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_paged_lion(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.Lion": mock.optim.Lion,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.PAGED_LION, output_dir=tmp_dir),
-                    mock.optim.Lion,
-                    default_lion_kwargs,
-                )
-
-    def test_bnb_adam8bit_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_bnb_paged_adam_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_bnb_paged_adam8bit_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_bnb_ademamix_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.ADEMAMIX, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_bnb_ademamix8bit_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.ADEMAMIX_8BIT, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_bnb_paged_ademamix_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_bnb_paged_ademamix8bit_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX_8BIT, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_bnb_paged_lion_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.PAGED_LION, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_bnb_paged_lion8bit_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
+            args = TrainingArguments(optim=optim_name, output_dir=tmp_dir)
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
                 with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_anyprecision_adamw(self):
-        # Pretend that torchdistx is installed and mock torchdistx.optimizers.AnyPrecisionAdamW exists.
-        # Trainer.get_optimizer_cls_and_kwargs does not use AnyPrecisioinAdamW. It only has to return the
-        # class given, so mocking torchdistx.optimizers.AnyPrecisionAdamW should be fine for testing and allow
-        # the test to run without requiring a bnb installation.
         mock = Mock()
-        modules = {
-            "torchdistx": mock,
-            "torchdistx.optimizers": mock.optimizers,
-            "torchdistx.optimizers.AnyPrecisionAdamW.": mock.optimizers.AnyPrecisionAdamW,
-        }
+        modules = {"torchdistx": mock, "torchdistx.optimizers": mock.optimizers}
         with tempfile.TemporaryDirectory() as tmp_dir:
             with patch.dict("sys.modules", modules):
                 self.check_optim_and_kwargs(
@@ -6119,12 +5929,32 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
     def test_no_torchdistx_anyprecision_adamw(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir=tmp_dir)
-
-            # Pretend that torchdistx does not exist, even if installed. By setting torchdistx to None, importing
-            # torchdistx.optimizers will fail even if torchdistx is installed.
             with patch.dict("sys.modules", {"torchdistx.optimizers": None}):
                 with self.assertRaises(ValueError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_optimizer_factory_pattern(self):
+        """Test that is_optimizer_factory correctly identifies factory classes vs optimizer classes."""
+        from transformers.trainer_optimizer import is_optimizer_factory
+
+        # Create a mock optimizer class
+        class MockComplexOptimizer(torch.optim.Optimizer):
+            def __init__(self, params, lr=1e-3):
+                defaults = {"lr": lr}
+                super().__init__(params, defaults)
+
+            def step(self, closure=None):
+                pass
+
+        # Create a factory class (simulates Muon/Dion pattern)
+        class MockOptimizerFactory:
+            def __call__(self, opt_model, **optimizer_kwargs):
+                all_params = list(opt_model.parameters())
+                return MockComplexOptimizer(all_params, **optimizer_kwargs)
+
+        # Verify is_optimizer_factory correctly identifies factories vs optimizer classes
+        self.assertFalse(is_optimizer_factory(MockComplexOptimizer))  # Optimizer class should return False
+        self.assertTrue(is_optimizer_factory(MockOptimizerFactory))  # Factory class should return True
 
 
 @require_torch

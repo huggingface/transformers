@@ -2049,6 +2049,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         masking_pattern: torch.Tensor | None = None,
         num_recycles: int | None = None,
         output_hidden_states: bool | None = False,
+        **kwargs,
     ) -> EsmForProteinFoldingOutput:
         r"""
         masking_pattern (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

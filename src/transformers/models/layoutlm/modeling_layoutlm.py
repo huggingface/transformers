@@ -31,8 +31,9 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_layoutlm import LayoutLMConfig
 
 
@@ -131,8 +132,7 @@ def eager_attention_forward(
 ):
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -170,7 +170,7 @@ class LayoutLMSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         output_attentions: bool | None = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.attention_head_size)
@@ -226,7 +226,7 @@ class LayoutLMAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         output_attentions: bool | None = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
@@ -285,7 +285,7 @@ class LayoutLMLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         output_attentions: bool | None = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
             hidden_states,
@@ -325,7 +325,7 @@ class LayoutLMEncoder(nn.Module):
         output_attentions: bool | None = False,
         output_hidden_states: bool | None = False,
         return_dict: bool | None = True,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None

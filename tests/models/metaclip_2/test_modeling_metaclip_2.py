@@ -648,7 +648,6 @@ class MetaClip2ForImageClassificationModelTest(MetaClip2ModelTesterMixin, Pipeli
 
     test_resize_embeddings = False
     test_attention_outputs = False
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = MetaClip2ForImageClassificationModelTester(self)

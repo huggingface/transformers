@@ -96,6 +96,7 @@ class DynamicLayer(CacheLayerMixin):
         self.values = torch.tensor([], dtype=self.dtype, device=self.device)
         self.is_initialized = True
 
+    @torch.no_grad()
     def update(
         self,
         key_states: torch.Tensor,
@@ -183,6 +184,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         super().lazy_initialization(key_states, value_states)
         self._sliding_window_tensor = self._sliding_window_tensor.to(self.device)
 
+    @torch.no_grad()
     def update(
         self,
         key_states: torch.Tensor,
@@ -307,6 +309,7 @@ class StaticLayer(CacheLayerMixin):
 
         self.is_initialized = True
 
+    @torch.no_grad()
     def update(
         self,
         key_states: torch.Tensor,
@@ -382,6 +385,7 @@ class StaticSlidingWindowLayer(StaticLayer):
         super().__init__(max_cache_len=effective_max_cache_len)
         self.cumulative_length = 0
 
+    @torch.no_grad()
     def update(
         self,
         key_states: torch.Tensor,
@@ -515,6 +519,7 @@ class QuantizedLayer(DynamicLayer):
         self.residual_length = residual_length
         self.cumulative_length = 0
 
+    @torch.no_grad()
     def update(
         self,
         key_states: torch.Tensor,
@@ -755,6 +760,7 @@ class Cache:
         if not (only_non_sliding and self.is_sliding[layer_idx]):
             self.layers[layer_idx].offload()
 
+    @torch.no_grad()
     def update(
         self,
         key_states: torch.Tensor,
@@ -1261,20 +1267,6 @@ class EncoderDecoderCache(Cache):
         """
         self.check_dynamic_cache(self.crop.__name__)
         self.self_attention_cache.crop(maximum_length)
-
-    def batch_split(self, full_batch_size: int, split_size: int) -> "list[EncoderDecoderCache]":
-        """
-        Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
-        `_split_model_inputs()` in `generation.utils`
-        """
-        self.check_dynamic_cache(self.batch_split.__name__)
-        self_attention_cache = self.self_attention_cache.batch_split(full_batch_size, split_size)
-        cross_attention_cache = self.cross_attention_cache.batch_split(full_batch_size, split_size)
-
-        out = []
-        for self_attn, cross_attn in zip(self_attention_cache, cross_attention_cache):
-            out.append(EncoderDecoderCache(self_attn, cross_attn))
-        return out
 
     def batch_repeat_interleave(self, repeats: int):
         """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search (on the Hub)."""

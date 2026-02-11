@@ -1160,7 +1160,7 @@ class MusicgenIntegrationTests(unittest.TestCase):
         unconditional_inputs = model.get_unconditional_inputs(num_samples=2)
         unconditional_inputs = place_dict_on_device(unconditional_inputs, device=torch_device)
 
-        set_seed(0)
+        set_seed(42)
         output_values = model.generate(**unconditional_inputs, do_sample=True, max_new_tokens=10)
 
         # fmt: off
@@ -1241,7 +1241,7 @@ class MusicgenIntegrationTests(unittest.TestCase):
         input_ids = inputs.input_ids.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
 
-        set_seed(0)
+        set_seed(42)
         output_values = model.generate(
             input_ids, attention_mask=attention_mask, do_sample=True, guidance_scale=None, max_new_tokens=10
         )

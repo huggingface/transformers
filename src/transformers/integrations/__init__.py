@@ -116,6 +116,7 @@ _import_structure = {
         "run_hp_search_ray",
         "run_hp_search_wandb",
     ],
+    "liger": ["apply_liger_kernel"],
     "moe": [
         "batched_mm_experts_forward",
         "grouped_mm_experts_forward",
@@ -129,6 +130,11 @@ _import_structure = {
         "quantize_to_mxfp4",
         "replace_with_mxfp4_linear",
         "swizzle_mxfp4",
+    ],
+    "neftune": [
+        "activate_neftune",
+        "deactivate_neftune",
+        "neftune_post_forward_hook",
     ],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
@@ -257,6 +263,7 @@ if TYPE_CHECKING:
         run_hp_search_ray,
         run_hp_search_wandb,
     )
+    from .liger import apply_liger_kernel
     from .moe import (
         batched_mm_experts_forward,
         grouped_mm_experts_forward,
@@ -270,6 +277,7 @@ if TYPE_CHECKING:
         replace_with_mxfp4_linear,
         swizzle_mxfp4,
     )
+    from .neftune import activate_neftune, deactivate_neftune, neftune_post_forward_hook
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers
     from .spqr import replace_with_spqr_linear

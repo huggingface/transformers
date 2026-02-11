@@ -42,12 +42,12 @@ from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
-    can_return_tuple,
     is_grouped_mm_available,
     is_torchdynamo_compiling,
     torch_compilable_check,
 )
-from ...utils.generic import OutputRecorder, check_model_inputs, is_flash_attention_requested, maybe_autocast
+from ...utils.generic import can_return_tuple, is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_glm4v_moe import Glm4vMoeConfig, Glm4vMoeTextConfig, Glm4vMoeVisionConfig
 
 
@@ -78,8 +78,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -340,7 +339,7 @@ class Glm4vMoeTextMLP(nn.Module):
 
 @use_kernel_forward_from_hub("RMSNorm")
 class Glm4vMoeTextRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         Glm4vMoeTextRMSNorm is equivalent to T5LayerNorm
         """
@@ -348,7 +347,7 @@ class Glm4vMoeTextRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -426,9 +425,10 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Glm4vMoeTextDecoderLayer,
         "attentions": Glm4vMoeTextAttention,
-        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "router_logits": Glm4vMoeTextTopkRouter,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
     input_modalities = ("text", "image", "video")
 
     @torch.no_grad()
@@ -472,6 +472,7 @@ class Glm4vMoeCausalLMOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
     aux_loss: torch.FloatTensor | None = None
 
 
@@ -493,7 +494,7 @@ class Glm4vMoeVisionRotaryEmbedding(nn.Module):
 
 @use_kernel_forward_from_hub("RMSNorm")
 class Glm4vMoeRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         Glm4vMoeRMSNorm is equivalent to T5LayerNorm
         """
@@ -501,7 +502,7 @@ class Glm4vMoeRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -829,7 +830,8 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb, pos_ids
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
@@ -990,7 +992,8 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1099,6 +1102,7 @@ class Glm4vMoeModelOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring
@@ -1509,10 +1513,7 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
         )
 
         return Glm4vMoeModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            **outputs,
             rope_deltas=self.rope_deltas,
         )
 
@@ -1609,6 +1610,8 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         super().__init__(config)
         self.model = Glm4vMoeModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.num_experts = config.text_config.num_local_experts
+        self.num_experts_per_tok = config.text_config.num_experts_per_tok
 
         self.post_init()
 
@@ -1651,7 +1654,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
     @auto_docstring
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1754,6 +1757,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
+            router_logits=outputs.router_logits,
         )
 
     def prepare_inputs_for_generation(

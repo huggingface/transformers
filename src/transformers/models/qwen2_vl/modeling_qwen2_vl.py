@@ -31,6 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -45,8 +46,12 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import check_model_inputs, is_flash_attention_requested, maybe_autocast
-from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
+from ...utils.generic import (
+    is_flash_attention_requested,
+    maybe_autocast,
+    merge_with_config_defaults,
+)
+from ...utils.output_capturing import capture_outputs
 from .configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig, Qwen2VLVisionConfig
 
 
@@ -104,6 +109,28 @@ class Qwen2VLCausalLMOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Qwen2VL
+class Qwen2VLRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        Qwen2VLRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Qwen2VL
@@ -337,8 +364,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -582,8 +608,8 @@ class Qwen2VLDecoderLayer(GradientCheckpointingLayer):
         self.self_attn = Qwen2VLAttention(config, layer_idx)
 
         self.mlp = Qwen2MLP(config)
-        self.input_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = Qwen2VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Qwen2VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attention_type = config.layer_types[layer_idx]
 
     def forward(
@@ -741,7 +767,8 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -799,7 +826,7 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
             [Qwen2VLDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self._attn_implementation = config._attn_implementation
-        self.norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = Qwen2VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.has_sliding_layers = "sliding_attention" in self.config.layer_types
         self.rotary_emb = Qwen2VLRotaryEmbedding(config=config)
 

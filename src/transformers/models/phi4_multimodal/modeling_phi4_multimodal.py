@@ -32,8 +32,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -46,7 +45,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, torch_int
-from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested, maybe_autocast
+from ...utils.generic import TransformersKwargs, maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_phi4_multimodal import Phi4MultimodalAudioConfig, Phi4MultimodalConfig, Phi4MultimodalVisionConfig
 
 
@@ -77,8 +77,7 @@ def simple_eager_attention_forward(
 ):
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -410,7 +409,8 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.patch_embedding
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values,
@@ -432,17 +432,11 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
         hidden_states = self.embeddings(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
 
         patch_attention_mask = patch_attention_mask.view(batch_size, -1)
-        # The call to `_upad_input` in `_flash_attention_forward` is expensive
-        # So when the `patch_attention_mask` is full of 1s (i.e. attending to the whole sequence),
-        # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
-        if not torch.any(~patch_attention_mask):
-            attention_mask = None
-        else:
-            attention_mask = (
-                _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
-                if not is_flash_attention_requested(self.config)
-                else patch_attention_mask
-            )
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=patch_attention_mask,
+        )
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
@@ -1116,7 +1110,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
 
 @use_kernel_forward_from_hub("RMSNorm")
 class Phi4MultimodalRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         Phi4MultimodalRMSNorm is equivalent to T5LayerNorm
         """
@@ -1124,7 +1118,7 @@ class Phi4MultimodalRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -1187,8 +1181,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -1518,7 +1511,8 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

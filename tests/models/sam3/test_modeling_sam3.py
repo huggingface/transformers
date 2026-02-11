@@ -497,8 +497,12 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             del inputs_dict["output_attentions"]
             config.output_attentions = True
             for k in config.sub_configs:
-                if getattr(config, k) is not None:
-                    getattr(config, k).output_attentions = True
+                if (subconfig := getattr(config, k)) is not None:
+                    subconfig.output_attentions = True
+                    # Sam3 has a vision subconfig with itself a sub config....
+                    for k in subconfig.sub_configs:
+                        if (subsubconfig := getattr(subconfig, k)) is not None:
+                            subsubconfig.output_attentions = True
 
             model = model_class(config)
             model.to(torch_device)

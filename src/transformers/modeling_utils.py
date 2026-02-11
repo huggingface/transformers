@@ -118,7 +118,7 @@ from .utils import (
     is_torch_xpu_available,
     logging,
 )
-from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder, is_flash_attention_requested
+from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     is_huggingface_hub_greater_or_equal,
@@ -126,6 +126,7 @@ from .utils.import_utils import (
     is_tracing,
 )
 from .utils.loading_report import LoadStateDictInfo, log_state_dict_report
+from .utils.output_capturing import _CAN_RECORD_REGISTRY, OutputRecorder
 from .utils.quantization_config import QuantizationMethod
 
 
@@ -1164,11 +1165,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # In practice, it means that they support attention (mask) interface functions, fully pass the kwargs
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
     _supports_attention_backend: bool = False
-    # A mapping describing what outputs can be captured by `check_model_inputs` decorator during the forward pass
+    # A mapping describing what outputs can be captured by `capture_outputs` decorator during the forward pass
     _can_record_outputs: dict | None = None
 
     @property
-    @torch._dynamo.allow_in_graph
+    @torch.compiler.allow_in_graph
     def can_record_outputs(self) -> dict[str, OutputRecorder]:
         """
          Maps output names (e.g., "attentions", "hidden_states")
@@ -2309,6 +2310,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Initialize the weights if they are not already initialized.
         """
         if getattr(module, "_is_hf_initialized", False):
+            return
+
+        if (
+            (weight := getattr(module, "weight", None)) is not None
+            and getattr(weight, "_is_hf_initialized", False)
+            and not list(module.named_buffers())
+        ):
+            module._is_hf_initialized = True
             return
 
         self._init_weights(module)
@@ -4200,35 +4209,38 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """Perform all post processing operations after having loaded some checkpoints into a model, such as moving
         missing keys from meta device to their expected device, reinitializing missing weights according to proper
         distributions, tying the weights and logging the loading report."""
+        try:
+            # Adjust `all_tied_weights_keys` before marking them as initialized
+            model._adjust_tied_keys_with_tied_pointers(loading_info.missing_and_mismatched())
 
-        # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
-        model.mark_tied_weights_as_initialized()
+            # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
+            model.mark_tied_weights_as_initialized()
 
-        # Move missing (and potentially mismatched) keys and non-persistent buffers back to their expected device from
-        # meta device (because they were not moved when loading the weights as they were not in the loaded state dict)
-        model._move_missing_keys_from_meta_to_device(
-            loading_info.missing_and_mismatched(),
-            load_config.device_map,
-            load_config.device_mesh,
-            load_config.hf_quantizer,
-        )
+            # Move missing (and potentially mismatched) keys and non-persistent buffers back to their expected device from
+            # meta device (because they were not moved when loading the weights as they were not in the loaded state dict)
+            model._move_missing_keys_from_meta_to_device(
+                loading_info.missing_and_mismatched(),
+                load_config.device_map,
+                load_config.device_mesh,
+                load_config.hf_quantizer,
+            )
 
-        # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialized` flag)
-        model._initialize_missing_keys(load_config.is_quantized)
+            # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialized` flag)
+            model._initialize_missing_keys(load_config.is_quantized)
 
-        # Tie the weights
-        model.tie_weights(missing_keys=loading_info.missing_keys, recompute_mapping=False)
+            # Tie the weights
+            model.tie_weights(missing_keys=loading_info.missing_keys, recompute_mapping=False)
 
-        # Adjust missing and unexpected keys
-        model._adjust_missing_and_unexpected_keys(loading_info)
-
-        log_state_dict_report(
-            model=model,
-            pretrained_model_name_or_path=load_config.pretrained_model_name_or_path,
-            ignore_mismatched_sizes=load_config.ignore_mismatched_sizes,
-            loading_info=loading_info,
-            logger=logger,
-        )
+            # Adjust missing and unexpected keys
+            model._adjust_missing_and_unexpected_keys(loading_info)
+        finally:
+            log_state_dict_report(
+                model=model,
+                pretrained_model_name_or_path=load_config.pretrained_model_name_or_path,
+                ignore_mismatched_sizes=load_config.ignore_mismatched_sizes,
+                loading_info=loading_info,
+                logger=logger,
+            )
 
         return loading_info
 
@@ -4415,6 +4427,35 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     @classmethod
     def is_backend_compatible(cls):
         return cls._supports_attention_backend
+
+    def _adjust_tied_keys_with_tied_pointers(self, missing_keys: list[str]) -> None:
+        """
+        Adds keys to `self.all_tied_weights_keys` by checking if any group of params
+        share the same data ptr. It helps us support remote code where the weight tying is
+        done in old-T5 style, by manually assigning the same module to different param names.
+        If we don't add them back in `self.all_tied_weights_keys`, they will be re-initialized
+        and all params in tied group get random weights.
+        """
+        param_pointers = defaultdict(list)
+        for param_name, param_value in self.state_dict().items():
+            param_pointers[param_value.data_ptr()].append(param_name)
+
+        # Filter out params that are already in `self.all_tied_weights_keys` or if all
+        # are missing params. Missing param groups share the same data ptr by being on `meta`
+        tied_param_names = [
+            names
+            for names in param_pointers.values()
+            if len(names) > 1
+            and not any(name in self.all_tied_weights_keys.keys() for name in names)
+            and not all(name in missing_keys for name in names)
+        ]
+
+        # Create a dummy mapping, it doesn't matter which one is source/target
+        # because they are already tied
+        tied_weights_keys_by_pointers = {
+            param_name: group[0] for group in tied_param_names for param_name in group[1:]
+        }
+        self.all_tied_weights_keys.update(tied_weights_keys_by_pointers)
 
     def _move_missing_keys_from_meta_to_device(
         self,

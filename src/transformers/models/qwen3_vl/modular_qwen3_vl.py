@@ -36,7 +36,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
 from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -652,7 +653,8 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         patch_pos_embeds = torch.cat(patch_pos_embeds_permute)
         return patch_pos_embeds
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
@@ -736,7 +738,8 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
         hidden_states[visual_pos_masks, :] = local_this
         return hidden_states
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -1005,7 +1008,7 @@ class Qwen3VLModel(Qwen2_5_VLModel):
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @auto_docstring
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1117,8 +1120,7 @@ class Qwen3VLModel(Qwen2_5_VLModel):
         )
 
         return Qwen3VLModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            **outputs,
             rope_deltas=self.rope_deltas,
         )
 
@@ -1507,7 +1509,7 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
                     curr_timestamp = self._calculate_timestamps(
                         metadata.frames_indices,
                         metadata.fps,
-                        self.video_processor.merge_size,
+                        self.video_processor.temporal_patch_size,
                     )
 
                     video_placeholder = ""

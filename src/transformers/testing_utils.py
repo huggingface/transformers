@@ -48,7 +48,6 @@ from unittest import mock
 from unittest.mock import patch
 
 import httpx
-import urllib3
 from huggingface_hub import create_repo, delete_repo
 from packaging import version
 
@@ -2489,6 +2488,8 @@ class RequestCounter:
 
             return wrap
 
+        import urllib3
+
         self.patcher = patch.object(
             urllib3.connectionpool.log, "debug", side_effect=patched_with_thread_info(urllib3.connectionpool.log.debug)
         )
@@ -3113,7 +3114,7 @@ def cleanup(device: str, gc_collect=False):
     if gc_collect:
         gc.collect()
     backend_empty_cache(device)
-    torch._dynamo.reset()
+    torch.compiler.reset()
 
 
 # Type definition of key used in `Expectations` class.

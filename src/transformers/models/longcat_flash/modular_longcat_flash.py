@@ -340,6 +340,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
         "hidden_states": LongcatFlashDecoderLayer,
         "attentions": LongcatFlashMLA,
     }
+    _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -354,8 +355,6 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
 
 
 class LongcatFlashModel(DeepseekV3Model):
-    _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
-
     def __init__(self, config):
         super().__init__(config)
         self.layers = nn.ModuleList(
