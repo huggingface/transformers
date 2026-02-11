@@ -1767,7 +1767,7 @@ class Trainer:
 
                     # We sync the gradients in the following cases: 1. sync_each_batch set to True 2. Using deepspeed 3. when we are at the last batch sample
                     if (
-                        self.accelerator.gradient_state.sync_each_batch
+                        self.accelerator.gradient_state.plugin_kwargs.get("sync_each_batch", False)
                         or self.accelerator.distributed_type == DistributedType.DEEPSPEED
                         or i == len(batch_samples) - 1
                     ):
