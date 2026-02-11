@@ -1045,9 +1045,13 @@ class IdeficsModel(IdeficsPreTrainedModel):
         # If any of the elements are True (eager 0.0), then the token is attending to at least one image and the gate value is 1. Otherwise the gate value is 0.
         # `cross_attention_gate` has shape [bsz, seq_len] with elements equal to either 0.0 or 1.0.
         if image_attention_mask.dtype == torch.bool:
-            cross_attention_gate = torch.any(image_attention_mask, dim=-1).to(dtype=self.dtype, device=device).squeeze(dim=1)
+            cross_attention_gate = (
+                torch.any(image_attention_mask, dim=-1).to(dtype=self.dtype, device=device).squeeze(dim=1)
+            )
         else:
-            cross_attention_gate = torch.any(image_attention_mask == 0.0, dim=-1).to(dtype=self.dtype, device=device).squeeze(dim=1)
+            cross_attention_gate = (
+                torch.any(image_attention_mask == 0.0, dim=-1).to(dtype=self.dtype, device=device).squeeze(dim=1)
+            )
 
         # embed positions
         if attention_mask is None:
