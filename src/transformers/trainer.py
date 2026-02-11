@@ -611,7 +611,7 @@ class Trainer:
 
         self._memory_tracker.stop_and_update_metrics()
 
-    def _validate_args(self):
+    def _validate_args(self) -> None:
         """Validate constructor arguments and fail fast on incompatible combinations."""
         args = self.args
 
@@ -693,7 +693,8 @@ class Trainer:
                 "Samplers cannot be used with IterableDataset as they require indexed access to the dataset."
             )
 
-    def create_accelerator_and_postprocess(self):
+    def create_accelerator_and_postprocess(self) -> None:
+        """Create the accelerator and perform post-creation setup (FSDP, DeepSpeed, etc.)."""
         # We explicitly don't rely on the `Accelerator` to do gradient accumulation
         grad_acc_kwargs = {}
         if self.args.accelerator_config.gradient_accumulation_kwargs is not None:
@@ -971,6 +972,7 @@ class Trainer:
         return dataloader
 
     def _get_train_sampler(self, train_dataset: Dataset | None = None) -> torch.utils.data.Sampler | None:
+        """Return the training sampler based on `train_sampling_strategy`."""
         if train_dataset is None:
             train_dataset = self.train_dataset
         if train_dataset is None or not has_length(train_dataset):
@@ -1001,6 +1003,7 @@ class Trainer:
             return RandomSampler(train_dataset)
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> torch.utils.data.Sampler | None:
+        """Return the evaluation sampler, using sequential ordering when not distributed."""
         if eval_dataset is None or not has_length(eval_dataset):
             return None
 
@@ -1028,7 +1031,8 @@ class Trainer:
         else:
             return None
 
-    def _set_signature_columns_if_needed(self):
+    def _set_signature_columns_if_needed(self) -> None:
+        """Populate `_signature_columns` from the model's forward signature if not already set."""
         if self._signature_columns is None:
             # Inspect model forward signature to keep only the arguments it accepts.
             model_to_inspect = self.model
@@ -1043,7 +1047,10 @@ class Trainer:
             # Labels may be named label or label_ids, the default data collator handles that.
             self._signature_columns += list(set(["label", "label_ids"] + self.label_names))
 
-    def _remove_unused_columns(self, dataset: "datasets.Dataset", description: str | None = None):
+    def _remove_unused_columns(
+        self, dataset: "datasets.Dataset", description: str | None = None
+    ) -> "datasets.Dataset":
+        """Remove dataset columns not accepted by the model's forward method."""
         if not self.args.remove_unused_columns:
             return dataset
         self._set_signature_columns_if_needed()
@@ -1093,7 +1100,7 @@ class Trainer:
 
     # ---- Optimizer & Scheduler & Learning rate ----
 
-    def create_optimizer_and_scheduler(self, num_training_steps: int):
+    def create_optimizer_and_scheduler(self, num_training_steps: int) -> None:
         """
         Setup the optimizer and the learning rate scheduler.
 
@@ -1104,12 +1111,15 @@ class Trainer:
         self.create_optimizer()
         self.create_scheduler(num_training_steps=num_training_steps)
 
-    def create_optimizer(self):
+    def create_optimizer(self) -> torch.optim.Optimizer:
         """
         Setup the optimizer.
 
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
         Trainer's init through `optimizers`, or subclass and override this method in a subclass.
+
+        Returns:
+            `torch.optim.Optimizer`: The optimizer instance.
         """
         opt_model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
 
@@ -1177,13 +1187,18 @@ class Trainer:
 
         return self.optimizer
 
-    def create_scheduler(self, num_training_steps: int, optimizer: torch.optim.Optimizer = None):
+    def create_scheduler(
+        self, num_training_steps: int, optimizer: torch.optim.Optimizer = None
+    ) -> torch.optim.lr_scheduler.LRScheduler:
         """
         Setup the scheduler. The optimizer of the trainer must have been set up either before this method is called or
         passed as an argument.
 
         Args:
             num_training_steps (int): The number of training steps to do.
+
+        Returns:
+            `torch.optim.lr_scheduler.LRScheduler`: The learning rate scheduler instance.
         """
         if self.lr_scheduler is None:
             if optimizer is None:
@@ -1245,7 +1260,7 @@ class Trainer:
         decay_parameters = get_parameter_names(model, [nn.LayerNorm], forbidden_name_patterns)
         return decay_parameters
 
-    def _get_learning_rate(self):
+    def _get_learning_rate(self) -> float:
         """
         Returns the current learning rate from the scheduler.
 
@@ -1280,7 +1295,7 @@ class Trainer:
         resume_from_checkpoint: str | bool | None = None,
         trial: "optuna.Trial | dict[str, Any] | None" = None,
         ignore_keys_for_eval: list[str] | None = None,
-    ):
+    ) -> TrainOutput:
         """
         Main training entry point.
 
@@ -1294,6 +1309,9 @@ class Trainer:
             ignore_keys_for_eval (`list[str]`, *optional*)
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions for evaluation during the training.
+
+        Returns:
+            [`~trainer_utils.TrainOutput`]: Object containing the global step count, training loss, and metrics.
         """
         if resume_from_checkpoint is False:
             resume_from_checkpoint = None
@@ -1382,7 +1400,8 @@ class Trainer:
 
     def _inner_training_loop(
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
-    ):
+    ) -> TrainOutput:
+        """Run the actual training loop: forward, backward, optimizer step, logging, and checkpointing."""
         self.accelerator.free_memory()
         self._train_batch_size = batch_size
         if self.args.auto_find_batch_size:
@@ -1942,7 +1961,7 @@ class Trainer:
         inputs: dict[str, torch.Tensor | Any],
         return_outputs: bool = False,
         num_items_in_batch: torch.Tensor | None = None,
-    ):
+    ) -> torch.Tensor | tuple[torch.Tensor, Any]:
         """
         How the loss is computed by Trainer. By default, all models return the loss in the first element.
 
@@ -2019,7 +2038,7 @@ class Trainer:
 
         return (loss, outputs) if return_outputs else loss
 
-    def compute_loss_context_manager(self):
+    def compute_loss_context_manager(self) -> contextlib.ExitStack:
         """
         A helper wrapper to group together context managers.
         """
@@ -2031,7 +2050,7 @@ class Trainer:
 
         return ctx_stack
 
-    def autocast_smart_context_manager(self, cache_enabled: bool | None = True):
+    def autocast_smart_context_manager(self, cache_enabled: bool | None = True) -> contextlib.AbstractContextManager:
         """
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
         arguments, depending on the situation. We rely on accelerate for autocast, hence we do nothing here.
@@ -2040,7 +2059,8 @@ class Trainer:
 
     def _maybe_log_save_evaluate(
         self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time, learning_rate=None
-    ):
+    ) -> None:
+        """Log metrics, run evaluation, and save checkpoints if the current training state requires it."""
         if self.control.should_log and self.state.global_step > self._globalstep_last_logged:
             if is_torch_xla_available():
                 xm.mark_step()
@@ -2181,7 +2201,9 @@ class Trainer:
 
         return inputs
 
-    def _prepare_context_parallel_inputs(self, model, inputs: dict[str, torch.Tensor | Any]):
+    def _prepare_context_parallel_inputs(
+        self, model: nn.Module, inputs: dict[str, torch.Tensor | Any]
+    ) -> tuple[Callable, dict[str, torch.Tensor | Any]]:
         """
         Prepare inputs for context parallelism by setting up buffers and validation.
 
@@ -2275,16 +2297,12 @@ class Trainer:
 
     def set_initial_training_values(
         self, args: TrainingArguments, dataloader: DataLoader, total_train_batch_size: int
-    ):
+    ) -> tuple[int, int, int, int, bool, int | None, int]:
         """
-        Calculates and returns the following values:
-        - `num_train_epochs`
-        - `num_update_steps_per_epoch`
-        - `num_examples`
-        - `num_train_samples`
-        - `epoch_based`
-        - `len_dataloader`
-        - `max_steps`
+        Compute and return initial training loop values derived from the dataloader and training arguments.
+
+        Returns a tuple of (num_train_epochs, num_update_steps_per_epoch, num_examples, num_train_samples,
+        epoch_based, len_dataloader, max_steps).
         """
         # Case 1: we rely on `args.max_steps` first
         max_steps = args.max_steps
@@ -2342,7 +2360,7 @@ class Trainer:
             max_steps,
         )
 
-    def get_total_train_batch_size(self, args) -> int:
+    def get_total_train_batch_size(self, args: TrainingArguments) -> int:
         """Calculates total batch size (micro_batch * grad_accum * dp_world_size).
 
         Accounts for all parallelism dimensions: TP, CP, and SP.
@@ -2390,7 +2408,8 @@ class Trainer:
         # 3. Default fallback
         return 1
 
-    def _wrap_model(self, model, training=True, dataloader=None):
+    def _wrap_model(self, model: nn.Module, training: bool = True, dataloader: DataLoader | None = None) -> nn.Module:
+        """Wrap `model` for distributed training if needed (DDP, FSDP, SageMaker, etc.)."""
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
             if isinstance(self.model_wrapped, smp.model.DistributedModel):
@@ -2917,7 +2936,10 @@ class Trainer:
 
         return (loss, logits, labels)
 
-    def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False):
+    def _evaluate(
+        self, trial, ignore_keys_for_eval: list[str] | None, skip_scheduler: bool = False
+    ) -> dict[str, float]:
+        """Run evaluation, report to HP search, and step ReduceLROnPlateau if needed."""
         metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
         self._report_to_hp_search(trial, self.state.global_step, metrics)
 
@@ -2940,7 +2962,8 @@ class Trainer:
 
     # ---- Checkpoint Saving ----
 
-    def _get_output_dir(self, trial):
+    def _get_output_dir(self, trial) -> str:
+        """Return the output directory, accounting for hyperparameter search trials."""
         if self.hp_search_backend is not None and trial is not None:
             if self.hp_search_backend == HPSearchBackend.OPTUNA:
                 run_id = trial.number
@@ -2958,7 +2981,8 @@ class Trainer:
             run_dir = self.args.output_dir
         return run_dir
 
-    def _save_checkpoint(self, model, trial):
+    def _save_checkpoint(self, model, trial) -> None:
+        """Save model checkpoint, optimizer, scheduler, scaler, RNG states, and trainer state."""
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
         # want to save except FullyShardedDDP.
         # assert unwrap_model(model) is self.model, "internal model should be a reference to self.model"
@@ -3023,7 +3047,7 @@ class Trainer:
                 use_mtime=True,
             )
 
-    def _determine_best_metric(self, metrics, trial):
+    def _determine_best_metric(self, metrics, trial) -> bool:
         """
         Determine if the model should be saved based on the evaluation metrics.
 
@@ -3061,7 +3085,8 @@ class Trainer:
 
         return is_new_best_metric
 
-    def _save_rng_state(self, output_dir):
+    def _save_rng_state(self, output_dir) -> None:
+        """Save random number generator states for reproducible resumption."""
         # Save RNG state in non-distributed training
         rng_states = {
             "python": random.getstate(),
@@ -3111,7 +3136,8 @@ class Trainer:
         else:
             torch.save(rng_states, os.path.join(output_dir, f"rng_state_{self.args.process_index}.pth"))
 
-    def _save_optimizer_and_scheduler(self, output_dir):
+    def _save_optimizer_and_scheduler(self, output_dir) -> None:
+        """Save optimizer and learning rate scheduler states to `output_dir`."""
         if is_torch_xla_available():
             xm.rendezvous("saving_optimizer_states")
             if self.is_fsdp_xla_v1_enabled:
@@ -3176,7 +3202,8 @@ class Trainer:
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
             reissue_pt_warnings(caught_warnings)
 
-    def _save_scaler(self, output_dir):
+    def _save_scaler(self, output_dir) -> None:
+        """Save the gradient scaler state if one exists."""
         # See if there is a scaler attribute
         try:
             scaler = self.accelerator.scaler
@@ -3198,7 +3225,8 @@ class Trainer:
 
     # ---- Checkpoint Resuming ----
 
-    def _load_from_checkpoint(self, resume_from_checkpoint, model=None):
+    def _load_from_checkpoint(self, resume_from_checkpoint, model=None) -> None:
+        """Load model weights from a checkpoint directory."""
         if model is None:
             model = self.model
 
@@ -3326,7 +3354,8 @@ class Trainer:
             if not is_sagemaker_mp_enabled():
                 self._issue_warnings_after_load(load_result)
 
-    def _load_best_model(self):
+    def _load_best_model(self) -> None:
+        """Load the best model found during training based on the tracked metric."""
         logger.info(f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric}).")
         best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
         best_safe_model_path = os.path.join(self.state.best_model_checkpoint, SAFE_WEIGHTS_NAME)
@@ -3431,7 +3460,8 @@ class Trainer:
                 "on multiple nodes, you should activate `--save_on_each_node`."
             )
 
-    def _load_rng_state(self, checkpoint):
+    def _load_rng_state(self, checkpoint) -> None:
+        """Restore random number generator states from a checkpoint."""
         # Load RNG states from `checkpoint`
         if checkpoint is None:
             return
@@ -3475,7 +3505,7 @@ class Trainer:
         if is_torch_musa_available():
             set_rng_state_for_device("MUSA", torch.musa, checkpoint_rng_state, is_distributed)
 
-    def _load_optimizer_and_scheduler(self, checkpoint):
+    def _load_optimizer_and_scheduler(self, checkpoint) -> None:
         """If optimizer and scheduler states exist, load them."""
         if checkpoint is None:
             return
@@ -3579,7 +3609,7 @@ class Trainer:
                     )
                 reissue_pt_warnings(caught_warnings)
 
-    def _load_scaler(self, checkpoint):
+    def _load_scaler(self, checkpoint) -> None:
         """If scaler state exists, load it."""
         if checkpoint is None:
             return
@@ -3606,7 +3636,7 @@ class Trainer:
                     )
                 reissue_pt_warnings(caught_warnings)
 
-    def _load_callback_state(self):
+    def _load_callback_state(self) -> None:
         """If callback states exist and were passed in, restore their states if enabled"""
         if not self.args.restore_callback_states_from_checkpoint:
             return
@@ -3645,7 +3675,8 @@ class Trainer:
         for callback in new_callbacks:
             self.callback_handler.add_callback(callback)
 
-    def _issue_warnings_after_load(self, load_result):
+    def _issue_warnings_after_load(self, load_result) -> None:
+        """Log warnings for missing or unexpected keys after loading a checkpoint."""
         if len(load_result.missing_keys) != 0:
             if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(
                 self.model._keys_to_ignore_on_save
@@ -3660,7 +3691,7 @@ class Trainer:
 
     # ---- Saving & Serialization ----
 
-    def save_model(self, output_dir: str | None = None, _internal_call: bool = False):
+    def save_model(self, output_dir: str | None = None, _internal_call: bool = False) -> None:
         """
         Will save the model, so you can reload it using `from_pretrained()`.
 
@@ -3718,7 +3749,8 @@ class Trainer:
         if self.args.push_to_hub and not _internal_call:
             self.push_to_hub(commit_message="Model save", revision=self.args.hub_revision)
 
-    def _save(self, output_dir: str | None = None, state_dict=None):
+    def _save(self, output_dir: str | None = None, state_dict=None) -> None:
+        """Save model weights, configuration, and processing class to `output_dir`."""
         # If we are executing this function, we are the process zero, so we don't check for that.
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         os.makedirs(output_dir, exist_ok=True)
@@ -3784,8 +3816,8 @@ class Trainer:
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 
-    def store_flos(self):
-        # Storing the number of floating-point operations that went into the model
+    def store_flos(self) -> None:
+        """Store the number of floating-point operations that went into the model."""
         if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
             self.state.total_flos += (
                 distributed_broadcast_scalars([self.current_flos], device=self.args.device).sum().item()
@@ -3795,7 +3827,7 @@ class Trainer:
             self.state.total_flos += self.current_flos
             self.current_flos = 0
 
-    def floating_point_ops(self, inputs: dict[str, torch.Tensor | Any]):
+    def floating_point_ops(self, inputs: dict[str, torch.Tensor | Any]) -> int:
         """
         For models that inherit from [`PreTrainedModel`], uses that method to compute the number of floating point
         operations for every backward + forward pass. If using another model, either implement such a method in the
@@ -3816,7 +3848,7 @@ class Trainer:
 
     # ---- Hub Integration ----
 
-    def init_hf_repo(self, token: str | None = None):
+    def init_hf_repo(self, token: str | None = None) -> None:
         """
         Initializes a git repo in `self.args.hub_model_id`.
         """
@@ -3845,7 +3877,7 @@ class Trainer:
         dataset_tags: str | list[str] | None = None,
         dataset: str | list[str] | None = None,
         dataset_args: str | list[str] | None = None,
-    ):
+    ) -> None:
         """
         Creates a draft of a model card using the information available to the `Trainer`.
 
@@ -3990,8 +4022,8 @@ class Trainer:
             revision=revision,
         )
 
-    def _push_from_checkpoint(self, checkpoint_folder):
-        # Only push from one node.
+    def _push_from_checkpoint(self, checkpoint_folder: str) -> None:
+        """Push model and checkpoint files to the Hub from a checkpoint folder."""
         if not self.is_world_process_zero() or self.args.hub_strategy == HubStrategy.END:
             return
         # If we haven't finished the last push, we don't do this one unless args.hub_always_push=True.
@@ -4059,7 +4091,8 @@ class Trainer:
         else:
             self.push_in_progress.jobs.extend(push_jobs)
 
-    def _finish_current_push(self):
+    def _finish_current_push(self) -> None:
+        """Wait for any in-progress push to the Hub to complete."""
         if not hasattr(self, "push_in_progress"):
             return
         if self.push_in_progress is not None and not self.push_in_progress.is_done():
@@ -4149,7 +4182,8 @@ class Trainer:
         self.hp_search_backend = None
         return best_run
 
-    def call_model_init(self, trial=None):
+    def call_model_init(self, trial=None) -> nn.Module:
+        """Invoke `model_init` to get a fresh model instance, optionally conditioned on a hyperparameter trial."""
         model_init_argcount = number_of_arguments(self.model_init)
         if model_init_argcount == 0:
             model = self.model_init()
@@ -4163,8 +4197,8 @@ class Trainer:
 
         return model
 
-    def _hp_search_setup(self, trial: "optuna.Trial | dict[str, Any]"):
-        """HP search setup code"""
+    def _hp_search_setup(self, trial: "optuna.Trial | dict[str, Any]") -> None:
+        """Set up training arguments and accelerator state for a hyperparameter search trial."""
         self._trial = trial
 
         if self.hp_search_backend is None or trial is None:
@@ -4215,7 +4249,10 @@ class Trainer:
 
         self.create_accelerator_and_postprocess()
 
-    def _report_to_hp_search(self, trial: "optuna.Trial | dict[str, Any]", step: int, metrics: dict[str, float]):
+    def _report_to_hp_search(
+        self, trial: "optuna.Trial | dict[str, Any]", step: int, metrics: dict[str, float]
+    ) -> None:
+        """Report intermediate metrics to the active hyperparameter search backend."""
         if self.hp_search_backend is None or trial is None:
             return
         metrics = metrics.copy()
@@ -4239,7 +4276,8 @@ class Trainer:
                 metrics["objective"] = self.objective
                 ray.tune.report(metrics, checkpoint=checkpoint)
 
-    def _tune_save_checkpoint(self, checkpoint_dir: str):
+    def _tune_save_checkpoint(self, checkpoint_dir: str) -> None:
+        """Save a checkpoint during a Ray Tune hyperparameter search trial."""
         output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
         self.save_model(output_dir, _internal_call=True)
         if self.args.should_save:
@@ -4251,7 +4289,7 @@ class Trainer:
 
     # ---- Callbacks ----
 
-    def add_callback(self, callback):
+    def add_callback(self, callback: type[TrainerCallback] | TrainerCallback) -> None:
         """
         Add a callback to the current list of [`~transformers.TrainerCallback`].
 
@@ -4262,7 +4300,7 @@ class Trainer:
         """
         self.callback_handler.add_callback(callback)
 
-    def pop_callback(self, callback):
+    def pop_callback(self, callback: type[TrainerCallback] | TrainerCallback) -> TrainerCallback | None:
         """
         Remove a callback from the current list of [`~transformers.TrainerCallback`] and returns it.
 
@@ -4278,7 +4316,7 @@ class Trainer:
         """
         return self.callback_handler.pop_callback(callback)
 
-    def remove_callback(self, callback):
+    def remove_callback(self, callback: type[TrainerCallback] | TrainerCallback) -> None:
         """
         Remove a callback from the current list of [`~transformers.TrainerCallback`].
 
@@ -4309,7 +4347,8 @@ class Trainer:
             return smp.rank() == 0
         return self.args.process_index == 0
 
-    def _move_model_to_device(self, model, device):
+    def _move_model_to_device(self, model: nn.Module, device: torch.device) -> None:
+        """Move the model to the specified device, re-tying weights on XLA if needed."""
         if getattr(model, "hf_device_map", None) is not None:
             logger.warning(
                 "The model is already on multiple devices. Skipping the move to device specified in `args`."
