@@ -97,7 +97,7 @@ class GlmImageImageProcessorFast(BaseImageProcessorFast):
     temporal_patch_size = 2
     merge_size = 2
     valid_kwargs = GlmImageImageProcessorKwargs
-    model_input_names = ["pixel_values", "image_grid_thw"]
+    model_input_names = ["pixel_values", "image_grid_thw", "images_per_sample"]
 
     def __init__(self, **kwargs: Unpack[GlmImageImageProcessorKwargs]):
         size = kwargs.pop("size", None)

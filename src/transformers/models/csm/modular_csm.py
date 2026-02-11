@@ -17,8 +17,6 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
-from transformers.utils.generic import check_model_inputs
-
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -27,7 +25,9 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -160,7 +160,8 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
         self.embed_tokens = nn.Embedding((config.num_codebooks * config.vocab_size), config.backbone_hidden_size)
         self.inputs_embeds_projector = nn.Linear(config.backbone_hidden_size, config.hidden_size, bias=False)
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -215,7 +216,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -388,9 +389,9 @@ class CsmBackboneModelEmbeddings(nn.Module):
         )
 
     def forward(self, input_ids):
-        input_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
-        input_embeds = input_embeds.sum(dim=2)
-        return input_embeds
+        inputs_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
+        inputs_embeds = inputs_embeds.sum(dim=2)
+        return inputs_embeds
 
 
 @auto_docstring
@@ -399,7 +400,8 @@ class CsmBackboneModel(LlamaModel):
         super().__init__(config)
         self.embed_tokens = CsmBackboneModelEmbeddings(config)
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(self, **super_kwargs):
         r"""

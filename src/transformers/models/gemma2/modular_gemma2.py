@@ -27,7 +27,6 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
     RopeParameters,
-    RotaryEmbeddingConfigMixin,
     dynamic_rope_update,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -52,7 +51,7 @@ from ..gemma.modeling_gemma import (
 logger = logging.get_logger(__name__)
 
 
-class Gemma2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Gemma2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma2Model`]. It is used to instantiate an Gemma2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -282,9 +281,8 @@ def eager_attention_forward(
         attn_weights = attn_weights / softcap
         attn_weights = torch.tanh(attn_weights)
         attn_weights = attn_weights * softcap
-    if attention_mask is not None:  # no matter the length, we just slice it
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
@@ -329,9 +327,9 @@ class Gemma2Attention(GemmaAttention):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -447,7 +445,7 @@ class Gemma2Model(GemmaModel):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,

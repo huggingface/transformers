@@ -28,8 +28,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from transformers.utils.generic import OutputRecorder
-
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -43,7 +41,8 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested
+from ...utils.generic import TransformersKwargs, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
 from .configuration_sam2 import (
     Sam2Config,
@@ -326,9 +325,9 @@ class Sam2MultiScaleAttention(nn.Module):
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
         attn_output, _ = attention_interface(
             self,
             query,
@@ -548,6 +547,8 @@ class Sam2HieraDetModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor | None = None
     intermediate_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -559,6 +560,15 @@ class Sam2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
+    _keys_to_ignore_on_load_unexpected = [
+        r"^memory_.*",
+        r"^mask_downsample.*",
+        r"^object_pointer_proj.*",
+        r"^temporal_positional_encoding_projection_layer.*",
+        "no_memory_positional_encoding",
+        "no_object_pointer",
+        "occlusion_spatial_embedding_parameter",
+    ]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -618,7 +628,8 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
         pos_embed = pos_embed.permute(0, 2, 3, 1)
         return pos_embed
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -670,7 +681,7 @@ class Sam2VisionModel(Sam2PreTrainedModel):
     def get_input_embeddings(self):
         return self.backbone.get_input_embeddings()
 
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -693,6 +704,8 @@ class Sam2VisionModel(Sam2PreTrainedModel):
             last_hidden_state=hidden_states,
             fpn_hidden_states=fpn_hidden_states,
             fpn_position_encoding=fpn_position_encoding,
+            hidden_states=backbone_output.hidden_states,
+            attentions=backbone_output.attentions,
         )
 
 
@@ -881,9 +894,9 @@ class Sam2Attention(nn.Module):
         key = self.k_proj(key).view(*new_shape).transpose(1, 2)
         value = self.v_proj(value).view(*new_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         if is_flash_attention_requested(self.config) and attention_similarity is not None:
             # Target guided masks are represented as float masks and are incompatible with Flash Attention
@@ -914,7 +927,7 @@ class Sam2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Sam2TwoWayAttentionBlock(nn.Module):
+class Sam2TwoWayAttentionBlock(GradientCheckpointingLayer):
     def __init__(self, config: Sam2MaskDecoderConfig, skip_first_layer_pe: bool = False):
         """
         A transformer block with four layers:
@@ -1287,15 +1300,6 @@ class Sam2Model(Sam2PreTrainedModel):
     input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam2TwoWayAttentionBlock, index=2)}
     _tied_weights_keys = {}
-    _keys_to_ignore_on_load_unexpected = [
-        r"^memory_.*",
-        r"^mask_downsample.*",
-        r"^object_pointer_proj.*",
-        r"^temporal_positional_encoding_projection_layer.*",
-        "no_memory_positional_encoding",
-        "no_object_pointer",
-        "occlusion_spatial_embedding_parameter",
-    ]
 
     def __init__(self, config: Sam2Config):
         super().__init__(config)
@@ -1391,7 +1395,8 @@ class Sam2Model(Sam2PreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

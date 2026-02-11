@@ -113,7 +113,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("emu3", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("ernie", "BertTokenizer" if is_tokenizers_available() else None),
         ("esm", "EsmTokenizer"),
-        ("exaone4", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("falcon_mamba", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("fastspeech2_conformer", "FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None),
         ("flaubert", "FlaubertTokenizer"),
@@ -259,6 +258,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("qwen2_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen2_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_5", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_5_moe", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_next", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_omni_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
@@ -281,7 +282,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("seamless_m4t_v2", "SeamlessM4TTokenizer" if is_tokenizers_available() else None),
         ("shieldgemma2", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("siglip", "SiglipTokenizer" if is_sentencepiece_available() else None),
-        ("siglip2", "GemmaTokenizer" if is_tokenizers_available() else None),
+        ("siglip2", "Siglip2Tokenizer" if is_tokenizers_available() else None),
         ("speech_to_text", "Speech2TextTokenizer" if is_sentencepiece_available() else None),
         ("speecht5", "SpeechT5Tokenizer" if is_sentencepiece_available() else None),
         ("splinter", "SplinterTokenizer"),
@@ -646,12 +647,15 @@ class AutoTokenizer:
             != tokenizer_config_class.replace("Fast", "")
         ):
             # new model, but we ignore it unless the model type is the same
-            try:
-                return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-            except Exception:
-                return tokenizer_class_from_name(tokenizer_config_class).from_pretrained(
-                    pretrained_model_name_or_path, *inputs, **kwargs
-                )
+            if TokenizersBackend is not None:
+                try:
+                    return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                except Exception as e:
+                    logger.debug(f"Failed to use TokenizersBackend: {e}")
+
+            return tokenizer_class_from_name(tokenizer_config_class).from_pretrained(
+                pretrained_model_name_or_path, *inputs, **kwargs
+            )
 
         if "_commit_hash" in tokenizer_config:
             kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]

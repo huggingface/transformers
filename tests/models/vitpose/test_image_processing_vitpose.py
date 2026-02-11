@@ -279,14 +279,10 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @pytest.mark.torch_compile_test
     def test_can_compile_torchvision_backend(self):
         """VitPose requires boxes parameter for preprocessing."""
-        from packaging import version
-
         from transformers.testing_utils import torch_device
 
         if "torchvision" not in self.image_processors_backends_list:
             self.skipTest("Skipping compilation test as torchvision backend is not available")
-        if version.parse(torch.__version__) < version.parse("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         torch.compiler.reset()
         input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)

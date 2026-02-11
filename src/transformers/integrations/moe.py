@@ -12,14 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from functools import wraps
 
+from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available
 
 
 if is_torch_available():
     import torch
+
+logger = logging.get_logger(__name__)
 
 # Examples of experts class with its eager mm implementation
 # class Experts(nn.Module):
@@ -112,14 +116,19 @@ def batched_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
+    # Handle invalid expert IDs from Expert Parallelism (EP)
+    # When EP is enabled, tokens assigned to experts on other devices are marked with sentinel value >= num_experts
+    valid_mask = expert_ids < self.num_experts
+    expert_ids_clamped = expert_ids.clamp(0, self.num_experts - 1)
+
     # Get current hidden states for selected samples
     selected_hidden_states = hidden_states[token_idx]
 
-    # Select expert weights and biases for selected samples
-    selected_gate_up = self.gate_up_proj[expert_ids]
-    selected_down = self.down_proj[expert_ids]
-    selected_gate_up_bias = self.gate_up_proj_bias[expert_ids] if self.has_bias else None
-    selected_down_bias = self.down_proj_bias[expert_ids] if self.has_bias else None
+    # Select expert weights and biases for selected samples (using clamped IDs for safe indexing)
+    selected_gate_up = self.gate_up_proj[expert_ids_clamped]
+    selected_down = self.down_proj[expert_ids_clamped]
+    selected_gate_up_bias = self.gate_up_proj_bias[expert_ids_clamped] if self.has_bias else None
+    selected_down_bias = self.down_proj_bias[expert_ids_clamped] if self.has_bias else None
 
     # --- Up projection per expert (batched) ---
     gate_up_out = _batched_linear(
@@ -134,8 +143,11 @@ def batched_mm_experts_forward(
         gated_out, selected_down, selected_down_bias, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
-    # Apply routing weights
+    # Apply routing weights and zero out invalid expert contributions
+    if sample_weights.shape != expert_ids_clamped.shape:
+        sample_weights = sample_weights.gather(0, expert_ids_clamped)
     out_per_sample = out_per_sample * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
+    out_per_sample = out_per_sample * valid_mask.unsqueeze(-1).to(out_per_sample.dtype)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
     # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
@@ -168,12 +180,15 @@ def _grouped_linear(
     Returns:
         `torch.Tensor`: Output tensor of shape (S, output_dim).
     """
-    if is_transposed:
-        # (S, input_dim) @ grouped (num_experts, input_dim, output_dim) -> (S, output_dim)
-        out = torch._grouped_mm(input, weight, offs=offs)
-    else:
-        # (S, input_dim) @ grouped (num_experts, output_dim, input_dim).T -> (S, output_dim)
-        out = torch._grouped_mm(input, weight.transpose(-2, -1), offs=offs)
+    # torch._grouped_mm is not autocast-enabled, so we disable autocast to avoid dtype mismatch.
+    # See: https://github.com/pytorch/pytorch/issues/174763
+    with torch.amp.autocast(device_type=input.device.type, enabled=False):
+        if is_transposed:
+            # (S, input_dim) @ grouped (num_experts, input_dim, output_dim) -> (S, output_dim)
+            out = torch._grouped_mm(input, weight, offs=offs)
+        else:
+            # (S, input_dim) @ grouped (num_experts, output_dim, input_dim).T -> (S, output_dim)
+            out = torch._grouped_mm(input, weight.transpose(-2, -1), offs=offs)
 
     if bias is not None:
         # We should be able to pass bias to the grouped_mm call, but it's not yet supported.
@@ -226,7 +241,9 @@ def grouped_mm_experts_forward(
 
     # Compute offsets for grouped_mm
     # using histc instead of bincount to avoid cuda graph issues
-    num_tokens_per_expert = torch.histc(expert_ids_g.float(), bins=self.num_experts, min=0, max=self.num_experts - 1)
+    # With deterministic algorithms, CPU only supports float input, CUDA only supports int input.
+    histc_input = expert_ids_g.float() if device.type == "cpu" else expert_ids_g.int()
+    num_tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (grouped) ---
@@ -262,6 +279,20 @@ class ExpertsInterface(GeneralInterface):
         "batched_mm": batched_mm_experts_forward,
         "grouped_mm": grouped_mm_experts_forward,
     }
+
+    def get_interface(self, experts_implementation: str, default: Callable) -> Callable:
+        """Return the requested `experts_implementation`. Also strictly check its validity, and raise if invalid."""
+        if experts_implementation is None:
+            logger.warning_once(
+                "You tried to access the `ExpertsInterface` with a `config._experts_implementation` set to `None`. This "
+                "is expected if you use an Expert Module as a standalone Module. If this is not the case, something went "
+                "wrong with the dispatch of `config._experts_implementation`"
+            )
+        elif experts_implementation != "eager" and experts_implementation not in self:
+            raise KeyError(
+                f"`{experts_implementation}` is not a valid experts implementation registered in the `ExpertsInterface`"
+            )
+        return super().get(experts_implementation, default)
 
 
 ALL_EXPERTS_FUNCTIONS = ExpertsInterface()
@@ -311,11 +342,9 @@ def use_experts_implementation(
 
         @wraps(original_forward)
         def forward(self, *args, **kwargs):
-            experts_forward = original_forward
-
-            if self.config._experts_implementation != "eager":
-                experts_forward = ALL_EXPERTS_FUNCTIONS[self.config._experts_implementation]
-
+            experts_forward = ALL_EXPERTS_FUNCTIONS.get_interface(
+                self.config._experts_implementation, original_forward
+            )
             return experts_forward(self, *args, **kwargs)
 
         if not hasattr(experts_class, "_apply_gate"):

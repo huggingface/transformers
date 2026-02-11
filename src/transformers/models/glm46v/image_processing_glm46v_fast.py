@@ -29,7 +29,7 @@ from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-from .image_processing_glm46v import Glm46VImageProcessorKwargs, smart_resize
+from .image_processing_glm46v import Glm46VImageProcessor, Glm46VImageProcessorKwargs, smart_resize
 
 
 @auto_docstring
@@ -170,6 +170,9 @@ class Glm46VImageProcessorFast(BaseImageProcessorFast):
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        return Glm46VImageProcessor.get_number_of_image_patches(self, height, width, images_kwargs)
 
     @auto_docstring
     def preprocess(

@@ -32,7 +32,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, is_grouped_mm_available, logging
-from ...utils.generic import OutputRecorder
+from ...utils.output_capturing import OutputRecorder
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralForCausalLM,
@@ -314,7 +314,7 @@ class MixtralModel(MistralModel):
         mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
         causal_mask = mask_function(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,

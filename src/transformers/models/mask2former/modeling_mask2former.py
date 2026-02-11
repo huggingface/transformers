@@ -23,13 +23,13 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import load_backbone
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring, is_accelerate_available, logging, torch_compilable_check
-from ...utils.backbone_utils import load_backbone
 from .configuration_mask2former import Mask2FormerConfig
 
 
@@ -1298,19 +1298,19 @@ class Mask2FormerPixelDecoder(nn.Module):
         )
 
         # Apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        input_embeds = []
+        inputs_embeds = []
         position_embeddings = []
         for level, x in enumerate(features[::-1][: self.num_feature_levels]):
-            input_embeds.append(self.input_projections[level](x))
+            inputs_embeds.append(self.input_projections[level](x))
             position_embeddings.append(self.position_embedding(x.shape, x.device, x.dtype))
 
         masks = [
-            torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool) for x in input_embeds
+            torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool) for x in inputs_embeds
         ]
 
         # Prepare encoder inputs (by flattening)
-        spatial_shapes_list = [(embed.shape[2], embed.shape[3]) for embed in input_embeds]
-        input_embeds_flat = torch.cat([embed.flatten(2).transpose(1, 2) for embed in input_embeds], 1)
+        spatial_shapes_list = [(embed.shape[2], embed.shape[3]) for embed in inputs_embeds]
+        input_embeds_flat = torch.cat([embed.flatten(2).transpose(1, 2) for embed in inputs_embeds], 1)
         spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=input_embeds_flat.device)
         masks_flat = torch.cat([mask.flatten(1) for mask in masks], 1)
 

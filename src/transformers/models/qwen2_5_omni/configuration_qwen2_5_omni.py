@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -208,7 +208,7 @@ class Qwen2_5OmniAudioEncoderConfig(PreTrainedConfig):
         self.output_dim = output_dim
 
 
-class Qwen2_5OmniTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Qwen2_5OmniTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2_5OmniThinkerForConditionalGeneration`]. It is used to instantiate an
     Qwen2.5-Omni-Thinker model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -264,6 +264,8 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             with longer `max_position_embeddings`.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -328,6 +330,7 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         pad_token_id: int | None = None,
         bos_token_id: int | None = None,
         eos_token_id: int | None = None,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -342,6 +345,7 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -495,7 +499,7 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-class Qwen2_5OmniTalkerConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2_5OmniTalkerForConditionalGeneration`]. It is used to instantiate an
     Qwen2.5-Omni-Talker model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -591,6 +595,9 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             The size used for merging spatial dimensions.
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
+
 
     Example:
 
@@ -660,6 +667,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         initializer_range=0.02,
         spatial_merge_size=2,
         layer_types=None,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.audio_token_index = audio_token_index
@@ -703,6 +711,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.seconds_per_chunk = seconds_per_chunk  # zf
         self.audio_start_token_id = audio_start_token_id  # zf
         self.audio_end_token_id = audio_end_token_id  # zf
+        self.pad_token_id = pad_token_id
 
         self.initializer_range = initializer_range
         self.spatial_merge_size = spatial_merge_size
@@ -722,7 +731,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
 
-class Qwen2_5OmniDiTConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Qwen2_5OmniDiTConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of the Qwen2_5OmniToken2WavDiT used in the Qwen2.5-Omni-Token2Wav model.
     It defines the architecture of the DiT model, which is used for generating mel-spectrograms from tokens.

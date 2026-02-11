@@ -11,23 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
-import json
 import os
-import tempfile
 import unittest
 
 import pytest
-from packaging import version
 
-from transformers import AutoTokenizer, ModernBertConfig, PreTrainedModel, is_torch_available
+from transformers import AutoTokenizer, ModernBertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
-    CaptureLogger,
+    Expectations,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -48,7 +43,6 @@ if is_torch_available():
         ModernBertForSequenceClassification,
         ModernBertForTokenClassification,
         ModernBertModel,
-        logging,
     )
 
 
@@ -148,15 +142,6 @@ class ModernBertModelTester:
         if test := os.environ.get("PYTEST_CURRENT_TEST", None):
             test_name = test.split(":")[-1].split(" ")[0]
 
-            # If we're testing `test_retain_grad_hidden_states_attentions`, we normally get an error
-            # that compilation doesn't work. Users can then set compile=False when loading the model,
-            # much like here. We're testing whether it works once they've done that.
-
-            # If we're testing `test_inputs_embeds_matches_input_ids`, then we'd like to test with `reference_compile`
-            # set to False, otherwise the input_ids with compiled input embeddings will not match the inputs_embeds
-            # with atol=1e-8 and rtol=1e-5
-            if test_name in ("test_retain_grad_hidden_states_attentions", "test_inputs_embeds_matches_input_ids"):
-                config.reference_compile = False
             # Some tests require attentions to be outputted, in that case we'll set the attention implementation to eager
             # as the others don't support outputted attentions
             if test_name in (
@@ -308,220 +293,18 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
-    def test_for_warning_if_padding_and_no_attention_mask(self):
-        (
-            config,
-            input_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.model_tester.prepare_config_and_inputs()
-
-        # Set pad tokens in the input_ids
-        input_ids[0, 0] = config.pad_token_id
-
-        # Check for warnings if the attention_mask is missing.
-        logger = logging.get_logger("transformers.modeling_utils")
-        # clear cache so we can test the warning is emitted (from `warning_once`).
-        logger.warning_once.cache_clear()
-
-        with CaptureLogger(logger) as cl:
-            model = ModernBertModel(config=config)
-            model.to(torch_device)
-            model.eval()
-            model(input_ids, attention_mask=None)
-        self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
-
-    @unittest.skip("ModernBert doesn't use separate classes for SDPA, but a function instead.")
-    def test_sdpa_can_dispatch_non_composite_models(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "google-bert/bert-base-uncased"
         model = ModernBertModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @require_flash_attn
-    @require_torch_accelerator
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="ModernBert flash attention does not support right padding")
-
-    @require_flash_attn
-    @require_torch_accelerator
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_conversion(self):
-        self.skipTest(reason="ModernBert doesn't use the ModernBertFlashAttention2 class method.")
-
-    @pytest.mark.torch_compile_test
-    def test_saved_config_excludes_reference_compile(self):
-        config = ModernBertConfig(reference_compile=True)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            config.save_pretrained(tmpdirname)
-            with open(os.path.join(tmpdirname, "config.json")) as f:
-                config_dict = json.load(f)
-            self.assertNotIn("reference_compile", config_dict)
-
-    @require_flash_attn
-    @require_torch_accelerator
-    @pytest.mark.flash_attn_test
-    def test_flash_attention_dispatches_by_default(self):
-        "ModernBert should dispatch to FA2 by default, not SDPA"
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            self.assertTrue(model.config._attn_implementation == "flash_attention_2")
-
-    # This is overloaded because the model handles padding / unpadding on its own, thus ModernBertForMultipleChoice has
-    # a different hidden states shape when using FA2.
-    def flash_attn_inference_equivalence(
-        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
-    ):
-        r"""
-        Tests the equivalence between the eager and flash attention implementations.
-        This test is only for inference and runs with `dtype=torch.bfloat16`.
-        """
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        # This flag is used to know if the test was skipped for all `self.all_model_classes` or not
-        _has_run_at_least_one_model = False
-
-        for model_class in self.all_model_classes:
-            # Custom kernel which needs the mask interface to be properly usable on these models
-            if not model_class._supports_attention_backend and not attn_implementation.startswith("flash_attention"):
-                continue
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            # flash attention variants does not always support arbitrary headim
-            config = self._prepare_config_headdim(config, 16)
-
-            # forcing the prefill size to go over sliding window size to check for SWA correctness
-            if getattr(config, "sliding_window", None):
-                config.sliding_window = 2
-
-            model = model_class(config)
-            if not all(
-                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
-            ):
-                continue
-
-            # If we end up here, at least one model class was not skipped
-            _has_run_at_least_one_model = True
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                # Save the model so we can reload with correct attention
-                model.save_pretrained(tmpdirname)
-
-                # Create first inputs without attention mask
-                main_input = inputs_dict[model.main_input_name]
-                # Only keep first batch sequence
-                if isinstance(main_input, torch.Tensor):
-                    main_input = main_input[:1]
-                    # Fix the dtype
-                    if torch.is_floating_point(main_input):
-                        main_input = main_input.to(torch.bfloat16)
-                first_inputs = {model.main_input_name: main_input, "output_hidden_states": True}
-                # Some models have main input name which is different from input_ids, but require input_ids... e.g. BarkFine
-                if model.main_input_name != "input_ids" and "input_ids" in inputs_dict:
-                    first_inputs["input_ids"] = inputs_dict["input_ids"][:1]
-                # If we have some pixel values, use them as well
-                if model.main_input_name != "pixel_values" and "pixel_values" in inputs_dict:
-                    # NOTE: this fixes qwen2_5_vl/omni because test break w/ pixel values
-                    if "image_grid_thw" in inputs_dict:
-                        continue
-                    first_inputs["pixel_values"] = inputs_dict["pixel_values"][:1].to(torch.bfloat16)
-                if model.config.is_encoder_decoder:
-                    decoder_input_ids = inputs_dict.get("decoder_input_ids", first_inputs.get("input_ids"))
-                    if decoder_input_ids is not None:
-                        first_inputs["decoder_input_ids"] = decoder_input_ids[:1]
-
-                # Create attention mask with padding
-                dummy_attention_mask = inputs_dict.get("attention_mask", None)
-                if dummy_attention_mask is not None:
-                    dummy_attention_mask = dummy_attention_mask[:1]
-                    if padding_side == "left":
-                        dummy_attention_mask[:, 1:] = 1
-                        dummy_attention_mask[:, 0] = 0
-                    else:
-                        dummy_attention_mask[:, :-1] = 1
-                        dummy_attention_mask[:, -1] = 0
-
-                # Create second inputs with attention mask and padding
-                second_inputs = copy.deepcopy(first_inputs)
-                if dummy_attention_mask is not None:
-                    second_inputs["attention_mask"] = dummy_attention_mask
-                    if model.config.is_encoder_decoder:
-                        second_inputs["decoder_attention_mask"] = dummy_attention_mask
-
-                # Use prepare for class to account for special attributes (e.g. in QnA models)
-                first_inputs = self._prepare_for_class(first_inputs, model_class)
-                first_inputs = {
-                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in first_inputs.items()
-                }
-                second_inputs = self._prepare_for_class(second_inputs, model_class)
-                second_inputs = {
-                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in second_inputs.items()
-                }
-
-                model = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation="eager", device_map=torch_device
-                )
-
-                # First run without attention mask
-                outputs = model(**first_inputs)
-                retrieve_logits = model_class == ModernBertForMultipleChoice
-                logits_1_eager = outputs.logits if retrieve_logits else outputs.hidden_states[-1]
-                # Second run with attention mask and padding
-                outputs = model(**second_inputs)
-                logits_2_eager = outputs.logits if retrieve_logits else outputs.hidden_states[-1]
-
-                # Switch to FA
-                del model
-                model = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation, device_map=torch_device
-                )
-                outputs = model(**first_inputs)
-                logits_1_fa = outputs.logits if retrieve_logits else outputs.hidden_states[-1]
-                # Second run with attention mask and padding
-                outputs = model(**second_inputs)
-                logits_2_fa = outputs.logits if retrieve_logits else outputs.hidden_states[-1]
-
-                # Check the results
-                torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=atol, rtol=rtol)
-                if padding_side == "left":
-                    torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=atol, rtol=rtol)
-                    # Check it can run in training mode
-                    model.train()
-                    _ = model(**second_inputs)
-                else:
-                    torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=atol, rtol=rtol)
-
-        # In this case, the test should appear as skipped, not successful
-        if not _has_run_at_least_one_model:
-            self.skipTest(
-                f"Model architecture does not support {attn_implementation}, or setting its attention dynamically"
-            )
-
-    @require_torch_gpu  # modernbert contains triton code which cannot run on CPU, so we only test on GPU
-    def test_all_tensors_are_parameter_or_buffer(self):
-        super().test_all_tensors_are_parameter_or_buffer()
-
 
 @require_torch
 class ModernBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
-        model = ModernBertForMaskedLM.from_pretrained(
-            "answerdotai/ModernBERT-base", reference_compile=False, attn_implementation="sdpa"
-        )
+        model = ModernBertForMaskedLM.from_pretrained("answerdotai/ModernBERT-base", attn_implementation="sdpa")
         tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
 
         inputs = tokenizer("Hello World!", return_tensors="pt")
@@ -538,12 +321,7 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
-        model = ModernBertModel.from_pretrained(
-            "answerdotai/ModernBERT-base", reference_compile=False, attn_implementation="sdpa"
-        )
+        model = ModernBertModel.from_pretrained("answerdotai/ModernBERT-base", attn_implementation="sdpa")
         tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
 
         inputs = tokenizer("Hello World!", return_tensors="pt")
@@ -560,12 +338,8 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_token_classification(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         model = ModernBertForTokenClassification.from_pretrained(
             "hf-internal-testing/tiny-random-ModernBertForTokenClassification",
-            reference_compile=False,
             attn_implementation="sdpa",
         )
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-ModernBertForTokenClassification")
@@ -583,12 +357,8 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_sequence_classification(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         model = ModernBertForSequenceClassification.from_pretrained(
             "hf-internal-testing/tiny-random-ModernBertForSequenceClassification",
-            reference_compile=False,
             attn_implementation="sdpa",
         )
         tokenizer = AutoTokenizer.from_pretrained(
@@ -607,9 +377,6 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     @slow
     def test_export(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         bert_model = "answerdotai/ModernBERT-base"
         device = "cpu"
         attn_implementation = "sdpa"
@@ -646,14 +413,10 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_multiple_choice(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
         model = (
             ModernBertForMultipleChoice.from_pretrained(
                 "netique/ModernBertForMultipleChoice",
-                reference_compile=False,
                 attn_implementation="sdpa",
             )
             .eval()
@@ -679,3 +442,34 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
             torch.allclose(logits, expected_logits, atol=1e-4, rtol=1e-4),
             f"Logits: {logits.tolist()}\nExpected: {expected_logits.tolist()}",
         )
+
+    @require_flash_attn
+    @require_torch_accelerator
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_inference_masked_lm_flash_attention_2(self):
+        model = ModernBertForMaskedLM.from_pretrained(
+            "answerdotai/ModernBERT-base", dtype=torch.float16, attn_implementation="flash_attention_2"
+        ).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
+
+        inputs = tokenizer("Hello World!", return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            output = model(**inputs)[0]
+        expected_shape = torch.Size((1, 5, 50368))
+        self.assertEqual(output.shape, expected_shape)
+
+        # compare the actual values for a slice.
+        expected_slice = Expectations(
+            {
+                ("cuda", None): torch.tensor(
+                    [[[3.8203, -0.2125, 12.2812], [3.6055, 0.6797, 14.6875], [-5.1094, -3.8105, 11.9922]]],
+                    dtype=torch.float16,
+                ),
+                ("xpu", None): torch.tensor(
+                    [[[3.8555, -0.1993, 12.2969], [3.6387, 0.6943, 14.7109], [-5.1172, -3.8086, 11.9844]]],
+                    dtype=torch.float16,
+                ),
+            }
+        ).get_expectation()
+        torch.testing.assert_close(output[:, :3, :3].cpu(), expected_slice, rtol=1e-4, atol=1e-4)

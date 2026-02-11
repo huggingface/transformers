@@ -31,12 +31,13 @@ from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin, dynamic_rope_update
+from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
 from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -115,7 +116,7 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
         self.deepstack_visual_indexes = deepstack_visual_indexes
 
 
-class Qwen3VLTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Qwen3VLTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3VLTextModel`]. It is used to instantiate a
     Qwen3-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -441,9 +442,9 @@ class Qwen3VLTextAttention(Qwen3Attention):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -652,7 +653,8 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         patch_pos_embeds = torch.cat(patch_pos_embeds_permute)
         return patch_pos_embeds
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
@@ -736,7 +738,8 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
         hidden_states[visual_pos_masks, :] = local_this
         return hidden_states
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -790,7 +793,7 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
 
         attention_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -1005,7 +1008,7 @@ class Qwen3VLModel(Qwen2_5_VLModel):
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @auto_docstring
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1117,8 +1120,7 @@ class Qwen3VLModel(Qwen2_5_VLModel):
         )
 
         return Qwen3VLModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            **outputs,
             rope_deltas=self.rope_deltas,
         )
 
@@ -1507,7 +1509,7 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
                     curr_timestamp = self._calculate_timestamps(
                         metadata.frames_indices,
                         metadata.fps,
-                        self.video_processor.merge_size,
+                        self.video_processor.temporal_patch_size,
                     )
 
                     video_placeholder = ""

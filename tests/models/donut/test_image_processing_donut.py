@@ -17,6 +17,7 @@ import unittest
 
 import numpy as np
 
+from transformers import set_seed
 from transformers.testing_utils import is_flaky, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -155,6 +156,8 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @is_flaky()
     def test_call_pil(self):
         for backend_name in self.image_processors_backends_list:
+            # Set seed for deterministic test - ensures reproducible image generation
+            set_seed(42)
             image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
@@ -185,6 +188,8 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @is_flaky()
     def test_call_numpy(self):
         for backend_name in self.image_processors_backends_list:
+            # Set seed for deterministic test - ensures reproducible image generation
+            set_seed(42)
             image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
@@ -215,6 +220,8 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @is_flaky()
     def test_call_pytorch(self):
         for backend_name in self.image_processors_backends_list:
+            # Set seed for deterministic test - ensures reproducible image generation
+            set_seed(42)
             image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
             for image in image_inputs:

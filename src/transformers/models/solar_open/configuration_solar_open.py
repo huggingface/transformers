@@ -19,10 +19,10 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class SolarOpenConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class SolarOpenConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SolarOpenModel`]. It is used to instantiate a
     SolarOpen model according to the specified arguments, defining the model architecture.
@@ -99,9 +99,9 @@ class SolarOpenConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
-        "layers.*.mlp.experts.down_proj": "local_rowwise",
-        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

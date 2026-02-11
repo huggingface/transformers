@@ -45,7 +45,8 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_gemma3n import Gemma3nAudioConfig, Gemma3nConfig, Gemma3nTextConfig, Gemma3nVisionConfig
 
@@ -837,7 +838,7 @@ class Gemma3nAudioConformerFeedForward(nn.Module):
         self.ffw_layer_1 = nn.Linear(self.config.hidden_size, self.config.hidden_size * 4, bias=False)
         self.ffw_layer_2 = nn.Linear(self.config.hidden_size * 4, self.config.hidden_size, bias=False)
         self.post_layer_norm = Gemma3nRMSNorm(self.config.hidden_size)
-        self.post_layer_scale = torch.tensor(self.config.conf_residual_weight)
+        self.post_layer_scale = self.config.conf_residual_weight
 
     def forward(self, audio_encodings: torch.Tensor) -> torch.Tensor:
         residual = audio_encodings
@@ -941,7 +942,8 @@ class Gemma3nAudioEncoder(PreTrainedModel):
         )
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | Gemma3nAudioEncoderModelOutput:
@@ -1210,9 +1212,8 @@ def eager_attention_forward(
         attn_weights = attn_weights / softcap
         attn_weights = torch.tanh(attn_weights)
         attn_weights = attn_weights * softcap
-    if attention_mask is not None:  # no matter the length, we just slice it
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
@@ -1343,9 +1344,9 @@ class Gemma3nTextAttention(nn.Module):
                     past_key_values.shared_layers = {}
                 past_key_values.shared_layers[self.layer_idx] = key_states, value_states
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1636,7 +1637,8 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -1678,7 +1680,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
@@ -1786,7 +1788,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 @auto_docstring(custom_intro="The base Gemma 3n language model with a language modeling head.")
 class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config: Gemma3nTextConfig
     _checkpoint_conversion_mapping = {"model.language_model": "model"}

@@ -31,7 +31,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
@@ -1399,7 +1400,7 @@ class Gemma3nAudioConformerFeedForward(nn.Module):
         self.ffw_layer_1 = nn.Linear(self.config.hidden_size, self.config.hidden_size * 4, bias=False)
         self.ffw_layer_2 = nn.Linear(self.config.hidden_size * 4, self.config.hidden_size, bias=False)
         self.post_layer_norm = Gemma3nRMSNorm(self.config.hidden_size)
-        self.post_layer_scale = torch.tensor(self.config.conf_residual_weight)
+        self.post_layer_scale = self.config.conf_residual_weight
 
     def forward(self, audio_encodings: torch.Tensor) -> torch.Tensor:
         residual = audio_encodings
@@ -1503,7 +1504,8 @@ class Gemma3nAudioEncoder(PreTrainedModel):
         )
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | Gemma3nAudioEncoderModelOutput:
@@ -1812,9 +1814,9 @@ class Gemma3nTextAttention(Gemma3Attention):
                     past_key_values.shared_layers = {}
                 past_key_values.shared_layers[self.layer_idx] = key_states, value_states
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -2032,7 +2034,8 @@ class Gemma3nTextModel(Gemma3TextModel):
         )
 
     # Last hidden states should be before reprojecting, to stay consistent with the other layer outputs
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -2074,7 +2077,7 @@ class Gemma3nTextModel(Gemma3TextModel):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
