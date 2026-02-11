@@ -42,7 +42,6 @@ if is_torch_available():
         NomicBertForQuestionAnswering,
         NomicBertForSequenceClassification,
         NomicBertForTokenClassification,
-        NomicBertLMHeadModel,
         NomicBertModel,
     )
 
@@ -343,7 +342,6 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     all_model_classes = (
         (
             NomicBertModel,
-            NomicBertLMHeadModel,
             NomicBertForMaskedLM,
             NomicBertForMultipleChoice,
             NomicBertForNextSentencePrediction,

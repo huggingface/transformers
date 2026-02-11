@@ -671,7 +671,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mvp", "MvpForCausalLM"),
         ("nanochat", "NanoChatForCausalLM"),
         ("nemotron", "NemotronForCausalLM"),
-        ("nomic_bert", "NomicBertLMHeadModel"),
         ("olmo", "OlmoForCausalLM"),
         ("olmo2", "Olmo2ForCausalLM"),
         ("olmo3", "Olmo3ForCausalLM"),

@@ -18,11 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs
 
 
 class NomicBertConfig(PreTrainedConfig):
@@ -122,30 +119,31 @@ class NomicBertConfig(PreTrainedConfig):
         max_position_embeddings=2048,
         pad_token_id=0,
         head_dim=None,
-        **kwargs: Unpack[TransformersKwargs],
+        **kwargs,
     ):
+        self.head_dim = head_dim if head_dim is not None else hidden_size // num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
+        self.rope_parameters = rope_parameters
+        self.pad_token_id = pad_token_id
+
+        self.is_decoder = False
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
+        self.intermediate_size = intermediate_size
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.classifier_dropout = classifier_dropout
-        self.type_vocab_size = type_vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.pad_token_id = pad_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.rope_parameters = rope_parameters
-
         super().__init__(**kwargs)
 
 

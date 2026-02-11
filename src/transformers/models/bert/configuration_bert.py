@@ -109,7 +109,6 @@ class BertConfig(PreTrainedConfig):
         tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.pad_token_id = pad_token_id
         self.is_decoder = is_decoder
         self.add_cross_attention = add_cross_attention
@@ -131,6 +130,7 @@ class BertConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
+        super().__init__(**kwargs)
 
 
 __all__ = ["BertConfig"]

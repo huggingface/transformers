@@ -17,23 +17,21 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 
-from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithPooling,
-    CausalLMOutput,
 )
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
     BertEmbeddings,
-    BertEncoder,
     BertForMaskedLM,
     BertForMultipleChoice,
     BertForNextSentencePrediction,
@@ -42,7 +40,6 @@ from ..bert.modeling_bert import (
     BertForQuestionAnswering,
     BertForSequenceClassification,
     BertForTokenClassification,
-    BertLMHeadModel,
     BertModel,
     BertPooler,
     BertPredictionHeadTransform,
@@ -58,7 +55,7 @@ from ..llama.modeling_llama import (
 )
 
 
-class NomicBertConfig(PreTrainedConfig):
+class NomicBertConfig(BertConfig):
     r"""
     This is the configuration class to store the configuration of a [`NomicBertModel`]. It is used to instantiate an NomicBERT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -155,31 +152,36 @@ class NomicBertConfig(PreTrainedConfig):
         max_position_embeddings=2048,
         pad_token_id=0,
         head_dim=None,
-        **kwargs: Unpack[TransformersKwargs],
+        **kwargs,
     ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.classifier_dropout = classifier_dropout
-        self.type_vocab_size = type_vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.pad_token_id = pad_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
+        self.head_dim = head_dim if head_dim is not None else hidden_size // num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.rope_parameters = rope_parameters
 
-        super().__init__(**kwargs)
+        super().__init__(
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            intermediate_size=intermediate_size,
+            hidden_act=hidden_act,
+            hidden_dropout_prob=hidden_dropout_prob,
+            attention_probs_dropout_prob=attention_probs_dropout_prob,
+            initializer_range=initializer_range,
+            layer_norm_eps=layer_norm_eps,
+            classifier_dropout=classifier_dropout,
+            type_vocab_size=type_vocab_size,
+            max_position_embeddings=max_position_embeddings,
+            pad_token_id=pad_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
+
+        self.is_decoder = False
+        del self.use_cache
+        del self.add_cross_attention
 
 
 class NomicBertEmbeddings(BertEmbeddings):
@@ -227,20 +229,28 @@ class NomicBertRotaryEmbedding(LlamaRotaryEmbedding):
 @use_kernelized_func(apply_rotary_pos_emb)
 class NomicBertSelfAttention(BertSelfAttention):
     """
-    Custom Self-Attention mechanism for NomicBERT.
+    Self-Attention mechanism for NomicBERT is essentially Llama attention without caching logic.
     Key Difference: Replaces standard BERT absolute position embeddings with
     Rotary Positional Embeddings (RoPE) applied directly to Q and K.
     """
 
     def __init__(self, config, layer_idx=None):
+        super().__init__(config, layer_idx=layer_idx)
+
         self.num_kv_heads = (
             config.num_key_value_heads if config.num_key_value_heads is not None else config.num_attention_heads
         )
-        super().__init__(config, layer_idx=layer_idx)
         self.num_key_value_groups = self.num_attention_heads // self.num_kv_heads
+        self.Wqkv = nn.Linear(
+            config.hidden_size, 3 * self.attention_head_size * config.num_attention_heads, bias=False
+        )
+        self.o_proj = NomicBertSelfOutput(config)
 
-        self.is_decoder = False
-        self.is_causal = False
+        del self.is_decoder
+        del self.is_causal
+        del self.query
+        del self.key
+        del self.value
 
     def forward(
         self,
@@ -250,33 +260,37 @@ class NomicBertSelfAttention(BertSelfAttention):
         **kwargs: Unpack[TransformersKwargs],
     ):
         input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.attention_head_size)
 
         # get all proj
-        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_layer = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
+        qkv = self.Wqkv(hidden_states)
+        qkv = qkv.view(*input_shape, 3, -1, self.attention_head_size)
+        query_states, key_states, value_states = qkv.unbind(dim=-3)
+
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
 
         # Apply Rotary Position Embeddings
         cos, sin = position_embeddings
-        query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
-            query_layer,
-            key_layer,
-            value_layer,
+            query_states,
+            key_states,
+            value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
             scaling=self.scaling,
             **kwargs,
         )
 
-        attn_output = attn_output.transpose(1, 2).contiguous().view(*input_shape, -1)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output, hidden_states)
         return attn_output, attn_weights
 
 
@@ -284,32 +298,6 @@ class NomicBertSelfOutput(BertSelfOutput):
     def __init__(self, config):
         super().__init__(config)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-
-
-class NomicBertAttention(nn.Module):
-    def __init__(self, config, layer_idx=None):
-        super().__init__()
-        self.self = NomicBertSelfAttention(config, layer_idx=layer_idx)
-
-        self.output = NomicBertSelfOutput(config)
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        position_embeddings=None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        self_outputs, _ = self.self(
-            hidden_states,
-            attention_mask=attention_mask,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        # Process context layer (always index 0)
-        output = self.output(self_outputs, hidden_states)
-
-        return output
 
 
 class NomicBertIntermediate(LlamaMLP):
@@ -323,8 +311,9 @@ class NomicBertIntermediate(LlamaMLP):
 class NomicBertLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
-        self.attention = NomicBertAttention(config, layer_idx=layer_idx)
+        self.attention = NomicBertSelfAttention(config, layer_idx=layer_idx)
         self.intermediate = NomicBertIntermediate(config)
+        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -335,7 +324,7 @@ class NomicBertLayer(GradientCheckpointingLayer):
     ):
         # Self attention block
         residual = hidden_states
-        hidden_states = self.attention(
+        hidden_states, _ = self.attention(
             hidden_states,
             attention_mask,
             position_embeddings=position_embeddings,
@@ -346,37 +335,12 @@ class NomicBertLayer(GradientCheckpointingLayer):
 
         # Feed forward block
         residual = hidden_states
+        hidden_states = self.norm2(hidden_states)
         hidden_states = self.intermediate(hidden_states)
 
-        # Residual connection
         hidden_states = residual + hidden_states
 
         return hidden_states
-
-
-class NomicBertEncoder(BertEncoder):
-    def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        position_embeddings: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(
-                hidden_states,
-                attention_mask,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-        )
 
 
 class NomicBertPooler(BertPooler):
@@ -386,7 +350,6 @@ class NomicBertPooler(BertPooler):
 class NomicBertPreTrainedModel(BertPreTrainedModel):
     config_class = NomicBertConfig
     base_model_prefix = "nomic_bert"
-    supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_unexpected = ["inv_freq", "original_inv_freq"]
     _can_record_outputs = {
         "hidden_states": NomicBertLayer,
@@ -401,6 +364,7 @@ class NomicBertForPreTrainingOutput(BertForPreTrainingOutput):
 class NomicBertPredictionHeadTransform(BertPredictionHeadTransform):
     def __init__(self, config):
         super().__init__(config)
+        # Use layer_norm rather than LayerNorm to avoid bert legacy mappings weights and bias to gamma and beta
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         del self.LayerNorm
 
@@ -413,15 +377,6 @@ class NomicBertPredictionHeadTransform(BertPredictionHeadTransform):
 
 @auto_docstring
 class NomicBertModel(BertModel):
-    """
-    Example:
-    ```python
-    python transformers/src/transformers/models/nomic_bert/convert_nomic_bert_to_hf.py \
-        --original_model_id nomic-ai/nomic-embed-text-v1.5 \
-        --output_hub_path org/nomic_bert
-    ```
-    """
-
     def __init__(self, config, add_pooling_layer=True):
         """
         Args:
@@ -430,13 +385,18 @@ class NomicBertModel(BertModel):
         """
         super().__init__(config, add_pooling_layer=add_pooling_layer)
 
-        self.encoder = NomicBertEncoder(config)
+        del self.encoder
+
+        self.layers = nn.ModuleList(
+            [NomicBertLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
         self.rotary_emb = NomicBertRotaryEmbedding(config)
 
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids=None,
@@ -457,8 +417,7 @@ class NomicBertModel(BertModel):
             device = inputs_embeds.device
 
         if position_ids is None:
-            position_ids = torch.arange(seq_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
+            position_ids = torch.arange(seq_length, dtype=torch.long, device=device)[None, :]
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
@@ -473,73 +432,27 @@ class NomicBertModel(BertModel):
             attention_mask=attention_mask,
         )
 
-        position_embeddings = self.rotary_emb(embedding_output, position_ids)
+        hidden_states = embedding_output
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        encoder_outputs = self.encoder(
-            embedding_output,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        sequence_output = encoder_outputs.last_hidden_state
-
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        for encoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = encoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                **kwargs,
+            )
+        pooled_output = self.pooler(hidden_states) if self.pooler is not None else None
 
         return BaseModelOutputWithPooling(
-            last_hidden_state=sequence_output,
+            last_hidden_state=hidden_states,
             pooler_output=pooled_output,
         )
 
 
 class NomicBertForPreTraining(BertForPreTraining):
     pass
-
-
-class NomicBertLMHeadModel(BertLMHeadModel):
-    def forward(
-        self,
-        input_ids: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        token_type_ids: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        labels: torch.Tensor | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | CausalLMOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
-            `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
-        """
-
-        outputs: BaseModelOutputWithPooling = self.nomic_bert(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            return_dict=True,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.cls(hidden_states[:, slice_indices, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        return CausalLMOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
 
 
 class NomicBertForMaskedLM(BertForMaskedLM):
@@ -576,7 +489,6 @@ __all__ = [
     "NomicBertForSequenceClassification",
     "NomicBertForTokenClassification",
     "NomicBertLayer",
-    "NomicBertLMHeadModel",
     "NomicBertModel",
     "NomicBertPreTrainedModel",
 ]

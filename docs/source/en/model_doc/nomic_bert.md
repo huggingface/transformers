@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-04-20 and added to Hugging Face Transformers on 2026-02-06.*
+*This model was released on 2021-04-20 and added to Hugging Face Transformers on 2026-02-11.*
 
 
 # NomicBERT
@@ -40,57 +40,114 @@ This model was contributed by community members ([Sonny Cooper](https://github.c
 The original code for nomic-embed-text-v1.5 can be found [here](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5).
 
 ## Usage examples
-The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
+The examples below demonstrate how to generate dense vector embeddings for different tasks using `[AutoModel]`. Each task requires a specific instruction prefix to optimize the embedding space for that use case.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
+<hfoption id="Search Document">
 
 ```py
 import torch
-from transformers import pipeline
+import torch.nn.functional as F
+from transformers import AutoTokenizer, AutoModel
 
-pipeline = pipeline(
-    task="fill-mask",
-    model="nomic-ai/nomic-embed-text-v1.5",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("Plants create [MASK] through a process known as photosynthesis.")
-```
+def mean_pooling(model_output, attention_mask):
+    token_embeddings = model_output[0]
+    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
-</hfoption>
-<hfoption id="AutoModel">
+tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True)
 
-```py
-import torch
-from transformers import AutoModelForMaskedLM, AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained(
-    "bert-base-uncased",
-)
-model = AutoModelForMaskedLM.from_pretrained(
-    "nomic-ai/nomic-embed-text-v1.5",
-    dtype=torch.float16,
-    device_map="auto"
-)
-inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt").to(model.device)
+sentences = ['search_document: TSNE is a dimensionality reduction algorithm created by Laurens van Der Maaten']
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
 
 with torch.no_grad():
-    outputs = model(**inputs)
-    predictions = outputs.logits
+    model_output = model(**encoded_input)
 
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
-
-print(f"The predicted token is: {predicted_token}")
+embeddings = mean_pooling(model_output, encoded_input['attention_mask'])
+embeddings = F.normalize(embeddings, p=2, dim=1)
+print(embeddings)
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
+<hfoption id="Search Query">
 
-```bash
-echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model nomic-ai/nomic-embed-text-v1.5 --device 0
+```py
+import torch
+import torch.nn.functional as F
+from transformers import AutoTokenizer, AutoModel
+
+def mean_pooling(model_output, attention_mask):
+    token_embeddings = model_output[0]
+    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+
+tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True)
+
+sentences = ['search_query: Who is Laurens van Der Maaten?']
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
+
+with torch.no_grad():
+    model_output = model(**encoded_input)
+
+embeddings = mean_pooling(model_output, encoded_input['attention_mask'])
+embeddings = F.normalize(embeddings, p=2, dim=1)
+print(embeddings)
+```
+
+</hfoption>
+<hfoption id="Clustering">
+
+```py
+import torch
+import torch.nn.functional as F
+from transformers import AutoTokenizer, AutoModel
+
+def mean_pooling(model_output, attention_mask):
+    token_embeddings = model_output[0]
+    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+
+tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True)
+
+sentences = ['clustering: the quick brown fox']
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
+
+with torch.no_grad():
+    model_output = model(**encoded_input)
+
+embeddings = mean_pooling(model_output, encoded_input['attention_mask'])
+embeddings = F.normalize(embeddings, p=2, dim=1)
+print(embeddings)
+```
+
+</hfoption>
+<hfoption id="Classification">
+
+```py
+import torch
+import torch.nn.functional as F
+from transformers import AutoTokenizer, AutoModel
+
+def mean_pooling(model_output, attention_mask):
+    token_embeddings = model_output[0]
+    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+
+tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True)
+
+sentences = ['classification: the quick brown fox']
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
+
+with torch.no_grad():
+    model_output = model(**encoded_input)
+
+embeddings = mean_pooling(model_output, encoded_input['attention_mask'])
+embeddings = F.normalize(embeddings, p=2, dim=1)
+print(embeddings)
 ```
 
 </hfoption>
@@ -98,8 +155,9 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 ## Notes
 
-- For extremely long sequences, consider batching to save memory.
-- NomicBERT uses Rotary Positional Embeddings (RoPE). For correct positional encoding either **right padding** should be used or `position_ids` should be properly prepared
+- NomicBERT uses Rotary Positional Embeddings (RoPE). For correct positional encoding either use 
+    - right padding (default)
+    - left padding and prepare `position_ids` accordingly
 
 ## NomicBertConfig
 
@@ -137,8 +195,3 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 ## NomicBertForTokenClassification
 
 [[autodoc]] NomicBertForTokenClassification
-
-## NomicBertLMHeadModel
-
-[[autodoc]] NomicBertLMHeadModel
-    - forward

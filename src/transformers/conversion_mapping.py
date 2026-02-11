@@ -322,27 +322,32 @@ def _build_checkpoint_conversion_mapping():
         ],
         "nomic_bert": [
             # Embeddings & Pooler
-            WeightRenaming("emb_ln.weight", "embeddings.LayerNorm.weight"),
-            WeightRenaming("emb_ln.bias", "embeddings.LayerNorm.bias"),
-            WeightRenaming("embeddings.token_type_embeddings.weight", "embeddings.token_type_embeddings.weight"),
-            WeightRenaming("embeddings.word_embeddings.weight", "embeddings.word_embeddings.weight"),
+            WeightRenaming("emb_ln", "embeddings.LayerNorm"),
             # Encoder Layers Renaming
             WeightRenaming(
                 r"encoder.layers.(\d+).attn.out_proj.weight",
-                r"encoder.layer.\1.attention.output.dense.weight",
+                r"layers.\1.attention.o_proj.dense.weight",
             ),
             WeightRenaming(
                 r"encoder.layers.(\d+).mlp.fc11.weight",
-                r"encoder.layer.\1.intermediate.gate_proj.weight",
+                r"layers.\1.intermediate.gate_proj.weight",
             ),
             WeightRenaming(
                 r"encoder.layers.(\d+).mlp.fc12.weight",
-                r"encoder.layer.\1.intermediate.up_proj.weight",
+                r"layers.\1.intermediate.up_proj.weight",
             ),
-            WeightRenaming(r"encoder.layers.(\d+).mlp.fc2.weight", r"encoder.layer.\1.intermediate.down_proj.weight"),
+            WeightRenaming(r"encoder.layers.(\d+).mlp.fc2.weight", r"layers.\1.intermediate.down_proj.weight"),
             WeightRenaming(
                 r"encoder.layers.(\d+).norm1",
-                r"encoder.layer.\1.attention.output.LayerNorm",
+                r"layers.\1.attention.o_proj.LayerNorm",
+            ),
+            WeightRenaming(
+                r"encoder.layers.(\d+).norm2",
+                r"layers.\1.norm2",
+            ),
+            WeightRenaming(
+                r"encoder.layers.(\d+).attn.Wqkv.weight",
+                r"layers.\1.attention.Wqkv.weight",
             ),
         ],
     }
