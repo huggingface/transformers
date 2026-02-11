@@ -2299,10 +2299,14 @@ class Trainer:
         self, args: TrainingArguments, dataloader: DataLoader, total_train_batch_size: int
     ) -> tuple[int, int, int, int, bool, int | None, int]:
         """
-        Compute and return initial training loop values derived from the dataloader and training arguments.
-
-        Returns a tuple of (num_train_epochs, num_update_steps_per_epoch, num_examples, num_train_samples,
-        epoch_based, len_dataloader, max_steps).
+        Calculates and returns the following values:
+        - `num_train_epochs`
+        - `num_update_steps_per_epoch`
+        - `num_examples`
+        - `num_train_samples`
+        - `epoch_based`
+        - `len_dataloader`
+        - `max_steps`
         """
         # Case 1: we rely on `args.max_steps` first
         max_steps = args.max_steps
