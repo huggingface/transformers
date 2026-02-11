@@ -397,7 +397,6 @@ OBJECTS_TO_IGNORE = {
     "ProphetNetConfig",
     "QDQBertConfig",
     "QDQBertModel",
-    "QuestionAnsweringPipeline",
     "RagConfig",
     "RagModel",
     "RagRetriever",
