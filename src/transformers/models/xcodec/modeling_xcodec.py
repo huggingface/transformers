@@ -368,9 +368,7 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
 
     def apply_weight_norm(self):
         """Apply weight norm in the acoustic encoder and decoder because the original checkpoint has weight norm applied."""
-        weight_norm = torch.nn.utils.weight_norm
-        if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
-            weight_norm = torch.nn.utils.parametrizations.weight_norm
+        weight_norm = torch.nn.utils.parametrizations.weight_norm
 
         weight_norm(self.acoustic_encoder.conv1)
         weight_norm(self.acoustic_encoder.conv2)

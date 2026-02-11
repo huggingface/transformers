@@ -35,7 +35,12 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
-from ...utils.generic import TransformersKwargs, check_model_inputs, maybe_autocast
+from ...utils.generic import (
+    TransformersKwargs,
+    maybe_autocast,
+    merge_with_config_defaults,
+)
+from ...utils.output_capturing import capture_outputs
 from ..phi3.configuration_phi3 import Phi3Config
 from ..phi3.modeling_phi3 import (
     Phi3DecoderLayer,
@@ -447,8 +452,7 @@ def simple_eager_attention_forward(
 ):
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -679,7 +683,8 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.patch_embedding
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values,
@@ -1477,7 +1482,8 @@ class Phi4MultimodalModel(Phi3Model):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

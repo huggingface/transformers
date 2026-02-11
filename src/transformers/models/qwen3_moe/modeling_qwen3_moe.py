@@ -48,8 +48,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_grouped_mm_available
-from ...utils.generic import check_model_inputs, maybe_autocast
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_qwen3_moe import Qwen3MoeConfig
 
 
@@ -113,8 +113,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -374,7 +373,7 @@ class Qwen3MoePreTrainedModel(PreTrainedModel):
     )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3MoeTopKRouter, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(Qwen3MoeTopKRouter, index=0),
         "hidden_states": Qwen3MoeDecoderLayer,
         "attentions": Qwen3MoeAttention,
     }
@@ -473,7 +472,8 @@ class Qwen3MoeModel(Qwen3MoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

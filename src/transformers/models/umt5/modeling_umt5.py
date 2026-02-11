@@ -314,8 +314,7 @@ class UMT5Attention(nn.Module):
             position_bias = position_bias[:, :, -seq_length:, :]
 
         if attention_mask is not None:
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-            position_bias = position_bias + causal_mask
+            position_bias = position_bias + attention_mask
 
         position_bias_masked = position_bias
         scores += position_bias_masked

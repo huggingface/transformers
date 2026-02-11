@@ -47,7 +47,8 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import check_model_inputs, is_flash_attention_requested
+from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ...video_utils import (
     VideoInput,
     group_videos_by_shape,
@@ -491,7 +492,8 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
 
         return torch.cat(outputs, dim=0)
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,

@@ -39,7 +39,7 @@ from ...integrations import (
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -50,8 +50,8 @@ from ...utils import (
     is_grouped_mm_available,
     torch_compilable_check,
 )
-from ...utils.generic import check_model_inputs, is_flash_attention_requested, maybe_autocast
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_qwen3_vl_moe import Qwen3VLMoeConfig, Qwen3VLMoeTextConfig, Qwen3VLMoeVisionConfig
 
 
@@ -183,8 +183,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -377,7 +376,7 @@ class Qwen3VLMoePreTrainedModel(PreTrainedModel):
     )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, index=0),
         "hidden_states": Qwen3VLMoeTextDecoderLayer,
         "attentions": Qwen3VLMoeTextAttention,
     }
@@ -745,7 +744,8 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
         patch_pos_embeds = torch.cat(patch_pos_embeds_permute)
         return patch_pos_embeds
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
@@ -920,7 +920,8 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -935,7 +936,7 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
         visual_pos_masks: torch.Tensor | None = None,
         deepstack_visual_embeds: list[torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         r"""
         visual_pos_masks (`torch.Tensor` of shape `(batch_size, seqlen)`, *optional*):
             The mask of the visual positions.
@@ -1009,7 +1010,7 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
 
         hidden_states = self.norm(hidden_states)
 
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(  # only diff with Qwen3VLTextModel
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -1023,6 +1024,31 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
         local_this = hidden_states[visual_pos_masks, :] + visual_embeds
         hidden_states[visual_pos_masks, :] = local_this
         return hidden_states
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for Llava outputs, with hidden states and attentions.
+    """
+)
+class Qwen3VLMoeModelOutputWithPast(ModelOutput):
+    r"""
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+        The rope index difference between sequence length and multimodal rope.
+    """
+
+    last_hidden_state: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    rope_deltas: torch.LongTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -1052,31 +1078,8 @@ class Qwen3VLMoeCausalLMOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
     aux_loss: torch.FloatTensor | None = None
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Llava outputs, with hidden states and attentions.
-    """
-)
-class Qwen3VLMoeModelOutputWithPast(ModelOutput):
-    r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-    """
-
-    last_hidden_state: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    rope_deltas: torch.LongTensor | None = None
 
 
 @auto_docstring
@@ -1418,11 +1421,8 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         )
 
         return Qwen3VLMoeModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            **outputs,
             rope_deltas=self.rope_deltas,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
 
 
@@ -1674,6 +1674,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
+            router_logits=outputs.router_logits,
         )
 
     def prepare_inputs_for_generation(
