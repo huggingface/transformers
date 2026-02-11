@@ -23,6 +23,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...utils import auto_docstring, is_scipy_available
 
 
@@ -373,6 +374,12 @@ class FNetPreTrainedModel(PreTrainedModel):
     config: FNetConfig
     base_model_prefix = "fnet"
     supports_gradient_checkpointing = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, FNetEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
 
 @dataclass

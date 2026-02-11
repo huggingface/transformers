@@ -134,6 +134,9 @@ class DeepseekVLAligner(nn.Module):
 class DeepseekVLPreTrainedModel(JanusPreTrainedModel):
     _no_split_modules = ["LlamaDecoderLayer"]
 
+    def _init_weights(self, module):
+        raise AttributeError("No need to inherit!")
+
 
 @auto_docstring
 class DeepseekVLModel(JanusModel):

@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Quantize 🤗 Transformers models
 
-## `AutoGPTQ` Integration
+## GPT-QModel Integration
 
 
 🤗 Transformers には、言語モデルで GPTQ 量子化を実行するための `optimum` API が統合されています。パフォーマンスを大幅に低下させることなく、推論速度を高速化することなく、モデルを 8、4、3、さらには 2 ビットでロードおよび量子化できます。これは、ほとんどの GPU ハードウェアでサポートされています。
@@ -24,14 +24,14 @@ rendered properly in your Markdown viewer.
 量子化モデルの詳細については、以下を確認してください。
 - [GPTQ](https://huggingface.co/papers/2210.17323) 論文
 - GPTQ 量子化に関する `optimum` [ガイド](https://huggingface.co/docs/optimum/llm_quantization/usage_guides/quantization)
-- バックエンドとして使用される [`AutoGPTQ`](https://github.com/PanQiWei/AutoGPTQ) ライブラリ
+- バックエンドとして使用される `GPT-QModel` (https://github.com/ModelCloud/GPTQModel) ライブラリ
 
 ### Requirements
 
 以下のコードを実行するには、以下の要件がインストールされている必要があります： 
 
-- 最新の `AutoGPTQ` ライブラリをインストールする。
-`pip install auto-gptq` をインストールする。
+- 最新の `GPT-QModel` ライブラリをインストールする。
+`pip install gptqmodel --no-build-isolation` を実行する。
 
 - 最新の `optimum` をソースからインストールする。
 `git+https://github.com/huggingface/optimum.git` をインストールする。
@@ -63,7 +63,7 @@ gptq_config = GPTQConfig(bits=4, dataset = "c4", tokenizer=tokenizer)
 独自のデータセットを文字列のリストとして渡すことができることに注意してください。ただし、GPTQ 論文のデータセットを使用することを強くお勧めします。
 
 ```python
-dataset = ["auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."]
+dataset = ["gptqmodel is an easy-to-use model quantization library with user-friendly apis, based on the GPTQ algorithm."]
 quantization = GPTQConfig(bits=4, dataset = dataset, tokenizer=tokenizer)
 ```
 

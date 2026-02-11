@@ -186,6 +186,9 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
             self, config_class=FastVlmConfig, has_text_modality=False, common_properties=common_properties
         )
 
+    def test_enable_input_require_grads(self):
+        self.skipTest("FastVLM relies on timm architectures unavailable in this test environment.")
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -219,10 +222,6 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
             # two images and two sets of image tokens don't raise an error
             input_ids = torch.cat([input_ids, input_ids], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values)
-
-    @unittest.skip("Timm wrapper and backbone don't currently support full HF initialization")
-    def test_can_init_all_missing_weights(self):
-        pass
 
     @unittest.skip("Timm can't be initialized on meta")
     def test_can_be_initialized_on_meta(self):

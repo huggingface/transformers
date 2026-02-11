@@ -22,6 +22,7 @@ import numpy as np
 from transformers import ClvpConfig, ClvpDecoderConfig, ClvpEncoderConfig
 from transformers.testing_utils import (
     cleanup,
+    require_numba,
     require_torch,
     slow,
     torch_device,
@@ -390,6 +391,7 @@ class ClvpModelForConditionalGenerationTester:
 
 
 @require_torch
+@require_numba
 class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ClvpModelForConditionalGeneration,) if is_torch_available() else ()
     # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
@@ -509,6 +511,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
 @slow
 @require_torch
+@require_numba
 class ClvpIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.text = "This is an example text."

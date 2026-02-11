@@ -21,6 +21,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
@@ -165,6 +166,7 @@ class LevitAttention(nn.Module):
 
         points = list(itertools.product(range(resolution), range(resolution)))
         len_points = len(points)
+        self.len_points = len_points
         attention_offsets, indices = {}, []
         for p1 in points:
             for p2 in points:
@@ -172,6 +174,7 @@ class LevitAttention(nn.Module):
                 if offset not in attention_offsets:
                     attention_offsets[offset] = len(attention_offsets)
                 indices.append(attention_offsets[offset])
+        self.indices = indices
 
         self.attention_bias_cache = {}
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_attention_heads, len(attention_offsets)))
@@ -243,6 +246,8 @@ class LevitAttentionSubsample(nn.Module):
         points = list(itertools.product(range(resolution_in), range(resolution_in)))
         points_ = list(itertools.product(range(resolution_out), range(resolution_out)))
         len_points, len_points_ = len(points), len(points_)
+        self.len_points_ = len_points_
+        self.len_points = len_points
         attention_offsets, indices = {}, []
         for p1 in points_:
             for p2 in points:
@@ -251,6 +256,7 @@ class LevitAttentionSubsample(nn.Module):
                 if offset not in attention_offsets:
                     attention_offsets[offset] = len(attention_offsets)
                 indices.append(attention_offsets[offset])
+        self.indices = indices
 
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_attention_heads, len(attention_offsets)))
         self.register_buffer(
@@ -471,6 +477,18 @@ class LevitPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = ["LevitResidualLayer"]
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, LevitAttention):
+            init.copy_(
+                module.attention_bias_idxs, torch.LongTensor(module.indices).view(module.len_points, module.len_points)
+            )
+        elif isinstance(module, LevitAttentionSubsample):
+            init.copy_(
+                module.attention_bias_idxs,
+                torch.LongTensor(module.indices).view(module.len_points_, module.len_points),
+            )
 
 
 @auto_docstring

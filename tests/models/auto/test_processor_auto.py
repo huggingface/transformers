@@ -35,6 +35,7 @@ from transformers import (
     AutoTokenizer,
     BaseVideoProcessor,
     BertTokenizer,
+    CLIPImageProcessorFast,
     FeatureExtractionMixin,
     ImageProcessingMixin,
     LlamaTokenizer,
@@ -42,6 +43,7 @@ from transformers import (
     LlavaProcessor,
     ProcessorMixin,
     SiglipImageProcessor,
+    SiglipImageProcessorFast,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
@@ -51,7 +53,6 @@ from transformers.models.auto.image_processing_auto import get_image_processor_c
 from transformers.models.auto.video_processing_auto import get_video_processor_config
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
 from transformers.tokenization_python import TOKENIZER_CONFIG_FILE
-from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 from transformers.utils import (
     FEATURE_EXTRACTOR_NAME,
     PROCESSOR_NAME,
@@ -431,6 +432,117 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             second_processor = AutoProcessor.from_pretrained(tmp_dir)
             self.assertEqual(second_processor.__class__.__name__, processor.__class__.__name__)
 
+    def test_processor_with_multiple_tokenizers_save_load(self):
+        """Test that processors with multiple tokenizers save and load correctly."""
+
+        class DualTokenizerProcessor(ProcessorMixin):
+            """A processor with two tokenizers and an image processor."""
+
+            def __init__(self, tokenizer, decoder_tokenizer, image_processor):
+                super().__init__(tokenizer, decoder_tokenizer, image_processor)
+
+        # Create processor with multiple tokenizers
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-BertForMaskedLM")
+        decoder_tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        image_processor = SiglipImageProcessor()
+
+        processor = DualTokenizerProcessor(
+            tokenizer=tokenizer,
+            decoder_tokenizer=decoder_tokenizer,
+            image_processor=image_processor,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            processor.save_pretrained(tmp_dir)
+
+            # Verify directory structure: primary tokenizer in root, additional in subfolder
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "tokenizer_config.json")))
+            self.assertTrue(os.path.isdir(os.path.join(tmp_dir, "decoder_tokenizer")))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "decoder_tokenizer", "tokenizer_config.json")))
+
+            # Verify processor_config.json contains image_processor but not tokenizers
+            with open(os.path.join(tmp_dir, "processor_config.json")) as f:
+                processor_config = json.load(f)
+            self.assertIn("image_processor", processor_config)
+            self.assertNotIn("tokenizer", processor_config)
+            self.assertNotIn("decoder_tokenizer", processor_config)
+
+            # Reload the full processor and verify all attributes
+            loaded_processor = DualTokenizerProcessor.from_pretrained(tmp_dir)
+
+            # Verify the processor has all expected attributes
+            self.assertTrue(hasattr(loaded_processor, "tokenizer"))
+            self.assertTrue(hasattr(loaded_processor, "decoder_tokenizer"))
+            self.assertTrue(hasattr(loaded_processor, "image_processor"))
+
+            # Verify tokenizers loaded correctly
+            self.assertEqual(loaded_processor.tokenizer.vocab_size, tokenizer.vocab_size)
+            self.assertEqual(loaded_processor.decoder_tokenizer.vocab_size, decoder_tokenizer.vocab_size)
+
+            # Verify image processor loaded correctly
+            self.assertEqual(loaded_processor.image_processor.size, image_processor.size)
+
+    def test_processor_with_multiple_image_processors_save_load(self):
+        """Test that processors with multiple image processors save and load correctly."""
+
+        class DualImageProcessorProcessor(ProcessorMixin):
+            """A processor with two image processors and a tokenizer."""
+
+            def __init__(self, tokenizer, image_processor, encoder_image_processor):
+                super().__init__(tokenizer, image_processor, encoder_image_processor)
+
+        # Create processor with multiple image processors
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-BertForMaskedLM")
+        image_processor = SiglipImageProcessorFast(size={"height": 224, "width": 224})
+        encoder_image_processor = CLIPImageProcessorFast(size={"height": 384, "width": 384})
+
+        processor = DualImageProcessorProcessor(
+            tokenizer=tokenizer,
+            image_processor=image_processor,
+            encoder_image_processor=encoder_image_processor,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            processor.save_pretrained(tmp_dir)
+
+            # Verify processor_config.json contains both image processors
+            with open(os.path.join(tmp_dir, "processor_config.json")) as f:
+                processor_config = json.load(f)
+            self.assertIn("image_processor", processor_config)
+            self.assertIn("encoder_image_processor", processor_config)
+            self.assertNotIn("tokenizer", processor_config)
+
+            # Verify both image processors have the correct type key for instantiation
+            self.assertIn("image_processor_type", processor_config["image_processor"])
+            self.assertIn("image_processor_type", processor_config["encoder_image_processor"])
+            self.assertEqual(processor_config["image_processor"]["image_processor_type"], "SiglipImageProcessorFast")
+            self.assertEqual(
+                processor_config["encoder_image_processor"]["image_processor_type"], "CLIPImageProcessorFast"
+            )
+
+            # Verify the sizes are different (to ensure they're separate configs)
+            self.assertEqual(processor_config["image_processor"]["size"], {"height": 224, "width": 224})
+            self.assertEqual(processor_config["encoder_image_processor"]["size"], {"height": 384, "width": 384})
+
+            # Reload the full processor and verify all attributes
+            loaded_processor = DualImageProcessorProcessor.from_pretrained(tmp_dir)
+
+            # Verify the processor has all expected attributes
+            self.assertTrue(hasattr(loaded_processor, "tokenizer"))
+            self.assertTrue(hasattr(loaded_processor, "image_processor"))
+            self.assertTrue(hasattr(loaded_processor, "encoder_image_processor"))
+
+            # Verify tokenizer loaded correctly
+            self.assertEqual(loaded_processor.tokenizer.vocab_size, tokenizer.vocab_size)
+
+            # Verify image processors loaded correctly with their distinct sizes
+            self.assertEqual(loaded_processor.image_processor.size, {"height": 224, "width": 224})
+            self.assertEqual(loaded_processor.encoder_image_processor.size, {"height": 384, "width": 384})
+
+            # Verify they are different types
+            self.assertIsInstance(loaded_processor.image_processor, SiglipImageProcessorFast)
+            self.assertIsInstance(loaded_processor.encoder_image_processor, CLIPImageProcessorFast)
+
 
 @is_staging_test
 class ProcessorPushToHubTester(unittest.TestCase):
@@ -522,10 +634,7 @@ class ProcessorPushToHubTester(unittest.TestCase):
 
     def test_push_to_hub_with_chat_templates(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # Extract vocab and merges from SentencePiece model
-            extractor = SentencePieceExtractor(SAMPLE_VOCAB_LLAMA)
-            vocab_ids, vocab_scores, merges = extractor.extract()
-            tokenizer = LlamaTokenizer(vocab=vocab_scores, merges=merges)
+            tokenizer = LlamaTokenizer.from_pretrained(SAMPLE_VOCAB_LLAMA)
             image_processor = SiglipImageProcessor()
             chat_template = "default dummy template for testing purposes only"
             processor = LlavaProcessor(

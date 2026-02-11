@@ -37,7 +37,7 @@ class DabDetrConfig(PreTrainedConfig):
         use_timm_backbone (`bool`, *optional*, defaults to `True`):
             Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
             API.
-        backbone_config (`PreTrainedConfig` or `dict`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
             case it will default to `ResNetConfig()`.
         backbone (`str`, *optional*, defaults to `"resnet50"`):
@@ -255,8 +255,8 @@ class DabDetrConfig(PreTrainedConfig):
         self.temperature_height = temperature_height
         self.sine_position_embedding_scale = sine_position_embedding_scale
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-        self.tie_encoder_decoder = True  # weights have to be tied for this model
 
 
 __all__ = ["DabDetrConfig"]

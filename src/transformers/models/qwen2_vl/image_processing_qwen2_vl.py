@@ -159,8 +159,9 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
-            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+        if size is not None:
+            if "shortest_edge" not in size or "longest_edge" not in size:
+                raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
         else:
             size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
         # backward compatibility: override size with min_pixels and max_pixels if they are provided

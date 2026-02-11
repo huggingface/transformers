@@ -584,12 +584,13 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
                         init.copy_(module.position_enc, position_enc)
             else:
                 init.copy_(module.position_enc, position_enc)
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
             init.zeros_(module.bias)
             init.ones_(module.weight)
-        elif isinstance(module, PatchTSTBatchNorm):
-            init.zeros_(module.batchnorm.bias)
-            init.ones_(module.batchnorm.weight)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Linear):
             init.normal_(module.weight, mean=0.0, std=self.config.init_std)
             if module.bias is not None:

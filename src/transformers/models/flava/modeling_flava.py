@@ -677,6 +677,9 @@ class FlavaPreTrainedModel(PreTrainedModel):
             init.zeros_(module.position_embeddings)
             if module.mask_token is not None:
                 init.zeros_(module.mask_token)
+        elif isinstance(module, FlavaTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
         elif isinstance(module, FlavaMultimodalModel):
             if module.use_cls_token:
                 init.zeros_(module.cls_token)
@@ -1107,7 +1110,7 @@ class FlavaModel(FlavaPreTrainedModel):
         output_hidden_states: bool = True,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[tuple, FlavaOutput]:
+    ) -> Union[tuple, FlavaModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, image_num_patches + text_seq_len)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See

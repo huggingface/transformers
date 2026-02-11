@@ -256,7 +256,7 @@ class BenchmarkRunner:
         if config.continuous_batching:
             inputs = self.inputs["input_ids"].tolist()
             wall_time_0 = time.perf_counter()
-            outputs = self.model.generate_batch(inputs, allow_prefix_sharing=False, record_timestamps=True)
+            outputs = self.model.generate_batch(inputs, allow_block_sharing=False, record_timestamps=True)
         else:
             streamer = BenchmarkStreamer()
             wall_time_0 = time.perf_counter()

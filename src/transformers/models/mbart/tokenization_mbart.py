@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -58,13 +58,14 @@ class MBartTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = Unigram
 
     prefix_tokens: list[int] = []
     suffix_tokens: list[int] = []
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict, list]] = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -75,9 +76,6 @@ class MBartTokenizer(TokenizersBackend):
         src_lang=None,
         tgt_lang=None,
         additional_special_tokens=None,
-        vocab=None,
-        merges=None,  # Ignored for Unigram
-        vocab_file=None,
         **kwargs,
     ):
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
@@ -88,56 +86,20 @@ class MBartTokenizer(TokenizersBackend):
                 [t for t in additional_special_tokens if t not in _additional_special_tokens]
             )
 
-        # MBart uses fairseq vocab alignment: <s>=0, <pad>=1, </s>=2, <unk>=3, then SPM pieces[3:], lang codes, <mask>
-        if vocab is not None:
-            # Handle different vocab formats (dict, list of tokens, or list of tuples)
-            # SentencePieceExtractor returns list[tuple[str, float]] which is the expected format
-            if isinstance(vocab, dict):
-                vocab = [(token, 0.0) for token in vocab.keys()]
-            elif isinstance(vocab, list) and len(vocab) > 0:
-                if not isinstance(vocab[0], tuple):
-                    vocab = [(token, 0.0) for token in vocab]
-                else:
-                    # Ensure tuples are (str, float) format
-                    vocab = [(str(item[0]), float(item[1])) for item in vocab]
-
-            # Reorder to fairseq: <s>, <pad>, </s>, <unk>, ... (rest of vocab from SPM[3:])
-            vocab_list = []
-            vocab_list.append((str(bos_token), 0.0))
-            vocab_list.append((str(pad_token), 0.0))
-            vocab_list.append((str(eos_token), 0.0))
-            vocab_list.append((str(unk_token), 0.0))
-
-            # Add the rest of the SentencePiece vocab (skipping first 3: <unk>, <s>, </s>)
-            vocab_list.extend(vocab[4:])
-
-            # Add language codes
-            for lang_code in FAIRSEQ_LANGUAGE_CODES:
-                vocab_list.append((str(lang_code), 0.0))
-
-            # Add mask token
-            vocab_list.append((str(mask_token), 0.0))
-
-            self._vocab_scores = vocab_list
-        else:
-            self._vocab_scores = [
+        if vocab is None:
+            vocab = [
                 (str(bos_token), 0.0),
                 (str(pad_token), 0.0),
                 (str(eos_token), 0.0),
                 (str(unk_token), 0.0),
-                ("▁", -2.0),
             ]
+            vocab += [("▁", -2.0)]
             for lang_code in FAIRSEQ_LANGUAGE_CODES:
-                self._vocab_scores.append((lang_code, 0.0))
-            self._vocab_scores.append((str(mask_token), 0.0))
+                vocab.append((lang_code, 0.0))
+            vocab.append((str(mask_token), 0.0))
 
-        self._tokenizer = Tokenizer(
-            Unigram(
-                self._vocab_scores,
-                unk_id=3,
-                byte_fallback=False,
-            )
-        )
+        self._vocab = vocab
+        self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
 
         self._tokenizer.normalizer = None
 
@@ -150,10 +112,7 @@ class MBartTokenizer(TokenizersBackend):
 
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,

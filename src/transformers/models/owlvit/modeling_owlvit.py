@@ -15,7 +15,6 @@
 """PyTorch OWL-ViT model."""
 
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Any, Optional, Union
 
 import torch
@@ -562,10 +561,12 @@ class OwlViTPreTrainedModel(PreTrainedModel):
         if isinstance(module, OwlViTTextEmbeddings):
             init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
             init.normal_(module.position_embedding.weight, mean=0.0, std=factor * 0.02)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, OwlViTVisionEmbeddings):
             init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, OwlViTAttention):
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
@@ -588,6 +589,8 @@ class OwlViTPreTrainedModel(PreTrainedModel):
                 std=module.vision_embed_dim**-0.5 * factor,
             )
             init.constant_(module.logit_scale, self.config.logit_scale_init_value)
+        elif isinstance(module, OwlViTForObjectDetection):
+            init.copy_(module.box_bias, module.compute_box_bias(module.num_patches_height, module.num_patches_width))
         if isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
@@ -1200,7 +1203,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self.config = config
         self.num_patches_height = self.config.vision_config.image_size // self.config.vision_config.patch_size
         self.num_patches_width = self.config.vision_config.image_size // self.config.vision_config.patch_size
-        self.box_bias = self.compute_box_bias(self.num_patches_height, self.num_patches_width)
+        self.register_buffer(
+            "box_bias", self.compute_box_bias(self.num_patches_height, self.num_patches_width), persistent=False
+        )
 
         self.post_init()
 
@@ -1221,7 +1226,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return box_coordinates
 
-    @lru_cache(maxsize=2)
     def compute_box_bias(
         self, num_patches_height: int, num_patches_width: int, feature_map: Optional[torch.FloatTensor] = None
     ) -> torch.Tensor:

@@ -572,10 +572,13 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
             init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
         elif isinstance(module, ChineseCLIPTextEmbeddings):
             init.normal_(module.word_embeddings.weight, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.position_embeddings.weight, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.token_type_embeddings.weight, mean=0.0, std=self.config.initializer_range)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
             for embedding in [module.word_embeddings, module.position_embeddings, module.token_type_embeddings]:
                 if embedding.padding_idx is not None:
                     init.zeros_(embedding.weight[embedding.padding_idx])
@@ -638,9 +641,9 @@ class ChineseCLIPTextEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                output_attentions=output_attentions,
+                hidden_states,
+                attention_mask,
+                output_attentions,
                 **kwargs,
             )
 

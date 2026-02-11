@@ -79,6 +79,7 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
             unk_token=unk_token,
             pad_token=pad_token,
             should_strip_spaces=should_strip_spaces,
+            special_tokens_pattern="none",
             **kwargs,
         )
 

@@ -582,6 +582,10 @@ class MobileViTV2PreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.GroupNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)

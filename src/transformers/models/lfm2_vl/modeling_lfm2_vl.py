@@ -41,7 +41,8 @@ class Lfm2VlMultiModalProjector(nn.Module):
         super().__init__()
         in_channels = config.vision_config.hidden_size * (config.downsample_factor**2)
         self.factor = config.downsample_factor
-        self.layer_norm = nn.LayerNorm(in_channels)
+        self.use_layer_norm = config.projector_use_layernorm
+        self.layer_norm = nn.LayerNorm(in_channels) if config.projector_use_layernorm else None
         self.linear_1 = nn.Linear(
             in_channels,
             config.projector_hidden_size,
@@ -56,7 +57,8 @@ class Lfm2VlMultiModalProjector(nn.Module):
 
     def forward(self, image_features: torch.Tensor):
         image_features = self.pixel_unshuffle(image_features)
-        image_features = self.layer_norm(image_features)
+        if self.use_layer_norm:
+            image_features = self.layer_norm(image_features)
         hidden_states = self.linear_1(image_features)
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
@@ -448,6 +450,7 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -459,12 +462,15 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            # Pixel values are used only in the first iteration if available
+            # In subsquent iterations, they are already merged with text and cached
+            # NOTE: first iteration doesn't have to be prefill, it can be the first
+            # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs

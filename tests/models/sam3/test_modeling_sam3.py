@@ -22,6 +22,7 @@ import requests
 
 from transformers.testing_utils import (
     backend_empty_cache,
+    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
@@ -854,6 +855,29 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with self.assertRaises(ValueError):
                 model(**inputs_with_both)
 
+    def test_custom_image_size(self):
+        """Test that custom image size can be set and propagates correctly through nested configs."""
+        config = self.model_tester.get_config()
+        config.image_size = 560
+
+        self.assertEqual(config.image_size, 560)
+        self.assertEqual(config.vision_config.image_size, 560)
+        self.assertEqual(config.vision_config.backbone_config.image_size, 560)
+
+        # Verify model works with custom size
+        model = Sam3Model(config=config).to(torch_device).eval()
+        pixel_values = floats_tensor([self.model_tester.batch_size, self.model_tester.num_channels, 560, 560]).to(
+            torch_device
+        )
+        input_ids = torch.randint(0, 1000, (self.model_tester.batch_size, 16), device=torch_device)
+
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values, input_ids=input_ids, attention_mask=torch.ones_like(input_ids))
+
+        self.assertIsNotNone(outputs.pred_masks)
+        self.assertIsNotNone(outputs.pred_boxes)
+        self.assertIsNotNone(outputs.pred_logits)
+
     @unittest.skip(reason="SAM3 model can't be compiled dynamic yet")
     def test_sdpa_can_compile_dynamic(self):
         pass
@@ -1448,6 +1472,7 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         # Check that semantic seg has same spatial size as pred_masks
         self.assertEqual(outputs.semantic_seg.shape[-2:], outputs.pred_masks.shape[-2:])
 
+    @require_deterministic_for_xpu
     def test_efficient_multi_prompt_single_image(self):
         """Test efficient inference with multiple prompts on a single image using get_vision_features."""
         raw_image = prepare_coco_cat_image()
@@ -1491,6 +1516,7 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs_with_embeds.pred_boxes, outputs_direct.pred_boxes, atol=1e-5, rtol=1e-5)
         torch.testing.assert_close(outputs_with_embeds.pred_masks, outputs_direct.pred_masks, atol=1e-5, rtol=1e-5)
 
+    @require_deterministic_for_xpu
     def test_efficient_single_prompt_multi_images(self):
         """Test efficient inference with same prompt on multiple images using get_text_features."""
         raw_image1 = prepare_coco_cat_image()

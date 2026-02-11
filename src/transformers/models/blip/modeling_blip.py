@@ -430,6 +430,8 @@ class BlipPreTrainedModel(PreTrainedModel):
                 std = self.config.vision_config.initializer_range
             init.trunc_normal_(module.position_embedding, mean=0.0, std=std)
             init.trunc_normal_(module.class_embedding, mean=0.0, std=std)
+        elif isinstance(module, BlipTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 class BlipEncoder(nn.Module):

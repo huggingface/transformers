@@ -337,15 +337,31 @@ class FuyuProcessor(ProcessorMixin):
     r"""
     Constructs a Fuyu processor which wraps a Fuyu image processor and a Llama tokenizer into a single processor.
 
-    [`FuyuProcessor`] offers all the functionalities of [`FuyuImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`FuyuProcessor`] offers all the functionalities of [`FuyuImageProcessor`] and [`TokenizersBackend`]. See the
     [`~FuyuProcessor.__call__`] and [`~FuyuProcessor.decode`] for more information.
 
     Args:
         image_processor ([`FuyuImageProcessor`]):
             The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`]):
+        tokenizer ([`TokenizersBackend`]):
             The tokenizer is a required input.
     """
+
+    @classmethod
+    def _load_tokenizer_from_pretrained(
+        cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs
+    ):
+        """
+        Override for BC. Fuyu uses TokenizersBackend and requires token_type_ids to be removed from model_input_names
+        because Fuyu uses mm_token_type_ids instead for multimodal token identification.    `
+        """
+        from ...tokenization_utils_tokenizers import TokenizersBackend
+
+        tokenizer = TokenizersBackend.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        # Remove token_type_ids as Fuyu uses mm_token_type_ids instead
+        if "token_type_ids" in tokenizer.model_input_names:
+            tokenizer.model_input_names.remove("token_type_ids")
+        return tokenizer
 
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor=image_processor, tokenizer=tokenizer)
@@ -486,7 +502,7 @@ class FuyuProcessor(ProcessorMixin):
     ) -> "FuyuBatchFeature":
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to
+        and `kwargs` arguments to TokenizersBackend's [`~TokenizersBackend.__call__`] if `text` is not `None` to
         encode the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         FuyuImageProcessor's [`~FuyuImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.

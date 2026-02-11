@@ -362,6 +362,11 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
                 if isinstance(submodule, nn.Conv1d):
                     init.trunc_normal_(submodule.weight, std=0.02)
                     init.constant_(submodule.bias, 0)
+        elif isinstance(module, XcodecEuclideanCodebook):
+            init.copy_(module.inited, torch.Tensor([True]))
+            init.zeros_(module.cluster_size)
+            init.zeros_(module.embed)
+            init.zeros_(module.embed_avg)
 
     def apply_weight_norm(self):
         """Apply weight norm in the acoustic encoder and decoder because the original checkpoint has weight norm applied."""

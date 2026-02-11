@@ -149,7 +149,6 @@ for i, transcription in enumerate(transcriptions):
     print(f"Audio {i+1}: {transcription}")
 ```
 
-
 ## GraniteSpeechConfig
 
 [[autodoc]] GraniteSpeechConfig

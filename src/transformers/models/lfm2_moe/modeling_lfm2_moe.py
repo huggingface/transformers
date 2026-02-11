@@ -27,7 +27,12 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...integrations import (
+    use_experts_implementation,
+    use_kernel_forward_from_hub,
+    use_kernel_func_from_hub,
+    use_kernelized_func,
+)
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, MoeModelOutputWithPast
@@ -35,7 +40,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, maybe_autocast
 from ...utils.import_utils import is_causal_conv1d_available, is_torchdynamo_compiling
 from .configuration_lfm2_moe import Lfm2MoeConfig
 
@@ -84,7 +89,7 @@ class Lfm2MoeRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -123,7 +128,7 @@ class Lfm2MoeRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -145,6 +150,7 @@ class Lfm2MoeMLP(nn.Module):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
 
+@use_experts_implementation
 class Lfm2MoeExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
@@ -155,6 +161,7 @@ class Lfm2MoeExperts(nn.Module):
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = F.silu
 
     def forward(
         self,
@@ -175,7 +182,7 @@ class Lfm2MoeExperts(nn.Module):
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
             gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = F.silu(gate) * up
+            current_hidden_states = self.act_fn(gate) * up
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -426,6 +433,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Lfm2MoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -440,7 +448,6 @@ class Lfm2MoeAttention(nn.Module):
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
-        self.rotary_fn = apply_rotary_pos_emb
         self.out_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.q_layernorm = Lfm2MoeRMSNorm(self.head_dim, eps=config.norm_eps)
         self.k_layernorm = Lfm2MoeRMSNorm(self.head_dim, eps=config.norm_eps)
@@ -452,7 +459,6 @@ class Lfm2MoeAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Lfm2MoeHybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
@@ -672,7 +678,7 @@ class Lfm2MoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = False  # uses a non-compilable custom cache class Lfm2MoeHybridConvCache
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Lfm2MoeDecoderLayer,
@@ -685,6 +691,9 @@ class Lfm2MoePreTrainedModel(PreTrainedModel):
         if isinstance(module, Lfm2MoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Lfm2MoeSparseMoeBlock):
+            if module.use_expert_bias:
+                init.zeros_(module.expert_bias)
 
 
 @auto_docstring

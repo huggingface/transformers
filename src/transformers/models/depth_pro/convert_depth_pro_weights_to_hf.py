@@ -132,7 +132,6 @@ def get_qkv_state_dict(key, parameter):
 def write_model(
     hf_repo_id: str,
     output_dir: str,
-    safe_serialization: bool = True,
 ):
     os.makedirs(output_dir, exist_ok=True)
 
@@ -191,7 +190,7 @@ def write_model(
     print("Checkpoint loaded successfully.")
 
     print("Saving the model.")
-    model.save_pretrained(output_dir, safe_serialization=safe_serialization)
+    model.save_pretrained(output_dir)
     del state_dict, model
 
     # Safety check: reload the converted model
@@ -221,9 +220,6 @@ def main():
         help="Location to write the converted model and processor",
     )
     parser.add_argument(
-        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
-    )
-    parser.add_argument(
         "--push_to_hub",
         action=argparse.BooleanOptionalAction,
         help="Whether or not to push the converted model to the huggingface hub.",
@@ -238,7 +234,6 @@ def main():
     model = write_model(
         hf_repo_id=args.hf_repo_id,
         output_dir=args.output_dir,
-        safe_serialization=args.safe_serialization,
     )
 
     image_processor = write_image_processor(

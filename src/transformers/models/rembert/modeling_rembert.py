@@ -21,6 +21,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -488,6 +489,11 @@ class RemBertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "rembert"
     supports_gradient_checkpointing = True
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, RemBertEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+
 
 @auto_docstring(
     custom_intro="""
@@ -702,7 +708,7 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, is_first_iteration=False, **model_kwargs):
         input_shape = input_ids.shape
         effective_batch_size = input_shape[0]
 

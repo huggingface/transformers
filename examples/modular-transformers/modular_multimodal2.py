@@ -35,6 +35,7 @@ class Multimodal2VisionEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config):
         super().__init__()
         self.mlp = Multimodal2VisionMLP(config)
+        self.self_attn = Multimodal2VisionAttention(config)
 
 
 class Multimodal2VisionEncoder(CLIPEncoder):
@@ -43,7 +44,8 @@ class Multimodal2VisionEncoder(CLIPEncoder):
         self.layers = nn.ModuleList([Multimodal2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
 
-# Finally here the `Vision` part was correct in CLIP, but we still need to tell it that the encoder arg should use it as well
+# Finally here the `Vision` part was correct in CLIP, but we still need to tell it that the encoder and attn arg should
+# use it as well
 class Multimodal2VisionTransformer(CLIPVisionTransformer):
     def __init__(self, config):
         super().__init__(config)
@@ -51,6 +53,11 @@ class Multimodal2VisionTransformer(CLIPVisionTransformer):
 
 
 class Multimodal2VisionPreTrainedModel(CLIPPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": Multimodal2VisionEncoderLayer,
+        "attentions": Multimodal2VisionAttention,
+    }
+
     def _init_weights(self, module):
         if isinstance(module, Multimodal2VisionMLP):
             pass

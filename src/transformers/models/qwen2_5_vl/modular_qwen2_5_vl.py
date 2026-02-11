@@ -26,8 +26,20 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig
-from transformers.models.qwen2_vl.modeling_qwen2_vl import (
+from ... import initialization as init
+from ...activations import ACT2FN
+from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_utils import PreTrainedModel
+from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
+from ...video_utils import VideoInput
+from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig
+from ..qwen2_vl.modeling_qwen2_vl import (
     PatchEmbed,
     PatchMerger,
     Qwen2RMSNorm,
@@ -40,23 +52,7 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     VisionAttention,
     VisionRotaryEmbedding,
 )
-from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
-
-from ...activations import ACT2FN
-from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
-from ...modeling_flash_attention_utils import is_flash_attn_available
-from ...modeling_layers import GradientCheckpointingLayer
-from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
-from ...video_utils import VideoInput
-
-
-if is_flash_attn_available():
-    pass
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -173,7 +169,11 @@ class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
 
 
 class Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, Qwen2_5_VisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
@@ -206,6 +206,8 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             spatial_merge_size=config.spatial_merge_size,
         )
         self.gradient_checkpointing = False
+
+        self.post_init()
 
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
@@ -776,6 +778,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         image_grid_thw=None,
         video_grid_thw=None,
         second_per_grid_ts=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -793,6 +796,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             video_grid_thw=video_grid_thw,
             second_per_grid_ts=second_per_grid_ts,
             use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
@@ -802,7 +806,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             # When compiling, we can't check tensor values thus we check only input length
             # It is safe to assume that `length!=1` means we're in pre-fill because compiled
             # models currently cannot do assisted decoding
-            if cache_position[0] == 0 or self.model.rope_deltas is None:
+            if (cache_position[0] == 0 or not use_cache) or self.model.rope_deltas is None:
                 vision_positions, rope_deltas = self.model.get_rope_index(
                     model_inputs.get("input_ids", None),
                     image_grid_thw=image_grid_thw,
@@ -825,7 +829,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             text_positions = model_inputs["position_ids"][None, ...]
             model_inputs["position_ids"] = torch.cat([text_positions, vision_positions], dim=0)
 
-        if cache_position[0] != 0:
+        if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
 

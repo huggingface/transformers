@@ -10,8 +10,10 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -62,6 +64,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -127,6 +130,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class MyNewModel2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -260,12 +264,12 @@ class MyNewModel2PreTrainedModel(PreTrainedModel):
         "attentions": MyNewModel2Attention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         if "RMSNorm" in module.__class__.__name__:
-            module.weight.zero_()
+            init.zeros_(module.weight)
 
 
 class MyNewModel2ForSequenceClassification(GenericForSequenceClassification, MyNewModel2PreTrainedModel):

@@ -19,7 +19,7 @@ states before downsampling, which is different from the default Swin Transformer
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
@@ -331,18 +331,7 @@ class MaskFormerSwinSelfAttention(nn.Module):
             torch.zeros((2 * self.window_size[0] - 1) * (2 * self.window_size[1] - 1), num_heads)
         )
 
-        # get pair-wise relative position index for each token inside the window
-        coords_h = torch.arange(self.window_size[0])
-        coords_w = torch.arange(self.window_size[1])
-        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
-        coords_flatten = torch.flatten(coords, 1)
-        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
-        relative_coords = relative_coords.permute(1, 2, 0).contiguous()
-        relative_coords[:, :, 0] += self.window_size[0] - 1
-        relative_coords[:, :, 1] += self.window_size[1] - 1
-        relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
-        relative_position_index = relative_coords.sum(-1)
-        self.register_buffer("relative_position_index", relative_position_index)
+        self.register_buffer("relative_position_index", self.create_relative_position_index())
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
@@ -400,6 +389,20 @@ class MaskFormerSwinSelfAttention(nn.Module):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
+
+    def create_relative_position_index(self):
+        # get pair-wise relative position index for each token inside the window
+        coords_h = torch.arange(self.window_size[0])
+        coords_w = torch.arange(self.window_size[1])
+        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
+        coords_flatten = torch.flatten(coords, 1)
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()
+        relative_coords[:, :, 0] += self.window_size[0] - 1
+        relative_coords[:, :, 1] += self.window_size[1] - 1
+        relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
+        relative_position_index = relative_coords.sum(-1)
+        return relative_position_index
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->MaskFormerSwin
@@ -656,7 +659,7 @@ class MaskFormerSwinEncoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
-    ):
+    ) -> Union[tuple, MaskFormerSwinBaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_input_dimensions = ()
         all_self_attentions = () if output_attentions else None
@@ -711,6 +714,7 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.position_embeddings)
         elif isinstance(module, MaskFormerSwinSelfAttention):
             init.zeros_(module.relative_position_bias_table)
+            init.copy_(module.relative_position_index, module.create_relative_position_index())
 
 
 class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
@@ -739,7 +743,7 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         interpolate_pos_encoding=False,
         return_dict=None,
         **kwargs,
-    ):
+    ) -> Union[tuple, MaskFormerSwinModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

@@ -17,6 +17,7 @@ import json
 import os
 from typing import Any, Literal
 
+from ..conversion_mapping import get_model_conversion_mapping
 from ..core_model_loading import WeightRenaming, rename_source_key
 from ..utils import (
     CONFIG_NAME,
@@ -44,26 +45,6 @@ MIN_PEFT_VERSION = "0.18.0"
 
 
 logger = logging.get_logger(__name__)
-
-
-# DO NOT MODIFY, KEPT FOR BC ONLY
-VLMS = [
-    "aria",
-    "ayavision",
-    "emu3",
-    "fuyu",
-    "gotocr2",
-    "gemma3",
-    "internvl",
-    "llava",  # all llava prefixed models fall under this check
-    "mistral3",
-    "mllama",
-    "paligemma",
-    "qwen2vl",
-    "qwen2_5_vl",
-    "videollava",
-    "vipllava",
-]
 
 
 class PeftAdapterMixin:
@@ -103,6 +84,7 @@ class PeftAdapterMixin:
         low_cpu_mem_usage: bool = False,
         is_trainable: bool = False,
         hotswap: bool | Literal["auto"] = "auto",
+        local_files_only: bool = False,
         adapter_kwargs: dict[str, Any] | None = None,
     ) -> None:
         """
@@ -211,11 +193,10 @@ class PeftAdapterMixin:
             if any(conf.peft_type != PeftType.LORA for conf in self.peft_config.values()):
                 raise ValueError("Hotswapping is currently only supported for LoRA, please set `hotswap=False`.")
 
+        key_mapping = adapter_kwargs.pop("key_mapping", None) if adapter_kwargs is not None else None
+        weight_conversions = get_model_conversion_mapping(self, key_mapping=key_mapping)
         # peft only supports low_cpu_mem_usage starting from v0.13.0
         peft_load_kwargs = {}
-        key_mapping = adapter_kwargs.pop("key_mapping", None) if adapter_kwargs is not None else None
-        if key_mapping is None and any(allowed_name in self.__class__.__name__.lower() for allowed_name in VLMS):
-            key_mapping = self._checkpoint_conversion_mapping
         peft_load_kwargs["low_cpu_mem_usage"] = low_cpu_mem_usage
 
         adapter_name = adapter_name if adapter_name is not None else "default"
@@ -263,6 +244,7 @@ class PeftAdapterMixin:
             adapter_config_file = find_adapter_config_file(
                 peft_model_id,
                 token=token,
+                local_files_only=local_files_only,
                 **adapter_kwargs,
             )
 
@@ -275,12 +257,10 @@ class PeftAdapterMixin:
             peft_config = PeftConfig.from_pretrained(
                 peft_model_id,
                 token=token,
+                local_files_only=local_files_only,
                 **adapter_kwargs,
             )
             peft_config.inference_mode = not is_trainable
-
-        if peft_config.peft_type != PeftType.LORA:
-            raise ValueError("Hotswapping is currently only supported for LoRA, please set `hotswap=False`.")
 
         if not hotswap:
             # TODO: WE NEED TOO APPLY OUR DYNAMIC WEIGHT CONVERSION AT SOME POINT HERE!
@@ -291,12 +271,14 @@ class PeftAdapterMixin:
             self._hf_peft_config_loaded = True
 
         if peft_model_id is not None:
+            if "local_files_only" not in adapter_kwargs:
+                adapter_kwargs["local_files_only"] = local_files_only
             adapter_state_dict = load_peft_weights(peft_model_id, token=token, device=device, **adapter_kwargs)
 
         # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility
         renamings = []
-        if key_mapping:
-            renamings = [entry for entry in key_mapping if isinstance(entry, WeightRenaming)]
+        if weight_conversions:
+            renamings = [entry for entry in weight_conversions if isinstance(entry, WeightRenaming)]
         processed_adapter_state_dict = {}
         prefix = "base_model.model."
         state_dict = self.state_dict()

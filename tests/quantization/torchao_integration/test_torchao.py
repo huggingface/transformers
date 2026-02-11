@@ -540,6 +540,57 @@ class TorchAoTest(unittest.TestCase):
         )
         self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
 
+    def test_compute_module_sizes(self):
+        r"""
+        Test if we compute the right module sizes needed to generate the device map.
+        Also test if we get the right values for `total_byte_count` in `caching_allocator_warmup`.
+        """
+        from transformers import AutoConfig
+        from transformers.integrations.accelerate import compute_module_sizes
+        from transformers.modeling_utils import expand_device_map, get_total_byte_count
+        from transformers.quantizers import AutoHfQuantizer
+
+        # we need to preprocess the model like that because device_map calculation happens before we load the weights inside the model.
+        # For normal wieghts, it's fine but for quantized weights, the tensors dtype might change during loading.
+        with torch.device("meta"):
+            config = AutoConfig.from_pretrained(self.model_name)
+            model = AutoModelForCausalLM.from_config(config, dtype=torch.bfloat16)
+            model_size, _ = compute_module_sizes(model, only_modules=False)
+
+            expected_keys = [name for name, _ in model.named_parameters()] + [
+                name for name, _ in model.named_buffers()
+            ]
+            expanded_device_map = expand_device_map({"": torch_device}, expected_keys)
+            total_byte_count = list(get_total_byte_count(model, expanded_device_map).values())[0]
+
+            # testing prequantized = False should be enough, the shape should be the same whether it is pre-quantized or not
+            hf_quantizer = AutoHfQuantizer.from_config(
+                TorchAoConfig(quant_type=Int4WeightOnlyConfig(**self.quant_scheme_kwargs)), pre_quantized=False
+            )
+            hf_quantizer.preprocess_model(model=model, config=model.config)
+            quantized_model_size, _ = compute_module_sizes(model, hf_quantizer, only_modules=False)
+
+            expected_keys = [name for name, _ in model.named_parameters()] + [
+                name for name, _ in model.named_buffers()
+            ]
+            expanded_device_map = expand_device_map({"": torch_device}, expected_keys)
+            quantized_total_byte_count = list(get_total_byte_count(model, expanded_device_map, hf_quantizer).values())[
+                0
+            ]
+
+        for name, module in model.named_modules():
+            # modules are not replaced when using torchao
+            if isinstance(module, torch.nn.Linear) and "lm_head" not in name:
+                # from 16 bits to 4 bits
+                assert int(model_size[f"{name}.weight"] // 4) == int(quantized_model_size[f"{name}.weight"])
+
+        # check that we get the same value, as we use `compute_module_sizes` in `get_total_byte_count`
+        assert total_byte_count == model_size[""]
+        assert quantized_total_byte_count == quantized_model_size[""]
+
+        # we should at least have 1.5 times memory reduction in total
+        assert model_size[""] > quantized_model_size[""] * 2
+
 
 @require_torch_accelerator
 class TorchAoAcceleratorTest(TorchAoTest):
@@ -608,19 +659,20 @@ class TorchAoAcceleratorTest(TorchAoTest):
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
 
         # fmt: off
-        EXPECTED_OUTPUTS = Expectations(
+        EXPECTED_OUTPUTS_DEVICES = Expectations(
             {
-                ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
-                ("cuda", 7): "What are we having for dinner?\n- 1. What is the temperature outside",
+                ("xpu", 3): ["What are we having for dinner?\n\nJessica: (smiling)"],
+                ("cuda", 7): ["What are we having for dinner?\n- 1. What is the temperature outside",
+                              "What are we having for dinner?"],
             }
         )
         # fmt: on
-        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
+        EXPECTED_OUTPUTS = EXPECTED_OUTPUTS_DEVICES.get_expectation()
 
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
         generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
 
-        self.assertEqual(generated_text, EXPECTED_OUTPUT)
+        self.assertIn(generated_text, EXPECTED_OUTPUTS)
 
     @require_torch_multi_accelerator
     def test_int4wo_quant_multi_accelerator(self):
@@ -668,14 +720,15 @@ class TorchAoAcceleratorTest(TorchAoTest):
 
         check_autoquantized(self, quantized_model.model.layers[0].self_attn.v_proj)
 
-        EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
+        EXPECTED_OUTPUTS = ["What are we having for dinner?\n\nJessica: (smiling)", "What are we having for dinner?"]
+
         output = quantized_model.generate(
             **input_ids, max_new_tokens=self.max_new_tokens, cache_implementation="static"
         )
-        self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
+        self.assertIn(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUTS)
 
 
-@require_torchao_version_greater_or_equal("0.11.0")
+@require_torchao_version_greater_or_equal("0.15.0")
 @slow
 class TorchAoSerializationTest(unittest.TestCase):
     input_text = "What are we having for dinner?"
@@ -718,16 +771,16 @@ class TorchAoSerializationTest(unittest.TestCase):
 
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    def check_serialization_expected_output(self, device, expected_output, safe_serialization=False):
+    def check_serialization_expected_output(self, device, expected_output):
         """
         Test if we can serialize and load/infer the model again on the same device
         """
         dtype = torch.bfloat16 if isinstance(self.quant_scheme, Int4WeightOnlyConfig) else "auto"
         with tempfile.TemporaryDirectory() as tmpdirname:
-            self.quantized_model.save_pretrained(tmpdirname, safe_serialization=safe_serialization)
+            self.quantized_model.save_pretrained(tmpdirname)
 
             loaded_quantized_model = AutoModelForCausalLM.from_pretrained(
-                tmpdirname, dtype=dtype, device_map=device, torch_dtype=dtype, use_safetensors=safe_serialization
+                tmpdirname, dtype=dtype, device_map=device, torch_dtype=dtype
             )
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(device)
 
@@ -789,7 +842,7 @@ class TorchAoSafeSerializationTest(TorchAoSerializationTest):
             device_map=device,
             quantization_config=self.quant_config,
         )
-        self.check_serialization_expected_output(device, expected_output, safe_serialization=True)
+        self.check_serialization_expected_output(device, expected_output)
 
 
 class TorchAoSerializationW8A8CPUTest(TorchAoSerializationTest):

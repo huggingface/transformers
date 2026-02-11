@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for RoBERTa."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
@@ -59,6 +59,10 @@ class RobertaTokenizer(TokenizersBackend):
     this superclass for more information regarding those methods.
 
     Args:
+        vocab (`str`, `dict` or `list`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
+        merges (`str` or `list`, *optional*):
+            Custom merges list. If not provided, merges are loaded from merges_file.
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
@@ -102,18 +106,16 @@ class RobertaTokenizer(TokenizersBackend):
             other word. (RoBERTa tokenizer detect beginning of words by the preceding space).
         trim_offsets (`bool`, *optional*, defaults to `True`):
             Whether the post processing step should trim offsets to avoid including whitespaces.
-        vocab (`dict`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`list`, *optional*):
-            Custom merges list. If not provided, merges are loaded from merges_file.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         errors: str = "replace",
         bos_token: str = "<s>",
         eos_token: str = "</s>",
@@ -124,30 +126,22 @@ class RobertaTokenizer(TokenizersBackend):
         mask_token: str = "<mask>",
         add_prefix_space: bool = False,
         trim_offsets: bool = True,
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
         self.trim_offsets = trim_offsets
 
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
+        if vocab is None:
+            vocab = {
                 str(pad_token): 0,
                 str(unk_token): 1,
                 str(cls_token): 2,
                 str(sep_token): 3,
                 str(mask_token): 4,
             }
+        self._vocab = vocab
 
-        if merges is not None:
-            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
-        else:
-            self._merges = []
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(
@@ -162,17 +156,8 @@ class RobertaTokenizer(TokenizersBackend):
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         self._tokenizer.decoder = decoders.ByteLevel()
-        self._tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(str(sep_token), self._vocab.get(str(sep_token), 3)),
-            cls=(str(cls_token), self._vocab.get(str(cls_token), 2)),
-            add_prefix_space=add_prefix_space,
-            trim_offsets=trim_offsets,
-        )
-
-        tokenizer_object = self._tokenizer
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             errors=errors,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -184,6 +169,12 @@ class RobertaTokenizer(TokenizersBackend):
             add_prefix_space=add_prefix_space,
             trim_offsets=trim_offsets,
             **kwargs,
+        )
+        self._tokenizer.post_processor = processors.RobertaProcessing(
+            sep=(str(sep_token), self.sep_token_id),
+            cls=(str(cls_token), self.cls_token_id),
+            add_prefix_space=add_prefix_space,
+            trim_offsets=trim_offsets,
         )
 
 

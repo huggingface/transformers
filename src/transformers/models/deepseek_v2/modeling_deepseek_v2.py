@@ -30,18 +30,19 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_grouped_mm_available
+from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_deepseek_v2 import DeepseekV2Config
 
 
+@use_experts_implementation
 class DeepseekV2Experts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
@@ -184,7 +185,7 @@ class DeepseekV2RotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -223,7 +224,7 @@ class DeepseekV2RotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
             freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
             freqs_cis = freqs_cis * self.attention_scaling
@@ -342,7 +343,6 @@ class DeepseekV2Attention(nn.Module):
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        position_ids: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         batch_size, seq_length = hidden_states.shape[:-1]
@@ -454,7 +454,9 @@ class DeepseekV2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = (
+        is_grouped_mm_available()
+    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": DeepseekV2DecoderLayer,

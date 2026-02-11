@@ -229,7 +229,7 @@ class FIFOScheduler(Scheduler):
             # Update the token budget
             token_budget -= request_len
             # If using prefix sharing, we make note of the blocks that will be computed in the forward pass
-            if self.cache.use_prefix_sharing:
+            if self.cache.allow_block_sharing:
                 tokens_in_current_block = state.current_len() % self.cache.block_size
                 tokens_after_forward = tokens_in_current_block + request_len
                 complete_blocks = tokens_after_forward // self.cache.block_size
@@ -295,7 +295,7 @@ class PrefillFirstScheduler(Scheduler):
             # Update the token budget
             token_budget -= request_len
             # If using prefix sharing, we make note of the blocks that will be computed in the forward pass
-            if self.cache.use_prefix_sharing:
+            if self.cache.allow_block_sharing:
                 tokens_in_current_block = state.current_len() % self.cache.block_size
                 tokens_after_forward = tokens_in_current_block + request_len
                 complete_blocks = tokens_after_forward // self.cache.block_size

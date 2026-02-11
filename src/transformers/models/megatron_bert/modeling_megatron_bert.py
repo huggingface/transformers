@@ -528,6 +528,8 @@ class MegatronBertPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, MegatronBertLMPredictionHead):
             init.zeros_(module.bias)
+        elif isinstance(module, MegatronBertEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @dataclass

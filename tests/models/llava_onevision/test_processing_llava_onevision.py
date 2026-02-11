@@ -85,7 +85,8 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ("Hello", 0.0),
             ("world", 0.0),
         ]
-        tokenizer = tokenizer_class(vocab=vocab_tokens, add_bos_token=True, add_eos_token=False)
+        vocab = {token: index for index, (token, _) in enumerate(vocab_tokens)}
+        tokenizer = tokenizer_class(vocab=vocab, add_bos_token=True, add_eos_token=False)
         tokenizer.add_special_tokens({"additional_special_tokens": ["<image>", "<video>"]})
         if tokenizer.pad_token is None:
             tokenizer.pad_token = "[PAD]"

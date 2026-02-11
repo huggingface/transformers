@@ -170,7 +170,6 @@ print(output_text)
 
 [[autodoc]] Glm4vConfig
 
-
 ## Glm4vVisionConfig
 
 [[autodoc]] Glm4vVisionConfig

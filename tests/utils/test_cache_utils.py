@@ -59,11 +59,13 @@ if is_torch_available():
     from transformers.integrations.executorch import export_with_dynamic_cache
 
 
+# FIXME: offloaded cache is skipped becase it needs `offload_only_non_sliding=False`
+# but we can't configure cache through `generate()`
 TEST_CACHE_IMPLEMENTATIONS = [
     cache_name
     for cache_name in ALL_CACHE_IMPLEMENTATIONS
     # TODO (joao): offloaded_hybrid == offloaded_hybrid_chunked, deprecate one of them
-    if cache_name != "offloaded_hybrid"
+    if cache_name not in ["offloaded_hybrid", "offloaded_static", "offloaded_hybrid_chunked"]
 ]
 
 
@@ -467,10 +469,13 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         # Check that the caches are the same
         for layer_idx in range(len(no_parallelism_cache)):
-            for kv_idx in range(2):  # 0 = key, 1 = value
-                torch.testing.assert_close(
-                    actual=parallelism_cache[layer_idx][kv_idx], expected=no_parallelism_cache[layer_idx][kv_idx]
-                )
+            torch.testing.assert_close(
+                actual=parallelism_cache.layers[layer_idx].keys, expected=no_parallelism_cache.layers[layer_idx].keys
+            )
+            torch.testing.assert_close(
+                actual=parallelism_cache.layers[layer_idx].values,
+                expected=no_parallelism_cache.layers[layer_idx].values,
+            )
 
     @require_torch_gpu
     def test_static_cache_no_cuda_graph_skips(self):

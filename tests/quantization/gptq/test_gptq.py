@@ -21,17 +21,23 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GPTQCo
 from transformers.testing_utils import (
     is_torch_available,
     require_accelerate,
-    require_gptq,
+    require_gptqmodel,
     require_optimum,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
 )
-from transformers.utils import is_auto_gptq_available, is_gptqmodel_available, is_ipex_available
+from transformers.utils import is_gptqmodel_available, is_ipex_available
 
 
 if is_torch_available():
     import torch
+
+
+if is_gptqmodel_available():
+    from gptqmodel import BACKEND
+    from gptqmodel.quantization import METHOD
+    from gptqmodel.utils.importer import hf_select_quant_linear_v2
 
 
 class GPTQConfigTest(unittest.TestCase):
@@ -64,6 +70,7 @@ class GPTQConfigTest(unittest.TestCase):
         self.assertEqual(dict["bits"], quantization_config.bits)
 
     @require_optimum
+    @require_gptqmodel
     def test_optimum_config(self):
         from optimum.gptq import GPTQQuantizer
 
@@ -76,14 +83,14 @@ class GPTQConfigTest(unittest.TestCase):
 
 @slow
 @require_optimum
-@require_gptq
+@require_gptqmodel
 class GPTQTest(unittest.TestCase):
     model_name = "bigscience/bloom-560m"
 
     input_text = "Hello my name is"
 
     EXPECTED_OUTPUTS = set()
-    # flaky test: gptqmodel and auto-gptq are not output equivalent nor is string compare deterministic even between transformer/torch versions
+    # flaky test: gptqmodel kernels are not always bitwise deterministic even between transformer/torch versions
     EXPECTED_OUTPUTS.add("Hello my name is John and I am a professional photographer. I")
     EXPECTED_OUTPUTS.add("Hello my name is John, I am a professional photographer and I")
     EXPECTED_OUTPUTS.add("Hello my name is John, I am a student in the University of")
@@ -94,6 +101,10 @@ class GPTQTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Hello my name is Nate and I am a member of the N")
     EXPECTED_OUTPUTS.add("Hello my name is Nellie and I am a student at the")
     EXPECTED_OUTPUTS.add("Hello my name is Nate and I am a new member of the")
+    EXPECTED_OUTPUTS.add("Hello my name is Nils, I am a student of the University")
+    EXPECTED_OUTPUTS.add("Hello my name is John and I am a very friendly and caring")
+    EXPECTED_OUTPUTS.add("Hello my name is Nils, I am a student in the field")
+    EXPECTED_OUTPUTS.add("Hello my name is Michael, I am a professional photographer and I")
 
     # this seems a little small considering that we are doing 4bit quant but we have a small model and ww don't quantize the embeddings
     EXPECTED_RELATIVE_DIFFERENCE = 1.664253062
@@ -102,13 +113,12 @@ class GPTQTest(unittest.TestCase):
     sym = True
     group_size = 128
     desc_act = False
-    use_exllama = False
-
+    act_group_aware = True
     dataset = [
-        "auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."
+        "gptqmodel is an easy-to-use model quantization library with user-friendly APIs, based on the GPTQ algorithm."
     ]
 
-    device_map = "cpu" if is_gptqmodel_available() else None
+    device_map = "cpu"
 
     # called only once for all test in this class
     @classmethod
@@ -130,8 +140,9 @@ class GPTQTest(unittest.TestCase):
             tokenizer=cls.tokenizer,
             group_size=cls.group_size,
             desc_act=cls.desc_act,
+            act_group_aware=cls.act_group_aware,
             sym=cls.sym,
-            use_exllama=cls.use_exllama,
+            backend=BACKEND.AUTO,
         )
 
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -164,50 +175,31 @@ class GPTQTest(unittest.TestCase):
             # Tries with a `dtype``
             self.quantized_model.to(torch.float16)
 
-    def test_original_dtype(self):
-        r"""
-        A simple test to check if the model successfully stores the original dtype
-        """
-        self.assertTrue(hasattr(self.quantized_model.config, "_pre_quantization_dtype"))
-        self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
-        self.assertTrue(self.quantized_model.config._pre_quantization_dtype == torch.float16)
-
     def test_quantized_layers_class(self):
         """
         Simple test to check if the model conversion has been done correctly by checking on
         the class type of the linear layers of the converted models
         """
-        if is_gptqmodel_available():
-            from gptqmodel.utils.importer import hf_select_quant_linear
+        if hasattr(self.config, "quantization_config"):
+            checkpoint_format = self.config.quantization_config.get("checkpoint_format")
+            meta = self.config.quantization_config.get("meta")
+        else:
+            checkpoint_format = "gptq"
+            meta = None
 
-            if hasattr(self.config, "quantization_config"):
-                checkpoint_format = self.config.quantization_config.get("checkpoint_format")
-                meta = self.config.quantization_config.get("meta")
-            else:
-                checkpoint_format = "gptq"
-                meta = None
-            QuantLinear = hf_select_quant_linear(
-                bits=self.bits,
-                group_size=self.group_size,
-                desc_act=self.desc_act,
-                sym=self.sym,
-                device_map=self.device_map,
-                checkpoint_format=checkpoint_format,
-                meta=meta,
-                backend=self.quantization_config.backend,
-            )
-        elif is_auto_gptq_available():
-            from auto_gptq.utils.import_utils import dynamically_import_QuantLinear as hf_select_quant_linear
-
-            QuantLinear = hf_select_quant_linear(
-                use_triton=False,
-                desc_act=self.desc_act,
-                group_size=self.group_size,
-                bits=self.bits,
-                disable_exllama=not self.use_exllama,
-                disable_exllamav2=True,
-            )
-        self.assertTrue(self.quantized_model.transformer.h[0].mlp.dense_4h_to_h.__class__ == QuantLinear)
+        QuantLinear = hf_select_quant_linear_v2(
+            bits=self.bits,
+            group_size=self.group_size,
+            desc_act=self.desc_act,
+            sym=self.sym,
+            device_map=self.device_map,
+            format=checkpoint_format,
+            quant_method=METHOD.GPTQ,
+            meta=meta,
+            backend=self.quantization_config.backend,
+            pack=True,
+        )
+        self.assertEqual(self.quantized_model.transformer.h[0].mlp.dense_4h_to_h.__class__, QuantLinear)
 
     def check_inference_correctness(self, model):
         r"""
@@ -225,7 +217,7 @@ class GPTQTest(unittest.TestCase):
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def check_quantized_layers_type(self, model, value):
-        self.assertTrue(model.transformer.h[0].mlp.dense_4h_to_h.QUANT_TYPE == value)
+        self.assertEqual(model.transformer.h[0].mlp.dense_4h_to_h.QUANT_TYPE, value)
 
     def test_generate_quality(self):
         """
@@ -243,29 +235,13 @@ class GPTQTest(unittest.TestCase):
         Test the serialization of the model and the loading of the quantized weights works
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
+            self.tokenizer.save_pretrained(tmpdirname)
             self.quantized_model.save_pretrained(tmpdirname)
-            if is_auto_gptq_available() and not is_gptqmodel_available():
-                quant_type = "cuda-old" if not self.use_exllama else "exllama"
-                if not self.use_exllama:
-                    quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
-                        tmpdirname, quantization_config=GPTQConfig(use_exllama=False, bits=4)
-                    )
-                    if self.device_map != "cpu":
-                        quantized_model_from_saved = quantized_model_from_saved.to(0)
-                else:
-                    quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
-                        tmpdirname, device_map=self.device_map
-                    )
+            if self.device_map == "cpu":
+                quant_type = "ipex" if is_ipex_available() else "torch_fused"
             else:
-                if self.device_map == "cpu":
-                    quant_type = "ipex" if is_ipex_available() else "torch"
-                else:
-                    # We expect tritonv2 to be used here, because exllama backend doesn't support packing https://github.com/ModelCloud/GPTQModel/issues/1354
-                    # TODO: Remove this once GPTQModel exllama kernels supports packing
-                    quant_type = "tritonv2"
-                quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
-                    tmpdirname, device_map=self.device_map
-                )
+                quant_type = "exllamav2"
+            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
 
             self.check_quantized_layers_type(quantized_model_from_saved, quant_type)
             self.check_inference_correctness(quantized_model_from_saved)
@@ -292,15 +268,15 @@ class GPTQTestCUDA(GPTQTest):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
-            if is_auto_gptq_available() and not is_gptqmodel_available() and not self.use_exllama:
-                self.check_quantized_layers_type(self.quantized_model, "cuda-old")
-                # we need to put it directly to the gpu. Otherwise, we won't be able to initialize the exllama kernel
-                quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
-                    tmpdirname, quantization_config=GPTQConfig(use_exllama=True, bits=4), device_map=self.device_map
-                )
-                self.assertEqual(quantized_model_from_saved.config.quantization_config.bits, self.bits)
-                self.check_quantized_layers_type(quantized_model_from_saved, "exllama")
-                self.check_inference_correctness(quantized_model_from_saved)
+            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
+                tmpdirname,
+                quantization_config=GPTQConfig(bits=self.bits),
+                device_map=self.device_map,
+            )
+            self.assertEqual(quantized_model_from_saved.config.quantization_config.bits, self.bits)
+            quant_type = "exllamav2" if self.device_map != "cpu" else ("ipex" if is_ipex_available() else "torch")
+            self.check_quantized_layers_type(quantized_model_from_saved, quant_type)
+            self.check_inference_correctness(quantized_model_from_saved)
 
 
 @require_accelerate
@@ -309,27 +285,24 @@ class GPTQTestDeviceMap(GPTQTestCUDA):
     device_map = "auto"
 
 
-@require_accelerate
-@require_torch_multi_gpu
-class GPTQTestDeviceMapExllama(GPTQTestCUDA):
-    device_map = "auto"
-    use_exllama = True
-
-
 @slow
 @require_optimum
-@require_gptq
+@require_gptqmodel
 @require_torch_gpu
 @require_accelerate
-class GPTQTestActOrderExllama(unittest.TestCase):
+class GPTQTestActOrderExllamaV2(unittest.TestCase):
     """
-    Test GPTQ model with exllama kernel and desc_act=True (also known as act-order).
+    Test GPTQ model with exllamav2 kernel and desc_act=True (also known as act-order).
     More information on those arguments here:
     https://huggingface.co/docs/transformers/main_classes/quantization#transformers.GPTQConfig
     """
 
+    # `act_group_aware` == `True` requires `desc_act` == `False` when both are explicitly set
+    desc_act = True
+    act_group_aware = False
+
     EXPECTED_OUTPUTS = set()
-    # flaky test: gptqmodel and auto-gptq are not output equivalent nor is string compare deterministic even between transformer/torch versions
+    # flaky test: gptqmodel kernels are not always bitwise deterministic even between transformer/torch versions
     EXPECTED_OUTPUTS.add("Hello, how are you ? I'm doing good, thanks for asking.")
     # 4bit + act_order + 128g
     model_name = "hf-internal-testing/TinyLlama-1.1B-Chat-v0.3-GPTQ"
@@ -340,7 +313,13 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         """
         Setup quantized model
         """
-        cls.quantization_config = GPTQConfig(bits=4, max_input_length=4028)
+        cls.quantization_config = GPTQConfig(
+            bits=4,
+            max_input_length=4028,
+            desc_act=cls.desc_act,
+            act_group_aware=cls.act_group_aware,
+            backend=BACKEND.EXLLAMA_V2,
+        )
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
             dtype=torch.float16,
@@ -366,7 +345,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_quantized_layers_type(self):
-        self.assertTrue(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE == "exllama")
+        self.assertEqual(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE, "exllamav2")
 
     def test_generate_quality(self):
         """
@@ -374,27 +353,10 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         """
         self.check_inference_correctness(self.quantized_model)
 
-    def test_max_input_length(self):
-        """
-        Test if the max_input_length works. It modifies the maximum input length that of the model that runs with exllama backend.
-        """
-
-        prompt = "I am in Paris and" * 1000
-        inp = self.tokenizer(prompt, return_tensors="pt").to(0)
-        self.assertTrue(inp["input_ids"].shape[1] > 4028)
-        with self.assertRaises(RuntimeError) as cm:
-            self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
-            self.assertTrue("temp_state buffer is too small" in str(cm.exception))
-
-        prompt = "I am in Paris and"
-        inp = self.tokenizer(prompt, return_tensors="pt").to(0)
-        self.assertTrue(inp["input_ids"].shape[1] < 4028)
-        self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
-
 
 @slow
 @require_optimum
-@require_gptq
+@require_gptqmodel
 @require_torch_gpu
 @require_accelerate
 class GPTQTestExllamaV2(unittest.TestCase):
@@ -405,7 +367,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
     """
 
     EXPECTED_OUTPUTS = set()
-    # flaky test: gptqmodel and auto-gptq are not output equivalent nor is string compare deterministic even between transformer/torch versions
+    # flaky test: gptqmodel kernels are not always bitwise deterministic even between transformer/torch versions
     EXPECTED_OUTPUTS.add("Hello, how are you ? I'm doing good, thanks for asking.")
     # 4bit + act_order + 128g
     model_name = "hf-internal-testing/TinyLlama-1.1B-Chat-v0.3-GPTQ"
@@ -416,7 +378,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
         """
         Setup quantized model
         """
-        cls.quantization_config = GPTQConfig(bits=4, exllama_config={"version": 2})
+        cls.quantization_config = GPTQConfig(bits=4, backend=BACKEND.EXLLAMA_V2)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
             dtype=torch.float16,
@@ -426,18 +388,10 @@ class GPTQTestExllamaV2(unittest.TestCase):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name, use_fast=True)
 
     def test_quantized_layers_type(self):
-        if is_auto_gptq_available() and not is_gptqmodel_available():
-            self.assertEqual(
-                self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE,
-                "exllamav2",
-            )
-        else:
-            # We expect tritonv2 to be used here, because exllama backend doesn't support packing https://github.com/ModelCloud/GPTQModel/issues/1354
-            # TODO: Remove this once GPTQModel exllama kernels supports packing
-            self.assertEqual(
-                self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE,
-                "tritonv2",
-            )
+        self.assertEqual(
+            self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE,
+            "exllamav2",
+        )
 
     def check_inference_correctness(self, model):
         """

@@ -91,6 +91,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
 
     def __init__(self, dim: int):
         super().__init__()
+        self.dim = dim
         # Generate and save the inverse frequency buffer (non trainable)
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
         self.register_buffer("inv_freq", inv_freq)
@@ -203,12 +204,19 @@ class EvollaSaProtPreTrainedModel(PreTrainedModel):
         ],
     }
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, EvollaSaProtRotaryEmbedding):
+            inv_freq = 1.0 / (10000 ** (torch.arange(0, module.dim, 2, dtype=torch.int64).float() / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
+
 
 class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
     def __init__(self, config: SaProtConfig):
         super().__init__(config)
         self.embeddings = EvollaSaProtEmbeddings(config)
         self.encoder = EvollaSaProtEncoder(config)
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings

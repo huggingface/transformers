@@ -208,11 +208,10 @@ class InternVLVisionPatchEmbeddings(nn.Module):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
 
-        embeddings = self.projection(pixel_values)
-        patch_height, patch_width = embeddings.shape[2], embeddings.shape[3]
+        embeddings = self.projection(pixel_values.to(self.projection.weight.dtype))
         embeddings = embeddings.flatten(2).transpose(1, 2)
 
-        return embeddings, (patch_height, patch_width)
+        return embeddings
 
 
 # Based on timm implementation, which can be found here:
@@ -291,7 +290,7 @@ class InternVLVisionEmbeddings(nn.Module):
         bool_masked_pos: Optional[torch.BoolTensor] = None,
     ) -> torch.Tensor:
         _, _, height, width = pixel_values.shape
-        embeddings, (patch_height, patch_width) = self.patch_embeddings(pixel_values)
+        embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
 
         if bool_masked_pos is not None:
@@ -308,7 +307,7 @@ class InternVLVisionEmbeddings(nn.Module):
 
         embeddings = self.dropout(embeddings)
 
-        return embeddings, (patch_height, patch_width)
+        return embeddings
 
 
 class InternVLVisionMLP(nn.Module):
@@ -455,7 +454,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
         """
-        embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
+        embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
 
         encoder_outputs = self.encoder(embedding_output)
         sequence_output = encoder_outputs[0]
@@ -898,6 +897,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -909,12 +909,15 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            # Pixel values are used only in the first iteration if available
+            # In subsquent iterations, they are already merged with text and cached
+            # NOTE: first iteration doesn't have to be prefill, it can be the first
+            # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs

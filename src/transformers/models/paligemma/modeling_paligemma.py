@@ -149,7 +149,8 @@ def create_causal_mask_mapping(
     position_ids: Optional[torch.Tensor],
     token_type_ids: Optional[torch.Tensor] = None,
     pixel_values: Optional[torch.FloatTensor] = None,
-    is_training: bool = False,
+    is_training: Optional[bool] = False,
+    is_first_iteration: Optional[bool] = None,
     **kwargs,
 ) -> dict:
     """
@@ -169,31 +170,33 @@ def create_causal_mask_mapping(
         "past_key_values": past_key_values,
         "position_ids": position_ids,
     }
-    # NOTE: this `is_prompt` logic is not flawless, it fails when we're using a cache eagerly initialized
-    # (e.g. compiled prefill) AND `pixel_values` are not provided (i.e. the image data is provided through other
-    # means). Determining prefill in that case requires checking data values, which is not compile-compatible.
-    maybe_is_prompt = past_key_values is None or not past_key_values.is_initialized or pixel_values is not None
+    # Infer if prefill or decoding stage, if the flag isn't passed. This happens only when the mask is constructed
+    # from `forward` call. If users run a `forward` call, we have no option to infer `is_first_iteration` because users may be
+    # running generation with custom loop. Thus we need to infer it in a `non-perfect` way
+    # NOTE: Determining prefill in that case requires checking data values, which is not compile-compatible.
+    is_first_iteration = (
+        is_first_iteration
+        if is_first_iteration
+        else (past_key_values is None or not past_key_values.is_initialized or pixel_values is not None)
+    )
 
-    if maybe_is_prompt:
+    if is_first_iteration or not kwargs.get("use_cache", True):
         if token_type_ids is not None:
             # The logic bellow was originally written for Gemma3, where `token_type_ids` is reversed. Let's reverse
             # it to then use exactly the same logic.
             token_type_ids = 1 - token_type_ids
         else:
             logger.warning_once(
-                "The input may be the prompt, but `token_type_ids` is not provided. We recommend "
+                "It is a prefill stage but The `token_type_ids` is not provided. We recommend "
                 "passing `token_type_ids` to the model to prevent bad attention masking."
             )
-            # BC: when NOT training, use bidirectional mask if sequence length > 1. Otherwise, use the default causal
-            # mask. This is incorrect in some advanced use cases, hence the warning above.
             # NOTE: this branch can't be reached when training because `token_type_ids` is required as a model input.
-            if input_embeds.shape[1] > 1:
-                token_type_ids = torch.ones_like(input_embeds)[:, :, 0]
+            token_type_ids = torch.ones_like(input_embeds)[:, :, 0]
 
     # Logic originally copied from Gemma3. It holds up for Paligemma as well because Paligemma assumes up to one image
     # per prompt AND we reverse `token_type_ids` above. Gemma3 uses a bidirectional mask for images, tagged through
     # `token_type_ids` 1s.
-    if token_type_ids is not None and maybe_is_prompt:
+    if token_type_ids is not None and is_first_iteration:
         # We need to pass an additional mask function to account for token type ids, and it needs to be an `or` (to
         # undo the causal masking)
 
@@ -550,6 +553,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         use_cache=True,
         logits_to_keep=None,
         labels=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- custom `position_ids` and `pixel_values` handling
@@ -563,6 +567,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             use_cache=use_cache,
             logits_to_keep=logits_to_keep,
             token_type_ids=token_type_ids,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
@@ -570,9 +575,11 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         if model_inputs.get("position_ids") is not None:
             model_inputs["position_ids"] += 1
 
-        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-        # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
-        if cache_position[0] == 0:
+        # Pixel values are used only in the first iteration if available
+        # In subsquent iterations, they are already merged with text and cached
+        # NOTE: first iteration doesn't have to be prefill, it can be the first
+        # iteration with a question and cached system prompt (continue generate from cache). NOTE: use_cache=False needs pixel_values always
+        if is_first_iteration or not use_cache:
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs
@@ -586,6 +593,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         past_key_values: Optional[Cache],
         position_ids: Optional[torch.Tensor],
         token_type_ids: Optional[torch.Tensor] = None,
+        is_first_iteration: Optional[bool] = False,
         **kwargs,
     ) -> dict:
         # Uses the overwritten `create_masks_for_generate` with `token_type_ids` masking
@@ -597,7 +605,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             past_key_values,
             position_ids,
             token_type_ids,
-            pixel_values=kwargs.get("pixel_values"),
+            is_first_iteration=is_first_iteration,
             **{k: v for k, v in kwargs.items() if k != "pixel_values"},
         )
 

@@ -26,6 +26,7 @@ from typing import Any, Optional, Union
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -629,6 +630,18 @@ class Florence2PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = False
     config_class = Florence2Config
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Florence2VisionPositionalEmbeddingCosine1D):
+            pos_idx_to_embed = torch.empty((module.max_seq_len, module.embed_dim))
+            sine, cosine = module.get_sinusoid_embeddings(
+                max_positions=module.max_seq_len,
+                embed_dim=module.embed_dim,
+            )
+            pos_idx_to_embed[:, 0::2] = sine
+            pos_idx_to_embed[:, 1::2] = cosine
+            init.copy_(module.pos_idx_to_embed, pos_idx_to_embed)
+
 
 @auto_docstring(
     custom_intro="""
@@ -937,6 +950,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -948,12 +962,15 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            # Pixel values are used only in the first iteration if available
+            # In subsquent iterations, they are already merged with text and cached
+            # NOTE: first iteration doesn't have to be prefill, it can be the first
+            # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs

@@ -335,6 +335,8 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
         elif isinstance(module, (InstructBlipForConditionalGeneration, InstructBlipModel)):
             init.zeros_(module.query_tokens)
+        elif isinstance(module, InstructBlipQFormerEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipEncoder with Blip->InstructBlip

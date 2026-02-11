@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     torch_float,
 )
+from ...utils.generic import maybe_autocast
 from .configuration_imagegpt import ImageGPTConfig
 
 
@@ -60,7 +61,7 @@ class ImageGPTLayerNorm(nn.Module):
 class ImageGPTAttention(nn.Module):
     def __init__(self, config, is_cross_attention: Optional[bool] = False, layer_idx: Optional[int] = None):
         super().__init__()
-
+        self.config = config
         max_positions = config.max_position_embeddings
         self.register_buffer(
             "bias",
@@ -69,7 +70,6 @@ class ImageGPTAttention(nn.Module):
             ),
             persistent=False,
         )
-        self.register_buffer("masked_bias", torch.tensor(-1e4), persistent=False)
 
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -150,7 +150,7 @@ class ImageGPTAttention(nn.Module):
             scale_factor /= float(self.layer_idx + 1)
 
         # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
-        with torch.autocast(query.device.type, enabled=False):
+        with maybe_autocast(query.device.type, enabled=False):
             q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, k_seq_len)
             attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
             attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
@@ -383,6 +383,14 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
                 if "c_proj" in name and "weight" in name:
                     # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
                     init.normal_(p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.n_layer))
+        elif isinstance(module, ImageGPTAttention):
+            max_positions = module.config.max_position_embeddings
+            init.copy_(
+                module.bias,
+                torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
+                    1, 1, max_positions, max_positions
+                ),
+            )
 
 
 @auto_docstring

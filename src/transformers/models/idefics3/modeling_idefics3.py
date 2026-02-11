@@ -458,6 +458,8 @@ class Idefics3VisionTransformer(Idefics3PreTrainedModel):
         self.patch_size = config.patch_size
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
+        self.post_init()
+
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2VisionTransformer.get_input_embeddings
     def get_input_embeddings(self):
         return self.embeddings
@@ -887,6 +889,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         pixel_attention_mask=None,
         image_hidden_states=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- there are mutually exclusive inputs (if the logic to make `image_hidden_states` take
@@ -902,10 +905,11 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
             pixel_attention_mask=pixel_attention_mask,
             image_hidden_states=image_hidden_states,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if image_hidden_states is not None or cache_position[0] != 0:
+        if image_hidden_states is not None or not is_first_iteration:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_attention_mask"] = None
 

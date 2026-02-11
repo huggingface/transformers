@@ -37,7 +37,7 @@ from ...modeling_rope_utils import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
 from .configuration_mllama import MllamaConfig, MllamaTextConfig, MllamaVisionConfig
 
 
@@ -741,7 +741,7 @@ class MllamaRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -781,7 +781,7 @@ class MllamaRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -847,6 +847,15 @@ class MllamaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, MllamaPrecomputedAspectRatioEmbedding):
             if module.is_gated:
                 init.zeros_(module.gate)
+        elif isinstance(module, MllamaRotaryEmbedding):
+            rope_fn = (
+                ROPE_INIT_FUNCTIONS[module.rope_type]
+                if module.rope_type != "default"
+                else module.compute_default_rope_parameters
+            )
+            buffer_value, _ = rope_fn(module.config)
+            init.copy_(module.inv_freq, buffer_value)
+            init.copy_(module.original_inv_freq, buffer_value)
 
     # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._update_causal_mask
     def _update_causal_mask(
@@ -1721,6 +1730,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         use_cache=False,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -1738,12 +1748,13 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             cross_attention_mask=cross_attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
         # If we're in pre-fill or cacheless decoding step, then we need pixel_values and aspect ratios
         # to compute image hidden states, otherwise they are cached within each cross attn layer
-        if cache_position[0] != 0:
+        if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
             model_inputs["aspect_ratio_ids"] = None
             model_inputs["aspect_ratio_mask"] = None

@@ -353,6 +353,31 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
 
         super().__init__(**kwargs)
 
+    @property
+    def image_size(self):
+        """Image size for the tracker video model."""
+        return self.vision_config.image_size
+
+    @image_size.setter
+    def image_size(self, value):
+        """Set the image size and propagate to sub-configs. Calculates feature sizes based on patch_size."""
+        self.prompt_encoder_config.image_size = value
+        self.vision_config.image_size = value
+
+        patch_size = self.vision_config.backbone_config.patch_size
+        self.vision_config.backbone_feature_sizes = [
+            [4 * value // patch_size, 4 * value // patch_size],
+            [2 * value // patch_size, 2 * value // patch_size],
+            [value // patch_size, value // patch_size],
+        ]
+        self.memory_attention_rope_feat_sizes = [
+            value // patch_size,
+            value // patch_size,
+        ]
+
+        # keep the image_size in the __dict__ to save the value in the config file (backward compatibility)
+        self.__dict__["image_size"] = value
+
 
 class Sam3TrackerVideoInferenceCache(Sam2VideoInferenceCache):
     pass
@@ -461,8 +486,6 @@ class Sam3TrackerVideoModel(Sam2VideoModel):
         "tracker_neck.": "vision_encoder.neck.",
     }
     _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
-    _tied_weights_keys = {}
-    _keys_to_ignore_on_load_missing = []
 
     def __init__(self, config: Sam3TrackerVideoConfig, remove_vision_encoder: bool = False):
         r"""

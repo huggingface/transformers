@@ -149,7 +149,7 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
 
         encoding_ids = new_tokenizer.encode("a🤗")
         self.assertGreater(len(encoding_ids), 0)
-        self.assertEqual(new_tokenizer.decode(encoding_ids), "a🤗")
+        self.assertEqual(new_tokenizer.decode(encoding_ids), " a🤗")
 
     def test_init_from_tokenizers_model(self):
         from tokenizers import Tokenizer

@@ -21,6 +21,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import LayerNorm
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -433,6 +434,12 @@ class VideoLlama3PreTrainedModel(Qwen2VLPreTrainedModel):
     config: VideoLlama3Config
     _no_split_modules = ["VideoLlama3VisionEncoderLayer"]
 
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, VideoLlama3VisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
+
 
 class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
     config: VideoLlama3VisionConfig
@@ -842,6 +849,7 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         video_grid_thw: Optional[torch.LongTensor] = None,
         video_merge_sizes: Optional[torch.LongTensor] = None,
         video_compression_mask: Optional[torch.BoolTensor] = None,
+        is_first_iteration: Optional[bool] = False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -861,10 +869,11 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             video_merge_sizes=video_merge_sizes,
             video_compression_mask=video_compression_mask,
             use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if model_inputs["cache_position"][0] != 0:
+        if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
 

@@ -23,6 +23,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -515,6 +516,12 @@ class ViltPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["ViltEmbeddings", "ViltSelfAttention"]
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, TextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
 
 @auto_docstring

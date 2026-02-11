@@ -20,6 +20,7 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -350,20 +351,11 @@ class AfmoePreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                nn.init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, AfmoeRMSNorm):
-            nn.init.ones_(module.weight)
-        elif isinstance(module, AfmoeTokenChoiceRouter):
-            nn.init.zeros_(module.gate.weight)
+        super()._init_weights(module)
+        if isinstance(module, AfmoeTokenChoiceRouter):
+            init.zeros_(module.gate.weight)
         elif isinstance(module, AfmoeMoE):
-            nn.init.zeros_(module.expert_bias)
+            init.zeros_(module.expert_bias)
 
 
 @auto_docstring

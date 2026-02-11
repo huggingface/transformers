@@ -118,6 +118,9 @@ class ConvBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, GroupedLinearLayer):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.bias)
+        elif isinstance(module, ConvBertEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
 
 class SeparableConv1D(nn.Module):

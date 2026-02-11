@@ -35,7 +35,7 @@ class TvpConfig(PreTrainedConfig):
 
 
     Args:
-        backbone_config (`PreTrainedConfig` or `dict`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -68,6 +68,8 @@ class TvpConfig(PreTrainedConfig):
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the Tvp text model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`TvpModel`].
+        type_vocab_size (`int`, *optional*, defaults to 2):
+            The vocabulary size of the `token_type_ids` passed when calling [`TvpModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers.
         intermediate_size (`int`, *optional*, defaults to 3072):
@@ -114,6 +116,7 @@ class TvpConfig(PreTrainedConfig):
         max_img_size=448,
         num_frames=48,
         vocab_size=30522,
+        type_vocab_size=2,
         hidden_size=768,
         intermediate_size=3072,
         num_hidden_layers=12,
@@ -157,6 +160,7 @@ class TvpConfig(PreTrainedConfig):
         self.max_img_size = max_img_size
         self.num_frames = num_frames
         self.vocab_size = vocab_size
+        self.type_vocab_size = type_vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers

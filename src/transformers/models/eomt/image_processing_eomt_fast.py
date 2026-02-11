@@ -162,8 +162,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         )
         ignore_index = kwargs.pop("ignore_index", None)
         images_kwargs = kwargs.copy()
-        processed_images, patch_offsets = self._preprocess(images, **images_kwargs)
-        outputs = BatchFeature({"pixel_values": processed_images})
+        outputs = self._preprocess(images, **images_kwargs)
 
         if segmentation_maps is not None:
             processed_segmentation_maps = self._prepare_image_like_inputs(
@@ -183,9 +182,9 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
                 }
             )
 
-            processed_segmentation_maps, _ = self._preprocess(
+            processed_segmentation_maps = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
-            )
+            ).pixel_values
             processed_segmentation_maps = processed_segmentation_maps.squeeze(1).to(torch.int64)
             # Convert to list of binary masks and labels
             mask_labels, class_labels = [], []
@@ -208,8 +207,8 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
             outputs["mask_labels"] = mask_labels
             outputs["class_labels"] = class_labels
 
-        if patch_offsets:
-            outputs["patch_offsets"] = [torch.tensor(offsets) for offsets in patch_offsets]
+        if outputs.patch_offsets:
+            outputs["patch_offsets"] = [torch.tensor(offsets) for offsets in outputs.patch_offsets]
 
         return outputs
 
@@ -239,7 +238,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
-                resized_images_grouped[shape] = stacked_images
+            resized_images_grouped[shape] = stacked_images
         images = reorder_images(resized_images_grouped, grouped_images_index)
 
         # Group images by size for batched resizing, Needed in case do_resize is False.
@@ -274,11 +273,13 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images
-        images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        processed_images = torch.stack(images, dim=0) if return_tensors else images
-
-        return processed_images, patch_offsets
+        return BatchFeature(
+            data={"pixel_values": processed_images, "patch_offsets": patch_offsets},
+            tensor_type=return_tensors,
+            skip_tensor_conversion=["patch_offsets"],
+        )
 
     def merge_image_patches(
         self,
@@ -385,7 +386,19 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
 
         segmentation_logits = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
-        output_logits = self.merge_image_patches(segmentation_logits, patch_offsets, target_sizes, size)
+        if patch_offsets:
+            output_logits = self.merge_image_patches(segmentation_logits, patch_offsets, target_sizes, size)
+        else:
+            output_logits = []
+
+            for idx in range(len(segmentation_logits)):
+                resized_logits = torch.nn.functional.interpolate(
+                    segmentation_logits[idx].unsqueeze(dim=0),
+                    size=target_sizes[idx],
+                    mode="bilinear",
+                    align_corners=False,
+                )
+                output_logits.append(resized_logits[0])
 
         preds = [logit.argmax(dim=0) for logit in output_logits]
         return preds

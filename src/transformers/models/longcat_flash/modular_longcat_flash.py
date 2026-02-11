@@ -347,6 +347,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, LongcatFlashTopkRouter):
             init.normal_(module.classifier.weight, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.e_score_correction_bias)
         if isinstance(module, LongcatFlashExperts):
             if module.gate_up_proj is not None:
                 init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)

@@ -361,10 +361,6 @@ class EdgeTamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="Timm weights cannot be fully constructed in _init_weights")
-    def test_can_init_all_missing_weights(self):
-        pass
-
     @unittest.skip(
         reason="TIMM's attention implementation is self configured and won't raise ValueError on global attention implementation."
     )

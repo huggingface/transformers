@@ -172,15 +172,15 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 extractor = SentencePieceExtractor(vocab_file)
                 vocab_ids, vocab_scores, merges = extractor.extract()
                 tok3 = NllbTokenizer(
-                    vocab=vocab_scores, merges=merges, vocab_file=vocab_file, additional_special_tokens=None
+                    vocab=vocab_ids, merges=merges, vocab_file=vocab_file, additional_special_tokens=None
                 )
                 self.assertEqual(len(tok3), 256204)  # legacy
                 tok4 = NllbTokenizer(
-                    vocab=vocab_scores, merges=merges, vocab_file=vocab_file, additional_special_tokens=[]
+                    vocab=vocab_ids, merges=merges, vocab_file=vocab_file, additional_special_tokens=[]
                 )
                 self.assertEqual(len(tok4), 256002)
                 tok5 = NllbTokenizer(
-                    vocab=vocab_scores, merges=merges, vocab_file=vocab_file, additional_special_tokens=[code1, code2]
+                    vocab=vocab_ids, merges=merges, vocab_file=vocab_file, additional_special_tokens=[code1, code2]
                 )
                 self.assertEqual(len(tok5), 256004)
 

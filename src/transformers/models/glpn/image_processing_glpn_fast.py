@@ -107,7 +107,6 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
             processed_groups[shape] = stacked_images
 
         processed_images = reorder_images(processed_groups, grouped_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def post_process_depth_estimation(self, outputs, target_sizes=None):

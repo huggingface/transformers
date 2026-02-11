@@ -483,6 +483,9 @@ class DFinePreTrainedModel(PreTrainedModel):
             init.constant_(module.attention_weights.weight, 0.0)
             init.constant_(module.attention_weights.bias, 0.0)
 
+            num_points_scale = [1 / n for n in module.num_points_list for _ in range(n)]
+            init.copy_(module.num_points_scale, torch.tensor(num_points_scale, dtype=torch.float32))
+
         if isinstance(module, DFineModel):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
@@ -493,6 +496,10 @@ class DFinePreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
 
         if isinstance(module, DFineGate):
             bias = float(-math.log((1 - 0.5) / 0.5))
@@ -838,6 +845,45 @@ class DFineDecoder(DFinePreTrainedModel):
         )
 
 
+class DFineFrozenBatchNorm2d(nn.Module):
+    """
+    BatchNorm2d where the batch statistics and the affine parameters are fixed.
+
+    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    torchvision.models.resnet[18,34,50,101] produce nans.
+    """
+
+    def __init__(self, n):
+        super().__init__()
+        self.register_buffer("weight", torch.ones(n))
+        self.register_buffer("bias", torch.zeros(n))
+        self.register_buffer("running_mean", torch.zeros(n))
+        self.register_buffer("running_var", torch.ones(n))
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
+        num_batches_tracked_key = prefix + "num_batches_tracked"
+        if num_batches_tracked_key in state_dict:
+            del state_dict[num_batches_tracked_key]
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
+
+    def forward(self, x):
+        # move reshapes to the beginning
+        # to make it user-friendly
+        weight = self.weight.reshape(1, -1, 1, 1)
+        bias = self.bias.reshape(1, -1, 1, 1)
+        running_var = self.running_var.reshape(1, -1, 1, 1)
+        running_mean = self.running_mean.reshape(1, -1, 1, 1)
+        epsilon = 1e-5
+        scale = weight * (running_var + epsilon).rsqrt()
+        bias = bias - running_mean * scale
+        return x * scale + bias
+
+
 @dataclass
 @auto_docstring(
     custom_intro="""
@@ -894,45 +940,6 @@ class DFineModelOutput(ModelOutput):
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     denoising_meta_values: Optional[dict] = None
-
-
-class DFineFrozenBatchNorm2d(nn.Module):
-    """
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
-    torchvision.models.resnet[18,34,50,101] produce nans.
-    """
-
-    def __init__(self, n):
-        super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
-
-    def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-    ):
-        num_batches_tracked_key = prefix + "num_batches_tracked"
-        if num_batches_tracked_key in state_dict:
-            del state_dict[num_batches_tracked_key]
-
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
-
-    def forward(self, x):
-        # move reshapes to the beginning
-        # to make it user-friendly
-        weight = self.weight.reshape(1, -1, 1, 1)
-        bias = self.bias.reshape(1, -1, 1, 1)
-        running_var = self.running_var.reshape(1, -1, 1, 1)
-        running_mean = self.running_mean.reshape(1, -1, 1, 1)
-        epsilon = 1e-5
-        scale = weight * (running_var + epsilon).rsqrt()
-        bias = bias - running_mean * scale
-        return x * scale + bias
 
 
 def replace_batch_norm(model):

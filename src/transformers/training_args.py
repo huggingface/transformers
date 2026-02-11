@@ -351,9 +351,6 @@ class TrainingArguments:
             SIGTERM with adequate time before the job time limit. Calculate the required grace period as: longest
             possible iteration time + checkpoint saving time. For example, if an iteration takes 2 minutes and
             checkpoint saving takes 2 minutes, set at least 4 minutes (240 seconds) of grace time.
-        save_safetensors (`bool`, *optional*, defaults to `True`):
-            Use [safetensors](https://huggingface.co/docs/safetensors) saving and loading for state dicts instead of
-            default `torch.load` and `torch.save`.
         save_on_each_node (`bool`, *optional*, defaults to `False`):
             When doing multi-node distributed training, whether to save models and checkpoints on each node, or only on
             the main one.
@@ -596,9 +593,9 @@ class TrainingArguments:
             instance of `Dataset`.
         report_to (`str` or `list[str]`, *optional*, defaults to `"none"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
-            `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
-            `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations
-            installed, `"none"` for no integrations.
+            `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"swanlab"`,
+            `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"`
+            for no integrations.
         project (`str`, *optional*, defaults to `"huggingface"`):
             The name of the project to use for logging. Currently, only used by Trackio.
         trackio_space_id (`str` or `None`, *optional*, defaults to `"trackio"`):
@@ -863,7 +860,7 @@ class TrainingArguments:
     warmup_ratio: float | None = field(
         default=None,
         metadata={
-            "help": "This argument is deprecated and will be removed in v5. Use `warmup_steps` instead as it also works with float values."
+            "help": "This argument is deprecated and will be removed in v5.2. Use `warmup_steps` instead as it also works with float values."
         },
     )
 
@@ -958,12 +955,6 @@ class TrainingArguments:
                 "Calculate required grace period as: iteration time + checkpoint saving time. "
                 "Example: 2min iteration + 2min checkpoint = 240 seconds minimum."
             )
-        },
-    )
-    save_safetensors: bool = field(
-        default=True,
-        metadata={
-            "help": "Use safetensors saving and loading for state dicts instead of default torch.load and torch.save."
         },
     )
     save_on_each_node: bool = field(
@@ -1531,14 +1522,6 @@ class TrainingArguments:
                         f"steps, but found {self.save_steps}, which is not a round multiple of {self.eval_steps}."
                     )
 
-        if not self.save_safetensors:
-            logger.info(
-                f"Found safetensors installation, but --save_safetensors={self.save_safetensors}. "
-                f"Safetensors should be a preferred weights saving format due to security and performance reasons. "
-                f"If your model cannot be saved by safetensors please feel free to open an issue at "
-                f"https://github.com/huggingface/safetensors!"
-            )
-
         if (
             self.load_best_model_at_end or self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU
         ) and self.metric_for_best_model is None:
@@ -1547,16 +1530,14 @@ class TrainingArguments:
             self.greater_is_better = not self.metric_for_best_model.endswith("loss")
         if is_torch_available():
             if self.bf16 or self.bf16_full_eval:
-                if self.use_cpu and not is_torch_xla_available():
-                    # cpu
-                    raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
-                elif not self.use_cpu:
-                    if not is_torch_bf16_gpu_available() and not is_torch_xla_available():  # added for tpu support
-                        error_message = "Your setup doesn't support bf16/gpu."
-                        if is_torch_cuda_available():
-                            error_message += " You need Ampere+ GPU with cuda>=11.0"
-                        # gpu
-                        raise ValueError(error_message)
+                if (
+                    not self.use_cpu and not is_torch_bf16_gpu_available() and not is_torch_xla_available()
+                ):  # added for tpu support
+                    error_message = "Your setup doesn't support bf16/gpu. You need to assign use_cpu if you want to train the model on CPU"
+                    if is_torch_cuda_available():
+                        error_message += " You need Ampere+ GPU with cuda>=11.0"
+                    # gpu
+                    raise ValueError(error_message)
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
@@ -2386,8 +2367,8 @@ class TrainingArguments:
             report_to (`str` or `list[str]`, *optional*, defaults to `"none"`):
                 The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
                 `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`,
-                `"neptune"`, `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all
-                integrations installed, `"none"` for no integrations.
+                `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations
+                installed, `"none"` for no integrations.
             first_step (`bool`, *optional*, defaults to `False`):
                 Whether to log and evaluate the first `global_step` or not.
             nan_inf_filter (`bool`, *optional*, defaults to `True`):
@@ -2592,7 +2573,7 @@ class TrainingArguments:
         ```
         """
         if warmup_ratio is not None:
-            logger.warning("warmup_ratio is deprecated and will be removed in v5. Use `warmup_steps` instead.")
+            logger.warning("warmup_ratio is deprecated and will be removed in v5.2 . Use `warmup_steps` instead.")
             warmup_steps = warmup_ratio
 
         self.lr_scheduler_type = SchedulerType(name)

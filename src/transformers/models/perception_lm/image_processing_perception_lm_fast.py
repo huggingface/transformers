@@ -307,7 +307,6 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = [p[None] if p.ndim == 3 else p for p in processed_images]  # add tiles dimension if needed
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 

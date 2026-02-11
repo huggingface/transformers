@@ -365,7 +365,7 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         self.rope_parameters = rope_parameters
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
-            ignore_keys_at_rope_validation={"mrope"},
+            ignore_keys_at_rope_validation={"mrope_section"},
             **kwargs,
         )
 
@@ -713,7 +713,9 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        super().__init__(tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope"}, **kwargs)
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope_section"}, **kwargs
+        )
 
 
 class Qwen2_5OmniDiTConfig(PreTrainedConfig):

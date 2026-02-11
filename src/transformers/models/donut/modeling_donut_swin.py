@@ -381,18 +381,7 @@ class DonutSwinSelfAttention(nn.Module):
             torch.zeros((2 * self.window_size[0] - 1) * (2 * self.window_size[1] - 1), num_heads)
         )
 
-        # get pair-wise relative position index for each token inside the window
-        coords_h = torch.arange(self.window_size[0])
-        coords_w = torch.arange(self.window_size[1])
-        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
-        coords_flatten = torch.flatten(coords, 1)
-        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
-        relative_coords = relative_coords.permute(1, 2, 0).contiguous()
-        relative_coords[:, :, 0] += self.window_size[0] - 1
-        relative_coords[:, :, 1] += self.window_size[1] - 1
-        relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
-        relative_position_index = relative_coords.sum(-1)
-        self.register_buffer("relative_position_index", relative_position_index)
+        self.register_buffer("relative_position_index", self.create_relative_position_index())
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
@@ -450,6 +439,20 @@ class DonutSwinSelfAttention(nn.Module):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
+
+    def create_relative_position_index(self):
+        # get pair-wise relative position index for each token inside the window
+        coords_h = torch.arange(self.window_size[0])
+        coords_w = torch.arange(self.window_size[1])
+        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
+        coords_flatten = torch.flatten(coords, 1)
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()
+        relative_coords[:, :, 0] += self.window_size[0] - 1
+        relative_coords[:, :, 1] += self.window_size[1] - 1
+        relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
+        relative_position_index = relative_coords.sum(-1)
+        return relative_position_index
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinSelfOutput
@@ -801,6 +804,7 @@ class DonutSwinPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.position_embeddings)
         elif isinstance(module, DonutSwinSelfAttention):
             init.zeros_(module.relative_position_bias_table)
+            init.copy_(module.relative_position_index, module.create_relative_position_index())
 
 
 @auto_docstring

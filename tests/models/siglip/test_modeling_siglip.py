@@ -49,6 +49,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SiglipForImageClassification, SiglipModel, SiglipTextModel, SiglipVisionModel
+    from transformers.models.siglip.modeling_siglip import SiglipVisionTransformer
 
 if is_vision_available():
     from PIL import Image
@@ -203,6 +204,22 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
+
+    def test_vision_transformer_get_set_input_embeddings(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        transformer = SiglipVisionTransformer(config)
+
+        self.assertIsInstance(transformer.get_input_embeddings(), nn.Conv2d)
+
+        new_embeddings = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=config.hidden_size,
+            kernel_size=config.patch_size,
+            stride=config.patch_size,
+            padding="valid",
+        )
+        transformer.set_input_embeddings(new_embeddings)
+        self.assertIs(transformer.get_input_embeddings(), new_embeddings)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

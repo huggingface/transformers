@@ -106,6 +106,7 @@ class T5Gemma2ModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
+        layer_types=["full_attention", "sliding_attention"],
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
@@ -150,6 +151,7 @@ class T5Gemma2ModelTester:
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
+        self.layer_types = layer_types
         self.type_vocab_size = type_vocab_size
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
@@ -175,6 +177,7 @@ class T5Gemma2ModelTester:
                 hidden_dropout_prob=self.hidden_dropout_prob,
                 attention_probs_dropout_prob=self.attention_probs_dropout_prob,
                 max_position_embeddings=self.max_position_embeddings,
+                layer_types=self.layer_types,
                 type_vocab_size=self.type_vocab_size,
                 is_decoder=False,
                 initializer_range=self.initializer_range,
@@ -205,6 +208,7 @@ class T5Gemma2ModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
+            layer_types=self.layer_types,
             type_vocab_size=self.type_vocab_size,
             is_decoder=True,
             initializer_range=self.initializer_range,
@@ -616,6 +620,46 @@ class T5Gemma2ModelTester:
         )["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
+    def create_and_create_and_check_forward_full_mask(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+        pixel_values,
+    ):
+        """
+        Checks whether we can use the shortcuts in our mask generation (SDPA) properly,
+        these rely on the `is_causal` flag to function properly
+        """
+        model = self.model_class(config=config).to(torch_device).eval()
+
+        # Force full mask (all true) which can be shortcircuited to `None`
+        attention_mask = torch.ones_like(attention_mask)
+        decoder_attention_mask = torch.ones_like(decoder_attention_mask)
+
+        output_full_mask = model(
+            input_ids,
+            pixel_values=pixel_values,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+        )["last_hidden_state"]
+
+        # Compile forces the mask creation to happen at any time
+        model.forward = torch.compile(model.forward)
+        output_full_mask_no_shortcut = model(
+            input_ids,
+            pixel_values=pixel_values,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+        )["last_hidden_state"]
+
+        self.parent.assertTrue(torch.allclose(output_full_mask, output_full_mask_no_shortcut, atol=1e-3, rtol=1e-3))
+
 
 @require_torch
 class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -723,6 +767,10 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
+
+    def test_forward_full_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_create_and_check_forward_full_mask(*config_and_inputs)
 
     # Based on tests.models.gemma.test_modeling_gemma.GemmaModelTest.test_Gemma_sequence_classification_model with Gemma -> T5Gemma2 (Add is_encoder_decoder option)
     def test_T5Gemma2_sequence_classification_model(self):

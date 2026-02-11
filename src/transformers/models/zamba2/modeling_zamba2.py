@@ -41,6 +41,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.generic import maybe_autocast
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_zamba2 import Zamba2Config
 
@@ -224,7 +225,7 @@ class Zamba2RotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -263,7 +264,7 @@ class Zamba2RotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -424,7 +425,6 @@ class Zamba2Attention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Zamba2HybridDynamicCache] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        position_ids: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -1545,6 +1545,7 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
         cache_position=None,
         position_ids=None,
         use_cache=True,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- has a unique cache type, `Zamba2HybridDynamicCache`
@@ -1578,7 +1579,7 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and empty_past_kv:
+        if inputs_embeds is not None and is_first_iteration:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases

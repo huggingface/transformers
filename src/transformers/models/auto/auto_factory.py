@@ -543,7 +543,7 @@ def add_generation_mixin_to_remote_model(model_class):
 
 class _LazyAutoMapping(OrderedDict[type[PreTrainedConfig], _LazyAutoMappingValue]):
     """
-    " A mapping config to object (model or tokenizer for instance) that will load keys and values when it is accessed.
+    A mapping config to object (model or tokenizer for instance) that will load keys and values when it is accessed.
 
     Args:
         - config_mapping: The map model type to config class

@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization class for LayoutLMv3. Same as LayoutLMv2, but RoBERTa-like BPE tokenization instead of WordPiece."""
 
-import json
 from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers, processors
@@ -159,15 +158,16 @@ class LayoutLMv3Tokenizer(TokenizersBackend):
             CrossEntropyLoss.
         only_label_first_subword (`bool`, *optional*, defaults to `True`):
             Whether or not to only label the first subword, in case word labels are provided.
-        vocab (`dict`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file when using from_pretrained.
-        merges (`list`, *optional*):
-            Custom merges list. If not provided, merges are loaded from merges_file when using from_pretrained.
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file` when using
+            `from_pretrained`.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `merges_file` when using `from_pretrained`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask", "bbox"]
-    slow_tokenizer_class = None
+    model = models.BPE
 
     def __init__(
         self,
@@ -185,69 +185,26 @@ class LayoutLMv3Tokenizer(TokenizersBackend):
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
         only_label_first_subword=True,
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
-        vocab_file: Optional[str] = None,
-        merges_file: Optional[str] = None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
-
-        # Build vocab and merges for BPE
-        # Priority: 1) vocab/merges dicts/lists, 2) vocab_file/merges_file paths, 3) empty
-        if vocab is not None:
-            _vocab = vocab
-        elif vocab_file is not None:
-            with open(vocab_file, encoding="utf-8") as f:
-                _vocab = json.load(f)
-        else:
-            _vocab = {}
-
-        if merges is not None:
-            _merges = merges
-        elif merges_file is not None:
-            _merges = []
-            with open(merges_file, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#"):
-                        _merges.append(tuple(line.split()))
-        else:
-            _merges = []
-
-        # Initialize BPE tokenizer
+        self._vocab = vocab or {}
+        self._merges = merges or []
         self._tokenizer = Tokenizer(
             models.BPE(
-                vocab=_vocab,
-                merges=_merges,
+                vocab=self._vocab,
+                merges=self._merges,
                 dropout=None,
                 continuing_subword_prefix="",
                 end_of_word_suffix="",
                 fuse_unk=False,
             )
         )
-
-        # Set pre_tokenizer (ByteLevel)
         self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
-
-        # Set decoder
         self._tokenizer.decoder = decoders.ByteLevel()
-
-        # Set post_processor (will be set after super().__init__ when we have token IDs)
-        # Temporarily set to None, will be configured after parent init
-        self._tokenizer.post_processor = None
-
-        tokenizer_object = self._tokenizer
-
-        # additional properties
-        self.cls_token_box = cls_token_box
-        self.sep_token_box = sep_token_box
-        self.pad_token_box = pad_token_box
-        self.pad_token_label = pad_token_label
-        self.only_label_first_subword = only_label_first_subword
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             errors=errors,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -277,17 +234,11 @@ class LayoutLMv3Tokenizer(TokenizersBackend):
             add_prefix_space=add_prefix_space,
             trim_offsets=True,
         )
-
-        # additional properties
         self.cls_token_box = cls_token_box
         self.sep_token_box = sep_token_box
         self.pad_token_box = pad_token_box
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
-
-        # Call _post_init for tokenizers created directly (not from_pretrained)
-        # For from_pretrained, this will be called again after loading the tokenizer from file
-        self._post_init()
 
     @add_end_docstrings(LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(

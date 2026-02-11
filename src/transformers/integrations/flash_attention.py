@@ -20,8 +20,8 @@ def get_target_dtype(query: torch.Tensor, module: torch.nn.Module) -> torch.dtyp
                 else torch.get_autocast_gpu_dtype()
             )
         # Handle the case where the model is quantized
-        elif hasattr(module.config, "_pre_quantization_dtype"):
-            return module.config._pre_quantization_dtype
+        elif hasattr(module.config, "quantization_config"):
+            return module.config.dtype
         else:
             return next(layer for layer in module.modules() if isinstance(layer, torch.nn.Linear)).weight.dtype
     return None

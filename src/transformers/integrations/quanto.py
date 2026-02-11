@@ -43,12 +43,17 @@ class QuantoQuantize(ConversionOps):
 
         _load_parameter_into_model(model, full_layer_name, value)
         module, _ = get_module_from_name(model, full_layer_name)
+        # Need to set those to a specific value, otherwise they will remain on meta device ...
+        module.input_scale = torch.ones(module.input_scale.shape)
+        module.output_scale = torch.ones(module.output_scale.shape)
+        # quantize
         module.freeze()
         module.weight.requires_grad = False
         module._is_hf_initialized = True
 
         # need to discard some missing keys we already updated the module in freeze.
         module_name = full_layer_name.rsplit(".", 1)[0]
+        missing_keys.discard(f"{module_name}.weight")
         missing_keys.discard(f"{module_name}.input_scale")
         missing_keys.discard(f"{module_name}.output_scale")
         return {}
@@ -57,7 +62,7 @@ class QuantoQuantize(ConversionOps):
 def replace_with_quanto_layers(
     model,
     quantization_config=None,
-    modules_to_not_convert=None,
+    modules_to_not_convert: list[str] | None = None,
 ):
     """
     Public method that recursively replaces the Linear layers of the given model with Quanto quantized layers.
@@ -72,7 +77,6 @@ def replace_with_quanto_layers(
             A list of modules to not convert. If a module name is in the list (e.g. `lm_head`), it will not be
             converted.
     """
-    from accelerate import init_empty_weights
     from optimum.quanto import QLayerNorm, QLinear, qfloat8, qint2, qint4, qint8
 
     w_mapping = {"float8": qfloat8, "int8": qint8, "int4": qint4, "int2": qint2}
@@ -82,7 +86,7 @@ def replace_with_quanto_layers(
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
-        with init_empty_weights():
+        with torch.device("meta"):
             new_module = None
             if isinstance(module, nn.Linear):
                 new_module = QLinear(

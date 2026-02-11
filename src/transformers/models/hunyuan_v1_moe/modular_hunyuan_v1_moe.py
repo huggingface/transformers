@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
+from ...utils import TransformersKwargs, is_grouped_mm_available, logging
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import HunYuanDenseV1RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -177,7 +177,9 @@ class HunYuanMoEV1DecoderLayer(LlamaDecoderLayer):
 
 
 class HunYuanMoEV1PreTrainedModel(LlamaPreTrainedModel):
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = (
+        is_grouped_mm_available()
+    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
 
     @torch.no_grad()
     def _init_weights(self, module):

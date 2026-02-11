@@ -14,6 +14,8 @@
 # limitations under the License.
 """Tokenization class for model PEGASUS."""
 
+from typing import Optional, Union
+
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
@@ -70,15 +72,17 @@ class PegasusTokenizer(TokenizersBackend):
             that uses the tokens 2 - 104 only for pretraining
         offset (`int`, *optional*, defaults to 103):
             Offset for additional special tokens.
-        vocab (`dict`, *optional*):
-            Custom vocabulary dictionary. If not provided, a blank vocabulary is initialized.
+        vocab (`str` or `list[tuple[str, float]]`, *optional*):
+            Custom vocabulary with `(token, score)` tuples. If not provided, a blank vocabulary is initialized.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    model = Unigram
 
     def __init__(
         self,
+        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
         pad_token="<pad>",
         eos_token="</s>",
         unk_token="<unk>",
@@ -86,60 +90,27 @@ class PegasusTokenizer(TokenizersBackend):
         mask_token_sent="<mask_1>",
         additional_special_tokens=None,
         offset=103,
-        vocab=None,
-        vocab_file=None,
         **kwargs,
     ):
         self.offset = offset
-        self.vocab_file = vocab_file
 
         if additional_special_tokens is None:
             additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
-        if vocab is not None:
-            # For Pegasus, insert special tokens at the beginning
-            special_tokens_set = {pad_token, eos_token, mask_token_sent, mask_token, unk_token}
-            special_tokens_set.update(additional_special_tokens)
+        if vocab is None:
+            vocab = [(str(unk_token), 0.0), (str(pad_token), 0.0), (str(eos_token), 0.0), (str(mask_token), 0.0)]
 
-            # Build special tokens in correct order
-            _vocab_list = [
-                (str(pad_token), 0.0),
-                (str(eos_token), 0.0),
-            ]
-            if mask_token_sent:
-                _vocab_list.append((str(mask_token_sent), 0.0))
-            for token in additional_special_tokens:
-                if token not in [pad_token, eos_token, mask_token_sent]:
-                    _vocab_list.append((str(token), 0.0))
-            if mask_token not in [t for t, _ in _vocab_list]:
-                _vocab_list.append((str(mask_token), 0.0))
-            _vocab_list.append((str(unk_token), 0.0))
-
-            # Filter out special tokens from main vocab and combine
-            filtered_vocab = [(t, s) for t, s in vocab if t not in special_tokens_set]
-            _vocab_list = _vocab_list + filtered_vocab
-        else:
-            _vocab_list = [(str(unk_token), 0.0)]
-
-        self._vocab = {token: idx for idx, (token, _) in enumerate(_vocab_list)}
-
-        self._tokenizer = Tokenizer(Unigram(vocab=_vocab_list, unk_id=self._vocab.get(str(unk_token), 0)))
-
+        self._vocab = vocab
+        self._tokenizer = Tokenizer(Unigram(vocab=vocab, unk_id=self._vocab.index((str(unk_token), 0.0), 1)))
         self._tokenizer.normalizer = normalizers.Sequence(
             [normalizers.Replace(Regex(r"\n"), " "), normalizers.Replace(Regex(r" {2,}"), " ")]
         )
 
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"$A {eos_token}",
-            pair=f"$A $B {eos_token}",
-            special_tokens=[(str(eos_token), self._vocab.get(str(eos_token), 1))],
-        )
-
-        tokenizer_object = self._tokenizer
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
+        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             pad_token=pad_token,
             eos_token=eos_token,
             unk_token=unk_token,
@@ -149,9 +120,11 @@ class PegasusTokenizer(TokenizersBackend):
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
-        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"$A {eos_token}",
+            pair=f"$A $B {eos_token}",
+            special_tokens=[(str(eos_token), self.convert_tokens_to_ids(str(eos_token)))],
+        )
 
 
 __all__ = ["PegasusTokenizer"]

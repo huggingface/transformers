@@ -26,7 +26,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -41,10 +40,6 @@ from ...utils import (
     logging,
 )
 from .configuration_gpt_bigcode import GPTBigCodeConfig
-
-
-if is_flash_attn_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -360,9 +355,6 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
-
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -377,6 +369,9 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
             init.normal_(
                 module.c_proj.weight, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.n_layer)
             )
+        elif isinstance(module, GPTBigCodeModel):
+            max_positions = module.config.max_position_embeddings
+            init.copy_(module.bias, torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)))
 
 
 @auto_docstring

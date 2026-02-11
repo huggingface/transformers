@@ -257,7 +257,7 @@ class OlmoIntegrationTest(unittest.TestCase):
 
     @require_tokenizers
     def test_simple_encode_decode(self):
-        rust_tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMo-1B-hf")
+        rust_tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMo-1B-hf", add_eos_token=False)
 
         self.assertEqual(rust_tokenizer.encode("This is a test"), [1552, 310, 247, 1071])
         self.assertEqual(rust_tokenizer.decode([1552, 310, 247, 1071], skip_special_tokens=True), "This is a test")
@@ -271,10 +271,10 @@ class OlmoIntegrationTest(unittest.TestCase):
 
         # Inner spaces showcase
         self.assertEqual(rust_tokenizer.encode("Hi  Hello"), [12764, 50276, 12092])
-        self.assertEqual(rust_tokenizer.decode([12764, 50276, 12092], skip_special_tokens=True), "Hi  Hello")
+        self.assertEqual(rust_tokenizer.decode([12764, 50276, 12092], skip_special_tokens=False), "Hi  Hello")
 
         self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [12764, 50275, 12092])
-        self.assertEqual(rust_tokenizer.decode([12764, 50275, 12092], skip_special_tokens=True), "Hi   Hello")
+        self.assertEqual(rust_tokenizer.decode([12764, 50275, 12092], skip_special_tokens=False), "Hi   Hello")
 
         self.assertEqual(rust_tokenizer.encode(""), [])
 

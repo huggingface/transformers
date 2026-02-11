@@ -117,6 +117,7 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, num_positions: int, embedding_dim: int):
         super().__init__()
         self.embedding_dim = embedding_dim
+        self.num_positions = num_positions
         self.make_weights(num_positions, embedding_dim)
 
     def make_weights(self, num_embeddings: int, embedding_dim: int):
@@ -432,6 +433,9 @@ class MusicgenPreTrainedModel(PreTrainedModel):
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, MusicgenSinusoidalPositionalEmbedding):
+            emb_weights = module.get_embedding(module.num_positions, module.embedding_dim)
+            init.copy_(module.weights, emb_weights)
 
 
 class MusicgenDecoder(MusicgenPreTrainedModel):
@@ -2082,7 +2086,6 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         synced_gpus: Optional[bool] = None,
         streamer: Optional["BaseStreamer"] = None,
-        use_model_defaults: Optional[bool] = None,
         **kwargs,
     ):
         """
@@ -2127,11 +2130,6 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
-            use_model_defaults (`bool`, *optional*):
-                When it is `True`, unset parameters in `generation_config` will be set to the model-specific default
-                generation configuration (`model.generation_config`), as opposed to the global defaults
-                (`GenerationConfig()`). If unset, models saved starting from `v4.50` will consider this flag to be
-                `True`.
             kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -2155,9 +2153,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         """
         # 1. Handle `generation_config` and kwargs that might update it, and validate the resulting objects
         generation_mode_kwargs = self._extract_generation_mode_kwargs(None, kwargs, False, None, None)
-        generation_config, model_kwargs = self._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
-        )
+        generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         generation_mode = generation_config.get_generation_mode()
         if generation_mode not in [GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH]:
             raise ValueError(

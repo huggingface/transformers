@@ -928,6 +928,10 @@ class FalconH1PreTrainedModel(PreTrainedModel):
             init.ones_(module.dt_bias)
             init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
             init.ones_(module.D)
+        elif isinstance(module, FalconH1Model):
+            mup_vector = compute_mup_vector(module.config)
+            for layer in module.layers:
+                init.copy_(layer.mamba.mup_vector, mup_vector)
 
 
 def compute_mup_vector(config):
@@ -992,7 +996,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
         # Compute the MuP vector once and register it for all layers
         mup_vector = compute_mup_vector(config)
         for layer in self.layers:
-            layer.mamba.register_buffer("mup_vector", mup_vector, persistent=False)
+            layer.mamba.register_buffer("mup_vector", mup_vector.clone(), persistent=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1298,6 +1302,7 @@ class FalconH1ForCausalLM(LlamaForCausalLM):
         cache_position=None,
         position_ids=None,
         use_cache=True,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- has a unique cache type, `FalconHybridMambaAttentionDynamicCache`
@@ -1335,7 +1340,7 @@ class FalconH1ForCausalLM(LlamaForCausalLM):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and empty_past_kv:
+        if inputs_embeds is not None and is_first_iteration:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases

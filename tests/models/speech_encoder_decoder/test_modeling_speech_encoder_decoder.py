@@ -364,6 +364,7 @@ class EncoderDecoderMixin:
             enc_dec_model.generation_config.eos_token_id = None
 
         inputs = input_values if input_features is None else input_features
+        enc_dec_model.generation_config.max_length = 20
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(

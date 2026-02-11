@@ -159,22 +159,11 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class = None
-
-    @staticmethod
-    def _load_vocab_from_file(vocab_file):
-        """Load vocab from a BERT-style vocab file (one token per line)."""
-        vocab = {}
-        with open(vocab_file, "r", encoding="utf-8") as reader:
-            for index, line in enumerate(reader):
-                token = line.rstrip("\n")
-                vocab[token] = index
-        return vocab
+    model = models.WordPiece
 
     def __init__(
         self,
-        vocab=None,
-        vocab_file=None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
         do_lower_case=True,
         unk_token="[UNK]",
         sep_token="[SEP]",
@@ -190,21 +179,12 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
         strip_accents=None,
         **kwargs,
     ):
-        self.vocab_file = vocab_file
         self.do_lower_case = do_lower_case
 
-        # Build vocab for WordPiece
         if vocab is not None:
-            if isinstance(vocab, dict):
-                _vocab = vocab
-            else:
-                raise ValueError("vocab must be a dict mapping tokens to ids")
-        elif vocab_file is not None:
-            # Load vocab from file (BERT format: one token per line)
-            _vocab = self._load_vocab_from_file(vocab_file)
+            self._vocab = vocab
         else:
-            # Initialize with at least the special tokens for WordPiece
-            _vocab = {
+            self._vocab = {
                 str(pad_token): 0,
                 str(unk_token): 1,
                 str(cls_token): 2,
@@ -212,10 +192,7 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
                 str(mask_token): 4,
             }
 
-        # Initialize WordPiece tokenizer
-        self._tokenizer = Tokenizer(models.WordPiece(vocab=_vocab, unk_token=str(unk_token)))
-
-        # Set normalizer
+        self._tokenizer = Tokenizer(models.WordPiece(vocab=self._vocab, unk_token=str(unk_token)))
         self._tokenizer.normalizer = normalizers.BertNormalizer(
             clean_text=True,
             handle_chinese_chars=tokenize_chinese_chars,
@@ -223,27 +200,9 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
             lowercase=do_lower_case,
         )
 
-        # Set pre_tokenizer
         self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
-
-        # Set decoder
         self._tokenizer.decoder = decoders.WordPiece(prefix="##")
-
-        # Set post_processor (will be set after super().__init__ when we have token IDs)
-        # Temporarily set to None, will be configured after parent init
-        self._tokenizer.post_processor = None
-
-        tokenizer_object = self._tokenizer
-
-        # additional properties
-        self.cls_token_box = cls_token_box
-        self.sep_token_box = sep_token_box
-        self.pad_token_box = pad_token_box
-        self.pad_token_label = pad_token_label
-        self.only_label_first_subword = only_label_first_subword
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             do_lower_case=do_lower_case,
             unk_token=unk_token,
             sep_token=sep_token,
@@ -260,6 +219,11 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
             **kwargs,
         )
 
+        self.cls_token_box = cls_token_box
+        self.sep_token_box = sep_token_box
+        self.pad_token_box = pad_token_box
+        self.pad_token_label = pad_token_label
+
         # Now set post_processor with actual token IDs
         cls = str(self.cls_token)
         sep = str(self.sep_token)
@@ -274,13 +238,6 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
                 (sep, sep_token_id),
             ],
         )
-
-        # additional properties
-        self.cls_token_box = cls_token_box
-        self.sep_token_box = sep_token_box
-        self.pad_token_box = pad_token_box
-        self.pad_token_label = pad_token_label
-        self.only_label_first_subword = only_label_first_subword
 
     @add_end_docstrings(LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(

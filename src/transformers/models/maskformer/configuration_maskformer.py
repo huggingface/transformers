@@ -14,7 +14,7 @@
 # limitations under the License.
 """MaskFormer model configuration"""
 
-from typing import Optional
+from typing import Optional, Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -49,7 +49,7 @@ class MaskFormerConfig(PreTrainedConfig):
         use_auxiliary_loss(`bool`, *optional*, defaults to `False`):
             If `True` [`MaskFormerForInstanceSegmentationOutput`] will contain the auxiliary losses computed using the
             logits from each decoder's stage.
-        backbone_config (`Dict`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `SwinConfig()`):
             The configuration passed to the backbone, if unset, the configuration corresponding to
             `swin-base-patch4-window12-384` will be used.
         backbone (`str`, *optional*):
@@ -114,7 +114,7 @@ class MaskFormerConfig(PreTrainedConfig):
         mask_feature_size: int = 256,
         no_object_weight: float = 0.1,
         use_auxiliary_loss: bool = False,
-        backbone_config: Optional[dict] = None,
+        backbone_config: Optional[Union[dict, PreTrainedConfig]] = None,
         decoder_config: Optional[dict] = None,
         init_std: float = 0.02,
         init_xavier_std: float = 1.0,

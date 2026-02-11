@@ -78,11 +78,11 @@ class FPQuantHfQuantizer(HfQuantizer):
                 )
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype is None:
-            logger.info("`dtype` is None. Setting `dtype=torch.bfloat16` for qutlass compatibility.")
+        if dtype != torch.bfloat16:
+            logger.warning_once(
+                f"Setting dtype to {dtype}, but only bfloat16 is supported right now. Overwriting torch_dtype to bfloat16."
+            )
             dtype = torch.bfloat16
-        elif dtype != torch.bfloat16:
-            raise ValueError(f"Invalid `dtype` {dtype}. fp_quant quantization only supports `dtype=torch.bfloat16`.")
         return dtype
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
@@ -118,5 +118,33 @@ class FPQuantHfQuantizer(HfQuantizer):
             )
         return trainable
 
-    def is_serializable(self, **kwargs):
+    def is_serializable(self):
         return True
+
+    def get_quantize_ops(self):
+        from ..integrations.fp_quant import FpQuantQuantize
+
+        return FpQuantQuantize(self)
+
+    def get_weight_conversions(self):
+        from ..core_model_loading import WeightConverter
+        from ..integrations.fp_quant import FpQuantDeserialize
+
+        if self.pre_quantized:
+            if self.quantization_config.pseudoquantization:
+                return [
+                    WeightConverter(
+                        source_patterns=[".dqweight"],
+                        target_patterns=".dqweight",
+                        operations=[FpQuantDeserialize(self)],
+                    ),
+                ]
+            else:
+                return [
+                    WeightConverter(
+                        source_patterns=[".qweight"],
+                        target_patterns=".qweight",
+                        operations=[FpQuantDeserialize(self)],
+                    ),
+                ]
+        return []

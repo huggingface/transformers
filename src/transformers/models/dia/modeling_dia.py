@@ -25,9 +25,10 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -41,6 +42,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils.generic import maybe_autocast
 from .configuration_dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
 from .generation_dia import DiaGenerationMixin
 
@@ -59,6 +61,12 @@ class DiaPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     main_input_name = "input_ids"
     _no_split_modules = ["DiaEncoderLayer", "DiaDecoderLayer"]
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, DiaMultiChannelEmbedding):
+            offsets = torch.arange(self.config.num_channels, dtype=torch.long) * self.config.vocab_size
+            init.copy_(module.offsets, offsets)
 
 
 class DiaMultiChannelEmbedding(nn.Module):
@@ -145,7 +153,7 @@ class DiaRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -184,7 +192,7 @@ class DiaRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -266,6 +274,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class DiaSelfAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -450,6 +459,8 @@ class DiaEncoder(DiaPreTrainedModel):
         self.norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.rotary_emb = DiaRotaryEmbedding(config=config)
 
+        self.post_init()
+
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -523,7 +534,6 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         self_attn_cache = past_key_values
@@ -576,6 +586,8 @@ class DiaDecoder(DiaPreTrainedModel):
         )
         self.norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.rotary_emb = DiaRotaryEmbedding(config=config)
+
+        self.post_init()
 
     @auto_docstring
     @can_return_tuple

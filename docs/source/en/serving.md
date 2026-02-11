@@ -403,11 +403,11 @@ Make sure to install the required libraries listed in the quantization documenta
 
 #### On the fly quantization
 
-If you want to quantize a model at runtime, you can specify the --quantization flag in the CLI. Note that not all quantization methods support on-the-fly conversion. The full list of supported methods is available in the quantization [overview](https://huggingface.co/docs/transformers/main/quantization/overview). 
+If you want to quantize a model at runtime, you can specify the --quantization flag in the CLI. Note that not all quantization methods support on-the-fly conversion. The full list of supported methods is available in the quantization [overview](https://huggingface.co/docs/transformers/main/quantization/overview).
 
 Currently, with transformers serve, we only supports some methods: ["bnb-4bit", "bnb-8bit"]
 
-For example, to enable 4-bit quantization with bitsandbytes, you need to pass add `--quantization bnb-4bit`: 
+For example, to enable 4-bit quantization with bitsandbytes, you need to pass add `--quantization bnb-4bit`:
 
 ```sh
 transformers serve --quantization bnb-4bit

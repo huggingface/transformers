@@ -148,9 +148,8 @@ def log_state_dict_report(
     mismatched_keys=None,
     mismatched_shapes=None,
     ignore_mismatched_sizes=True,
-    misc=None,
+    conversion_errors=None,
     color=True,  # allow disabling for plain logs
-    min_width_full_table=60,  # terminal min width to attempt full table
 ):
     """Log a readable report about state_dict loading issues.
 
@@ -165,12 +164,13 @@ def log_state_dict_report(
     missing_keys = missing_keys or []
     mismatched_keys = mismatched_keys or []
     mismatched_shapes = mismatched_shapes or []
-    misc = misc or {}
+    conversion_errors = conversion_errors or {}
 
     # Detect whether the current stdout supports ANSI colors; allow callers to pass `color=False` to force no color
     color_enabled = bool(color and sys.stdout.isatty())
     ansi = ANSI(color_enabled)
 
+    # Re-raise errors early if needed
     if error_msgs:
         error_msg = "\n\t".join(error_msgs)
         if "size mismatch" in error_msg:
@@ -204,9 +204,9 @@ def log_state_dict_report(
             )
             rows.append(data)
 
-    if misc:
-        for k, v in update_key_name(misc).items():
-            status = "MISC"
+    if conversion_errors:
+        for k, v in update_key_name(conversion_errors).items():
+            status = "CONVERSION"
             status = _color(status, "purple", ansi)
             _details = v[:term_w]
             rows.append([k, status, _details])
@@ -228,16 +228,25 @@ def log_state_dict_report(
     if unexpected_keys:
         tips += f"\n- {_color('UNEXPECTED', 'orange', ansi) + ansi['italic']}\t:can be ignored when loading from different task/architecture; not ok if you expect identical arch."
     if missing_keys:
-        tips += f"\n- {_color('MISSING', 'red', ansi) + ansi['italic']}\t:those params were newly initialized because missing form the checkpoint. Consider training on your downstream task."
+        tips += f"\n- {_color('MISSING', 'red', ansi) + ansi['italic']}\t:those params were newly initialized because missing from the checkpoint. Consider training on your downstream task."
     if mismatched_keys:
-        tips += f"\n- {_color('MISMATCH', 'yellow', ansi) + ansi['italic']}\t:ckpt weights were loaded, but they did not match the original empty weight."
-    if misc:
-        tips += f"\n- {_color('MISC', 'purple', ansi) + ansi['italic']}\t:originate from the conversion scheme"
+        tips += f"\n- {_color('MISMATCH', 'yellow', ansi) + ansi['italic']}\t:ckpt weights were loaded, but they did not match the original empty weight shapes."
+    if conversion_errors:
+        tips += f"\n- {_color('CONVERSION', 'purple', ansi) + ansi['italic']}\t:originate from the conversion scheme"
     tips += f"{ansi['reset']}"
 
+    # Log the report as warning
     logger.warning(prelude + table + tips)
+
+    # Re-raise in those case, after the report
+    if conversion_errors:
+        raise RuntimeError(
+            "We encountered some issues during automatic conversion of the weights. For details look at the `CONVERSION` entries of "
+            "the above report!"
+        )
     if not ignore_mismatched_sizes and mismatched_keys:
         raise RuntimeError(
             "You set `ignore_mismatched_sizes` to `False`, thus raising an error. For details look at the above report!"
         )
+
     return prelude + table + tips

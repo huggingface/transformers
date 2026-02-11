@@ -23,6 +23,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -1154,7 +1155,6 @@ class BigBirdPegasusEncoderAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -1178,7 +1178,7 @@ def eager_attention_forward(
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
-    attn_output = torch.matmul(attn_weights, value)
+    attn_output = torch.matmul(attn_weights.to(value.dtype), value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
@@ -1536,6 +1536,11 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BigBirdPegasusEncoderLayer", "BigBirdPegasusDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _can_compile_fullgraph = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, BigBirdPegasusForConditionalGeneration):
+            init.zeros_(module.final_logits_bias)
 
     @property
     def dummy_inputs(self):
@@ -2583,6 +2588,7 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.decoder = BigBirdPegasusDecoder(config)
+        self.post_init()
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)

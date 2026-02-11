@@ -254,7 +254,7 @@ class HqqHfQuantizer(HfQuantizer):
         model.is_hqq_serializable = self.is_serializable()
         return model
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self):
         return True
 
     @property

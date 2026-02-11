@@ -16,7 +16,7 @@
 """Tokenization classes for Splinter."""
 
 import collections
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
@@ -72,16 +72,17 @@ class SplinterTokenizer(TokenizersBackend):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase`.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, a minimal vocabulary is created.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = WordPiece
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
         do_lower_case: bool = True,
         unk_token: str = "[UNK]",
         sep_token: str = "[SEP]",
@@ -91,15 +92,12 @@ class SplinterTokenizer(TokenizersBackend):
         question_token: str = "[QUESTION]",
         tokenize_chinese_chars: bool = True,
         strip_accents: Optional[bool] = None,
-        vocab: Optional[dict] = None,
         **kwargs,
     ):
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
+        self._vocab = (
+            vocab
+            if vocab is not None
+            else {
                 str(pad_token): 0,
                 str(unk_token): 1,
                 str(cls_token): 2,
@@ -108,6 +106,7 @@ class SplinterTokenizer(TokenizersBackend):
                 str(question_token): 5,
                 ".": 6,
             }
+        )
 
         self._tokenizer = Tokenizer(WordPiece(self._vocab, unk_token=str(unk_token)))
 
@@ -120,10 +119,7 @@ class SplinterTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
         self._tokenizer.decoder = decoders.WordPiece(prefix="##")
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,
@@ -135,21 +131,6 @@ class SplinterTokenizer(TokenizersBackend):
             strip_accents=strip_accents,
             **kwargs,
         )
-
-        if hasattr(self, "_tokenizer") and self._tokenizer.normalizer is not None:
-            import json
-
-            pre_tok_state = json.loads(self._tokenizer.normalizer.__getstate__())
-            if (
-                pre_tok_state.get("lowercase", do_lower_case) != do_lower_case
-                or pre_tok_state.get("strip_accents", strip_accents) != strip_accents
-                or pre_tok_state.get("handle_chinese_chars", tokenize_chinese_chars) != tokenize_chinese_chars
-            ):
-                pre_tok_class = getattr(normalizers, pre_tok_state.pop("type"))
-                pre_tok_state["lowercase"] = do_lower_case
-                pre_tok_state["strip_accents"] = strip_accents
-                pre_tok_state["handle_chinese_chars"] = tokenize_chinese_chars
-                self._tokenizer.normalizer = pre_tok_class(**pre_tok_state)
 
         self.do_lower_case = do_lower_case
         self.tokenize_chinese_chars = tokenize_chinese_chars

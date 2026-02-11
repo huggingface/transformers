@@ -28,12 +28,13 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
+from ...utils import TransformersKwargs, is_grouped_mm_available, logging
 from ...utils.generic import OutputRecorder
 from ..mistral.modeling_mistral import (
     MistralAttention,
@@ -134,6 +135,7 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
+@use_experts_implementation
 class MixtralExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
@@ -263,7 +265,9 @@ class MixtralDecoderLayer(GradientCheckpointingLayer):
 
 
 class MixtralPreTrainedModel(MistralPreTrainedModel):
-    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+    _can_compile_fullgraph = (
+        is_grouped_mm_available()
+    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
     _can_record_outputs = {
         "router_logits": OutputRecorder(MixtralTopKRouter, index=0),
         "hidden_states": MixtralDecoderLayer,
