@@ -24,7 +24,8 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..granite.modeling_granite import GraniteRMSNorm, GraniteRotaryEmbedding
 from ..jetmoe.modeling_jetmoe import JetMoeParallelExperts, JetMoeTopKGating
 from ..llama.modeling_llama import LlamaAttention, LlamaPreTrainedModel
@@ -163,7 +164,8 @@ class GraniteMoeModel(MixtralModel):
         self.norm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.embedding_multiplier = config.embedding_multiplier
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

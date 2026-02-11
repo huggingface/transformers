@@ -36,8 +36,8 @@ from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedConfig, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
 from .vision import IdeficsVisionEmbeddings, IdeficsVisionTransformer
@@ -939,7 +939,8 @@ class IdeficsModel(IdeficsPreTrainedModel):
     def freeze_vision_layers(self, module_exceptions=[]):
         freeze_model(self.vision_model, module_exceptions=module_exceptions)
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

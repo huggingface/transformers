@@ -19,7 +19,8 @@ from torch import nn
 
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
-from ...utils.generic import ModelOutput, TransformersKwargs, check_model_inputs
+from ...utils.generic import ModelOutput, TransformersKwargs, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..sam.configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 from ..sam.modeling_sam import (
     SamFeedForward,
@@ -187,7 +188,8 @@ class SamHQVisionEncoder(SamVisionEncoder, SamHQPreTrainedModel):
         "attentions": SamHQVisionAttention,
     }
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | SamHQVisionEncoderOutput:

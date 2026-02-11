@@ -40,7 +40,12 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import ModelOutput, TensorType, auto_docstring, can_return_tuple, logging
-from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested
+from ...utils.generic import (
+    TransformersKwargs,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..maskformer.modeling_maskformer import MaskFormerSinePositionEmbedding
 from ..sam.image_processing_sam_fast import SamImageProcessorFast
@@ -725,7 +730,8 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
         pos_embed = pos_embed.permute(0, 2, 3, 1)
         return pos_embed
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -1278,7 +1284,8 @@ class Sam2Model(SamModel):
 
         return vision_outputs
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

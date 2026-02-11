@@ -45,7 +45,8 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_gemma3n import Gemma3nAudioConfig, Gemma3nConfig, Gemma3nTextConfig, Gemma3nVisionConfig
 
@@ -941,7 +942,8 @@ class Gemma3nAudioEncoder(PreTrainedModel):
         )
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | Gemma3nAudioEncoderModelOutput:
@@ -1210,9 +1212,8 @@ def eager_attention_forward(
         attn_weights = attn_weights / softcap
         attn_weights = torch.tanh(attn_weights)
         attn_weights = attn_weights * softcap
-    if attention_mask is not None:  # no matter the length, we just slice it
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
@@ -1636,7 +1637,8 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,

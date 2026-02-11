@@ -234,7 +234,10 @@ class FbgemmFp8Test(unittest.TestCase):
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
         quantization_config = FbgemmFp8Config()
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name, device_map="auto", quantization_config=quantization_config
+            self.model_name,
+            device_map="auto",
+            quantization_config=quantization_config,
+            max_memory={0: "6GB", 1: "6GB"},
         )
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
@@ -277,7 +280,9 @@ class FbgemmFp8Test(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
 
-            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map="auto")
+            model = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, device_map="auto", max_memory={0: "6GB", 1: "6GB"}
+            )
             self.assertTrue(set(model.hf_device_map.values()) == {0, 1})
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
