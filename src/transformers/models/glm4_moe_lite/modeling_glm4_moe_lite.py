@@ -582,8 +582,6 @@ class Glm4MoeLitePreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Glm4MoeLiteModel(Glm4MoeLitePreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
-
     def __init__(self, config: Glm4MoeLiteConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
