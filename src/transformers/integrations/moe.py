@@ -113,10 +113,6 @@ def batched_mm_experts_forward(
     # Reshape for easier indexing
     # S is the number of selected tokens-experts pairs (S = num_tokens * num_top_k)
     token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
-    if top_k_weights.sum() == torch.tensor(0.0, device=top_k_weights.device):
-        # If all routing weights are zero local experts are not selected
-        return torch.zeros_like(hidden_states)
-
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
