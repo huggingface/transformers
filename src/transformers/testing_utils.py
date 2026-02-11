@@ -113,6 +113,7 @@ from .utils import (
     is_liger_kernel_available,
     is_lomo_available,
     is_mistral_common_available,
+    is_mlx_available,
     is_natten_available,
     is_nltk_available,
     is_numba_available,
@@ -1427,6 +1428,13 @@ def require_mistral_common(test_case):
     Decorator marking a test that requires mistral-common. These tests are skipped when mistral-common isn't available.
     """
     return unittest.skipUnless(is_mistral_common_available(), "test requires mistral-common")(test_case)
+
+
+def require_mlx(test_case):
+    """
+    Decorator marking a test that requires mlx
+    """
+    return unittest.skipUnless(is_mlx_available(), "test requires mlx")(test_case)
 
 
 def get_gpu_count():

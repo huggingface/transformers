@@ -24,8 +24,15 @@ import numpy as np
 
 from transformers import AutoFeatureExtractor, Wav2Vec2FeatureExtractor
 from transformers.feature_extraction_utils import BatchFeature
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test, require_torch
-from transformers.utils import is_torch_available
+from transformers.testing_utils import (
+    TOKEN,
+    TemporaryHubRepo,
+    get_tests_dir,
+    is_staging_test,
+    require_mlx,
+    require_torch,
+)
+from transformers.utils import is_mlx_available, is_torch_available
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
@@ -35,6 +42,9 @@ from test_module.custom_feature_extraction import CustomFeatureExtractor  # noqa
 
 if is_torch_available():
     import torch
+
+if is_mlx_available():
+    import mlx.core as mx
 
 
 SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR = get_tests_dir("fixtures")
@@ -114,6 +124,36 @@ class BatchFeatureTester(unittest.TestCase):
         numpy_arrays = [np.random.randn(3, 10, 10) for _ in range(3)]
         batch_stacked = BatchFeature({"pixel_values": numpy_arrays}, tensor_type="pt")
         self.assertIsInstance(batch_stacked["pixel_values"], torch.Tensor)
+        self.assertEqual(batch_stacked["pixel_values"].shape, (3, 3, 10, 10))
+
+    @require_mlx
+    def test_batch_feature_mlx_conversion(self):
+        """Test conversion to MLX tensors from various input types."""
+        # From lists
+        batch = BatchFeature({"input_values": [[1, 2, 3], [4, 5, 6]]}, tensor_type="mlx")
+        self.assertIsInstance(batch["input_values"], mx.array)
+        self.assertEqual(batch["input_values"].shape, (2, 3))
+
+        # From MLX array (should be returned as-is)
+        mlx_data = mx.array([[1, 2, 3], [4, 5, 6]])
+        batch_mlx = BatchFeature({"input_values": mlx_data}, tensor_type="mlx")
+        np.testing.assert_array_equal(np.asarray(batch_mlx["input_values"]), np.asarray(mlx_data))
+
+        # From numpy arrays
+        batch_numpy = BatchFeature({"input_values": np.array([[1, 2], [3, 4]])}, tensor_type="mlx")
+        self.assertIsInstance(batch_numpy["input_values"], mx.array)
+
+        # List of same-shape MLX arrays should stack
+        mlx_arrays = [mx.array([[1, 2, 3], [4, 5, 6]]), mx.array([[7, 8, 9], [10, 11, 12]])]
+        batch_stacked = BatchFeature({"input_values": mlx_arrays}, tensor_type="mlx")
+        self.assertIsInstance(batch_stacked["input_values"], mx.array)
+        expected = np.array([[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]])
+        np.testing.assert_array_equal(np.asarray(batch_stacked["input_values"]), expected)
+
+        # List of same-shape numpy arrays should stack
+        numpy_arrays = [np.random.randn(3, 10, 10) for _ in range(3)]
+        batch_stacked = BatchFeature({"pixel_values": numpy_arrays}, tensor_type="mlx")
+        self.assertIsInstance(batch_stacked["pixel_values"], mx.array)
         self.assertEqual(batch_stacked["pixel_values"].shape, (3, 3, 10, 10))
 
     @require_torch
