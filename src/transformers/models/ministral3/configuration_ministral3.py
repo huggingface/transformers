@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Mistral AI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Ministral model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -126,25 +123,25 @@ class Ministral3Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 131072,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 14336,
-        num_hidden_layers: Optional[int] = 34,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = 8,
-        head_dim: Optional[int] = 128,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 262144,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-5,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 11,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        sliding_window: Optional[int] = None,
-        attention_dropout: Optional[float] = 0.0,
+        vocab_size: int | None = 131072,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 14336,
+        num_hidden_layers: int | None = 34,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 8,
+        head_dim: int | None = 128,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 262144,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-5,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 11,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        sliding_window: int | None = None,
+        attention_dropout: float | None = 0.0,
         **kwargs,
     ):
         if rope_parameters is None:
@@ -187,12 +184,12 @@ class Ministral3Config(PreTrainedConfig):
             )
 
         self.rope_parameters = rope_parameters
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
             ignore_keys_at_rope_validation={"llama_4_scaling_beta", "max_position_embeddings"},
             **kwargs,
         )

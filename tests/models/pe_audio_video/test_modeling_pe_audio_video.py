@@ -208,10 +208,9 @@ class PeAudioVideoEncoderTester:
 class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PeAudioVideoEncoder,)
     additional_model_inputs = ["pixel_values_videos", "padding_mask_videos"]
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     _is_composite = True
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = PeAudioVideoEncoderTester(self)
@@ -228,10 +227,6 @@ class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="PeAudioVideoEncoder does not have usual input embeddings")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
-    def test_initialization(self):
         pass
 
     @unittest.skip("PeAudioVideoEncoder does not have language_model, vision_tower, multi_modal_projector.")

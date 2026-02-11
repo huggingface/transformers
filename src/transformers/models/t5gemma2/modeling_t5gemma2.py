@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_t5gemma2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -21,7 +20,7 @@
 # limitations under the License.
 import copy
 from collections.abc import Callable
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -37,6 +36,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPooling,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
     SequenceClassifierOutput,
@@ -45,8 +45,9 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
 from .configuration_t5gemma2 import T5Gemma2Config, T5Gemma2DecoderConfig, T5Gemma2EncoderConfig, T5Gemma2TextConfig
 
@@ -118,10 +119,10 @@ class T5Gemma2RotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[T5Gemma2TextConfig] = None,
+        config: T5Gemma2TextConfig | None = None,
         device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
-        layer_type: Optional[str] = None,
+        seq_len: int | None = None,
+        layer_type: str | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -179,7 +180,7 @@ def rotate_half(x):
 
 
 @use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -187,8 +188,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -223,10 +222,10 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     dropout: float = 0.0,
-    scaling: Optional[float] = None,
-    softcap: Optional[float] = None,
+    scaling: float | None = None,
+    softcap: float | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     if scaling is None:
@@ -241,9 +240,8 @@ def eager_attention_forward(
         attn_weights = attn_weights / softcap
         attn_weights = torch.tanh(attn_weights)
         attn_weights = attn_weights * softcap
-    if attention_mask is not None:  # no matter the length, we just slice it
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
@@ -291,11 +289,11 @@ class T5Gemma2SelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -314,9 +312,9 @@ class T5Gemma2SelfAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -374,15 +372,15 @@ class T5Gemma2MergedAttention(nn.Module):
         # decoder self-attention inputs
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        merged_attention_mask: Optional[torch.Tensor],
+        merged_attention_mask: torch.Tensor | None,
         # cross-attention inputs
         encoder_hidden_states: torch.Tensor,
         # cache inputs
-        past_key_values: Optional[EncoderDecoderCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        past_key_values: EncoderDecoderCache | None = None,
+        cache_position: torch.LongTensor | None = None,
         # others
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         # attention shapes.
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
@@ -434,9 +432,9 @@ class T5Gemma2MergedAttention(nn.Module):
         key_states = torch.cat([key_states, cross_key_states], dim=2)
         value_states = torch.cat([value_states, cross_value_states], dim=2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -487,9 +485,9 @@ class T5Gemma2EncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor,]:
         residual = hidden_states
@@ -541,12 +539,12 @@ class T5Gemma2DecoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        merged_attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[EncoderDecoderCache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
+        merged_attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.FloatTensor:
         residual = hidden_states
@@ -618,11 +616,11 @@ class T5Gemma2MultiModalProjector(nn.Module):
         self.avg_pool = nn.AvgPool2d(kernel_size=self.kernel_size, stride=self.kernel_size)
 
     def forward(self, vision_outputs: torch.Tensor):
-        batch_size, _, seq_length = vision_outputs.shape
+        batch_size, _, hidden_size = vision_outputs.shape
 
         reshaped_vision_outputs = vision_outputs.transpose(1, 2)
         reshaped_vision_outputs = reshaped_vision_outputs.reshape(
-            batch_size, seq_length, self.patches_per_image, self.patches_per_image
+            batch_size, hidden_size, self.patches_per_image, self.patches_per_image
         )
         reshaped_vision_outputs = reshaped_vision_outputs.contiguous()
 
@@ -765,8 +763,8 @@ def sliding_window_mask_function(sliding_window: int, is_causal=True) -> Callabl
     return inner_mask
 
 
-class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
-    config: T5Gemma2EncoderConfig
+class T5Gemma2TextEncoder(T5Gemma2PreTrainedModel):
+    config: T5Gemma2TextConfig
     _can_record_outputs = {
         "attentions": T5Gemma2SelfAttention,
         "hidden_states": T5Gemma2EncoderLayer,
@@ -774,53 +772,139 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
 
     def __init__(
         self,
-        config: T5Gemma2EncoderConfig,
+        config: T5Gemma2TextConfig,
         eoi_token_index: int = 256_000,
     ):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
-        self.vocab_size = config.text_config.vocab_size
-
-        vision_config = config.vision_config
-        text_config = config.text_config
-
-        # setup vision tower
-        self.vision_tower = AutoModel.from_config(config=vision_config)
-        self.multi_modal_projector = T5Gemma2MultiModalProjector(config)
+        self.vocab_size = config.vocab_size
 
         self.embed_tokens = T5Gemma2TextScaledWordEmbedding(
-            text_config.vocab_size,
-            text_config.hidden_size,
+            config.vocab_size,
+            config.hidden_size,
             self.padding_idx,
-            embed_scale=text_config.hidden_size**0.5,
+            embed_scale=config.hidden_size**0.5,
             eoi_token_index=eoi_token_index,
         )
-        self.norm = T5Gemma2RMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
+        self.norm = T5Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
         self.layers = nn.ModuleList(
-            [T5Gemma2EncoderLayer(text_config, layer_idx) for layer_idx in range(text_config.num_hidden_layers)]
+            [T5Gemma2EncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.dropout = nn.Dropout(text_config.dropout_rate)
-        self.rotary_emb = T5Gemma2RotaryEmbedding(text_config)
-
-        self.text_config = text_config
+        self.dropout = nn.Dropout(config.dropout_rate)
+        self.rotary_emb = T5Gemma2RotaryEmbedding(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        """Convert pixel image to image features via the encoder and projector."""
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        # Unused for processor compatibility kept in signature.
+        token_type_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        # As we want to pass `past_key_values=None` explicitly everywhere, we need to pop them from kwargs if present
+        kwargs.pop("past_key_values", None)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if position_ids is None:
+            position_ids = torch.arange(0, inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
+
+        if not isinstance(self_attn_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+            }
+            self_attn_mask_mapping = {
+                "full_attention": create_bidirectional_mask(**mask_kwargs),
+                "sliding_attention": create_bidirectional_mask(
+                    **mask_kwargs,
+                    and_mask_function=sliding_window_mask_function(self.config.sliding_window, is_causal=False),
+                ),
+            }
+
+        # input layer
+        hidden_states = inputs_embeds
+
+        # global and local position embeddings
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
+
+        # dropout
+        hidden_states = self.dropout(hidden_states)
+
+        for layer_module in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = layer_module(
+                hidden_states,
+                position_embeddings[layer_module.attention_type],
+                self_attn_mask_mapping[layer_module.attention_type],
+                position_ids,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+        )
+
+
+class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
+    config: T5Gemma2EncoderConfig
+
+    def __init__(
+        self,
+        config: T5Gemma2EncoderConfig,
+        eoi_token_index: int = 256_000,
+    ):
+        super().__init__(config)
+
+        self.text_model = T5Gemma2TextEncoder._from_config(config.text_config, eoi_token_index=eoi_token_index)
+        self.vision_tower = AutoModel.from_config(config=config.vision_config)
+        self.multi_modal_projector = T5Gemma2MultiModalProjector(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.text_model.get_input_embeddings()
+
+    def set_input_embeddings(self, new_embeddings):
+        return self.text_model.set_input_embeddings(new_embeddings)
+
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
         # pixel_values: (batch_size, channels, height, width)
         # image_features: Image feature tensor of shape (num_images, image_length, embed_dim).
-        vision_outputs = self.vision_tower(pixel_values=pixel_values).last_hidden_state
-        image_features = self.multi_modal_projector(vision_outputs)
-        return image_features
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
+        last_hidden_state = vision_outputs.last_hidden_state
+        image_features = self.multi_modal_projector(last_hidden_state)
+        vision_outputs.pooler_output = image_features
+
+        return vision_outputs
 
     def get_image_placeholder_mask(
         self,
-        input_ids: Optional[torch.LongTensor],
-        inputs_embeds: Optional[torch.FloatTensor],
+        input_ids: torch.LongTensor | None,
+        inputs_embeds: torch.FloatTensor | None,
         image_features: torch.FloatTensor,
     ):
         """
@@ -841,102 +925,50 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}",
+        )
         return special_image_mask
 
-    def preprocess_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-    ):
-        """Convert pixel images to image features and merge into input embeds."""
-        image_features = self.get_image_features(pixel_values)
-        image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-
-        image_mask = self.get_image_placeholder_mask(
-            input_ids, inputs_embeds=inputs_embeds, image_features=image_features
-        )
-
-        inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
-        return inputs_embeds
-
-    @check_model_inputs
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
         # Unused for processor compatibility kept in signature.
-        token_type_ids: Optional[torch.Tensor] = None,
+        token_type_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        del token_type_ids
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        # As we want to pass `past_key_values=None` explicitly everywhere, we need to pop them from kwargs if present
-        kwargs.pop("past_key_values", None)
-
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds = self.text_model.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            inputs_embeds = self.preprocess_image_features(
-                pixel_values, input_ids=input_ids, inputs_embeds=inputs_embeds
+            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+
+            image_mask = self.get_image_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
 
-        if position_ids is None:
-            position_ids = torch.arange(0, inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
-        if not isinstance(self_attn_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "input_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-            }
-            self_attn_mask_mapping = {
-                "full_attention": create_bidirectional_mask(**mask_kwargs),
-                "sliding_attention": create_bidirectional_mask(
-                    **mask_kwargs,
-                    and_mask_function=sliding_window_mask_function(self.text_config.sliding_window, is_causal=False),
-                ),
-            }
-
-        # input layer
-        hidden_states = inputs_embeds
-
-        # global and local position embeddings
-        position_embeddings = {}
-        for layer_type in self.text_config.layer_types:
-            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
-
-        # dropout
-        hidden_states = self.dropout(hidden_states)
-
-        for layer_module in self.layers[: self.text_config.num_hidden_layers]:
-            hidden_states = layer_module(
-                hidden_states,
-                position_embeddings[layer_module.attention_type],
-                self_attn_mask_mapping[layer_module.attention_type],
-                position_ids,
-                **kwargs,
-            )
-
-        hidden_states = self.norm(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
+        outputs = self.text_model(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            **kwargs,
         )
+        return outputs
 
 
-def bidirectional_mask_function(attention_mask: Optional[torch.Tensor]) -> Callable:
+def bidirectional_mask_function(attention_mask: torch.Tensor | None) -> Callable:
     """
     This creates bidirectional attention mask.
     """
@@ -979,19 +1011,20 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
         self.rotary_emb = T5Gemma2RotaryEmbedding(config)
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[EncoderDecoderCache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1017,7 +1050,7 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values.self_attention_cache if past_key_values is not None else None,
@@ -1034,7 +1067,7 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
         if not isinstance(cross_attn_mask_mapping := encoder_attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": encoder_hidden_states,
+                "inputs_embeds": encoder_hidden_states,
                 "attention_mask": encoder_attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": None,
@@ -1091,8 +1124,8 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
 @auto_docstring
 class T5Gemma2Model(T5Gemma2PreTrainedModel):
     _tied_weights_keys = {
-        "decoder.embed_tokens.weight": "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.eoi_embedding": "encoder.embed_tokens.eoi_embedding",
+        "decoder.embed_tokens.weight": "encoder.text_model.embed_tokens.weight",
+        "decoder.embed_tokens.eoi_embedding": "encoder.text_model.embed_tokens.eoi_embedding",
     }
 
     def __init__(self, config: T5Gemma2Config):
@@ -1121,21 +1154,21 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
     def forward(
         self,
         # encoder inputs
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
         # decoder inputs
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        decoder_position_ids: Optional[torch.LongTensor] = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        decoder_position_ids: torch.LongTensor | None = None,
         # others (mainly inference or cache related)
-        encoder_outputs: Optional[BaseModelOutput] = None,
-        past_key_values: Optional[EncoderDecoderCache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        decoder_inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        encoder_outputs: BaseModelOutput | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqModelOutput:
         r"""
@@ -1186,9 +1219,9 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
 
 class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
-        "lm_head.out_proj.weight": "model.encoder.embed_tokens.weight",
+        "lm_head.out_proj.weight": "model.encoder.text_model.embed_tokens.weight",
     }
-    _tp_plan = {"lm_head.out_proj": "colwise_rep"}
+    _tp_plan = {"lm_head.out_proj": "colwise_gather_output"}
     _pp_plan = {"lm_head.out_proj": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: T5Gemma2Config):
@@ -1219,8 +1252,12 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def get_image_features(self, pixel_values):
-        return self.get_encoder().get_image_features(pixel_values)
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.get_encoder().get_image_features(pixel_values, **kwargs)
 
     @property
     def vision_tower(self):
@@ -1231,25 +1268,25 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     def forward(
         self,
         # encoder inputs
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
         # decoder inputs
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        decoder_position_ids: Optional[torch.LongTensor] = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        decoder_position_ids: torch.LongTensor | None = None,
         # others (mainly inference or cache related)
-        encoder_outputs: Optional[BaseModelOutput] = None,
-        past_key_values: Optional[EncoderDecoderCache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        encoder_outputs: BaseModelOutput | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
+    ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
         r"""
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
@@ -1408,17 +1445,17 @@ class T5Gemma2ForSequenceClassification(T5Gemma2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.Tensor] = None,
-        decoder_position_ids: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[BaseModelOutput] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.Tensor | None = None,
+        decoder_position_ids: torch.LongTensor | None = None,
+        encoder_outputs: BaseModelOutput | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutput:
         r"""
@@ -1507,17 +1544,17 @@ class T5Gemma2ForTokenClassification(T5Gemma2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.Tensor] = None,
-        decoder_position_ids: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[BaseModelOutput] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.Tensor | None = None,
+        decoder_position_ids: torch.LongTensor | None = None,
+        encoder_outputs: BaseModelOutput | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> TokenClassifierOutput:
         r"""
@@ -1575,6 +1612,7 @@ class T5Gemma2ForTokenClassification(T5Gemma2PreTrainedModel):
 __all__ = [
     "T5Gemma2ForConditionalGeneration",
     "T5Gemma2Model",
+    "T5Gemma2Encoder",
     "T5Gemma2PreTrainedModel",
     "T5Gemma2ForSequenceClassification",
     "T5Gemma2ForTokenClassification",

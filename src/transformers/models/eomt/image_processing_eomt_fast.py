@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Mobile Perception Systems Lab at TU/e and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -44,10 +43,41 @@ from ...utils import (
 from .image_processing_eomt import (
     EomtImageProcessorKwargs,
     compute_segments,
-    convert_segmentation_map_to_binary_masks,
     get_size_with_aspect_ratio,
     remove_low_and_no_objects,
 )
+
+
+# Adapted from transformers.models.maskformer.image_processing_maskformer_fast.convert_segmentation_map_to_binary_masks_fast
+def convert_segmentation_map_to_binary_masks_fast(
+    segmentation_map: "torch.Tensor",
+    instance_id_to_semantic_id: dict[int, int] | None = None,
+    ignore_index: int | None = None,
+):
+    if ignore_index is not None:
+        segmentation_map = torch.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
+
+    all_labels = torch.unique(segmentation_map)
+
+    if ignore_index is not None:
+        all_labels = all_labels[all_labels != ignore_index]  # drop background label if applicable
+
+    binary_masks = [(segmentation_map == i) for i in all_labels]
+    if binary_masks:
+        binary_masks = torch.stack(binary_masks, dim=0)
+    else:
+        binary_masks = torch.zeros((0, *segmentation_map.shape), device=segmentation_map.device)
+
+    # Convert instance ids to class ids
+    if instance_id_to_semantic_id is not None:
+        labels = torch.zeros(all_labels.shape[0], device=segmentation_map.device)
+
+        for i, label in enumerate(all_labels):
+            class_id = instance_id_to_semantic_id[(label.item() + 1 if ignore_index is not None else label.item())]
+            labels[i] = class_id - 1 if ignore_index is not None else class_id
+    else:
+        labels = all_labels
+    return binary_masks.float(), labels.long()
 
 
 def get_target_size(size_dict: dict[str, int]) -> tuple[int, int]:
@@ -132,8 +162,8 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[list[torch.Tensor]] = None,
-        instance_id_to_semantic_id: Optional[dict[int, int]] = None,
+        segmentation_maps: list[torch.Tensor] | None = None,
+        instance_id_to_semantic_id: dict[int, int] | None = None,
         **kwargs: Unpack[EomtImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -147,11 +177,11 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput],
-        instance_id_to_semantic_id: Optional[dict[int, int]],
+        segmentation_maps: ImageInput | None,
+        instance_id_to_semantic_id: dict[int, int] | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[EomtImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -178,7 +208,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": F.InterpolationMode.NEAREST_EXACT,
+                    "interpolation": tvF.InterpolationMode.NEAREST_EXACT,
                 }
             )
 
@@ -194,14 +224,14 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
                 else:
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
-                masks, classes = convert_segmentation_map_to_binary_masks(
+                masks, classes = convert_segmentation_map_to_binary_masks_fast(
                     segmentation_map,
                     instance_id,
                     ignore_index=ignore_index,
                 )
 
-                mask_labels.append(torch.from_numpy(masks))
-                class_labels.append(torch.from_numpy(classes))
+                mask_labels.append(masks)
+                class_labels.append(classes)
 
             # we cannot batch them since they don't share a common class size
             outputs["mask_labels"] = mask_labels
@@ -217,16 +247,16 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         do_split_image: bool,
         do_pad: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ):
         """Preprocesses the input images and masks if provided."""
@@ -363,7 +393,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         self,
         outputs,
         target_sizes: list[tuple[int, int]],
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
     ) -> np.ndarray:
         """Post-processes model outputs into final semantic segmentation prediction."""
 
@@ -410,8 +440,8 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         threshold: float = 0.8,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        stuff_classes: Optional[list[int]] = None,
-        size: Optional[dict[str, int]] = None,
+        stuff_classes: list[int] | None = None,
+        size: dict[str, int] | None = None,
     ):
         """Post-processes model outputs into final panoptic segmentation prediction."""
 
@@ -466,7 +496,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         outputs,
         target_sizes: list[tuple[int, int]],
         threshold: float = 0.8,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
     ):
         """Post-processes model outputs into Instance Segmentation Predictions."""
 

@@ -143,6 +143,7 @@ alt="drawing" width="900"/>
 ## SamProcessor
 
 [[autodoc]] SamProcessor
+    - __call__
 
 ## SamImageProcessor
 

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pixio.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,20 +20,20 @@
 
 import collections.abc
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_tracing
-from ...utils.backbone_utils import BackboneMixin
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_pixio import PixioConfig
 
 
@@ -153,8 +152,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -165,7 +164,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -206,9 +204,9 @@ class PixioSelfAttention(nn.Module):
         value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
         query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         context_layer, attention_probs = attention_interface(
             self,
@@ -274,7 +272,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class PixioDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -367,7 +365,7 @@ class PixioPreTrainedModel(PreTrainedModel):
     }
 
     @torch.no_grad()
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]):
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
@@ -399,12 +397,13 @@ class PixioModel(PixioPreTrainedModel):
     def get_input_embeddings(self) -> PixioPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         if output_hidden_states is None:
@@ -432,10 +431,9 @@ class PixioModel(PixioPreTrainedModel):
     Pixio backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class PixioBackbone(PixioPreTrainedModel, BackboneMixin):
+class PixioBackbone(BackboneMixin, PixioPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = PixioEmbeddings(config)
@@ -449,10 +447,11 @@ class PixioBackbone(PixioPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self) -> PixioPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
-        self, pixel_values: torch.Tensor, output_hidden_states: Optional[bool] = None, **kwargs
+        self, pixel_values: torch.Tensor, output_hidden_states: bool | None = None, **kwargs
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -461,10 +460,12 @@ class PixioBackbone(PixioPreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("facebook/pixio-huge")
         >>> model = AutoBackbone.from_pretrained(

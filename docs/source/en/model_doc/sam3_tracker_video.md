@@ -303,3 +303,4 @@ Tracked 2 objects through 180 frames
 [[autodoc]] Sam3TrackerVideoModel
     - forward
     - propagate_in_video_iterator
+    - get_image_features

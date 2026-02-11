@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The rednote-hilab team and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -92,7 +91,7 @@ class Dots1DecoderLayer(DeepseekV3DecoderLayer):
 
 
 class Dots1PreTrainedModel(DeepseekV3PreTrainedModel):
-    pass
+    _keys_to_ignore_on_load_unexpected = None
 
 
 class Dots1Model(Qwen3Model):

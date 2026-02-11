@@ -31,7 +31,7 @@ import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Optional
+from typing import Any
 
 import albumentations as A
 import numpy as np
@@ -89,8 +89,8 @@ class Arguments:
             )
         },
     )
-    image_height: Optional[int] = field(default=512, metadata={"help": "Image height after resizing."})
-    image_width: Optional[int] = field(default=512, metadata={"help": "Image width after resizing."})
+    image_height: int | None = field(default=512, metadata={"help": "Image height after resizing."})
+    image_width: int | None = field(default=512, metadata={"help": "Image width after resizing."})
     token: str = field(
         default=None,
         metadata={
@@ -327,7 +327,7 @@ def setup_logging(training_args: TrainingArguments) -> None:
     transformers.utils.logging.enable_explicit_format()
 
 
-def find_last_checkpoint(training_args: TrainingArguments) -> Optional[str]:
+def find_last_checkpoint(training_args: TrainingArguments) -> str | None:
     """Find the last checkpoint in the output directory according to parameters specified in `training_args`."""
 
     checkpoint = None

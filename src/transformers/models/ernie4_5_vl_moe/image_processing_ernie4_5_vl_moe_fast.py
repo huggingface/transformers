@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_ernie4_5_vl_moe.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Baidu and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -86,7 +85,7 @@ class Ernie4_5_VL_MoeImageProcessorFast(BaseImageProcessorFast):
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
+        size: SizeDict | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -107,12 +106,12 @@ class Ernie4_5_VL_MoeImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         patch_size: int,
         merge_size: int,
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -191,14 +190,6 @@ class Ernie4_5_VL_MoeImageProcessorFast(BaseImageProcessorFast):
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[Ernie4_5_VL_MoeImageProcessorKwargs],
-    ) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
         """
         A utility that returns number of image patches for a given image size.
@@ -227,6 +218,14 @@ class Ernie4_5_VL_MoeImageProcessorFast(BaseImageProcessorFast):
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
+
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        **kwargs: Unpack[Ernie4_5_VL_MoeImageProcessorKwargs],
+    ) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
 
 __all__ = ["Ernie4_5_VL_MoeImageProcessorFast"]

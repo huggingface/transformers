@@ -18,7 +18,6 @@ import unittest
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     cleanup,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -82,7 +81,6 @@ class Jais2IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @require_read_token
     def test_model_logits(self):
         model_id = "inceptionai/Jais-2-8B-Chat"
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
@@ -110,7 +108,6 @@ class Jais2IntegrationTest(unittest.TestCase):
             atol=1e-3,
         )
 
-    @require_read_token
     def test_model_generation(self):
         tokenizer = AutoTokenizer.from_pretrained("inceptionai/Jais-2-8B-Chat")
         model = Jais2ForCausalLM.from_pretrained(

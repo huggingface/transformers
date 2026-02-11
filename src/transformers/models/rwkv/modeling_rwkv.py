@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Bo Peng and HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -17,7 +16,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -457,10 +455,10 @@ class RwkvOutput(ModelOutput):
         avoid providing the old `input_ids`.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    state: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    state: list[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -480,11 +478,11 @@ class RwkvCausalLMOutput(ModelOutput):
         avoid providing the old `input_ids`.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    state: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    state: list[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -512,16 +510,16 @@ class RwkvModel(RwkvPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        state: Optional[list[torch.FloatTensor]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        state: list[torch.FloatTensor] | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, RwkvOutput]:
+    ) -> tuple | RwkvOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -685,44 +683,21 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, state=None, inputs_embeds=None, use_cache=None, **kwargs):
-        # Overwritten -- this model uses `state`, but doesn't have a cache (`past_key_values`)
-
-        # only last token for inputs_ids if the state is passed along.
-        if state is not None:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and state is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        model_inputs["state"] = state
-        model_inputs["use_cache"] = use_cache
-
-        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
-        for key, value in kwargs.items():
-            if key not in model_inputs:
-                model_inputs[key] = value
-
-        return model_inputs
-
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        state: Optional[list[torch.FloatTensor]] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        state: list[torch.FloatTensor] | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> Union[tuple, RwkvCausalLMOutput]:
+    ) -> tuple | RwkvCausalLMOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else

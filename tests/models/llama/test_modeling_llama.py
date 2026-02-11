@@ -16,14 +16,12 @@
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import AutoTokenizer, StaticCache, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     run_test_using_subprocess,
@@ -62,7 +60,6 @@ class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-@require_read_token
 class LlamaIntegrationTest(unittest.TestCase):
     def setup(self):
         cleanup(torch_device, gc_collect=True)
@@ -229,11 +226,6 @@ class LlamaIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
         NUM_TOKENS_TO_GENERATE = 40
         # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
         # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
@@ -270,9 +262,6 @@ class LlamaIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.torch_export_test
     def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
         )

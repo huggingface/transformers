@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,14 +14,13 @@
 
 """Processor class for Mllama."""
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import auto_docstring
 
 
 class MllamaProcessorKwargs(ProcessingKwargs, total=False):
@@ -166,38 +164,8 @@ def build_string_from_input(prompt: str, bos_token: str, image_token: str) -> st
     return f"{image_token * num_image_tokens_on_start}{bos_token}{prompt}"
 
 
+@auto_docstring
 class MllamaProcessor(ProcessorMixin):
-    r"""
-    Constructs a Mllama processor which wraps [`MllamaImageProcessor`] and
-    [`PretrainedTokenizerFast`] into a single processor that inherits both the image processor and
-    tokenizer functionalities. See the [`~MllamaProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more
-    information.
-    The preferred way of passing kwargs is as a dictionary per modality, see usage example below.
-        ```python
-        from transformers import MllamaProcessor
-        from PIL import Image
-
-        processor = MllamaProcessor.from_pretrained("meta-llama/Llama-3.2-11B-Vision")
-
-        processor(
-            images=your_pil_image,
-            text=["<|image|>If I had to write a haiku for this one"],
-            images_kwargs = {"size": {"height": 448, "width": 448}},
-            text_kwargs = {"padding": "right"},
-            common_kwargs = {"return_tensors": "pt"},
-        )
-        ```
-
-    Args:
-        image_processor ([`MllamaImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-
-    """
-
     def __init__(self, image_processor, tokenizer, chat_template=None):
         if not hasattr(tokenizer, "image_token"):
             self.image_token = "<|image|>"
@@ -211,31 +179,14 @@ class MllamaProcessor(ProcessorMixin):
         self.bos_token = tokenizer.bos_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[MllamaProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare text(s) and image(s) to be fed as input to the model. This method forwards the `text`
-        arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` arguments to
-        MllamaImageProcessor's [`~MllamaImageProcessor.__call__`] if `images` is not `None`. Please refer
-        to the docstring of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                    - `'np'`: Return NumPy `np.ndarray` objects.
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

@@ -31,7 +31,7 @@ import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Optional, Union
+from typing import Any
 
 import albumentations as A
 import numpy as np
@@ -158,7 +158,7 @@ def augment_and_transform_batch(
     return result
 
 
-def collate_fn(batch: list[BatchFeature]) -> Mapping[str, Union[torch.Tensor, list[Any]]]:
+def collate_fn(batch: list[BatchFeature]) -> Mapping[str, torch.Tensor | list[Any]]:
     data = {}
     data["pixel_values"] = torch.stack([x["pixel_values"] for x in batch])
     data["labels"] = [x["labels"] for x in batch]
@@ -172,7 +172,7 @@ def compute_metrics(
     evaluation_results: EvalPrediction,
     image_processor: AutoImageProcessor,
     threshold: float = 0.0,
-    id2label: Optional[Mapping[int, str]] = None,
+    id2label: Mapping[int, str] | None = None,
 ) -> Mapping[str, float]:
     """
     Compute mean average mAP, mAR and their variants for the object detection task.
@@ -253,17 +253,17 @@ class DataTrainingArguments:
             "help": "Name of a dataset from the hub (could be your own, possibly private dataset hosted on the hub)."
         },
     )
-    dataset_config_name: Optional[str] = field(
+    dataset_config_name: str | None = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
-    train_val_split: Optional[float] = field(
+    train_val_split: float | None = field(
         default=0.15, metadata={"help": "Percent to split off of train for validation."}
     )
-    image_square_size: Optional[int] = field(
+    image_square_size: int | None = field(
         default=600,
         metadata={"help": "Image longest size will be resized to this value, then image will be padded to square."},
     )
-    max_train_samples: Optional[int] = field(
+    max_train_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -272,7 +272,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_eval_samples: Optional[int] = field(
+    max_eval_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -281,7 +281,7 @@ class DataTrainingArguments:
             )
         },
     )
-    use_fast: Optional[bool] = field(
+    use_fast: bool | None = field(
         default=True,
         metadata={"help": "Use a fast torchvision-base image processor if it is supported for a given model."},
     )
@@ -297,10 +297,10 @@ class ModelArguments:
         default="facebook/detr-resnet-50",
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
     )
-    config_name: Optional[str] = field(
+    config_name: str | None = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
-    cache_dir: Optional[str] = field(
+    cache_dir: str | None = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
     )
     model_revision: str = field(

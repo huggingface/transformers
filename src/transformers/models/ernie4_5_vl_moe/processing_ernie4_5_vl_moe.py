@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Baidu and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 import os.path
 from pathlib import Path
 from shutil import SameFileError, copyfile
-from typing import Optional, Union
 
 import numpy as np
 
@@ -83,9 +81,9 @@ class Ernie4_5_VL_MoeProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        videos: Optional[VideoInput] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        videos: VideoInput | None = None,
         **kwargs: Unpack[Ernie4_5_VL_MoeProcessorKwargs],
     ) -> BatchFeature:
         """

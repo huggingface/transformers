@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +13,14 @@
 # limitations under the License.
 """PyTorch Pixio model."""
 
-from typing import Optional
-
 import torch
 from torch import nn
 
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...utils import auto_docstring, is_tracing, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..dinov2.configuration_dinov2 import Dinov2Config
 from ..dinov2.modeling_dinov2 import (
     Dinov2Backbone,
@@ -312,12 +310,13 @@ class PixioModel(PixioPreTrainedModel):
     def get_input_embeddings(self) -> PixioPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         if output_hidden_states is None:
@@ -346,10 +345,11 @@ class PixioModel(PixioPreTrainedModel):
     """
 )
 class PixioBackbone(Dinov2Backbone):
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
-        self, pixel_values: torch.Tensor, output_hidden_states: Optional[bool] = None, **kwargs
+        self, pixel_values: torch.Tensor, output_hidden_states: bool | None = None, **kwargs
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -358,10 +358,12 @@ class PixioBackbone(Dinov2Backbone):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("facebook/pixio-huge")
         >>> model = AutoBackbone.from_pretrained(

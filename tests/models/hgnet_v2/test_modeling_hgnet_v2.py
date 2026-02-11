@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -179,7 +178,6 @@ class HGNetV2ForImageClassificationTest(ModelTesterMixin, PipelineTesterMixin, u
     pipeline_model_mapping = {"image-classification": HGNetV2ForImageClassification} if is_torch_available() else {}
 
     test_resize_embeddings = False
-    test_torch_exportable = True
     has_attentions = False
 
     def setUp(self):

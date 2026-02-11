@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Facebook AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@ import collections.abc
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import torch
@@ -31,7 +29,8 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_vit_mae import ViTMAEConfig
 
 
@@ -52,11 +51,11 @@ class ViTMAEModelOutput(ModelOutput):
         Tensor containing the original index of the (shuffled) masked patches.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    mask: Optional[torch.LongTensor] = None
-    ids_restore: Optional[torch.LongTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    mask: torch.LongTensor | None = None
+    ids_restore: torch.LongTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -71,9 +70,9 @@ class ViTMAEDecoderOutput(ModelOutput):
         Pixel reconstruction logits.
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -94,12 +93,12 @@ class ViTMAEForPreTrainingOutput(ModelOutput):
         Tensor containing the original index of the (shuffled) masked patches.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    mask: Optional[torch.LongTensor] = None
-    ids_restore: Optional[torch.LongTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    mask: torch.LongTensor | None = None
+    ids_restore: torch.LongTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 def get_2d_sincos_pos_embed(embed_dim, grid_size, add_cls_token=False):
@@ -335,8 +334,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -347,7 +346,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -389,9 +387,9 @@ class ViTMAESelfAttention(nn.Module):
         value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
         query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         context_layer, attention_probs = attention_interface(
             self,
@@ -567,12 +565,13 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        noise: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        noise: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ViTMAEModelOutput:
@@ -588,10 +587,12 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, ViTMAEModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/vit-mae-base")
         >>> model = ViTMAEModel.from_pretrained("facebook/vit-mae-base")
@@ -787,7 +788,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         )
         return patchified_pixel_values
 
-    def unpatchify(self, patchified_pixel_values, original_image_size: Optional[tuple[int, int]] = None):
+    def unpatchify(self, patchified_pixel_values, original_image_size: tuple[int, int] | None = None):
         """
         Args:
             patchified_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
@@ -863,8 +864,8 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        noise: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        noise: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ViTMAEForPreTrainingOutput:
@@ -880,10 +881,12 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, ViTMAEForPreTraining
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
 
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/vit-mae-base")
         >>> model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base")

@@ -191,11 +191,11 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    @unittest.skip(reason="Model has no input_embeds")
+    @unittest.skip(reason="Model has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Model has no input_embeds")
+    @unittest.skip(reason="Model has no inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
 
@@ -540,7 +540,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
             check_hidden_states_output(inputs_dict, config, model_class)
 
     # this model has no inputs_embeds
-    @unittest.skip(reason="Model has no input_embeds")
+    @unittest.skip(reason="Model has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -643,22 +643,6 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
 
     @unittest.skip(reason="Training is not supported yet")
     def test_training(self):
-        pass
-
-    @unittest.skip(reason="Training is not supported yet")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     # overwrite from test_modeling_common
@@ -930,22 +914,6 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="training is not supported yet")
     def test_training(self):
-        pass
-
-    @unittest.skip(reason="training is not supported yet")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     # overwrite from test_modeling_common
@@ -1568,11 +1536,11 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip(reason="Model has no input_embeds")
+    @unittest.skip(reason="Model has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Model has no input_embeds")
+    @unittest.skip(reason="Model has no inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
 
@@ -1590,22 +1558,6 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Training is not supported yet")
     def test_training(self):
-        pass
-
-    @unittest.skip(reason="Training is not supported yet")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     # overwrite from test_modeling_common
@@ -1739,11 +1691,11 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="Model has no input_embeds")
+    @unittest.skip(reason="Model has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Model has no input_embeds")
+    @unittest.skip(reason="Model has no inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
 
