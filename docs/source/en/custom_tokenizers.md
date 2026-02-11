@@ -59,6 +59,57 @@ trained_tokenizer.save_pretrained("./finance-gemma-tokenizer")
 trained_tokenizer.push_to_hub("finance-gemma-tokenizer")
 ```
 
+## Custom vocabulary
+
+An empty tokenizer supports custom vocabulary with the `vocab` and `merges` arguments.
+
+- `vocab` is the complete set of tokens a tokenizer knows and each entry maps a token to its input id.
+- `merges` defines how the BPE algorithm should combine adjacent tokens. 
+
+```py
+from transformers import GemmaTokenizer
+
+vocab={
+    "<pad>": 0,
+    "</s>": 1,
+    "<s>": 2,
+    "<unk>": 3,
+    "<mask>": 4,
+    "▁the": 5,
+    "▁stock": 6,
+    "▁market": 7,
+    "▁": 8,
+    "r": 9,
+    "a": 10,
+    "l": 11,
+    "i": 12,
+    "e": 13,
+    "d": 14,
+    "ra": 15,
+    "li": 16,
+    "lie": 17,
+    "lied": 18,
+    "ral": 19,
+    "ralli": 20,
+    "rallie": 21,
+    "rallied": 22,
+}
+merges=[
+    ("r", "a"),       # r + a → ra
+    ("l", "i"),       # l + i → li
+    ("li", "e"),      # li + e → lie
+    ("lie", "d"),     # lie + d → lied
+    ("ra", "l"),      # ra + l → ral
+    ("ral", "li"),    # ral + li → ralli
+    ("ralli", "e"),   # ralli + e → rallie
+    ("rallie", "d"),  # rallie + d → rallied
+]
+
+tokenizer = GemmaTokenizer(vocab=vocab, merges=merges)
+encoded = tokenizer("the stock market rallied")
+print(encoded["input_ids"])
+```
+
 ## Subclassing TokenizersBackend
 
 Tokenizers supports four different [backends](./fast_tokenizers#backends). Generally, you should use the [`TokenizersBackend`] to define a new tokenizer because it's faster.
