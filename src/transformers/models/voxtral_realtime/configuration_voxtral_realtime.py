@@ -98,9 +98,7 @@ class VoxtralRealtimeEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin)
         hidden_act="silu",
         max_position_embeddings=1500,
         rms_norm_eps=1e-05,
-        rope_parameters={
-            "rope_theta": 1000000.0,
-        },
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         sliding_window=750,
         head_dim=64,
         **kwargs,
