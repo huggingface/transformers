@@ -1766,7 +1766,11 @@ class Trainer:
                         self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
                     # We sync the gradients in the following cases: 1. sync_each_batch set to True 2. Using deepspeed 3. when we are at the last batch sample
-                    if self.accelerator.gradient_state.sync_each_batch or self.accelerator.distributed_type == DistributedType.DEEPSPEED or i == len(batch_samples) - 1:
+                    if (
+                        self.accelerator.gradient_state.sync_each_batch
+                        or self.accelerator.distributed_type == DistributedType.DEEPSPEED
+                        or i == len(batch_samples) - 1
+                    ):
                         sync_context = contextlib.nullcontext
                     else:
                         sync_context = functools.partial(self.accelerator.no_sync, model=model)
@@ -4010,7 +4014,7 @@ class Trainer:
                 self.args.gradient_accumulation_steps = grad_acc_kwargs["num_steps"]
         else:
             grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps
-        
+
         # Just making sure that gradient_state have the correct values passed.
         # We don't rely on `accumulate` from accelerate to set sync_gradients in gradient_state.
         # Rather, we do it ourselves by setting self.accelerator.gradient_state._set_sync_gradients.
@@ -4046,7 +4050,7 @@ class Trainer:
             "dataloader_config": dataloader_config,
             "fsdp_plugin": fsdp_plugin,
             "deepspeed_plugin": self.args.deepspeed_plugin,
-            "gradient_accumulation_plugin": gradient_accumulation_plugin
+            "gradient_accumulation_plugin": gradient_accumulation_plugin,
         }
 
         # We defer compatibility checks to accelerator
