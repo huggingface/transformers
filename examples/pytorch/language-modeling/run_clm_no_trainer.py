@@ -518,9 +518,7 @@ def main():
     # Optimizer
     # Split weights in two groups, one with weight decay and the other not.
     forbidden_name_patterns = [r"bias", r"layernorm", r"rmsnorm", r"(?:^|\.)norm(?:$|\.)", r"_norm(?:$|\.)"]
-    decay_parameters = get_parameter_names(
-        model, [nn.LayerNorm], forbidden_layer_names=forbidden_name_patterns
-    )
+    decay_parameters = get_parameter_names(model, [nn.LayerNorm], forbidden_layer_names=forbidden_name_patterns)
     optimizer_grouped_parameters = [
         {
             "params": [p for n, p in model.named_parameters() if n in decay_parameters and p.requires_grad],
