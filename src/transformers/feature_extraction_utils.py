@@ -146,7 +146,6 @@ class BatchFeature(UserDict):
             is_tensor = torch.is_tensor
 
         elif tensor_type == TensorType.MLX:
-
             if not is_mlx_available():
                 raise ImportError("Unable to convert output to MLX tensors format, MLX is not installed.")
             import mlx.core as mx
@@ -162,9 +161,9 @@ class BatchFeature(UserDict):
                     ):
                         value = np.array(value)
                 return mx.array(value)
-            
+
             is_tensor = is_mlx_array
-                
+
         else:
 
             def as_tensor(value, dtype=None):

@@ -228,5 +228,3 @@ class ImageProcessingUtilsTester(unittest.TestCase):
         validate_fast_preprocess_arguments(return_tensors=TensorType.PYTORCH)
         validate_fast_preprocess_arguments(return_tensors=TensorType.MLX)
         validate_fast_preprocess_arguments(return_tensors=TensorType.NUMPY)
-
-
