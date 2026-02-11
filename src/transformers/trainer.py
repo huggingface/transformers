@@ -1188,7 +1188,7 @@ class Trainer:
         return self.optimizer
 
     def create_scheduler(
-        self, num_training_steps: int, optimizer: torch.optim.Optimizer = None
+        self, num_training_steps: int, optimizer: torch.optim.Optimizer | None = None
     ) -> torch.optim.lr_scheduler.LRScheduler:
         """
         Setup the scheduler. The optimizer of the trainer must have been set up either before this method is called or
@@ -1248,7 +1248,7 @@ class Trainer:
 
         return handler(ctx)
 
-    def get_decay_parameter_names(self, model) -> list[str]:
+    def get_decay_parameter_names(self, model: nn.Module) -> list[str]:
         """
         Get all parameter names that weight decay will be applied to.
 
@@ -1399,7 +1399,12 @@ class Trainer:
             )
 
     def _inner_training_loop(
-        self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
+        self,
+        batch_size: int | None = None,
+        args: TrainingArguments | None = None,
+        resume_from_checkpoint: str | None = None,
+        trial: "optuna.Trial | dict[str, Any] | None" = None,
+        ignore_keys_for_eval: list[str] | None = None,
     ) -> TrainOutput:
         """Run the actual training loop: forward, backward, optimizer step, logging, and checkpointing."""
         self.accelerator.free_memory()
@@ -1888,7 +1893,7 @@ class Trainer:
         self,
         model: nn.Module,
         inputs: dict[str, torch.Tensor | Any],
-        num_items_in_batch: torch.Tensor | None = None,
+        num_items_in_batch: torch.Tensor | int | None = None,
     ) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
@@ -1960,7 +1965,7 @@ class Trainer:
         model: nn.Module,
         inputs: dict[str, torch.Tensor | Any],
         return_outputs: bool = False,
-        num_items_in_batch: torch.Tensor | None = None,
+        num_items_in_batch: torch.Tensor | int | None = None,
     ) -> torch.Tensor | tuple[torch.Tensor, Any]:
         """
         How the loss is computed by Trainer. By default, all models return the loss in the first element.
@@ -2058,7 +2063,15 @@ class Trainer:
         return contextlib.nullcontext()
 
     def _maybe_log_save_evaluate(
-        self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time, learning_rate=None
+        self,
+        tr_loss: torch.Tensor,
+        grad_norm: torch.Tensor | float | None,
+        model: nn.Module,
+        trial: "optuna.Trial | dict[str, Any] | None",
+        epoch: float,
+        ignore_keys_for_eval: list[str] | None,
+        start_time: float,
+        learning_rate: float | None = None,
     ) -> None:
         """Log metrics, run evaluation, and save checkpoints if the current training state requires it."""
         if self.control.should_log and self.state.global_step > self._globalstep_last_logged:
@@ -2941,7 +2954,10 @@ class Trainer:
         return (loss, logits, labels)
 
     def _evaluate(
-        self, trial, ignore_keys_for_eval: list[str] | None, skip_scheduler: bool = False
+        self,
+        trial: "optuna.Trial | dict[str, Any] | None",
+        ignore_keys_for_eval: list[str] | None,
+        skip_scheduler: bool = False,
     ) -> dict[str, float]:
         """Run evaluation, report to HP search, and step ReduceLROnPlateau if needed."""
         metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
@@ -2966,7 +2982,7 @@ class Trainer:
 
     # ---- Checkpoint Saving ----
 
-    def _get_output_dir(self, trial) -> str:
+    def _get_output_dir(self, trial: "optuna.Trial | dict[str, Any] | None") -> str:
         """Return the output directory, accounting for hyperparameter search trials."""
         if self.hp_search_backend is not None and trial is not None:
             if self.hp_search_backend == HPSearchBackend.OPTUNA:
@@ -2985,7 +3001,7 @@ class Trainer:
             run_dir = self.args.output_dir
         return run_dir
 
-    def _save_checkpoint(self, model, trial) -> None:
+    def _save_checkpoint(self, model: nn.Module, trial: "optuna.Trial | dict[str, Any] | None") -> None:
         """Save model checkpoint, optimizer, scheduler, scaler, RNG states, and trainer state."""
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
         # want to save except FullyShardedDDP.
@@ -3051,7 +3067,7 @@ class Trainer:
                 use_mtime=True,
             )
 
-    def _determine_best_metric(self, metrics, trial) -> bool:
+    def _determine_best_metric(self, metrics: dict[str, float], trial: "optuna.Trial | dict[str, Any] | None") -> bool:
         """
         Determine if the model should be saved based on the evaluation metrics.
 
@@ -3089,7 +3105,7 @@ class Trainer:
 
         return is_new_best_metric
 
-    def _save_rng_state(self, output_dir) -> None:
+    def _save_rng_state(self, output_dir: str) -> None:
         """Save random number generator states for reproducible resumption."""
         # Save RNG state in non-distributed training
         rng_states = {
@@ -3140,7 +3156,7 @@ class Trainer:
         else:
             torch.save(rng_states, os.path.join(output_dir, f"rng_state_{self.args.process_index}.pth"))
 
-    def _save_optimizer_and_scheduler(self, output_dir) -> None:
+    def _save_optimizer_and_scheduler(self, output_dir: str) -> None:
         """Save optimizer and learning rate scheduler states to `output_dir`."""
         if is_torch_xla_available():
             xm.rendezvous("saving_optimizer_states")
@@ -3206,7 +3222,7 @@ class Trainer:
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
             reissue_pt_warnings(caught_warnings)
 
-    def _save_scaler(self, output_dir) -> None:
+    def _save_scaler(self, output_dir: str) -> None:
         """Save the gradient scaler state if one exists."""
         # See if there is a scaler attribute
         try:
@@ -3229,7 +3245,7 @@ class Trainer:
 
     # ---- Checkpoint Resuming ----
 
-    def _load_from_checkpoint(self, resume_from_checkpoint, model=None) -> None:
+    def _load_from_checkpoint(self, resume_from_checkpoint: str, model: nn.Module | None = None) -> None:
         """Load model weights from a checkpoint directory."""
         if model is None:
             model = self.model
@@ -3464,7 +3480,7 @@ class Trainer:
                 "on multiple nodes, you should activate `--save_on_each_node`."
             )
 
-    def _load_rng_state(self, checkpoint) -> None:
+    def _load_rng_state(self, checkpoint: str | None) -> None:
         """Restore random number generator states from a checkpoint."""
         # Load RNG states from `checkpoint`
         if checkpoint is None:
@@ -3509,7 +3525,7 @@ class Trainer:
         if is_torch_musa_available():
             set_rng_state_for_device("MUSA", torch.musa, checkpoint_rng_state, is_distributed)
 
-    def _load_optimizer_and_scheduler(self, checkpoint) -> None:
+    def _load_optimizer_and_scheduler(self, checkpoint: str | None) -> None:
         """If optimizer and scheduler states exist, load them."""
         if checkpoint is None:
             return
@@ -3613,7 +3629,7 @@ class Trainer:
                     )
                 reissue_pt_warnings(caught_warnings)
 
-    def _load_scaler(self, checkpoint) -> None:
+    def _load_scaler(self, checkpoint: str | None) -> None:
         """If scaler state exists, load it."""
         if checkpoint is None:
             return
@@ -3679,7 +3695,7 @@ class Trainer:
         for callback in new_callbacks:
             self.callback_handler.add_callback(callback)
 
-    def _issue_warnings_after_load(self, load_result) -> None:
+    def _issue_warnings_after_load(self, load_result: Any) -> None:
         """Log warnings for missing or unexpected keys after loading a checkpoint."""
         if len(load_result.missing_keys) != 0:
             if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(
@@ -3753,7 +3769,7 @@ class Trainer:
         if self.args.push_to_hub and not _internal_call:
             self.push_to_hub(commit_message="Model save", revision=self.args.hub_revision)
 
-    def _save(self, output_dir: str | None = None, state_dict=None) -> None:
+    def _save(self, output_dir: str | None = None, state_dict: dict | None = None) -> None:
         """Save model weights, configuration, and processing class to `output_dir`."""
         # If we are executing this function, we are the process zero, so we don't check for that.
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -4186,7 +4202,7 @@ class Trainer:
         self.hp_search_backend = None
         return best_run
 
-    def call_model_init(self, trial=None) -> nn.Module:
+    def call_model_init(self, trial: "optuna.Trial | dict[str, Any] | None" = None) -> nn.Module:
         """Invoke `model_init` to get a fresh model instance, optionally conditioned on a hyperparameter trial."""
         model_init_argcount = number_of_arguments(self.model_init)
         if model_init_argcount == 0:
@@ -4201,7 +4217,7 @@ class Trainer:
 
         return model
 
-    def _hp_search_setup(self, trial: "optuna.Trial | dict[str, Any]") -> None:
+    def _hp_search_setup(self, trial: "optuna.Trial | dict[str, Any] | None") -> None:
         """Set up training arguments and accelerator state for a hyperparameter search trial."""
         self._trial = trial
 
@@ -4254,7 +4270,7 @@ class Trainer:
         self.create_accelerator_and_postprocess()
 
     def _report_to_hp_search(
-        self, trial: "optuna.Trial | dict[str, Any]", step: int, metrics: dict[str, float]
+        self, trial: "optuna.Trial | dict[str, Any] | None", step: int, metrics: dict[str, float]
     ) -> None:
         """Report intermediate metrics to the active hyperparameter search backend."""
         if self.hp_search_backend is None or trial is None:
