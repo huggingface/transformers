@@ -37,7 +37,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -1200,7 +1200,12 @@ class UdopStack(UdopPreTrainedModel):
             causal_mask = (1.0 - causal_mask) * torch.finfo(inputs_embeds.dtype).min
 
         if self.is_decoder and encoder_attention_mask is not None:
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+            encoder_extended_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
         else:
             encoder_extended_attention_mask = None
 

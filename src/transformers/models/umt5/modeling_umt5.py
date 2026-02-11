@@ -24,7 +24,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -694,14 +694,13 @@ class UMT5Stack(UMT5PreTrainedModel):
         else:
             causal_mask = None
 
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=inputs_embeds.device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+        if self.is_decoder and encoder_attention_mask is not None:
+            encoder_extended_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
         else:
             encoder_extended_attention_mask = None
 

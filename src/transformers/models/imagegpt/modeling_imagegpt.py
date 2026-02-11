@@ -24,6 +24,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -507,41 +508,22 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        # ImageGPTAttention mask.
         if attention_mask is not None:
-            if batch_size <= 0:
-                raise ValueError("batch_size has to be defined and > 0")
             attention_mask = attention_mask.view(batch_size, -1)
-            # We create a 3D attention mask from a 2D tensor mask.
-            # Sizes are [batch_size, 1, 1, to_seq_length]
-            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-            # this attention mask is more simple than the triangular masking of causal attention
-            # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask = attention_mask[:, None, None, :]
-
-            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-            # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and the dtype's smallest value for masked positions.
-            # Since we are adding it to the raw scores before the softmax, this is
-            # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
-
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.add_cross_attention and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_attention_mask = None
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
         position_embeds = self.wpe(position_ids)
         hidden_states = inputs_embeds + position_embeds.to(inputs_embeds.device)
+
+        attention_mask, encoder_attention_mask = self._create_attention_masks(
+            attention_mask=attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
+            embedding_output=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+        )
 
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)
@@ -595,6 +577,40 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
             attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,
         )
+
+    def _create_attention_masks(
+        self,
+        attention_mask,
+        encoder_attention_mask,
+        embedding_output,
+        encoder_hidden_states,
+        cache_position,
+        past_key_values,
+    ):
+        if getattr(self.config, "is_decoder", False):
+            attention_mask = create_causal_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
+                past_key_values=past_key_values,
+            )
+        else:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=attention_mask,
+            )
+
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
+
+        return attention_mask, encoder_attention_mask
 
 
 @auto_docstring(

@@ -28,6 +28,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
@@ -745,16 +746,20 @@ class PerceiverModel(PerceiverPreTrainedModel):
         # If no attention mask is provided, make them all ones
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length), device=device)
-        # Make the attention mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        extended_attention_mask = self.invert_attention_mask(attention_mask)
 
         embedding_output = self.embeddings(batch_size=batch_size)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
 
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=None,
             inputs=inputs,
-            inputs_mask=extended_attention_mask,
+            inputs_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -777,7 +782,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
             decoder_outputs = self.decoder(
                 decoder_query,
                 z=sequence_output,
-                query_mask=extended_attention_mask,
+                query_mask=attention_mask,
                 output_attentions=output_attentions,
             )
             logits = decoder_outputs.logits
