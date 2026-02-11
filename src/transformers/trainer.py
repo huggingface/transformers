@@ -340,7 +340,7 @@ class Trainer:
           data parallelism, this means some of the model layers are split on different GPUs).
         - **place_model_on_device** -- Whether or not to automatically place the model on the device. Defaults to
           `True` unless model parallel, DeepSpeed, FSDP, full fp16/bf16 eval, or SageMaker MP is active. Can be
-          explicitly set via `TrainingArguments.place_model_on_device`.
+          overridden by subclassing `TrainingArguments` and overriding the `place_model_on_device` property.
         - **is_in_train** -- Whether or not a model is currently running `train` (e.g. when `evaluate` is called while
           in `train`)
 
@@ -684,12 +684,12 @@ class Trainer:
                 "The train_dataset does not implement __len__, max_steps has to be specified. "
                 "The number of steps needs to be known in advance for the learning rate scheduler."
             )
-        if (
-            self.train_dataset is not None
-            and isinstance(self.train_dataset, torch.utils.data.IterableDataset)
-            and args.group_by_length
-        ):
-            raise ValueError("the `--group_by_length` option is only available for `Dataset`, not `IterableDataset")
+
+        if self.train_dataset is not None and isinstance(self.train_dataset, torch.utils.data.IterableDataset):
+            logger.info(
+                f"The `train_sampling_strategy='{args.train_sampling_strategy}'` option is ignored when using an `IterableDataset`. "
+                "Samplers cannot be used with IterableDataset as they require indexed access to the dataset."
+            )
 
     def add_callback(self, callback):
         """
@@ -810,7 +810,7 @@ class Trainer:
             return None
 
         # Build the sampler.
-        if self.args.group_by_length:
+        if self.args.train_sampling_strategy == "group_by_length":
             if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
                 lengths = (
                     train_dataset[self.args.length_column_name]
@@ -828,7 +828,8 @@ class Trainer:
                 lengths=lengths,
                 model_input_name=model_input_name,
             )
-
+        elif self.args.train_sampling_strategy == "sequential":
+            return SequentialSampler(train_dataset)
         else:
             return RandomSampler(train_dataset)
 
@@ -906,7 +907,7 @@ class Trainer:
         if eval_dataset is None or not has_length(eval_dataset):
             return None
 
-        if self.args.group_by_length:
+        if self.args.train_sampling_strategy == "group_by_length":
             if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
                 lengths = (
                     eval_dataset[self.args.length_column_name]
