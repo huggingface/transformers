@@ -4011,8 +4011,8 @@ class Trainer:
         else:
             grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps
         
-        # Just making sure that gradient_state have the correct values passed. 
-        # We don't rely on `accumulate` from accelerate to set sync_gradients in gradient_state. 
+        # Just making sure that gradient_state have the correct values passed.
+        # We don't rely on `accumulate` from accelerate to set sync_gradients in gradient_state.
         # Rather, we do it ourselves by setting self.accelerator.gradient_state._set_sync_gradients.
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
 
