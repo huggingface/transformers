@@ -269,7 +269,7 @@ class Transpose(ConversionOps):
         # In this case, check the sentinel before transposing
         else:
             sentinel_dim = self.sentinel[0]
-            sentinel_size = getattr(kwargs["config"], self.sentinel[1])
+            sentinel_size = getattr(kwargs["config"].get_text_config(decoder=True), self.sentinel[1])
             # The sentinel check is True: do NOT transpose
             if tensor.shape[sentinel_dim] == sentinel_size:
                 return {target_pattern: tensor}
