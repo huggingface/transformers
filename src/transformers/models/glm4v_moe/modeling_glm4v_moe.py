@@ -428,6 +428,7 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
         "router_logits": Glm4vMoeTextTopkRouter,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
     input_modalities = ("text", "image", "video")
 
     @torch.no_grad()
@@ -1045,7 +1046,7 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
 
         mask_kwargs = {
             "config": self.config,
-            "input_embeds": inputs_embeds,
+            "inputs_embeds": inputs_embeds,
             "attention_mask": attention_mask,
             "cache_position": cache_position,
             "past_key_values": past_key_values,

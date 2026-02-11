@@ -91,7 +91,7 @@ class Dots1DecoderLayer(DeepseekV3DecoderLayer):
 
 
 class Dots1PreTrainedModel(DeepseekV3PreTrainedModel):
-    pass
+    _keys_to_ignore_on_load_unexpected = None
 
 
 class Dots1Model(Qwen3Model):

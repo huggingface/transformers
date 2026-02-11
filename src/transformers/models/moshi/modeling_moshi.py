@@ -972,7 +972,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         if attention_mask is not None:
             causal_mask = create_causal_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 cache_position=cache_position,
                 past_key_values=past_key_values,
@@ -1096,7 +1096,7 @@ class MoshiModel(MoshiPreTrainedModel):
         if attention_mask is not None:
             causal_mask = create_causal_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 cache_position=cache_position,
                 past_key_values=past_key_values,
@@ -1874,7 +1874,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         # Overwritten -- Moshi has custom post-processing on the prepared inputs.
 
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 1: when passing inputs_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
         # (we can't check exception 3 while compiling)

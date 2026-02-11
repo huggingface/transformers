@@ -121,6 +121,15 @@ class Sam3TrackerPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
+    _keys_to_ignore_on_load_unexpected = [
+        r"^memory_.*",
+        r"^mask_downsample.*",
+        r"^object_pointer_proj.*",
+        r"^temporal_positional_encoding_projection_layer.*",
+        "no_memory_positional_encoding",
+        "no_object_pointer",
+        "occlusion_spatial_embedding_parameter",
+    ]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -771,6 +780,11 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
     input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerTwoWayAttentionBlock, index=2)}
     _tied_weights_keys = {}
+    _checkpoint_conversion_mapping = {
+        r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
+        "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
+        "tracker_neck.": "vision_encoder.neck.",
+    }
     _keys_to_ignore_on_load_unexpected = [
         r"^detector_model.",
         r"^memory_.*",
@@ -781,11 +795,6 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         "no_object_pointer",
         "occlusion_spatial_embedding_parameter",
     ]
-    _checkpoint_conversion_mapping = {
-        r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
-        "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
-        "tracker_neck.": "vision_encoder.neck.",
-    }
 
     def __init__(self, config: Sam3TrackerConfig):
         # loading from a sam3_video config
