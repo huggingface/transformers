@@ -550,6 +550,7 @@ class DeepseekV3PreTrainedModel(PreTrainedModel):
         "attentions": DeepseekV3Attention,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -564,8 +565,6 @@ class DeepseekV3PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DeepseekV3Model(DeepseekV3PreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
-
     def __init__(self, config: DeepseekV3Config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

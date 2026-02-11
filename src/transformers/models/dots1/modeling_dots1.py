@@ -475,6 +475,7 @@ class Dots1PreTrainedModel(PreTrainedModel):
         "attentions": Dots1Attention,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keys_to_ignore_on_load_unexpected = None
 
     @torch.no_grad()
     def _init_weights(self, module):
