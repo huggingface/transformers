@@ -3,12 +3,13 @@ import tempfile
 import shutil
 import numpy as np
 import torch
+from parameterized import parameterized
 from transformers.models.qwen3_asr.processing_qwen3_asr import Qwen3ASRProcessor
 from transformers import (
-    Qwen2TokenizerFast,
-    WhisperFeatureExtractor,
     AutoProcessor,
     AutoTokenizer,
+    WhisperFeatureExtractor,
+    Qwen2TokenizerFast,
 )
 from transformers.testing_utils import (
     require_librosa, 
@@ -79,21 +80,57 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torchaudio
     def test_tokenizer_integration(self):
         tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
-        prompt = (
+        prompt = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+        EXPECTED_OUTPUT = ['This', 'Ġis', 'Ġa', 'Ġtest', 'ĠðŁĺ', 'Ĭ', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ', '9', '2', '0', '0', '0', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.Ċ', 'çĶŁæ´»çļĦ', 'çľŁ', 'è°Ľ', 'æĺ¯', 'Ċ', 'Hi', 'Ġ', 'ĠHello', 'Ċ', 'Hi', 'ĠĠ', 'ĠHello', 'ĊĊ', 'ĠĊĠĠĊ', 'ĠHello', 'Ċ', '<s', '>Ċ', 'hi', '<s', '>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġencoded', ':', 'ĠHello', '.Ċ', 'But', 'Ġ', 'ird', 'Ġand', 'Ġ', 'à¸Ľ', 'à¸µ', 'ĠĠ', 'Ġ', 'ird', 'ĠĠ', 'Ġ', 'à¸Ķ', 'Ċ', 'Hey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']
+        tokens = tokenizer.tokenize(prompt)
+        self.assertEqual(tokens, EXPECTED_OUTPUT)
+
+    @require_torch
+    @require_torchaudio
+    def test_chat_template(self):
+        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        expected_prompt = (
+            "<|im_start|>system\n"
+            "<|im_end|>\n"
             "<|im_start|>user\n"
-            "<sound>Transcribe the following audio.<|im_end|>\n"
+            "<|audio_start|><|audio_pad|><|audio_end|><|im_end|>\n"
             "<|im_start|>assistant\n"
         )
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "audio",
+                        "path": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_en.wav",
+                    },
+                ],
+            },
+        ]
+        formatted_prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        self.assertEqual(expected_prompt, formatted_prompt)
 
-        tokens = tokenizer.tokenize(prompt)
 
-        # Core structural checks
-        self.assertIn("<sound>", tokens)
-        self.assertIn("<|im_start|>", tokens)
-        self.assertIn("<|im_end|>", tokens)
 
-        # Text should be tokenized, not dropped
-        self.assertTrue(any("Transcribe" in tok or "transcribe" in tok for tok in tokens))
+    ### FOR DEBUGGING ###
+    @require_librosa
+    def test_apply_chat_template_audio(self):
 
-        # Sanity check: non-empty and stable
-        self.assertGreater(len(tokens), 5)
+        processor = self.get_processor()
+
+        batch_messages = [
+            [
+                {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+                {"role": "user", "content": [{"type": "text", "text": "Describe this."}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "It is the sound of"}]},
+            ]
+        ]
+
+        # this fails because of continue_final_message
+        # chat template is correctly loading from model checkpoint: Qwen/Qwen3-ASR-0.6B
+        #print(processor.chat_template)
+        rendered = processor.apply_chat_template(
+            batch_messages,
+            continue_final_message=True,    
+            tokenize=False,
+        )
