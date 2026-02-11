@@ -15,13 +15,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import torch
-
-from ..utils import logging
+from ..utils import is_torch_available, logging
 from ..utils.quantization_config import SinqConfig
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
+
+if is_torch_available():
+    import torch
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
