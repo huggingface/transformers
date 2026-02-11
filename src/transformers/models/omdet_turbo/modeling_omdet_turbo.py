@@ -1368,7 +1368,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         )
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=torch.ones_like(key_padding_mask, dtype=decoder_embeddings.dtype)[..., None],
+            inputs_embeds=torch.ones_like(key_padding_mask, dtype=decoder_embeddings.dtype)[..., None],
             attention_mask=~key_padding_mask,
         )
 

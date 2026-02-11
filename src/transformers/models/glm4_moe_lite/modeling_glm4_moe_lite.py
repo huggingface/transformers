@@ -567,6 +567,7 @@ class Glm4MoeLitePreTrainedModel(PreTrainedModel):
         "attentions": Glm4MoeLiteAttention,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.47.*"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -581,8 +582,6 @@ class Glm4MoeLitePreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Glm4MoeLiteModel(Glm4MoeLitePreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.47.*"]
-
     def __init__(self, config: Glm4MoeLiteConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -633,7 +632,7 @@ class Glm4MoeLiteModel(Glm4MoeLitePreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
