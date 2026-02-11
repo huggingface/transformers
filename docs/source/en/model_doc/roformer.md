@@ -99,8 +99,7 @@ echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model j
 
 ## RoFormerTokenizerFast
 
-[[autodoc]] RoFormerTokenizerFast
-    - build_inputs_with_special_tokens
+`RoFormerTokenizerFast` is an alias for [`RoFormerTokenizer`].
 
 ## RoFormerModel
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Allen Institute for AI team and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -66,9 +64,9 @@ class LongformerBaseModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -108,10 +106,10 @@ class LongformerBaseModelOutputWithPooling(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    pooler_output: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -150,11 +148,11 @@ class LongformerMaskedLMOutput(ModelOutput):
         in the sequence.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -191,12 +189,12 @@ class LongformerQuestionAnsweringModelOutput(ModelOutput):
         in the sequence.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    start_logits: Optional[torch.FloatTensor] = None
-    end_logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.FloatTensor | None = None
+    start_logits: torch.FloatTensor | None = None
+    end_logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -235,11 +233,11 @@ class LongformerSequenceClassifierOutput(ModelOutput):
         in the sequence.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -280,11 +278,11 @@ class LongformerMultipleChoiceModelOutput(ModelOutput):
         in the sequence.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -323,11 +321,11 @@ class LongformerTokenClassifierOutput(ModelOutput):
         in the sequence.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 def _get_question_end_index(input_ids, sep_token_id):
@@ -1405,16 +1403,17 @@ class LongformerModel(LongformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        global_attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, LongformerBaseModelOutputWithPooling]:
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        global_attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | LongformerBaseModelOutputWithPooling:
         r"""
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to decide the attention given on each token, local attention or global attention. Tokens with global
@@ -1557,17 +1556,18 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        global_attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, LongformerMaskedLMOutput]:
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        global_attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | LongformerMaskedLMOutput:
         r"""
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to decide the attention given on each token, local attention or global attention. Tokens with global
@@ -1668,17 +1668,18 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        global_attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, LongformerSequenceClassifierOutput]:
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        global_attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | LongformerSequenceClassifierOutput:
         r"""
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to decide the attention given on each token, local attention or global attention. Tokens with global
@@ -1789,18 +1790,19 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        global_attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        start_positions: Optional[torch.Tensor] = None,
-        end_positions: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, LongformerQuestionAnsweringModelOutput]:
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        global_attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        start_positions: torch.Tensor | None = None,
+        end_positions: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | LongformerQuestionAnsweringModelOutput:
         r"""
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to decide the attention given on each token, local attention or global attention. Tokens with global
@@ -1918,17 +1920,18 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        global_attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, LongformerTokenClassifierOutput]:
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        global_attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | LongformerTokenClassifierOutput:
         r"""
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to decide the attention given on each token, local attention or global attention. Tokens with global
@@ -1997,17 +2000,18 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        global_attention_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, LongformerMultipleChoiceModelOutput]:
+        input_ids: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        global_attention_mask: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | LongformerMultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.

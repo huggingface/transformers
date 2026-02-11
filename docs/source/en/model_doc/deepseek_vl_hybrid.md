@@ -208,6 +208,7 @@ model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
 ## DeepseekVLHybridProcessor
 
 [[autodoc]] DeepseekVLHybridProcessor
+    - __call__
 
 ## DeepseekVLHybridImageProcessor
 
@@ -221,6 +222,7 @@ model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
 
 [[autodoc]] DeepseekVLHybridModel
     - forward
+    - get_image_features
 
 ## DeepseekVLHybridForConditionalGeneration
 

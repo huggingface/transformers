@@ -36,7 +36,7 @@ To see all architectures and checkpoints compatible with this task, we recommend
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install transformers datasets evaluate jiwer
+pip install transformers datasets evaluate jiwer soundfile librosa torchcodec
 ```
 
 We encourage you to login to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to login:
@@ -262,7 +262,7 @@ At this point, only three steps remain:
 ...     max_steps=2000,
 ...     gradient_checkpointing=True,
 ...     fp16=True,
-...     group_by_length=True,
+...     train_sampling_strategy="group_by_length",
 ...     eval_strategy="steps",
 ...     per_device_eval_batch_size=8,
 ...     save_steps=1000,
@@ -272,6 +272,7 @@ At this point, only three steps remain:
 ...     metric_for_best_model="wer",
 ...     greater_is_better=False,
 ...     push_to_hub=True,
+...     report_to="trackio",
 ... )
 
 >>> trainer = Trainer(

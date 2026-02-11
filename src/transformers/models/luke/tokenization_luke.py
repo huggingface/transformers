@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright Studio-Ouisa and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,10 +16,9 @@
 import itertools
 import json
 from collections.abc import Mapping
-from typing import Optional, Union
 
 import numpy as np
-from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
 from ...tokenization_python import PreTrainedTokenizer
@@ -167,6 +165,10 @@ class LukeTokenizer(TokenizersBackend):
             Path to the vocabulary file.
         merges_file (`str`):
             Path to the merges file.
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, the vocabulary is loaded from `vocab_file`.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `merges_file`.
         entity_vocab_file (`str`):
             Path to the entity vocabulary file.
         task (`str`, *optional*):
@@ -228,10 +230,13 @@ class LukeTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
     def __init__(
         self,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
+        entity_vocab: str | dict | list | None = None,
         errors="replace",
         bos_token="<s>",
         eos_token="</s>",
@@ -250,37 +255,17 @@ class LukeTokenizer(TokenizersBackend):
         entity_pad_token="[PAD]",
         entity_mask_token="[MASK]",
         entity_mask2_token="[MASK2]",
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
-        entity_vocab: Optional[dict] = None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
 
         # Handle entity vocab file for backward compatibility
         entity_vocab_file = kwargs.pop("entity_vocab_file", None)
-
-        # Check if vocab/merges/entity_vocab are in kwargs
-        if vocab is None and "vocab" in kwargs:
-            vocab = kwargs.pop("vocab")
-        if merges is None and "merges" in kwargs:
-            merges = kwargs.pop("merges")
         if entity_vocab is None and "entity_vocab" in kwargs:
             entity_vocab = kwargs.pop("entity_vocab")
 
-        # Build vocab and merges (either from data or empty, like GPT2Tokenizer)
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {}
-
-        if merges is not None:
-            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
-        else:
-            self._merges = []
-
+        self._vocab = vocab or {}
+        self._merges = merges or []
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
@@ -365,8 +350,6 @@ class LukeTokenizer(TokenizersBackend):
 
         kwargs["extra_special_tokens"] = extra_tokens
 
-        tokenizer_object = self._tokenizer
-
         # Configure default special token behaviors to match LUKE formatting
         token_type_ids_pattern = kwargs.setdefault("token_type_ids_pattern", "all_zeros")
         special_tokens_pattern = kwargs.setdefault("special_tokens_pattern", "cls_double_sep")
@@ -379,7 +362,6 @@ class LukeTokenizer(TokenizersBackend):
         kwargs.setdefault("clean_up_tokenization_spaces", True)
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             errors=errors,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -401,40 +383,29 @@ class LukeTokenizer(TokenizersBackend):
             entity_vocab=entity_vocab if entity_vocab_file is None else None,  # Only store if it was passed as data
             **kwargs,
         )
-        self._post_init()
-
-    def _post_init(self):
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"{self.cls_token}:0 $A:0 {self.sep_token}:0",
-            pair=f"{self.cls_token}:0 $A:0 {self.sep_token}:0 {self.sep_token}:0 $B:1 {self.sep_token}:1",
-            special_tokens=[
-                (self.cls_token, self.cls_token_id),
-                (self.sep_token, self.sep_token_id),
-            ],
-        )
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         return PreTrainedTokenizer.build_inputs_with_special_tokens(self, token_ids_0, token_ids_1)
 
     def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         return PreTrainedTokenizer.get_special_tokens_mask(
             self, token_ids_0, token_ids_1, already_has_special_tokens=already_has_special_tokens
         )
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         return PreTrainedTokenizer.create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1)
 
     def _decode(
         self,
-        token_ids: Union[int, list[int]],
+        token_ids: int | list[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         **kwargs,
     ) -> str:
         text = super()._decode(
@@ -465,24 +436,24 @@ class LukeTokenizer(TokenizersBackend):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, list[TextInput]],
-        text_pair: Optional[Union[TextInput, list[TextInput]]] = None,
-        entity_spans: Optional[Union[EntitySpanInput, list[EntitySpanInput]]] = None,
-        entity_spans_pair: Optional[Union[EntitySpanInput, list[EntitySpanInput]]] = None,
-        entities: Optional[Union[EntityInput, list[EntityInput]]] = None,
-        entities_pair: Optional[Union[EntityInput, list[EntityInput]]] = None,
+        text: TextInput | list[TextInput],
+        text_pair: TextInput | list[TextInput] | None = None,
+        entity_spans: EntitySpanInput | list[EntitySpanInput] | None = None,
+        entity_spans_pair: EntitySpanInput | list[EntitySpanInput] | None = None,
+        entities: EntityInput | list[EntityInput] | None = None,
+        entities_pair: EntityInput | list[EntityInput] | None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        max_entity_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy = None,
+        max_length: int | None = None,
+        max_entity_length: int | None = None,
         stride: int = 0,
-        is_split_into_words: Optional[bool] = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        is_split_into_words: bool | None = False,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -656,24 +627,24 @@ class LukeTokenizer(TokenizersBackend):
 
     def _encode_plus(
         self,
-        text: Union[TextInput],
-        text_pair: Optional[Union[TextInput]] = None,
-        entity_spans: Optional[EntitySpanInput] = None,
-        entity_spans_pair: Optional[EntitySpanInput] = None,
-        entities: Optional[EntityInput] = None,
-        entities_pair: Optional[EntityInput] = None,
+        text: TextInput,
+        text_pair: TextInput | None = None,
+        entity_spans: EntitySpanInput | None = None,
+        entity_spans_pair: EntitySpanInput | None = None,
+        entities: EntityInput | None = None,
+        entities_pair: EntityInput | None = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
-        max_entity_length: Optional[int] = None,
+        max_length: int | None = None,
+        max_entity_length: int | None = None,
         stride: int = 0,
-        is_split_into_words: Optional[bool] = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        is_split_into_words: bool | None = False,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -763,25 +734,23 @@ class LukeTokenizer(TokenizersBackend):
 
     def _batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[list[TextInput], list[TextInputPair]],
-        batch_entity_spans_or_entity_spans_pairs: Optional[
-            Union[list[EntitySpanInput], list[tuple[EntitySpanInput, EntitySpanInput]]]
-        ] = None,
-        batch_entities_or_entities_pairs: Optional[
-            Union[list[EntityInput], list[tuple[EntityInput, EntityInput]]]
-        ] = None,
+        batch_text_or_text_pairs: list[TextInput] | list[TextInputPair],
+        batch_entity_spans_or_entity_spans_pairs: list[EntitySpanInput]
+        | list[tuple[EntitySpanInput, EntitySpanInput]]
+        | None = None,
+        batch_entities_or_entities_pairs: list[EntityInput] | list[tuple[EntityInput, EntityInput]] | None = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
-        max_entity_length: Optional[int] = None,
+        max_length: int | None = None,
+        max_entity_length: int | None = None,
         stride: int = 0,
-        is_split_into_words: Optional[bool] = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        is_split_into_words: bool | None = False,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -910,7 +879,7 @@ class LukeTokenizer(TokenizersBackend):
 
         return BatchEncoding(batch_outputs)
 
-    def _check_entity_input_format(self, entities: Optional[EntityInput], entity_spans: Optional[EntitySpanInput]):
+    def _check_entity_input_format(self, entities: EntityInput | None, entity_spans: EntitySpanInput | None):
         if not isinstance(entity_spans, list):
             raise TypeError("entity_spans should be given as a list")
         elif len(entity_spans) > 0 and not isinstance(entity_spans[0], tuple):
@@ -930,12 +899,12 @@ class LukeTokenizer(TokenizersBackend):
 
     def _create_input_sequence(
         self,
-        text: Union[TextInput],
-        text_pair: Optional[Union[TextInput]] = None,
-        entities: Optional[EntityInput] = None,
-        entities_pair: Optional[EntityInput] = None,
-        entity_spans: Optional[EntitySpanInput] = None,
-        entity_spans_pair: Optional[EntitySpanInput] = None,
+        text: TextInput,
+        text_pair: TextInput | None = None,
+        entities: EntityInput | None = None,
+        entities_pair: EntityInput | None = None,
+        entity_spans: EntitySpanInput | None = None,
+        entity_spans_pair: EntitySpanInput | None = None,
         **kwargs,
     ) -> tuple[list, list, list, list, list, list]:
         def get_input_ids(text):
@@ -1083,19 +1052,19 @@ class LukeTokenizer(TokenizersBackend):
     def _batch_prepare_for_model(
         self,
         batch_ids_pairs: list[tuple[list[int], None]],
-        batch_entity_ids_pairs: list[tuple[Optional[list[int]], Optional[list[int]]]],
-        batch_entity_token_spans_pairs: list[tuple[Optional[list[tuple[int, int]]], Optional[list[tuple[int, int]]]]],
+        batch_entity_ids_pairs: list[tuple[list[int] | None, list[int] | None]],
+        batch_entity_token_spans_pairs: list[tuple[list[tuple[int, int]] | None, list[tuple[int, int]] | None]],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
-        max_entity_length: Optional[int] = None,
+        max_length: int | None = None,
+        max_entity_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[str] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
@@ -1168,22 +1137,22 @@ class LukeTokenizer(TokenizersBackend):
     def prepare_for_model(
         self,
         ids: list[int],
-        pair_ids: Optional[list[int]] = None,
-        entity_ids: Optional[list[int]] = None,
-        pair_entity_ids: Optional[list[int]] = None,
-        entity_token_spans: Optional[list[tuple[int, int]]] = None,
-        pair_entity_token_spans: Optional[list[tuple[int, int]]] = None,
+        pair_ids: list[int] | None = None,
+        entity_ids: list[int] | None = None,
+        pair_entity_ids: list[int] | None = None,
+        entity_token_spans: list[tuple[int, int]] | None = None,
+        pair_entity_token_spans: list[tuple[int, int]] | None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        max_entity_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy = None,
+        max_length: int | None = None,
+        max_entity_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -1398,20 +1367,18 @@ class LukeTokenizer(TokenizersBackend):
 
     def pad(
         self,
-        encoded_inputs: Union[
-            BatchEncoding,
-            list[BatchEncoding],
-            dict[str, EncodedInput],
-            dict[str, list[EncodedInput]],
-            list[dict[str, EncodedInput]],
-        ],
-        padding: Union[bool, str, PaddingStrategy] = True,
-        max_length: Optional[int] = None,
-        max_entity_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        encoded_inputs: BatchEncoding
+        | list[BatchEncoding]
+        | dict[str, EncodedInput]
+        | dict[str, list[EncodedInput]]
+        | list[dict[str, EncodedInput]],
+        padding: bool | str | PaddingStrategy = True,
+        max_length: int | None = None,
+        max_entity_length: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_attention_mask: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         verbose: bool = True,
     ) -> BatchEncoding:
         """
@@ -1562,13 +1529,13 @@ class LukeTokenizer(TokenizersBackend):
 
     def _pad(
         self,
-        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
-        max_length: Optional[int] = None,
-        max_entity_length: Optional[int] = None,
+        encoded_inputs: dict[str, EncodedInput] | BatchEncoding,
+        max_length: int | None = None,
+        max_entity_length: int | None = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_attention_mask: bool | None = None,
     ) -> dict:
         """
         Pad encoded inputs (on left/right and up to predefined length or max length in the batch)

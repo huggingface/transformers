@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib
 import json
 import os
 import shutil
@@ -32,7 +31,9 @@ from transformers import (
     BertTokenizerFast,
     CTRLTokenizer,
     GPT2Tokenizer,
+    HerbertTokenizer,
     PreTrainedTokenizerFast,
+    PythonBackend,
     Qwen2Tokenizer,
     Qwen2TokenizerFast,
     Qwen3MoeConfig,
@@ -43,7 +44,10 @@ from transformers import (
 )
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.auto.tokenization_auto import (
+    REGISTERED_FAST_ALIASES,
+    REGISTERED_TOKENIZER_CLASSES,
     TOKENIZER_MAPPING,
+    TOKENIZER_MAPPING_NAMES,
     get_tokenizer_config,
     tokenizer_class_from_name,
 )
@@ -54,7 +58,6 @@ from transformers.testing_utils import (
     SMALL_MODEL_IDENTIFIER,
     CaptureLogger,
     RequestCounter,
-    is_flaky,
     require_tokenizers,
     slow,
 )
@@ -150,7 +153,6 @@ class AutoTokenizerTest(unittest.TestCase):
             self.assertEqual(tokenizer.model_max_length, 512)
 
     @require_tokenizers
-    @is_flaky()  # This one is flaky even with the new retry logic because it raises an unusual error
     def test_tokenizer_identifier_non_existent(self):
         for tokenizer_class in [BertTokenizer, AutoTokenizer]:
             with self.assertRaisesRegex(
@@ -176,6 +178,22 @@ class AutoTokenizerTest(unittest.TestCase):
             # must find the right class
             tokenizer_class_from_name(tokenizer_name)
 
+    def test_tokenizer_mapping_names_use_single_entries(self):
+        # this is just to ensure tokenizer mapping names are correct and map to strings!
+        invalid_entries = [
+            model_name
+            for model_name, tokenizer_entry in TOKENIZER_MAPPING_NAMES.items()
+            if isinstance(tokenizer_entry, (tuple, list))
+        ]
+        self.assertListEqual(
+            invalid_entries,
+            [],
+            msg=(
+                "TOKENIZER_MAPPING_NAMES should map model types to single tokenizer class names. "
+                f"Found invalid mappings for: {invalid_entries}"
+            ),
+        )
+
     @require_tokenizers
     def test_from_pretrained_use_fast_toggle(self):
         self.assertIsInstance(
@@ -184,15 +202,23 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIsInstance(AutoTokenizer.from_pretrained("google-bert/bert-base-cased"), BertTokenizerFast)
 
     @require_tokenizers
+    @slow
+    def test_custom_tokenizer_from_hub(self):
+        tokenizer = AutoTokenizer.from_pretrained(
+            "openbmb/MiniCPM-Llama3-V-2_5", trust_remote_code=True, revision="fd7f352fac0e06d0d818b23f98e3ec8c64267a57"
+        )
+        self.assertTrue(tokenizer.__class__.__module__.startswith("transformers_modules."))
+
+    @require_tokenizers
     def test_voxtral_tokenizer_converts_from_tekken(self):
+        # Test that voxtral tokenizer loads correctly when falling back to TokenizersBackend
+        # (i.e., when MistralCommonBackend is not available)
         repo_id = "mistralai/Voxtral-Mini-3B-2507"
-        tokenization_auto = transformers.models.auto.tokenization_auto
-        with (
-            mock.patch("transformers.utils.import_utils.is_mistral_common_available", return_value=False),
-            mock.patch("transformers.models.auto.tokenization_auto.is_mistral_common_available", return_value=False),
-        ):
-            tokenization_auto = importlib.reload(tokenization_auto)
-            tokenizer = tokenization_auto.AutoTokenizer.from_pretrained(repo_id)  # should not raise
+
+        # Simulate the fallback path by temporarily changing the mapping for voxtral
+        # from MistralCommonBackend to TokenizersBackend
+        with mock.patch.dict(TOKENIZER_MAPPING_NAMES, {"voxtral": "TokenizersBackend"}):
+            tokenizer = AutoTokenizer.from_pretrained(repo_id)
 
         self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
         self.assertTrue(tokenizer.is_fast)
@@ -263,6 +289,18 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIsInstance(tokenizer2, tokenizer.__class__)
         self.assertTrue(tokenizer2.vocab_size > 100_000)
 
+    @require_tokenizers
+    def test_auto_tokenizer_loads_bloom_repo_without_tokenizer_class(self):
+        tokenizer = AutoTokenizer.from_pretrained("trl-internal-testing/tiny-BloomForCausalLM")
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        self.assertTrue(tokenizer.is_fast)
+
+    @require_tokenizers
+    def test_auto_tokenizer_loads_sentencepiece_only_repo(self):
+        tokenizer = AutoTokenizer.from_pretrained("sshleifer/tiny-mbart")
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        self.assertTrue(tokenizer.is_fast)
+
     def test_auto_tokenizer_fast_no_slow(self):
         tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")
         # There is no fast CTRL so this always gives us a slow tokenizer.
@@ -309,6 +347,7 @@ class AutoTokenizerTest(unittest.TestCase):
                 del CONFIG_MAPPING._extra_content["custom"]
             if CustomConfig in TOKENIZER_MAPPING._extra_content:
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
+            REGISTERED_TOKENIZER_CLASSES.pop("CustomTokenizer", None)
 
     @require_tokenizers
     def test_new_tokenizer_fast_registration(self):
@@ -353,6 +392,9 @@ class AutoTokenizerTest(unittest.TestCase):
                 del CONFIG_MAPPING._extra_content["custom"]
             if CustomConfig in TOKENIZER_MAPPING._extra_content:
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
+            REGISTERED_TOKENIZER_CLASSES.pop("CustomTokenizer", None)
+            REGISTERED_TOKENIZER_CLASSES.pop("CustomTokenizerFast", None)
+            REGISTERED_FAST_ALIASES.pop("CustomTokenizer", None)
 
     def test_from_pretrained_dynamic_tokenizer(self):
         # If remote code is not set, we will time out when asking whether to load the model.
@@ -417,6 +459,14 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIsNot(tokenizer.__class__, reloaded_tokenizer.__class__)
         self.assertTrue(reloaded_tokenizer.special_attribute_present)
 
+    @slow
+    def test_custom_tokenizer_init(self):
+        tokenizer = AutoTokenizer.from_pretrained(
+            "Qwen/Qwen-VL", trust_remote_code=True, revision="0547ed36a86561e2e42fecec8fd0c4f6953e33c4"
+        )
+        self.assertIsInstance(tokenizer, PythonBackend)
+        self.assertGreater(len(tokenizer.get_vocab()), 0)
+
     @require_tokenizers
     def test_from_pretrained_dynamic_tokenizer_conflict(self):
         class NewTokenizer(BertTokenizer):
@@ -447,6 +497,7 @@ class AutoTokenizerTest(unittest.TestCase):
                 del CONFIG_MAPPING._extra_content["custom"]
             if CustomConfig in TOKENIZER_MAPPING._extra_content:
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
+            REGISTERED_TOKENIZER_CLASSES.pop("NewTokenizer", None)
 
     def test_from_pretrained_dynamic_tokenizer_legacy_format(self):
         tokenizer = AutoTokenizer.from_pretrained(
@@ -554,5 +605,94 @@ class NopConfig(PreTrainedConfig):
                     self.fail("AutoTokenizer.from_pretrained with trust_remote_code=False should raise ValueException")
                 except ValueError:
                     pass
+            finally:
+                os.chdir(prev_dir)
+
+    def test_tokenization_class_priority(self):
+        from transformers import AutoProcessor
+
+        tok = AutoTokenizer.from_pretrained("mlx-community/MiniMax-M2.1-4bit")
+        self.assertTrue(tok.__class__ == TokenizersBackend)
+
+        tok = AutoTokenizer.from_pretrained("allegro/herbert-base-cased")
+        self.assertTrue(tok.__class__ == HerbertTokenizer)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tok.save_pretrained(tmp_dir)
+            tok2 = AutoTokenizer.from_pretrained(tmp_dir)
+            self.assertTrue(tok2.__class__ == HerbertTokenizer)
+
+        tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
+        self.assertTrue(tok.__class__ == TokenizersBackend)
+
+        tok = AutoProcessor.from_pretrained("mistralai/Ministral-3-8B-Instruct-2512-BF16").tokenizer
+        self.assertTrue(tok.__class__ == TokenizersBackend)
+
+        tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
+        self.assertTrue(tok.__class__ == TokenizersBackend)
+
+    def test_custom_tokenizer_with_mismatched_tokenizer_class(self):
+        nop_tokenizer_code = """
+import transformers
+
+class NopTokenizer(transformers.PreTrainedTokenizer):
+    special_attribute_present = True
+
+    def get_vocab(self):
+        return {}
+"""
+
+        nop_config_code = """
+from transformers import PreTrainedConfig
+
+class NopConfig(PreTrainedConfig):
+    model_type = "test_unregistered_dynamic"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+"""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fake_model_id = "hf-internal-testing/test_unregistered_dynamic"
+            fake_repo = os.path.join(tmp_dir, fake_model_id)
+            os.makedirs(fake_repo)
+
+            tokenizer_src_file = os.path.join(fake_repo, "tokenizer.py")
+            with open(tokenizer_src_file, "w") as wfp:
+                wfp.write(nop_tokenizer_code)
+
+            model_config_src_file = os.path.join(fake_repo, "config.py")
+            with open(model_config_src_file, "w") as wfp:
+                wfp.write(nop_config_code)
+
+            config = {
+                "model_type": "test_unregistered_dynamic",
+                "auto_map": {"AutoConfig": f"{fake_model_id}--config.NopConfig"},
+            }
+
+            config_file = os.path.join(fake_repo, "config.json")
+            with open(config_file, "w") as wfp:
+                json.dump(config, wfp, indent=2)
+
+            tokenizer_config = {
+                "tokenizer_class": "NopTokenizer",
+                "auto_map": {
+                    "AutoTokenizer": [
+                        f"{fake_model_id}--tokenizer.NopTokenizer",
+                        None,
+                    ]
+                },
+            }
+
+            tokenizer_config_file = os.path.join(fake_repo, "tokenizer_config.json")
+            with open(tokenizer_config_file, "w") as wfp:
+                json.dump(tokenizer_config, wfp, indent=2)
+
+            prev_dir = os.getcwd()
+            try:
+                os.chdir(tmp_dir)
+
+                tokenizer = AutoTokenizer.from_pretrained(fake_model_id, local_files_only=True, trust_remote_code=True)
+                self.assertEqual(tokenizer.__class__.__name__, "NopTokenizer")
+                self.assertTrue(tokenizer.special_attribute_present)
             finally:
                 os.chdir(prev_dir)

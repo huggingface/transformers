@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,6 @@ from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from pprint import pprint
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -159,7 +157,7 @@ def get_from_to_our_keys(model_name: str) -> dict[str, str]:
     return from_to_ours_keys
 
 
-def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = None, push_to_hub: bool = True):
+def convert_weights_and_push(save_directory: Path, model_name: str | None = None, push_to_hub: bool = True):
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
 

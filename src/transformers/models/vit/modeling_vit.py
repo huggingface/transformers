@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 Google AI, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@
 import collections.abc
 import math
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -34,7 +32,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_vit import ViTConfig
 
 
@@ -101,7 +100,7 @@ class ViTEmbeddings(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
@@ -174,8 +173,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -186,7 +185,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -227,9 +225,9 @@ class ViTSelfAttention(nn.Module):
         value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
         query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         context_layer, attention_probs = attention_interface(
             self,
@@ -367,7 +365,7 @@ class ViTPreTrainedModel(PreTrainedModel):
     }
 
     @torch.no_grad()
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]):
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
@@ -407,13 +405,14 @@ class ViTModel(ViTPreTrainedModel):
     def get_input_embeddings(self) -> ViTPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
+        interpolate_pos_encoding: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -491,9 +490,9 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
+        interpolate_pos_encoding: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MaskedImageModelingOutput:
         r"""
@@ -505,10 +504,12 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
         >>> from transformers import AutoImageProcessor, ViTForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
         >>> model = ViTForMaskedImageModeling.from_pretrained("google/vit-base-patch16-224-in21k")
@@ -601,9 +602,9 @@ class ViTForImageClassification(ViTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        interpolate_pos_encoding: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
         r"""

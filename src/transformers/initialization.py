@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 import sys
 from collections import defaultdict
 from contextlib import contextmanager
@@ -162,6 +163,40 @@ def copy_(tensor: torch.Tensor, other: torch.Tensor) -> torch.Tensor:
     return tensor
 
 
+def _variance_scaling(tensor, mode="fan_in", distribution="normal"):
+    fan_in, fan_out = torch.nn.init._calculate_fan_in_and_fan_out(tensor)
+    if mode == "fan_in":
+        denom = fan_in
+    elif mode == "fan_out":
+        denom = fan_out
+    elif mode == "fan_avg":
+        denom = (fan_in + fan_out) / 2
+
+    variance = 1.0 / denom
+
+    if distribution == "truncated_normal":
+        trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
+    elif distribution == "normal":
+        normal_(tensor, std=math.sqrt(variance))
+    elif distribution == "uniform":
+        bound = math.sqrt(3 * variance)
+        uniform_(tensor, -bound, bound)
+    else:
+        raise ValueError(f"invalid distribution {distribution}")
+
+
+def lecun_normal_(tensor):
+    if not getattr(tensor, "_is_hf_initialized", False):
+        _variance_scaling(tensor, mode="fan_in", distribution="truncated_normal")
+    return tensor
+
+
+def default_flax_embed_init_(tensor):
+    if not getattr(tensor, "_is_hf_initialized", False):
+        _variance_scaling(tensor, mode="fan_in", distribution="normal")
+    return tensor
+
+
 # Here, we need to check several modules imported, and hot patch all of them, as sometimes torch does
 # something like `from torch.nn.init import xavier_uniform_` in their internals (e.g in torch.nn.modules.activations,
 # where MultiHeadAttention lives), so the function name is binded at import time and just doing
@@ -206,3 +241,62 @@ def guard_torch_init_functions():
         for module, functions in originals.items():
             for func_name, func in functions.items():
                 setattr(module, func_name, func)
+
+
+@contextmanager
+def no_init_weights():
+    """
+    Disable weight initialization both at the torch-level, and at the transformers-level (`init_weights`).
+    This is used to speed-up initializing an empty model with deepspeed, as we do not initialize the model on meta device
+    with deepspeed, but we still don't need to run expensive weight initializations as we are loading params afterwards.
+    """
+    from .modeling_utils import PreTrainedModel
+
+    def empty_func(*args, **kwargs):
+        pass
+
+    originals = defaultdict(dict)
+    try:
+        # Replace all torch funcs by empty ones
+        for module_name in TORCH_MODULES_TO_PATCH:
+            if module_name in sys.modules:
+                module = sys.modules[module_name]
+                for func_name in TORCH_INIT_FUNCTIONS.keys():
+                    if hasattr(module, func_name):
+                        originals[module][func_name] = getattr(module, func_name)
+                        setattr(module, func_name, empty_func)
+
+        # Also patch our own `init_weights`
+        original_init_weights = PreTrainedModel.init_weights
+        PreTrainedModel.init_weights = empty_func
+
+        yield
+    finally:
+        # Set back the original torch functions on all modules
+        for module, functions in originals.items():
+            for func_name, func in functions.items():
+                setattr(module, func_name, func)
+        # Set back `init_weights`
+        PreTrainedModel.init_weights = original_init_weights
+
+
+@contextmanager
+def no_tie_weights():
+    """
+    Disable weight tying during loading with `from_pretrained`. This is needed as we want to have access to ALL
+    weights in the state_dict during `from_pretrained`, and otherwise tying them would remove them from it, as it's
+    called in `post_init` when instantiating.
+    """
+    from .modeling_utils import PreTrainedModel
+
+    def empty_func(*args, **kwargs):
+        pass
+
+    try:
+        original_tie_weights = PreTrainedModel.tie_weights
+        PreTrainedModel.tie_weights = empty_func
+
+        yield
+    finally:
+        # Set back the original
+        PreTrainedModel.tie_weights = original_tie_weights

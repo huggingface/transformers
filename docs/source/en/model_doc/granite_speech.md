@@ -149,7 +149,6 @@ for i, transcription in enumerate(transcriptions):
     print(f"Audio {i+1}: {transcription}")
 ```
 
-
 ## GraniteSpeechConfig
 
 [[autodoc]] GraniteSpeechConfig
@@ -161,6 +160,7 @@ for i, transcription in enumerate(transcriptions):
 ## GraniteSpeechProcessor
 
 [[autodoc]] GraniteSpeechProcessor
+    - __call__
 
 ## GraniteSpeechFeatureExtractor
 
@@ -170,3 +170,4 @@ for i, transcription in enumerate(transcriptions):
 
 [[autodoc]] GraniteSpeechForConditionalGeneration
     - forward
+    - get_audio_features

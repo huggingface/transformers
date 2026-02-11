@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 Ecole Polytechnique and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -77,7 +76,7 @@ class BarthezTokenizer(TokenizersBackend):
         vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
         add_prefix_space (`bool`, *optional*, defaults to `True`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
@@ -90,6 +89,7 @@ class BarthezTokenizer(TokenizersBackend):
 
     def __init__(
         self,
+        vocab: str | dict | list | None = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -97,15 +97,12 @@ class BarthezTokenizer(TokenizersBackend):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        vocab_file=None,
-        vocab=None,
         add_prefix_space=True,
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
         self.add_prefix_space = add_prefix_space
-        self.vocab_file = vocab_file
 
         if vocab is not None:
             self._vocab = vocab
@@ -122,10 +119,7 @@ class BarthezTokenizer(TokenizersBackend):
 
         self._tokenizer.normalizer = normalizers.Sequence(
             [
-                normalizers.Replace("\n", " "),
-                normalizers.Replace("\r", " "),
-                normalizers.Replace("\t", " "),
-                normalizers.Replace(Regex(r" {2,}"), " "),
+                normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " "),
                 normalizers.NFC(),
                 normalizers.Strip(left=False, right=True),
             ]
@@ -134,9 +128,7 @@ class BarthezTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
 
-        tokenizer_object = self._tokenizer
         super().__init__(
-            tokenizer_object=tokenizer_object,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,

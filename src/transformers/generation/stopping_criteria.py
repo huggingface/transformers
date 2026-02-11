@@ -8,7 +8,6 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
-from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import add_start_docstrings, logging
 
@@ -430,7 +429,7 @@ class StopStringCriteria(StoppingCriteria):
         initial_match = end_lengths > 0
 
         # Tokens continue the string if the cumsum() so far is one of the valid positions for that token
-        # Note that we're actually tracking one cumsum() for for each possible end_length
+        # Note that we're actually tracking one cumsum() for each possible end_length
         later_match = torch.any(cumsum[:, :-1, :, None] == valid_positions[:, :, :, :, None], axis=-2)
 
         # The match vector is a boolean vector that indicates which positions have valid tokens
@@ -468,7 +467,7 @@ class EosTokenCriteria(StoppingCriteria):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
         self.eos_token_id = self.eos_token_id.to(input_ids.device)
-        is_done = isin_mps_friendly(input_ids[:, -1], self.eos_token_id)
+        is_done = torch.isin(input_ids[:, -1], self.eos_token_id)
         return is_done
 
 

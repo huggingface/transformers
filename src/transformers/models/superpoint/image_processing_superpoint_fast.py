@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,9 +13,10 @@
 # limitations under the License.
 """Fast Image processor class for Superpoint."""
 
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -38,8 +38,6 @@ from .image_processing_superpoint import SuperPointImageProcessorKwargs
 
 if TYPE_CHECKING:
     from .modeling_superpoint import SuperPointKeypointDescriptionOutput
-
-import torchvision.transforms.v2.functional as F
 
 
 def is_grayscale(
@@ -69,7 +67,7 @@ def convert_to_grayscale(
     """
     if is_grayscale(image):
         return image
-    return F.rgb_to_grayscale(image, num_output_channels=3)
+    return tvF.rgb_to_grayscale(image, num_output_channels=3)
 
 
 @auto_docstring
@@ -89,14 +87,14 @@ class SuperPointImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        size: Union[dict[str, int], SizeDict],
+        size: dict[str, int] | SizeDict,
         rescale_factor: float,
         do_rescale: bool,
         do_resize: bool,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_grayscale: bool,
         disable_grouping: bool,
-        return_tensors: Union[str, TensorType],
+        return_tensors: str | TensorType,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -110,11 +108,10 @@ class SuperPointImageProcessorFast(BaseImageProcessorFast):
                 stacked_images = self.rescale(stacked_images, rescale_factor)
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-        return BatchFeature(data={"pixel_values": processed_images})
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def post_process_keypoint_detection(
-        self, outputs: "SuperPointKeypointDescriptionOutput", target_sizes: Union[TensorType, list[tuple]]
+        self, outputs: "SuperPointKeypointDescriptionOutput", target_sizes: TensorType | list[tuple]
     ) -> list[dict[str, "torch.Tensor"]]:
         """
         Converts the raw output of [`SuperPointForKeypointDetection`] into lists of keypoints, scores and descriptors

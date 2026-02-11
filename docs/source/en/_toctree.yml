@@ -6,9 +6,12 @@
   - local: quicktour
     title: Quickstart
   title: Get started
-- isExpanded: false
+- isExpanded: true
   sections:
-  - sections:
+  - isExpanded: false
+    sections:
+    - local: weightconverter
+      title: Dynamic weight loading
     - local: models
       title: Loading models
     - local: custom_models
@@ -17,16 +20,17 @@
       title: Customizing model components
     - local: model_sharing
       title: Sharing
+    - local: serialization
+      title: Exporting to production
     - local: modular_transformers
       title: Contributing a new model to Transformers
     - local: add_new_model
       title: Legacy model contribution
     - local: auto_docstring
       title: Documenting a model
-    - local: attention_interface
-      title: Customizing attention function
     title: Models
-  - sections:
+  - isExpanded: false
+    sections:
     - local: fast_tokenizers
       title: Tokenizers
     - local: image_processors
@@ -45,9 +49,10 @@
       title: Padding and truncation
     title: Preprocessors
   title: Base classes
-- isExpanded: false
+- isExpanded: true
   sections:
-  - sections:
+  - isExpanded: false
+    sections:
     - local: pipeline_tutorial
       title: Pipeline
     - local: pipeline_gradio
@@ -57,74 +62,85 @@
     - local: add_new_pipeline
       title: Adding a new pipeline
     title: Pipeline API
-  - sections:
+  - isExpanded: false
+    sections:
     - local: llm_tutorial
       title: Text generation
     - local: generation_strategies
-      title: Generation strategies
+      title: Decoding methods
     - local: generation_features
       title: Generation features
     - local: tasks/prompting
       title: Prompt engineering
-    - local: llm_optims
-      title: Optimizing inference
-    - local: cache_explanation
-      title: Caching
-    - local: kv_cache
-      title: KV cache strategies
-    - local: llm_tutorial_optimization
-      title: Getting the most out of LLMs
     - local: perplexity
       title: Perplexity of fixed-length models
-    title: LLMs
-  - sections:
+    title: Generate API
+  - isExpanded: false
+    sections:
+    - local: optimization_overview
+      title: Overview
+    - local: attention_interface
+      title: Attention backends
+    - local: experts_interface
+      title: Experts backends
+    - local: continuous_batching
+      title: Continuous batching
+    - sections:
+      - local: kernel_doc/overview
+        title: Kernels
+      - local: kernel_doc/loading_kernels
+        title: Loading kernels
+      title: Kernels
+    - local: perf_torch_compile
+      title: torch.compile
+    - local: perf_infer_gpu_multi
+      title: Tensor parallelism
+    - local: expert_parallelism
+      title: Expert parallelism
+    - local: kv_cache
+      title: Cache strategies
+    - local: cache_explanation
+      title: Caching
+    - local: assisted_decoding
+      title: Assisted decoding
+    - local: llm_tutorial_optimization
+      title: Getting the most out of LLMs
+    title: Optimization
+  - isExpanded: false
+    sections:
     - local: conversations
       title: Chat basics
     - local: chat_templating
       title: Chat templates
+    - local: chat_content_patterns
+      title: Chat message patterns
     - local: chat_templating_multimodal
       title: Multimodal chat templates
     - local: chat_extras
       title: Tool use
     - local: chat_templating_writing
       title: Writing a chat template
-    - local: chat_response_parsing
-      title: Response parsing
     title: Chat with models
-  - sections:
-    - local: serving
-      title: Serving LLMs, VLMs, and other chat-based models
-    - local: jan
-      title: Jan
-    - local: cursor
+  - isExpanded: false
+    sections:
+    - local: serve-cli/serving
+      title: Serve CLI
+    - local: serve-cli/serving_optims
+      title: Server optimizations
+    - local: serve-cli/cursor
       title: Cursor
-    - local: tiny_agents
-      title: Tiny-Agents CLI and MCP tools
-    - local: open_webui
+    - local: serve-cli/jan
+      title: Jan
+    - local: serve-cli/openweb_ui
       title: Open WebUI
+    - local: serve-cli/tiny_agents
+      title: tiny-agents
     title: Serving
-  - sections:
-    - local: perf_torch_compile
-      title: torch.compile
-    - local: perf_infer_gpu_one
-      title: GPU
-    - local: perf_infer_gpu_multi
-      title: Distributed inference
-    - local: perf_infer_cpu
-      title: CPU
-    title: Optimization
-  - local: agents
-    title: Agents
-  - local: tools
-    title: Tools
-  - local: transformers_as_backend
-    title: Transformers as modeling backend
-  - local: continuous_batching
-    title: Continuous Batching
   title: Inference
-- isExpanded: false
+- isExpanded: true
   sections:
-  - sections:
+  - isExpanded: false
+    sections:
     - local: trainer
       title: Trainer
     - local: training
@@ -134,7 +150,8 @@
     - local: hpo_train
       title: Hyperparameter search
     title: Trainer API
-  - sections:
+  - isExpanded: false
+    sections:
     - local: accelerator_selection
       title: Accelerator selection
     - local: accelerate
@@ -150,7 +167,8 @@
     - local: perf_train_gpu_many
       title: Parallelism methods
     title: Distributed training
-  - sections:
+  - isExpanded: false
+    sections:
     - local: perf_train_gpu_one
       title: GPU
     - local: perf_train_cpu
@@ -222,16 +240,41 @@
   title: Quantization
 - isExpanded: false
   sections:
-  - local: kernel_doc/overview
-    title: Kernels in transformers
-  title: Kernels
-- isExpanded: false
-  sections:
-  - local: serialization
-    title: ONNX
-  - local: executorch
-    title: ExecuTorch
-  title: Export to production
+  - sections:
+    - local: community_integrations/transformers_as_backend
+      title: Building a compatible model backend for inference
+    - local: community_integrations/sglang
+      title: SGLang
+    - local: community_integrations/tensorrt-llm
+      title: TensorRT-LLM
+    - local: community_integrations/vllm
+      title: vLLM
+    title: Inference engines
+  - sections:
+    - local: community_integrations/candle
+      title: Candle
+    - local: community_integrations/executorch
+      title: ExecuTorch
+    - local: community_integrations/llama_cpp
+      title: llama.cpp
+    - local: community_integrations/mlx
+      title: MLX
+    title: Local deployment
+  - sections:
+    - local: community_integrations/nanotron
+      title: Nanotron
+    - local: community_integrations/torchtitan
+      title: torchtitan
+    title: Pretraining
+  - sections:
+    - local: community_integrations/axolotl
+      title: Axolotl
+    - local: community_integrations/trl
+      title: TRL
+    - local: community_integrations/unsloth
+      title: Unsloth
+    title: Fine-tuning
+  title: Ecosystem integrations
 - isExpanded: false
   sections:
   - sections:
@@ -258,6 +301,8 @@
         title: Audio classification
       - local: tasks/asr
         title: Automatic speech recognition
+      - local: tasks/text-to-speech
+        title: Text to speech
       title: Audio
     - sections:
       - local: tasks/image_classification
@@ -296,8 +341,6 @@
         title: Document Question Answering
       - local: tasks/visual_question_answering
         title: Visual Question Answering
-      - local: tasks/text-to-speech
-        title: Text to speech
       - local: tasks/idefics
         title: Image tasks with IDEFICS
       - local: tasks/image_text_to_text
@@ -482,6 +525,8 @@
         title: ESM
       - local: model_doc/exaone4
         title: EXAONE-4.0
+      - local: model_doc/exaone_moe
+        title: EXAONE-MoE
       - local: model_doc/falcon
         title: Falcon
       - local: model_doc/falcon3
@@ -511,11 +556,17 @@
       - local: model_doc/gemma2
         title: Gemma2
       - local: model_doc/glm
-        title: GLM
+        title: GLM-4
       - local: model_doc/glm4
-        title: glm4
+        title: GLM-4-0414
       - local: model_doc/glm4_moe
-        title: glm4_moe
+        title: GLM-4.5, GLM-4.6, GLM-4.7
+      - local: model_doc/glm4_moe_lite
+        title: GLM-4.7-Flash
+      - local: model_doc/glm_image
+        title: GLM-Image
+      - local: model_doc/glm_moe_dsa
+        title: GlmMoeDsa
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -552,6 +603,8 @@
         title: HunYuanMoEV1
       - local: model_doc/ibert
         title: I-BERT
+      - local: model_doc/jais2
+        title: Jais2
       - local: model_doc/jamba
         title: Jamba
       - local: model_doc/jetmoe
@@ -596,6 +649,8 @@
         title: MegatronGPT2
       - local: model_doc/minimax
         title: MiniMax
+      - local: model_doc/minimax_m2
+        title: MiniMax-M2
       - local: model_doc/ministral
         title: Ministral
       - local: model_doc/ministral3
@@ -668,6 +723,10 @@
         title: Qwen2MoE
       - local: model_doc/qwen3
         title: Qwen3
+      - local: model_doc/qwen3_5
+        title: Qwen3.5
+      - local: model_doc/qwen3_5_moe
+        title: Qwen3.5 Moe
       - local: model_doc/qwen3_moe
         title: Qwen3MoE
       - local: model_doc/qwen3_next
@@ -692,6 +751,8 @@
         title: RWKV
       - local: model_doc/seed_oss
         title: Seed-Oss
+      - local: model_doc/solar_open
+        title: SolarOpen
       - local: model_doc/splinter
         title: Splinter
       - local: model_doc/squeezebert
@@ -734,6 +795,8 @@
         title: xLSTM
       - local: model_doc/yoso
         title: YOSO
+      - local: model_doc/youtu
+        title: Youtu-LLM
       - local: model_doc/zamba
         title: Zamba
       - local: model_doc/zamba2
@@ -788,6 +851,8 @@
         title: EfficientNet
       - local: model_doc/eomt
         title: EoMT
+      - local: model_doc/eomt_dinov3
+        title: EoMT-DINOv3
       - local: model_doc/focalnet
         title: FocalNet
       - local: model_doc/glpn
@@ -804,6 +869,8 @@
         title: LeViT
       - local: model_doc/lightglue
         title: LightGlue
+      - local: model_doc/lw_detr
+        title: LW-DETR
       - local: model_doc/mask2former
         title: Mask2Former
       - local: model_doc/maskformer
@@ -818,6 +885,8 @@
         title: MobileViT
       - local: model_doc/mobilevitv2
         title: MobileViTV2
+      - local: model_doc/pixio
+        title: Pixio
       - local: model_doc/poolformer
         title: PoolFormer
       - local: model_doc/prompt_depth_anything
@@ -900,18 +969,24 @@
         title: EnCodec
       - local: model_doc/fastspeech2_conformer
         title: FastSpeech2Conformer
+      - local: model_doc/glmasr
+        title: GLM-ASR
       - local: model_doc/granite_speech
         title: GraniteSpeech
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/kyutai_speech_to_text
         title: Kyutai Speech-To-Text
+      - local: model_doc/lasr
+        title: LASR
       - local: model_doc/mimi
         title: Mimi
       - local: model_doc/mms
         title: MMS
       - local: model_doc/moonshine
         title: Moonshine
+      - local: model_doc/moonshine_streaming
+        title: Moonshine Streaming
       - local: model_doc/moshi
         title: Moshi
       - local: model_doc/musicgen
@@ -920,6 +995,8 @@
         title: MusicGen Melody
       - local: model_doc/parakeet
         title: Parakeet
+      - local: model_doc/pe_audio
+        title: PE Audio
       - local: model_doc/pop2piano
         title: Pop2Piano
       - local: model_doc/seamless_m4t
@@ -940,6 +1017,8 @@
         title: UniSpeech-SAT
       - local: model_doc/univnet
         title: UnivNet
+      - local: model_doc/vibevoice_acoustic_tokenizer
+        title: VibeVoice Acoustic Tokenizer
       - local: model_doc/vits
         title: VITS
       - local: model_doc/wav2vec2
@@ -962,6 +1041,8 @@
         title: XLSR-Wav2Vec2
       title: Audio models
     - sections:
+      - local: model_doc/pe_video
+        title: PE Video
       - local: model_doc/sam2_video
         title: SAM2 Video
       - local: model_doc/sam3_tracker_video
@@ -1028,6 +1109,8 @@
         title: EdgeTamVideo
       - local: model_doc/emu3
         title: Emu3
+      - local: model_doc/ernie4_5_vl_moe
+        title: ernie4_5_vl_moe
       - local: model_doc/evolla
         title: Evolla
       - local: model_doc/fast_vlm
@@ -1048,6 +1131,8 @@
         title: glm4v
       - local: model_doc/glm4v_moe
         title: glm4v_moe
+      - local: model_doc/glm_ocr
+        title: GlmOcr
       - local: model_doc/got_ocr2
         title: GOT-OCR2
       - local: model_doc/granitevision
@@ -1084,6 +1169,8 @@
         title: LayoutXLM
       - local: model_doc/lfm2_vl
         title: LFM2-VL
+      - local: model_doc/lighton_ocr
+        title: LightOnOcr
       - local: model_doc/lilt
         title: LiLT
       - local: model_doc/llama4
@@ -1122,8 +1209,12 @@
         title: OWL-ViT
       - local: model_doc/owlv2
         title: OWLv2
+      - local: model_doc/paddleocr_vl
+        title: PaddleOCRVL
       - local: model_doc/paligemma
         title: PaliGemma
+      - local: model_doc/pe_audio_video
+        title: PE Audio Video
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/perception_lm
@@ -1134,6 +1225,8 @@
         title: Pix2Struct
       - local: model_doc/pixtral
         title: Pixtral
+      - local: model_doc/pp_doclayout_v3
+        title: PP-DocLayoutV3
       - local: model_doc/qwen2_5_omni
         title: Qwen2.5-Omni
       - local: model_doc/qwen2_5_vl

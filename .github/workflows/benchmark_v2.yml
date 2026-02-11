@@ -8,7 +8,7 @@ env:
   TRANSFORMERS_IS_CI: yes
   # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
   # This token is created under the bot `hf-transformers-bot`.
-  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
 
 jobs:
   benchmark-v2:

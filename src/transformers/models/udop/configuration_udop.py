@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -80,6 +79,13 @@ class UdopConfig(PreTrainedConfig):
             The patch size used by the vision encoder.
         num_channels (`int`, *optional*, defaults to 3):
             The number of channels in the input images.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether cross-attention layers should be added to the model.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     """
 
     model_type = "udop"
@@ -110,8 +116,13 @@ class UdopConfig(PreTrainedConfig):
         image_size=224,
         patch_size=16,
         num_channels=3,
+        is_decoder=False,
+        add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -128,6 +139,8 @@ class UdopConfig(PreTrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
 
         # UDOP attributes
         self.max_2d_position_embeddings = max_2d_position_embeddings
@@ -149,12 +162,8 @@ class UdopConfig(PreTrainedConfig):
                 "'gated-gelu' or 'relu'"
             )
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        self.tie_word_embeddings = True
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["UdopConfig"]

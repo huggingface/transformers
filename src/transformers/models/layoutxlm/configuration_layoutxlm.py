@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_layoutxlm.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -149,22 +148,20 @@ class LayoutXLMConfig(PreTrainedConfig):
         detectron2_config_args=None,
         **kwargs,
     ):
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            intermediate_size=intermediate_size,
-            hidden_act=hidden_act,
-            hidden_dropout_prob=hidden_dropout_prob,
-            attention_probs_dropout_prob=attention_probs_dropout_prob,
-            max_position_embeddings=max_position_embeddings,
-            type_vocab_size=type_vocab_size,
-            initializer_range=initializer_range,
-            layer_norm_eps=layer_norm_eps,
-            pad_token_id=pad_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.pad_token_id = pad_token_id
         self.max_2d_position_embeddings = max_2d_position_embeddings
         self.max_rel_pos = max_rel_pos
         self.rel_pos_bins = rel_pos_bins

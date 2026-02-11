@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Kyutai and HuggingFace Inc. teams. All rights reserved.
 #
 #
@@ -14,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -61,7 +59,7 @@ def rotate_half(x):
     return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -69,8 +67,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -95,14 +91,14 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 class HeliumAttention(GraniteAttention):
-    def __init__(self, config: HeliumConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: HeliumConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
         self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.scaling = 1 / math.sqrt(self.head_dim)
 
 
 class HeliumDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: HeliumConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: HeliumConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
 
         self.mlp = HeliumMLP(config)

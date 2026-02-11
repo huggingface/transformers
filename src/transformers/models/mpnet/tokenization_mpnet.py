@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team, Microsoft Corporation.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -14,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for MPNet."""
-
-from typing import Optional
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
@@ -38,7 +35,7 @@ class MPNetTokenizer(TokenizersBackend):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab (`dict`, *optional*):
+        vocab (`str` or `dict[str, int]`, *optional*):
             Dictionary mapping tokens to their IDs. If not provided, an empty vocab is initialized.
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
@@ -87,10 +84,11 @@ class MPNetTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    model = WordPiece
 
     def __init__(
         self,
-        vocab: Optional[dict] = None,
+        vocab: str | dict[str, int] | None = None,
         do_lower_case=True,
         bos_token="<s>",
         eos_token="</s>",
@@ -104,12 +102,7 @@ class MPNetTokenizer(TokenizersBackend):
         **kwargs,
     ):
         # Initialize vocab
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {}
+        self._vocab = vocab if vocab is not None else {}
 
         # Initialize the tokenizer with WordPiece model
         self._tokenizer = Tokenizer(WordPiece(self._vocab, unk_token=str(unk_token)))
@@ -142,11 +135,7 @@ class MPNetTokenizer(TokenizersBackend):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        # Store for later use
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             do_lower_case=do_lower_case,
             bos_token=bos_token,
             eos_token=eos_token,

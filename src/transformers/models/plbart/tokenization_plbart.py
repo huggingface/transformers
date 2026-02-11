@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022, UCLA NLP, The Facebook AI Research Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Optional
+from typing import Any
 
 from ...tokenization_python import BatchEncoding
 from ...tokenization_utils_base import AddedToken
@@ -125,10 +124,9 @@ class PLBartTokenizer(SentencePieceBackend):
         pad_token="<pad>",
         mask_token="<mask>",
         language_codes="base",
-        tokenizer_file=None,
         src_lang=None,
         tgt_lang=None,
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
+        sp_model_kwargs: dict[str, Any] | None = None,
         additional_special_tokens=None,
         clean_up_tokenization_spaces=True,
         **kwargs,
@@ -171,7 +169,6 @@ class PLBartTokenizer(SentencePieceBackend):
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
-            tokenizer_file=tokenizer_file,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
             additional_special_tokens=_additional_special_tokens,
@@ -266,7 +263,7 @@ class PLBartTokenizer(SentencePieceBackend):
         self.set_src_lang_special_tokens(self._src_lang)
 
     def _build_translation_inputs(
-        self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
+        self, raw_inputs, return_tensors: str, src_lang: str | None, tgt_lang: str | None, **extra_kwargs
     ):
         """Used by translation pipeline, to prepare inputs for the generate function"""
         if src_lang is None or tgt_lang is None:
@@ -297,7 +294,7 @@ class PLBartTokenizer(SentencePieceBackend):
         self,
         src_texts: list[str],
         src_lang: str = "en_XX",
-        tgt_texts: Optional[list[str]] = None,
+        tgt_texts: list[str] | None = None,
         tgt_lang: str = "python",
         **kwargs,
     ) -> BatchEncoding:

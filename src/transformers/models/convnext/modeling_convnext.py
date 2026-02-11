@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +13,12 @@
 # limitations under the License.
 """PyTorch ConvNext model."""
 
-from typing import Optional
-
 import torch
 from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
@@ -29,7 +27,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import can_return_tuple
 from .configuration_convnext import ConvNextConfig
 
@@ -57,7 +54,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class ConvNextDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -220,7 +217,7 @@ class ConvNextEncoder(nn.Module):
             prev_chs = out_chs
 
     def forward(
-        self, hidden_states: torch.Tensor, output_hidden_states: Optional[bool] = False
+        self, hidden_states: torch.Tensor, output_hidden_states: bool | None = False
     ) -> BaseModelOutputWithNoAttention:
         all_hidden_states = [hidden_states] if output_hidden_states else None
 
@@ -268,7 +265,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor] = None, output_hidden_states: Optional[bool] = None
+        self, pixel_values: torch.FloatTensor | None = None, output_hidden_states: bool | None = None, **kwargs
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         if output_hidden_states is None:
             output_hidden_states = self.config.output_hidden_states
@@ -319,7 +316,7 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor] = None, labels: Optional[torch.LongTensor] = None, **kwargs
+        self, pixel_values: torch.FloatTensor | None = None, labels: torch.LongTensor | None = None, **kwargs
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -347,12 +344,11 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
     ConvNeXt backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
+class ConvNextBackbone(BackboneMixin, ConvNextPreTrainedModel):
     has_attentions = False
 
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.embeddings = ConvNextEmbeddings(config)
         self.encoder = ConvNextEncoder(config)
@@ -360,7 +356,7 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}
-        for stage, num_channels in zip(self._out_features, self.channels):
+        for stage, num_channels in zip(self.out_features, self.channels):
             hidden_states_norms[stage] = ConvNextLayerNorm(num_channels, data_format="channels_first")
         self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
 
@@ -370,9 +366,7 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self,
-        pixel_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
+        self, pixel_values: torch.Tensor, output_hidden_states: bool | None = None, **kwargs
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -381,10 +375,12 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("facebook/convnext-tiny-224")
         >>> model = AutoBackbone.from_pretrained("facebook/convnext-tiny-224")

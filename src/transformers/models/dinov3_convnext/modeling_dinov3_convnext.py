@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,18 +13,16 @@
 # limitations under the License.
 """PyTorch ConvNext model."""
 
-from typing import Optional
-
 import numpy as np
 import torch
 from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import can_return_tuple
 from .configuration_dinov3_convnext import DINOv3ConvNextConfig
 
@@ -53,7 +50,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class DINOv3ConvNextDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -214,7 +211,7 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: torch.FloatTensor, output_hidden_states: Optional[bool] = None
+        self, pixel_values: torch.FloatTensor, output_hidden_states: bool | None = None, **kwargs
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         hidden_states = pixel_values
 
@@ -247,12 +244,11 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
 
 
 @auto_docstring
-class DINOv3ConvNextBackbone(DINOv3ConvNextPreTrainedModel, BackboneMixin):
+class DINOv3ConvNextBackbone(BackboneMixin, DINOv3ConvNextPreTrainedModel):
     config: DINOv3ConvNextConfig
 
     def __init__(self, config: DINOv3ConvNextConfig):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_features = [config.num_channels] + list(config.hidden_sizes)
 
@@ -268,7 +264,7 @@ class DINOv3ConvNextBackbone(DINOv3ConvNextPreTrainedModel, BackboneMixin):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
         if output_hidden_states is None:

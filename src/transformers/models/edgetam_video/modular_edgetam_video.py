@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,20 +14,14 @@
 
 import math
 from collections.abc import Callable
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import Tensor
 
-from transformers.models.sam2.modeling_sam2 import (
-    eager_attention_forward,
-    window_partition,
-)
-from transformers.utils.generic import OutputRecorder
-
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -38,7 +31,9 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     auto_docstring,
 )
+from ...utils.output_capturing import OutputRecorder
 from ..auto import CONFIG_MAPPING, AutoConfig
+from ..sam2.modeling_sam2 import eager_attention_forward, window_partition
 from ..sam2_video.configuration_sam2_video import (
     Sam2VideoConfig,
     Sam2VideoMaskDecoderConfig,
@@ -373,26 +368,19 @@ class EdgeTamVideoVisionEncoderOutput(Sam2VideoVisionEncoderOutput):
 
 
 class EdgeTamVideoVisionRotaryEmbedding(Sam2VideoVisionRotaryEmbedding):
-    def __init__(self, config: EdgeTamVideoConfig, end_x: Optional[int] = None, end_y: Optional[int] = None):
+    def __init__(self, config: EdgeTamVideoConfig, end_x: int | None = None, end_y: int | None = None):
         nn.Module.__init__()
-        dim = config.memory_attention_hidden_size // (
+        self.dim = config.memory_attention_hidden_size // (
             config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
         )
         # Ensure even dimension for proper axial splitting
-        if dim % 4 != 0:
+        if self.dim % 4 != 0:
             raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-        end_x, end_y = config.memory_attention_rope_feat_sizes if end_x is None else (end_x, end_y)
-        freqs = 1.0 / (config.memory_attention_rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+        self.end_x, self.end_y = config.memory_attention_rope_feat_sizes if end_x is None else (end_x, end_y)
+        self.memory_attention_rope_theta = config.memory_attention_rope_theta
 
-        # Generate 2D position indices for axial rotary embedding
-        flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
-        x_positions = flattened_indices % end_x
-        y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor")
-        freqs_x = torch.outer(x_positions, freqs).float()
-        freqs_y = torch.outer(y_positions, freqs).float()
-        inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
-        inv_freq = inv_freq.repeat_interleave(2, dim=-1)
         # directly register the cos and sin embeddings as we have a fixed feature shape
+        inv_freq = self.create_inv_freq()
         self.register_buffer("rope_embeddings_cos", inv_freq.cos(), persistent=False)
         self.register_buffer("rope_embeddings_sin", inv_freq.sin(), persistent=False)
 
@@ -544,9 +532,9 @@ class EdgeTamVideoRoPESelfAttention(nn.Module):
         # Apply rotary position encoding for self-attention
         query, key = apply_rotary_pos_emb_2d_self_attn(query, key, cos=cos, sin=sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -620,9 +608,9 @@ class EdgeTamVideoRoPECrossAttention(nn.Module):
             num_k_exclude_rope=num_k_exclude_rope,
         )
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -662,7 +650,12 @@ class EdgeTamVideoFeedForward(Sam2VideoFeedForward):
 
 
 class EdgeTamVideoPreTrainedModel(Sam2VideoPreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        super()._init_weights()
+        if isinstance(module, EdgeTamVideoVisionRotaryEmbedding):
+            inv_freq = module.create_inv_freq()
+            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
+            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
 
 
 class EdgeTamVideoInferenceSession(Sam2VideoInferenceSession):
@@ -707,7 +700,7 @@ class EdgeTamVideoMemoryAttentionLayer(nn.Module):
         keys: Tensor,
         key_point_embedding: Tensor,
         rope_position_embeddings: tuple[Tensor, Tensor],
-        rope_position_embeddings_k: Optional[tuple[Tensor, Tensor]] = None,
+        rope_position_embeddings_k: tuple[Tensor, Tensor] | None = None,
         num_k_exclude_rope: int = 0,
         rope_k_repeat: int = 0,
     ) -> torch.Tensor:
@@ -746,8 +739,8 @@ class EdgeTamVideoMemoryAttention(Sam2VideoMemoryAttention):
         self,
         current_vision_features: torch.Tensor,
         memory: torch.Tensor,
-        current_vision_position_embeddings: Optional[Tensor] = None,
-        memory_posision_embeddings: Optional[Tensor] = None,
+        current_vision_position_embeddings: Tensor | None = None,
+        memory_posision_embeddings: Tensor | None = None,
         num_object_pointer_tokens: int = 0,
         num_spatial_memory_tokens: int = -1,
     ):
@@ -833,7 +826,7 @@ class EdgeTamVideoPerceiverAttention(nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        positional_encoding: Optional[torch.Tensor] = None,
+        positional_encoding: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         # Project queries, keys, and values
@@ -857,9 +850,9 @@ class EdgeTamVideoPerceiverAttention(nn.Module):
             value = value + pos_encoding
 
         # Apply attention
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, _ = attention_interface(
             self,
@@ -898,7 +891,7 @@ class EdgeTamVideoPerceiverEncoderLayer(nn.Module):
         self,
         latents: torch.Tensor,
         input_features: torch.Tensor,
-        positional_encoding: Optional[torch.Tensor] = None,
+        positional_encoding: torch.Tensor | None = None,
     ) -> torch.Tensor:
         # Cross attention with layer norms
         normalized_latents = self.layer_norm_latents(latents)
@@ -952,8 +945,8 @@ class EdgeTamVideoPerceiverResampler(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        positional_encoding: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        positional_encoding: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         output_latents = []
         output_positional_encodings = []
 
@@ -978,8 +971,8 @@ class EdgeTamVideoPerceiverResampler(nn.Module):
     def _forward_1d(
         self,
         hidden_states: torch.Tensor,
-        positional_encoding: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        positional_encoding: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size = hidden_states.shape[0]
 
         latents = self.latents_1d.unsqueeze(0).expand(batch_size, -1, -1)
@@ -1040,11 +1033,6 @@ class EdgeTamVideoSegmentationOutput(Sam2VideoSegmentationOutput):
 
 @auto_docstring
 class EdgeTamVideoModel(Sam2VideoModel):
-    _tied_weights_keys = {
-        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
-    }
-    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _keys_to_ignore_on_load_unexpected = []
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(EdgeTamVideoTwoWayAttentionBlock, index=2)}
 
@@ -1253,9 +1241,10 @@ class EdgeTamVideoModel(Sam2VideoModel):
     def forward(
         self,
         inference_session: EdgeTamVideoInferenceSession,
-        frame_idx: Optional[int] = None,
-        frame: Optional[torch.Tensor] = None,
+        frame_idx: int | None = None,
+        frame: torch.Tensor | None = None,
         reverse: bool = False,
+        **kwargs,
     ) -> EdgeTamVideoSegmentationOutput:
         r"""
         inference_session (`EdgeTamVideoInferenceSession`):
@@ -1399,11 +1388,11 @@ class EdgeTamVideoModel(Sam2VideoModel):
         obj_idx: int,
         batch_size: int,
         is_init_cond_frame: bool,
-        point_inputs: Optional[torch.Tensor],
-        mask_inputs: Optional[torch.Tensor],
+        point_inputs: torch.Tensor | None,
+        mask_inputs: torch.Tensor | None,
         reverse: bool,
         run_mem_encoder: bool,
-        prev_sam_mask_logits: Optional[torch.Tensor] = None,
+        prev_sam_mask_logits: torch.Tensor | None = None,
         streaming: bool = False,
     ) -> dict[str, Any]:
         """

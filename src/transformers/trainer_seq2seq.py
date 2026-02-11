@@ -333,7 +333,11 @@ class Seq2SeqTrainer(Trainer):
             self.model.generation_config._from_model_config = False
 
         # Retrieves GenerationConfig from model.generation_config
+        # Update with defaults because earlier the generation config used ot be init
+        # with default values. Now we init it with `None` and keep defaults for BC
         gen_config = self.model.generation_config
+        default_gen_config = gen_config._get_default_generation_params()
+        gen_config.update(**default_gen_config, defaults_only=True)
         # in case the batch is shorter than max length, the output should be padded
         if generated_tokens.shape[-1] < gen_config.max_length:
             generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_config.max_length)
@@ -374,7 +378,7 @@ class Seq2SeqTrainer(Trainer):
                 else self.processing_class.eos_token_id
             )
         else:
-            if self.model.config.pad_token_id is not None:
+            if getattr(self.model.config, "pad_token_id", None) is not None:
                 pad_token_id = self.model.config.pad_token_id
             else:
                 raise ValueError("Pad_token_id must be set in the configuration of the model, in order to pad tensors")

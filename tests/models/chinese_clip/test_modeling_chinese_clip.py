@@ -375,24 +375,20 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
         model = ChineseCLIPTextModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
 
@@ -447,22 +443,6 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip
     def test_training(self):
-        pass
-
-    @unittest.skip
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @slow
@@ -643,7 +623,11 @@ class ChineseCLIPModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.3990, 0.2983, -0.1239], [-0.1452, -0.2759, 0.0403], [-0.3149, -0.4763, 0.8555]]
+            [
+                [-0.3997, 0.2982, -0.1240],
+                [-0.1455, -0.2749, 0.0397],
+                [-0.3095, -0.4702, 0.8512],
+            ]
         ).to(torch_device)
 
         torch.testing.assert_close(

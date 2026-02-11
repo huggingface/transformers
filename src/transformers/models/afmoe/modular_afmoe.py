@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Arcee AI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +14,11 @@
 """PyTorch AFMoE model."""
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -28,7 +27,8 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..gpt_oss.modeling_gpt_oss import GptOssRMSNorm
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -161,7 +161,7 @@ class AfmoeMoE(nn.Module):
         self.router = AfmoeTokenChoiceRouter(config)
         self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.num_shared_experts)
         self.experts = AfmoeExperts(config)
-        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts, dtype=torch.float32), requires_grad=False)
+        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
 
     def forward(self, hidden_states):
         batch_size, seq_len, hidden_dim = hidden_states.shape
@@ -202,9 +202,9 @@ class AfmoeAttention(LlamaAttention):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_value: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -227,9 +227,9 @@ class AfmoeAttention(LlamaAttention):
             cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         output, attn_weights = attention_interface(
             self,
@@ -283,12 +283,12 @@ class AfmoeDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_value: Cache | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         residual = hidden_states
@@ -343,27 +343,18 @@ class AfmoePreTrainedModel(PreTrainedModel):
         "expert_bias",
     ]
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                nn.init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, AfmoeRMSNorm):
-            nn.init.ones_(module.weight)
-        elif isinstance(module, AfmoeTokenChoiceRouter):
-            nn.init.zeros_(module.gate.weight)
+        super()._init_weights(module)
+        if isinstance(module, AfmoeTokenChoiceRouter):
+            init.zeros_(module.gate.weight)
         elif isinstance(module, AfmoeMoE):
-            nn.init.zeros_(module.expert_bias)
+            init.zeros_(module.expert_bias)
 
 
 @auto_docstring
@@ -391,23 +382,24 @@ class AfmoeModel(AfmoePreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)

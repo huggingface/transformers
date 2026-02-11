@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2010, The Microsoft Research Asia LayoutLM Team authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -62,12 +61,18 @@ class LayoutLMConfig(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
             The value used to pad input_ids.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
         max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum value that the 2D position embedding might ever used. Typically set this to something large
             just in case (e.g., 1024).
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -101,11 +106,17 @@ class LayoutLMConfig(PreTrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        eos_token_id=None,
+        bos_token_id=None,
         use_cache=True,
         max_2d_position_embeddings=1024,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -120,6 +131,7 @@ class LayoutLMConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.max_2d_position_embeddings = max_2d_position_embeddings
+        self.tie_word_embeddings = tie_word_embeddings
 
 
 __all__ = ["LayoutLMConfig"]

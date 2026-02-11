@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import copy
-import tempfile
 import unittest
 
 from transformers import MT5Config, is_torch_available
@@ -47,7 +46,6 @@ if is_torch_available():
     )
 
 
-# Copied from tests.models.t5.test_modeling_t5.T5ModelTester with T5->MT5
 class MT5ModelTester:
     def __init__(
         self,
@@ -422,88 +420,6 @@ class MT5ModelTester:
         output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
-    def create_and_check_encoder_decoder_shared_weights(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        for model_class in [MT5Model, MT5ForConditionalGeneration]:
-            torch.manual_seed(0)
-            model = model_class(config=config).to(torch_device).eval()
-            # load state dict copies weights but does not tie them
-            model.encoder.load_state_dict(model.decoder.state_dict(), strict=False)
-
-            torch.manual_seed(0)
-            tied_config = copy.deepcopy(config)
-            tied_config.tie_encoder_decoder = True
-            tied_model = model_class(config=tied_config).to(torch_device).eval()
-
-            model_result = model(
-                input_ids=input_ids,
-                decoder_input_ids=decoder_input_ids,
-                attention_mask=attention_mask,
-                decoder_attention_mask=decoder_attention_mask,
-            )
-
-            tied_model_result = tied_model(
-                input_ids=input_ids,
-                decoder_input_ids=decoder_input_ids,
-                attention_mask=attention_mask,
-                decoder_attention_mask=decoder_attention_mask,
-            )
-
-            random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
-
-            # check that outputs are equal
-            self.parent.assertTrue(
-                torch.allclose(
-                    model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4
-                )
-            )
-
-            # check that outputs after saving and loading are equal
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                tied_model.save_pretrained(tmpdirname)
-                tied_model = model_class.from_pretrained(tmpdirname)
-                tied_model.to(torch_device)
-                tied_model.eval()
-
-                random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
-
-                tied_model_result = tied_model(
-                    input_ids=input_ids,
-                    decoder_input_ids=decoder_input_ids,
-                    attention_mask=attention_mask,
-                    decoder_attention_mask=decoder_attention_mask,
-                )
-
-                # check that outputs are equal
-                self.parent.assertTrue(
-                    torch.allclose(
-                        model_result[0][0, :, random_slice_idx],
-                        tied_model_result[0][0, :, random_slice_idx],
-                        atol=1e-4,
-                    )
-                )
-
-    def check_resize_embeddings_t5_v1_1(
-        self,
-        config,
-    ):
-        prev_vocab_size = config.vocab_size
-
-        config.tie_word_embeddings = False
-        model = MT5ForConditionalGeneration(config=config).to(torch_device).eval()
-        model.resize_token_embeddings(prev_vocab_size - 10)
-
-        self.parent.assertEqual(model.get_input_embeddings().weight.shape[0], prev_vocab_size - 10)
-        self.parent.assertEqual(model.get_output_embeddings().weight.shape[0], prev_vocab_size - 10)
-        self.parent.assertEqual(model.config.vocab_size, prev_vocab_size - 10)
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -525,7 +441,6 @@ class MT5ModelTester:
 
 
 @require_torch
-# Copied from tests.models.t5.test_modeling_t5.T5ModelTest with T5->MT5, google-t5/t5-small->google/mt5-small
 class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (MT5Model, MT5ForConditionalGeneration, MT5ForSequenceClassification, MT5ForQuestionAnswering)
@@ -618,15 +533,9 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        if config_and_inputs[0].__class__.__name__ == "T" + "5Config":
+            self.assertTrue(config_and_inputs[0].scale_decoder_outputs)
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_v1_1(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        # check that gated gelu feed forward and different word embeddings work
-        config = config_and_inputs[0]
-        config.tie_word_embeddings = False
-        config.feed_forward_proj = "gated-gelu"
-        self.model_tester.create_and_check_model(config, *config_and_inputs[1:])
 
     # MT5ForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
@@ -716,18 +625,10 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
 
-    def test_encoder_decoder_shared_weights(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
-
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
-
-    def test_v1_1_resize_embeddings(self):
-        config = self.model_tester.prepare_config_and_inputs()[0]
-        self.model_tester.check_resize_embeddings_t5_v1_1(config)
 
     @slow
     def test_model_from_pretrained(self):

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@ import argparse
 import gc
 import os
 import re
-from typing import Optional
 
 import torch
 from huggingface_hub import snapshot_download
@@ -90,7 +88,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 
 
-def load_original_state_dict(model_id: str, revision: Optional[str] = None) -> dict[str, torch.Tensor]:
+def load_original_state_dict(model_id: str, revision: str | None = None) -> dict[str, torch.Tensor]:
     # Download only the model.safetensors file
     directory_path = snapshot_download(
         repo_id=model_id,
@@ -146,7 +144,6 @@ def get_model_config_mapping(model_id: str):
 def write_model(
     hf_repo_id: str,
     output_dir: str,
-    safe_serialization: bool = True,
 ):
     """
     Converts a model checkpoint to Hugging Face format and saves it.
@@ -154,7 +151,6 @@ def write_model(
     Args:
         hf_repo_id (str): The Hugging Face repo ID to load from.
         output_dir (str): The directory to save the converted model.
-        safe_serialization (bool): Whether to use safe serialization.
 
     Returns:
         model: The reloaded Hugging Face model.
@@ -202,7 +198,7 @@ def write_model(
     print("Checkpoint loaded successfully.")
 
     print("Saving the model.")
-    model.save_pretrained(output_dir, safe_serialization=safe_serialization)
+    model.save_pretrained(output_dir)
     del state_dict, model
     gc.collect()
 
@@ -234,9 +230,6 @@ def main():
         help="Location to write the converted model and processor",
     )
     parser.add_argument(
-        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
-    )
-    parser.add_argument(
         "--push_to_hub",
         action=argparse.BooleanOptionalAction,
         help="Whether or not to push the converted model to the huggingface hub.",
@@ -251,7 +244,6 @@ def main():
     model = write_model(
         hf_repo_id=args.hf_repo_id,
         output_dir=args.output_dir,
-        safe_serialization=args.safe_serialization,
     )
 
     image_processor = write_image_processor(

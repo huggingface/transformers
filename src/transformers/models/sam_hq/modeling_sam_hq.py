@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_sam_hq.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -22,15 +21,11 @@
 import collections
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-
-from transformers.modeling_outputs import ModelOutput
-from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -39,6 +34,8 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.generic import ModelOutput, TransformersKwargs, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_sam_hq import SamHQConfig, SamHQMaskDecoderConfig, SamHQPromptEncoderConfig, SamHQVisionConfig
 
 
@@ -62,12 +59,12 @@ class SamHQVisionEncoderOutput(ModelOutput):
         This is specific to SAM-HQ and not present in base SAM.
     """
 
-    image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    image_embeds: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
-    intermediate_embeddings: Optional[list[torch.FloatTensor]] = None
+    intermediate_embeddings: list[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -83,8 +80,8 @@ class SamHQMMaskDecoderOutputs(ModelOutput):
     """
 
     masks: torch.FloatTensor
-    iou_scores: Optional[torch.FloatTensor] = None
-    mask_decoder_attentions: Optional[torch.FloatTensor] = None
+    iou_scores: torch.FloatTensor | None = None
+    mask_decoder_attentions: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -118,11 +115,11 @@ class SamHQImageSegmentationOutput(ModelOutput):
         heads.
     """
 
-    iou_scores: Optional[torch.FloatTensor] = None
-    pred_masks: Optional[torch.FloatTensor] = None
-    vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    mask_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    iou_scores: torch.FloatTensor | None = None
+    pred_masks: torch.FloatTensor | None = None
+    vision_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    vision_attentions: tuple[torch.FloatTensor, ...] | None = None
+    mask_decoder_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class SamHQVisionAttention(nn.Module):
@@ -413,6 +410,29 @@ class SamHQVisionLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class SamHQPositionalEmbedding(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.scale = config.scale
+        self.positional_embedding = nn.Parameter(self.scale * torch.randn((2, config.num_pos_feats)))
+
+    def forward(self, input_coords, input_shape=None):
+        """Positionally encode points that are normalized to [0,1]."""
+        coordinates = input_coords.clone()
+
+        if input_shape is not None:
+            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
+            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
+
+        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
+        coordinates = 2 * coordinates - 1
+        coordinates = coordinates.to(self.positional_embedding.dtype)
+        coordinates = coordinates @ self.positional_embedding
+        coordinates = 2 * np.pi * coordinates
+        # outputs d_1 x ... x d_n x channel shape
+        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
+
+
 @auto_docstring
 class SamHQPreTrainedModel(PreTrainedModel):
     config: SamHQConfig
@@ -433,6 +453,8 @@ class SamHQPreTrainedModel(PreTrainedModel):
         elif isinstance(module, SamHQVisionEncoder):
             if self.config.use_abs_pos:
                 init.zeros_(module.pos_embed)
+        elif isinstance(module, SamHQPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 class SamHQPatchEmbeddings(nn.Module):
@@ -525,14 +547,16 @@ class SamHQVisionEncoder(SamHQPreTrainedModel):
         self.neck = SamHQVisionNeck(config)
 
         self.gradient_checkpointing = False
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.patch_embed
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
-    ) -> Union[tuple, SamHQVisionEncoderOutput]:
+        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | SamHQVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -588,7 +612,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
@@ -646,7 +670,7 @@ class SamHQAttention(nn.Module):
         query: Tensor,
         key: Tensor,
         value: Tensor,
-        attention_similarity: Optional[Tensor] = None,
+        attention_similarity: Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Tensor:
         # Input projections
@@ -661,9 +685,9 @@ class SamHQAttention(nn.Module):
         value = self._separate_heads(value, self.num_attention_heads)
 
         # SamHQAttention
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -783,7 +807,7 @@ class SamHQTwoWayTransformer(nn.Module):
         attention_similarity: Tensor,
         target_embedding=None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
 
@@ -896,9 +920,9 @@ class SamHQMaskDecoder(nn.Module):
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
         hq_token_only: bool,
-        intermediate_embeddings: Optional[list[torch.Tensor]] = None,
-        attention_similarity: Optional[torch.Tensor] = None,
-        target_embedding: Optional[torch.Tensor] = None,
+        intermediate_embeddings: list[torch.Tensor] | None = None,
+        attention_similarity: torch.Tensor | None = None,
+        target_embedding: torch.Tensor | None = None,
     ) -> SamHQMMaskDecoderOutputs:
         """
         Predict high-quality masks given image and prompt embeddings.
@@ -1063,33 +1087,10 @@ class SamHQVisionModel(SamHQPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, SamHQVisionEncoderOutput]:
+    ) -> tuple | SamHQVisionEncoderOutput:
         return self.vision_encoder(pixel_values, **kwargs)
-
-
-class SamHQPositionalEmbedding(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.scale = config.hidden_size // 2
-        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
-
-    def forward(self, input_coords, input_shape=None):
-        """Positionally encode points that are normalized to [0,1]."""
-        coordinates = input_coords.clone()
-
-        if input_shape is not None:
-            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
-            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
-
-        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
-        coordinates = 2 * coordinates - 1
-        coordinates = coordinates.to(self.positional_embedding.dtype)
-        coordinates = coordinates @ self.positional_embedding
-        coordinates = 2 * np.pi * coordinates
-        # outputs d_1 x ... x d_n x channel shape
-        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
 
 
 class SamHQMaskEmbedding(nn.Module):
@@ -1183,10 +1184,10 @@ class SamHQPromptEncoder(nn.Module):
 
     def forward(
         self,
-        input_points: Optional[tuple[torch.Tensor, torch.Tensor]],
-        input_labels: Optional[torch.Tensor],
-        input_boxes: Optional[torch.Tensor],
-        input_masks: Optional[torch.Tensor],
+        input_points: tuple[torch.Tensor, torch.Tensor] | None,
+        input_labels: torch.Tensor | None,
+        input_boxes: torch.Tensor | None,
+        input_masks: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Embeds different types of prompts, returning both sparse and dense embeddings.
@@ -1232,7 +1233,9 @@ class SamHQPromptEncoder(nn.Module):
 class SamHQModel(SamHQPreTrainedModel):
     input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamHQTwoWayAttentionBlock, index=2)}
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
+    _tied_weights_keys = {
+        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -1281,10 +1284,10 @@ class SamHQModel(SamHQPreTrainedModel):
     @torch.no_grad()
     def get_prompt_embeddings(
         self,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
+        input_points: torch.FloatTensor | None = None,
+        input_labels: torch.LongTensor | None = None,
+        input_boxes: torch.FloatTensor | None = None,
+        input_masks: torch.LongTensor | None = None,
     ):
         r"""
         Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
@@ -1311,21 +1314,22 @@ class SamHQModel(SamHQPreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
-        image_embeddings: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        input_points: torch.FloatTensor | None = None,
+        input_labels: torch.LongTensor | None = None,
+        input_boxes: torch.FloatTensor | None = None,
+        input_masks: torch.LongTensor | None = None,
+        image_embeddings: torch.FloatTensor | None = None,
         multimask_output: bool = True,
         hq_token_only: bool = False,
-        attention_similarity: Optional[torch.FloatTensor] = None,
-        target_embedding: Optional[torch.FloatTensor] = None,
-        intermediate_embeddings: Optional[list[torch.FloatTensor]] = None,
+        attention_similarity: torch.FloatTensor | None = None,
+        target_embedding: torch.FloatTensor | None = None,
+        intermediate_embeddings: list[torch.FloatTensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> list[dict[str, torch.Tensor]]:
         r"""
@@ -1392,16 +1396,18 @@ class SamHQModel(SamHQPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("sushmanth/sam_hq_vit_b")
         >>> processor = AutoProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
 
-        >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> input_points = [[[400, 650]]]  # 2D location of a window on the car
-        >>> inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt")
+        >>> inputs = processor(images=image, input_points=input_points, return_tensors="pt")
 
         >>> # Get high-quality segmentation mask
         >>> outputs = model(**inputs)

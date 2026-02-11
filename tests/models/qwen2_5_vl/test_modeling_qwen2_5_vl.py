@@ -35,7 +35,7 @@ from transformers.testing_utils import (
     require_cv2,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -227,7 +227,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
             curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
@@ -237,7 +237,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(
                     input_ids=input_ids,
                     pixel_values=pixel_values,
@@ -467,7 +467,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         # verify generation
         inputs = inputs.to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in"
 
         self.assertEqual(
@@ -486,7 +486,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         )
 
         # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
         EXPECTED_DECODED_TEXT = [
             'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
@@ -535,7 +535,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         )
 
         # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
         EXPECTED_DECODED_TEXT = [
             'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
@@ -563,7 +563,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
         expected_decoded_texts = Expectations(
             {
@@ -573,7 +573,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
                 ],
                 ("cuda", (8, 6)): [
                     'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is',
                 ],
                 ("rocm", None): [
                     'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
@@ -592,7 +592,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
 
     @slow
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
@@ -607,11 +607,12 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         )
 
         # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
         expected_decoded_text = Expectations({
             ("cuda", None): "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
-            ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in"
+            ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
+            ("xpu", None): "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
         }).get_expectation()  # fmt: skip
 
         # Since the test is to generate twice the same text, we just test twice against the expected decoded text
@@ -621,7 +622,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
 
     @slow
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
@@ -641,7 +642,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         )
 
         # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
         # FIXME: The second decoded text in the CUDA expectation seems to be incorrect, it used to be the second text
         # on the ROCm expectation that was the correct one. Either model changed or code is buggy.
@@ -653,6 +654,10 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             ("rocm", (9, 4)): [
                 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
                 "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to answer a wide range of questions and provide information on various topics",
+            ],
+            ("xpu", None): [
+                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
+                "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nanvas is an AI language model created by Alibaba Cloud. I am here to assist with any questions or tasks you may have, as long as they are",
             ],
         }).get_expectation()  # fmt: skip
 
@@ -698,10 +703,9 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         inputs = self.processor(text=[text], videos=[frames], return_tensors="pt").to(torch_device)
 
         # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
-
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat is shown in this video?\nassistant\nThe video shows an indoor tennis court with a person standing on one side, preparing to serve the ball. The individual is dressed in athletic attire, including',
+            'system\nYou are a helpful assistant.\nuser\nWhat is shown in this video?\nassistant\nThe video shows an indoor tennis court with a person standing on the service line, preparing to serve. The individual is wearing athletic attire, including a white',
         ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),

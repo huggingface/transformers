@@ -24,7 +24,6 @@ import sys
 import tempfile
 import unittest
 from functools import partial
-from itertools import product
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock, patch
@@ -53,6 +52,7 @@ from transformers import (
     set_seed,
 )
 from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
+from transformers.integrations.neftune import activate_neftune
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     TOKEN,
@@ -104,14 +104,18 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, check_target_module_exists
+from transformers.trainer_utils import (
+    PREFIX_CHECKPOINT_DIR,
+    HPSearchBackend,
+    check_target_module_exists,
+    get_last_checkpoint,
+    rotate_checkpoints,
+    sort_checkpoints,
+)
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
-    WEIGHTS_INDEX_NAME,
-    WEIGHTS_NAME,
-    check_torch_load_is_safe,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
@@ -635,10 +639,8 @@ if is_torch_available():
 
 
 class TrainerIntegrationCommon:
-    def check_saved_checkpoints(
-        self, output_dir, freq, total, is_pretrained=True, safe_weights=True, use_scaler=False
-    ):
-        weights_file = WEIGHTS_NAME if not safe_weights else SAFE_WEIGHTS_NAME
+    def check_saved_checkpoints(self, output_dir, freq, total, is_pretrained=True, use_scaler=False):
+        weights_file = SAFE_WEIGHTS_NAME
         file_list = [weights_file, "training_args.bin", "optimizer.pt", "scheduler.pt", "trainer_state.json"]
         if is_pretrained:
             file_list.append("config.json")
@@ -651,7 +653,14 @@ class TrainerIntegrationCommon:
                 self.assertTrue(os.path.isfile(os.path.join(checkpoint, filename)))
 
     def check_best_model_has_been_loaded(
-        self, output_dir, freq, total, trainer, metric, greater_is_better=False, is_pretrained=True, safe_weights=True
+        self,
+        output_dir,
+        freq,
+        total,
+        trainer,
+        metric,
+        greater_is_better=False,
+        is_pretrained=True,
     ):
         checkpoint = os.path.join(output_dir, f"checkpoint-{(total // freq) * freq}")
         log_history = TrainerState.load_from_json(os.path.join(checkpoint, "trainer_state.json")).log_history
@@ -665,11 +674,7 @@ class TrainerIntegrationCommon:
             best_model.to(trainer.args.device)
         else:
             best_model = RegressionModel()
-            if not safe_weights:
-                check_torch_load_is_safe()
-                state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME), weights_only=True)
-            else:
-                state_dict = safetensors.torch.load_file(os.path.join(checkpoint, SAFE_WEIGHTS_NAME))
+            state_dict = safetensors.torch.load_file(os.path.join(checkpoint, SAFE_WEIGHTS_NAME))
             best_model.load_state_dict(state_dict)
             best_model.to(trainer.args.device)
         torch.testing.assert_close(best_model.a, trainer.model.a)
@@ -702,26 +707,15 @@ class TrainerIntegrationCommon:
 
             self.assertEqual(log, log1)
 
-    def convert_to_sharded_checkpoint(self, folder, save_safe=True, load_safe=True):
+    def convert_to_sharded_checkpoint(self, folder):
         # Converts a checkpoint of a regression model to a sharded checkpoint.
-        if load_safe:
-            loader = safetensors.torch.load_file
-            weights_file = os.path.join(folder, SAFE_WEIGHTS_NAME)
-        else:
-            check_torch_load_is_safe()
-            loader = torch.load
-            weights_file = os.path.join(folder, WEIGHTS_NAME)
+        loader = safetensors.torch.load_file
+        weights_file = os.path.join(folder, SAFE_WEIGHTS_NAME)
 
-        if save_safe:
-            extension = "safetensors"
-            saver = safetensors.torch.save_file
-            index_file = os.path.join(folder, SAFE_WEIGHTS_INDEX_NAME)
-            shard_name = SAFE_WEIGHTS_NAME
-        else:
-            extension = "bin"
-            saver = torch.save
-            index_file = os.path.join(folder, WEIGHTS_INDEX_NAME)
-            shard_name = WEIGHTS_NAME
+        extension = "safetensors"
+        saver = safetensors.torch.save_file
+        index_file = os.path.join(folder, SAFE_WEIGHTS_INDEX_NAME)
+        shard_name = SAFE_WEIGHTS_NAME
 
         state_dict = loader(weights_file)
 
@@ -867,7 +861,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             )
             # train with base loss
             set_seed(42)
-            model = AutoModelForCausalLM.from_pretrained(model_name)
+            model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
             base_loss_callback = StoreLossCallback()
             trainer = Trainer(
                 model,
@@ -937,7 +931,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         set_seed(42)
 
         model_name = "roneneldan/TinyStories-33M"
-        dataset_name = "wikitext"
+        dataset_name = "Salesforce/wikitext"
         dataset_config = "wikitext-2-raw-v1"
         dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:40]")
         tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -1049,7 +1043,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 per_device_train_batch_size=1,
                 learning_rate=0.1,
                 gradient_checkpointing=True,
-                gradient_checkpointing_kwargs={"use_reentrant": False},
                 output_dir=tmp_dir,
             )
             previous_params = {k: v.detach().clone() for k, v in trainer.model.named_parameters()}
@@ -1550,9 +1543,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tiny_model = get_peft_model(tiny_model, peft_config, "adapter1")
         tiny_model.add_adapter("adapter2", peft_config)
 
-        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
-
-        train_dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, max_len_single_sentence)
+        train_dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, 100)
 
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -1699,7 +1690,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
-        trainer.model = trainer._activate_neftune(trainer.model)
+        activate_neftune(trainer.model, trainer.args.neftune_noise_alpha)
 
         dummy_input = torch.LongTensor([[1, 0, 1]]).to(torch_device)
 
@@ -3096,25 +3087,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         self.check_saved_checkpoints(tmp_dir, 5, int(self.n_epochs * 64 / self.batch_size), False)
 
-    def test_safe_checkpoints(self):
-        for save_safetensors in [True, False]:
-            tmp_dir = self.get_auto_remove_tmp_dir()
-            trainer = get_regression_trainer(output_dir=tmp_dir, save_steps=5, save_safetensors=save_safetensors)
-            trainer.train()
-            self.check_saved_checkpoints(
-                tmp_dir, 5, int(self.n_epochs * 64 / self.batch_size), safe_weights=save_safetensors
-            )
-
-            # With a regular model that is not a PreTrainedModel
-            tmp_dir = self.get_auto_remove_tmp_dir()
-            trainer = get_regression_trainer(
-                output_dir=tmp_dir, save_steps=5, pretrained=False, save_safetensors=save_safetensors
-            )
-            trainer.train()
-            self.check_saved_checkpoints(
-                tmp_dir, 5, int(self.n_epochs * 64 / self.batch_size), False, safe_weights=save_safetensors
-            )
-
     def test_save_collator_tokenizer_by_default(self):
         class FakeCollator:
             def __init__(self):
@@ -3126,9 +3098,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         data_collator = FakeCollator()
         tmp_dir = self.get_auto_remove_tmp_dir()
-        trainer = get_regression_trainer(
-            output_dir=tmp_dir, save_steps=5, save_safetensors=True, data_collator=data_collator
-        )
+        trainer = get_regression_trainer(output_dir=tmp_dir, save_steps=5, data_collator=data_collator)
         trainer.train()
         loaded_tokenizer = AutoTokenizer.from_pretrained(os.path.join(tmp_dir, os.listdir(tmp_dir)[0]))
         assert len(loaded_tokenizer) == len(trainer.data_collator.tokenizer), "Failed to load updated tokenizer"
@@ -3333,9 +3303,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # Delete the reference
             del model_params, trainer
             # Checks if all checkpoints are there, +1 is necessary because range is 1-indexed
-            self.check_saved_checkpoints(
-                tmpdir, freq=1, total=training_steps + 1, is_pretrained=True, safe_weights=True, use_scaler=True
-            )
+            self.check_saved_checkpoints(tmpdir, freq=1, total=training_steps + 1, is_pretrained=True, use_scaler=True)
 
             # Checkpoint at intermediate step
             checkpoint = os.path.join(tmpdir, f"checkpoint-{resume_from_step + 1}")
@@ -3505,6 +3473,49 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # We should be back to 14 again, picking up based upon the last ran Trainer
         self.assertEqual(trainer._train_batch_size, previous_batch_size)
 
+    def test_resume_training_with_different_batch_size(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/43708
+        # When resuming from checkpoint without auto_find_batch_size, user's new batch size should be used
+        train_dataset = RegressionDataset(length=64)
+
+        config = RegressionModelConfig(a=0, b=2)
+        model = RegressionRandomPreTrainedModel(config)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+
+        # First training run with batch_size=2
+        args = RegressionTrainingArguments(
+            tmp_dir,
+            do_train=True,
+            max_steps=2,
+            save_steps=1,
+            per_device_train_batch_size=2,
+            auto_find_batch_size=False,
+        )
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.train()
+
+        # Verify the checkpoint saved with batch_size=2
+        checkpoint = os.path.join(tmp_dir, "checkpoint-1")
+        state = TrainerState.load_from_json(os.path.join(checkpoint, "trainer_state.json"))
+        self.assertEqual(state.train_batch_size, 2)
+
+        # Resume with a different batch_size=4 (without auto_find_batch_size)
+        # The trainer should use the new batch_size, not the checkpoint's
+        args2 = RegressionTrainingArguments(
+            tmp_dir,
+            do_train=True,
+            max_steps=4,
+            save_steps=1,
+            per_device_train_batch_size=4,
+            auto_find_batch_size=False,
+        )
+        trainer2 = Trainer(model, args2, train_dataset=train_dataset)
+        trainer2.train(resume_from_checkpoint=checkpoint)
+
+        # The trainer should be using the new batch size (4), not the checkpoint's (2)
+        self.assertEqual(trainer2._train_batch_size, 4 * max(trainer2.args.n_gpu, 1))
+
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):
         train_dataset = RegressionDataset(length=128)
@@ -3545,39 +3556,34 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_trainer_state_are_the_same(state, state1)
 
     @require_torch_up_to_2_accelerators
-    def test_resume_training_with_safe_checkpoint(self):
+    def test_resume_training_with_checkpoint(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
         # won't be the same since the training dataloader is shuffled).
 
-        for initial_safe in [False, True]:
-            for loaded_safe in [False, True]:
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    trainer = get_regression_trainer(
-                        output_dir=tmpdir,
-                        train_len=128,
-                        save_steps=5,
-                        learning_rate=0.1,
-                        save_safetensors=initial_safe,
-                    )
-                    trainer.train()
-                    (a, b) = trainer.model.a.item(), trainer.model.b.item()
-                    state = dataclasses.asdict(trainer.state)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                train_len=128,
+                save_steps=5,
+                learning_rate=0.1,
+            )
+            trainer.train()
+            (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            state = dataclasses.asdict(trainer.state)
 
-                    checkpoint = os.path.join(tmpdir, "checkpoint-5")
-                    self.convert_to_sharded_checkpoint(checkpoint, load_safe=initial_safe, save_safe=loaded_safe)
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+            self.convert_to_sharded_checkpoint(checkpoint)
 
-                    # Reinitialize trainer
-                    trainer = get_regression_trainer(
-                        output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, save_safetensors=loaded_safe
-                    )
+            # Reinitialize trainer
+            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
 
-                    trainer.train(resume_from_checkpoint=checkpoint)
-                    (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
-                    state1 = dataclasses.asdict(trainer.state)
-                    self.assertEqual(a, a1)
-                    self.assertEqual(b, b1)
-                    self.check_trainer_state_are_the_same(state, state1)
+            trainer.train(resume_from_checkpoint=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
 
     @require_torch_up_to_2_accelerators
     def test_resume_training_with_gradient_accumulation(self):
@@ -3730,8 +3736,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     def test_load_best_model_from_safetensors(self):
         total = int(self.n_epochs * 64 / self.batch_size)
-        for save_safetensors, pretrained in product([False, True], [False, True]):
-            save_safetensors = True
+        for pretrained in [False, True]:
             with tempfile.TemporaryDirectory() as tmpdir:
                 trainer = get_regression_trainer(
                     a=1.5,
@@ -3742,15 +3747,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     eval_strategy="steps",
                     save_steps=5,
                     load_best_model_at_end=True,
-                    save_safetensors=save_safetensors,
                     pretrained=pretrained,
                 )
                 self.assertFalse(trainer.args.greater_is_better)
                 trainer.train()
-                self.check_saved_checkpoints(tmpdir, 5, total, is_pretrained=pretrained, safe_weights=save_safetensors)
-                self.check_best_model_has_been_loaded(
-                    tmpdir, 5, total, trainer, "eval_loss", is_pretrained=pretrained, safe_weights=save_safetensors
-                )
+                self.check_saved_checkpoints(tmpdir, 5, total, is_pretrained=pretrained)
+                self.check_best_model_has_been_loaded(tmpdir, 5, total, trainer, "eval_loss", is_pretrained=pretrained)
 
     @slow
     def test_trainer_eval_mrpc(self):
@@ -3774,9 +3776,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         model = AutoModelForCausalLM.from_pretrained(MODEL_ID)
 
-        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
-
-        dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, max_len_single_sentence)
+        dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, 100)
         with tempfile.TemporaryDirectory() as tmp_dir:
             training_args = TrainingArguments(
                 output_dir=tmp_dir,
@@ -3800,8 +3800,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_trainer_eval_lm(self):
         MODEL_ID = "distilbert/distilroberta-base"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
-        dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, max_len_single_sentence)
+        dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, 100)
         self.assertEqual(len(dataset), 31)
 
     def test_training_iterable_dataset(self):
@@ -3992,11 +3991,38 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.assertTrue(isinstance(trainer.state.total_flos, float))
 
+    def test_checkpoint_sorting(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Create fake checkpoints in non-sorted order
+            for n in [20, 5, 15, 25, 10]:
+                os.makedirs(os.path.join(tmp_dir, f"{PREFIX_CHECKPOINT_DIR}-{n}"))
+
+            # Test sorting by step number (oldest first)
+            sorted_cps = sort_checkpoints(tmp_dir)
+            values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in sorted_cps]
+            self.assertEqual(values, [5, 10, 15, 20, 25])
+
+            # Test with best_model_checkpoint - moved to second-to-last to protect from deletion
+            best = os.path.join(tmp_dir, f"{PREFIX_CHECKPOINT_DIR}-5")
+            sorted_cps = sort_checkpoints(tmp_dir, best_model_checkpoint=best)
+            values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in sorted_cps]
+            self.assertEqual(values, [10, 15, 20, 5, 25])
+
+            # Test with best_model_checkpoint already at end (stays at end)
+            best = os.path.join(tmp_dir, f"{PREFIX_CHECKPOINT_DIR}-25")
+            sorted_cps = sort_checkpoints(tmp_dir, best_model_checkpoint=best)
+            values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in sorted_cps]
+            self.assertEqual(values, [5, 10, 15, 20, 25])
+
     def check_checkpoint_deletion(self, trainer, output_dir, expected):
         # Make fake checkpoints
         for n in [5, 10, 15, 20, 25]:
             os.makedirs(os.path.join(output_dir, f"{PREFIX_CHECKPOINT_DIR}-{n}"), exist_ok=True)
-        trainer._rotate_checkpoints(output_dir=output_dir)
+        rotate_checkpoints(
+            output_dir=output_dir,
+            save_total_limit=trainer.args.save_total_limit,
+            best_model_checkpoint=trainer.state.best_model_checkpoint,
+        )
         glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{PREFIX_CHECKPOINT_DIR}-*")]
         values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in glob_checkpoints]
         self.assertSetEqual(set(values), set(expected))
@@ -4633,9 +4659,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         image_processor_dict = image_processor.to_dict()
         reloaded_image_processor_dict = reloaded_image_processor.to_dict()
-        # When the processor is saved in the trainer, the _processor_class gets set in the reload_image_processor dict
-        image_processor_dict.pop("_processor_class")
-        reloaded_image_processor_dict.pop("_processor_class")
         self.assertDictEqual(image_processor_dict, reloaded_image_processor_dict)
 
         # For tokenizers, there isn't a direct to_dict method and the properties stored in the configs e.g.
@@ -4986,10 +5009,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
         model = BasicTextGenerationModel(vocab_size=tokenizer.vocab_size, hidden_size=32)
-        # Note that this class does not have a config attribute
-        max_len_single_sentence = tokenizer.model_max_length - tokenizer.num_special_tokens_to_add(pair=False)
 
-        train_dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, max_len_single_sentence)
+        train_dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, 100)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             training_args = TrainingArguments(
@@ -5110,6 +5131,143 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # Trainer saves non-PreTrainedModel models as `model.safetensors` by default if safetensors is available.
         final_model_path = os.path.join(final_checkpoint_path, SAFE_WEIGHTS_NAME)
         self.assertTrue(os.path.exists(final_model_path), "Final model checkpoint was not saved!")
+
+    @require_torch_non_multi_accelerator
+    def test_resume_batch_order(self):
+        """
+        Test that verifies dataloader order is reproducible when resuming from partial checkpoints.
+        Tests resuming from checkpoint 7 (within epoch 1).
+        """
+
+        # --- Helper classes and functions defined locally for this test ---
+        class DummyDataset(torch.utils.data.Dataset):
+            def __init__(self, size: int = 32):
+                self.size = size
+                self.data = torch.randn((size, 10))
+                self.data[:, 0] = torch.arange(0, size)  # Encode the data order
+                self.labels = torch.randint(0, 10, (size,))
+
+            def __len__(self) -> int:
+                return self.size
+
+            def __getitem__(self, idx: int):
+                return {"input_ids": self.data[idx], "labels": self.labels[idx]}
+
+        class DummyModel(nn.Module):
+            def __init__(self, size: int):
+                super().__init__()
+                self.fc = nn.Linear(10, 10, bias=False)
+                # data_order logs the order of data points seen by the model
+                self.register_buffer("data_order", torch.empty(0, dtype=torch.long))
+
+            def load_state_dict(self, state_dict, strict=True):
+                # Handle data_order buffer size mismatch during checkpoint loading
+                if "data_order" in state_dict:
+                    saved_data_order = state_dict["data_order"]
+                    if hasattr(self, "data_order") and self.data_order.shape != saved_data_order.shape:
+                        # Resize the buffer to match the saved state
+                        self.data_order = saved_data_order.clone()
+
+                return super().load_state_dict(state_dict, strict=strict)
+
+            def forward(self, input_ids: torch.Tensor, labels: torch.Tensor = None):
+                logits = self.fc(input_ids)
+                loss = None
+                if labels is not None:
+                    loss_fn = nn.CrossEntropyLoss()
+                    loss = loss_fn(logits, labels)
+
+                # Log the data order for verification
+                data_indices = input_ids[:, 0].int()
+                self.data_order = torch.cat([self.data_order, data_indices.detach().clone()])
+
+                return {"loss": loss, "logits": logits}
+
+        # Scenario 1: Run baseline training to completion
+        # 1.1 Run training to completion
+        set_seed(42)
+        train_dataset = DummyDataset(size=10)
+        model_baseline = DummyModel(size=10)
+
+        exp_dir_baseline = self.get_auto_remove_tmp_dir()
+        args_baseline = TrainingArguments(
+            output_dir=str(exp_dir_baseline),
+            seed=42,
+            learning_rate=0.1,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=1,
+            save_strategy="steps",
+            save_steps=1,
+            num_train_epochs=3,
+            optim="sgd",
+            disable_tqdm=True,
+            dataloader_num_workers=0,  # Ensures that main process loads the data
+            report_to=[],  # Disable wandb/tensorboard and other loggers
+        )
+
+        trainer_baseline = Trainer(
+            model=model_baseline,
+            args=args_baseline,
+            train_dataset=train_dataset,
+        )
+
+        trainer_baseline.train()
+
+        # 1.2 Get the data order from the last saved checkpoint for the full run
+        last_checkpoint_path = get_last_checkpoint(exp_dir_baseline)
+        last_ckpt_num = int(os.path.basename(last_checkpoint_path).split("-")[1])  # Must be 15
+
+        baseline_state_dict = safetensors.torch.load_file(
+            os.path.join(exp_dir_baseline, f"checkpoint-{last_ckpt_num}", "model.safetensors")
+        )
+        baseline_data_order = baseline_state_dict["data_order"]
+
+        # Scenario 2: Resume training from checkpoint in the middle of the second epoch
+        # 2.1 Resume training from the second batch of epoch 1 (target_ckpt_num = 7)
+        # 1 epoch consists of 10 points, so 5 steps with batch size 2
+        target_ckpt_num = 7
+        checkpoint_path = os.path.join(exp_dir_baseline, f"checkpoint-{target_ckpt_num - 1}")
+
+        set_seed(42)
+        model_resume = DummyModel(size=10)
+
+        exp_dir_resume = self.get_auto_remove_tmp_dir()
+        args_resume = TrainingArguments(
+            output_dir=str(exp_dir_resume),
+            seed=42,
+            learning_rate=0.1,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=1,
+            save_strategy="steps",
+            save_steps=1,
+            num_train_epochs=3,
+            optim="sgd",
+            disable_tqdm=True,
+            dataloader_num_workers=0,  # Ensures that main process loads the data
+            report_to=[],  # Disable wandb/tensorboard and other loggers
+        )
+
+        trainer_resume = Trainer(
+            model=model_resume,
+            args=args_resume,
+            train_dataset=train_dataset,
+        )
+
+        trainer_resume.train(resume_from_checkpoint=checkpoint_path)
+
+        # 2.2 Get the data order from the last saved checkpoint for the resumed run
+        resumed_state_dict = safetensors.torch.load_file(
+            os.path.join(exp_dir_resume, f"checkpoint-{last_ckpt_num}", "model.safetensors")
+        )
+        resumed_data_order = resumed_state_dict["data_order"]
+
+        # 3. Compare results: the data order should be identical
+        self.assertTrue(
+            torch.equal(baseline_data_order, resumed_data_order),
+            f"Data order mismatch after checkpoint deletion and resume.\n"
+            f"Baseline: {baseline_data_order}\n"
+            f"Resumed: {resumed_data_order}",
+        )
 
 
 @require_torch
@@ -5442,6 +5600,7 @@ class TrainerHyperParameterOptunaIntegrationTestWithFullEval(unittest.TestCase):
 
 @require_torch
 @require_ray
+@unittest.skip("don't work because of a serialization issue")
 class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
     def setUp(self):
         args = TrainingArguments("..")
@@ -5529,6 +5688,28 @@ if is_torch_available():
         "variance_dtype": torch.float32,
         "compensation_buffer_dtype": torch.bfloat16,
     }
+
+    # Bitsandbytes optimizer test parameters: (optim_name, mock_attr, expected_kwargs)
+    # Empty list when bitsandbytes is not available triggers skip_on_empty=True
+    _BNB_OPTIMIZER_PARAMS = (
+        [
+            (OptimizerNames.ADAMW_BNB, "AdamW", default_adam_kwargs),
+            (OptimizerNames.ADAMW_8BIT, "AdamW", default_adam_kwargs),
+            (OptimizerNames.PAGED_ADAMW, "AdamW", default_adam_kwargs),
+            (OptimizerNames.PAGED_ADAMW_8BIT, "AdamW", default_adam_kwargs),
+            (OptimizerNames.LION, "Lion", default_lion_kwargs),
+            (OptimizerNames.LION_8BIT, "Lion", default_lion_kwargs),
+            (OptimizerNames.PAGED_LION, "Lion", default_lion_kwargs),
+            (OptimizerNames.PAGED_LION_8BIT, "Lion", default_lion_kwargs),
+            (OptimizerNames.ADEMAMIX, "AdEMAMix", default_ademamix_kwargs),
+            (OptimizerNames.ADEMAMIX_8BIT, "AdEMAMix", default_ademamix_kwargs),
+            (OptimizerNames.PAGED_ADEMAMIX, "AdEMAMix", default_ademamix_kwargs),
+            (OptimizerNames.PAGED_ADEMAMIX_8BIT, "AdEMAMix", default_ademamix_kwargs),
+        ]
+        if is_bitsandbytes_available()
+        else []
+    )
+    _ALL_BNB_OPTIMIZERS = [p[0] for p in _BNB_OPTIMIZER_PARAMS]
 
     optim_test_params = [
         (
@@ -5697,16 +5878,8 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             trainer.train()
 
     def test_fused_adam(self):
-        # Pretend that apex is installed and mock apex.optimizers.FusedAdam exists.
-        # Trainer.get_optimizer_cls_and_kwargs does not use FusedAdam. It only has to return the
-        # class given, so mocking apex.optimizers.FusedAdam should be fine for testing and allow
-        # the test to run without requiring an apex installation.
         mock = Mock()
-        modules = {
-            "apex": mock,
-            "apex.optimizers": mock.optimizers,
-            "apex.optimizers.FusedAdam": mock.optimizers.FusedAdam,
-        }
+        modules = {"apex": mock, "apex.optimizers": mock.optimizers}
         with tempfile.TemporaryDirectory() as tmp_dir:
             with patch.dict("sys.modules", modules):
                 self.check_optim_and_kwargs(
@@ -5718,310 +5891,33 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
     def test_fused_adam_no_apex(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(optim=OptimizerNames.ADAMW_APEX_FUSED, output_dir=tmp_dir)
-
-            # Pretend that apex does not exist, even if installed. By setting apex to None, importing
-            # apex will fail even if apex is installed.
             with patch.dict("sys.modules", {"apex.optimizers": None}):
                 with self.assertRaises(ValueError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
-    @require_bitsandbytes
-    def test_bnb_adam8bit(self):
-        # Pretend that Bits and Bytes is installed and mock bnb.optim.Adam8bit exists.
-        # Trainer.get_optimizer_cls_and_kwargs does not use Adam8bit. It only has to return the
-        # class given, so mocking bnb.optim.Adam8bit should be fine for testing and allow
-        # the test to run without requiring a bnb installation.
+    @parameterized.expand(_BNB_OPTIMIZER_PARAMS, skip_on_empty=True)
+    def test_bnb_optimizer(self, optim_name, mock_attr, expected_kwargs):
         mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
-        }
+        modules = {"bitsandbytes": mock, "bitsandbytes.optim": mock.optim}
         with tempfile.TemporaryDirectory() as tmp_dir:
             with patch.dict("sys.modules", modules):
                 self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir=tmp_dir),
-                    mock.optim.AdamW,
-                    default_adam_kwargs,
+                    TrainingArguments(optim=optim_name, output_dir=tmp_dir),
+                    getattr(mock.optim, mock_attr),
+                    expected_kwargs,
                 )
 
-    @require_bitsandbytes
-    def test_bnb_paged_adam8bit_alias(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
-        }
+    @parameterized.expand(_ALL_BNB_OPTIMIZERS, skip_on_empty=True)
+    def test_bnb_not_available(self, optim_name):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.ADAMW_8BIT, output_dir=tmp_dir),
-                    mock.optim.AdamW,
-                    default_adam_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_paged_adam(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir=tmp_dir),
-                    mock.optim.AdamW,
-                    default_adam_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_paged_adam8bit(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir=tmp_dir),
-                    mock.optim.AdamW,
-                    default_adam_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_ademamix(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.AdEMAMix": mock.optim.AdEMAMix,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.ADEMAMIX, output_dir=tmp_dir),
-                    mock.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_ademamix8bit(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.AdEMAMix": mock.optim.AdEMAMix,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.ADEMAMIX_8BIT, output_dir=tmp_dir),
-                    mock.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_paged_ademamix(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.AdEMAMix": mock.optim.AdEMAMix,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX, output_dir=tmp_dir),
-                    mock.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_paged_ademamix8bit(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.AdEMAMix": mock.optim.AdEMAMix,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX_8BIT, output_dir=tmp_dir),
-                    mock.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_lion(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.Lion": mock.optim.Lion,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.LION, output_dir=tmp_dir),
-                    mock.optim.Lion,
-                    default_lion_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_lion8bit(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.Lion": mock.optim.Lion,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.LION_8BIT, output_dir=tmp_dir),
-                    mock.optim.Lion,
-                    default_lion_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_paged_lion8bit(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.Lion": mock.optim.Lion,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir=tmp_dir),
-                    mock.optim.Lion,
-                    default_lion_kwargs,
-                )
-
-    @require_bitsandbytes
-    def test_bnb_paged_lion(self):
-        mock = Mock()
-        modules = {
-            "bitsandbytes": mock,
-            "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.Lion": mock.optim.Lion,
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.PAGED_LION, output_dir=tmp_dir),
-                    mock.optim.Lion,
-                    default_lion_kwargs,
-                )
-
-    def test_bnb_adam8bit_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_bnb_paged_adam_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_bnb_paged_adam8bit_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_bnb_ademamix_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.ADEMAMIX, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_bnb_ademamix8bit_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.ADEMAMIX_8BIT, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_bnb_paged_ademamix_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_bnb_paged_ademamix8bit_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX_8BIT, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_bnb_paged_lion_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.PAGED_LION, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_bnb_paged_lion8bit_no_bnb(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir=tmp_dir)
-
-            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-            # bnb will fail even if `bitsandbytes` is installed.
+            args = TrainingArguments(optim=optim_name, output_dir=tmp_dir)
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
                 with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_anyprecision_adamw(self):
-        # Pretend that torchdistx is installed and mock torchdistx.optimizers.AnyPrecisionAdamW exists.
-        # Trainer.get_optimizer_cls_and_kwargs does not use AnyPrecisioinAdamW. It only has to return the
-        # class given, so mocking torchdistx.optimizers.AnyPrecisionAdamW should be fine for testing and allow
-        # the test to run without requiring a bnb installation.
         mock = Mock()
-        modules = {
-            "torchdistx": mock,
-            "torchdistx.optimizers": mock.optimizers,
-            "torchdistx.optimizers.AnyPrecisionAdamW.": mock.optimizers.AnyPrecisionAdamW,
-        }
+        modules = {"torchdistx": mock, "torchdistx.optimizers": mock.optimizers}
         with tempfile.TemporaryDirectory() as tmp_dir:
             with patch.dict("sys.modules", modules):
                 self.check_optim_and_kwargs(
@@ -6033,12 +5929,32 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
     def test_no_torchdistx_anyprecision_adamw(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir=tmp_dir)
-
-            # Pretend that torchdistx does not exist, even if installed. By setting torchdistx to None, importing
-            # torchdistx.optimizers will fail even if torchdistx is installed.
             with patch.dict("sys.modules", {"torchdistx.optimizers": None}):
                 with self.assertRaises(ValueError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_optimizer_factory_pattern(self):
+        """Test that is_optimizer_factory correctly identifies factory classes vs optimizer classes."""
+        from transformers.trainer_optimizer import is_optimizer_factory
+
+        # Create a mock optimizer class
+        class MockComplexOptimizer(torch.optim.Optimizer):
+            def __init__(self, params, lr=1e-3):
+                defaults = {"lr": lr}
+                super().__init__(params, defaults)
+
+            def step(self, closure=None):
+                pass
+
+        # Create a factory class (simulates Muon/Dion pattern)
+        class MockOptimizerFactory:
+            def __call__(self, opt_model, **optimizer_kwargs):
+                all_params = list(opt_model.parameters())
+                return MockComplexOptimizer(all_params, **optimizer_kwargs)
+
+        # Verify is_optimizer_factory correctly identifies factories vs optimizer classes
+        self.assertFalse(is_optimizer_factory(MockComplexOptimizer))  # Optimizer class should return False
+        self.assertTrue(is_optimizer_factory(MockOptimizerFactory))  # Factory class should return True
 
 
 @require_torch

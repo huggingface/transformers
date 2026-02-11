@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The Salesforce authors, The Open AI Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 """Tokenization classes for CodeGen."""
 
 import re
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 import numpy as np
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
@@ -67,6 +66,10 @@ class CodeGenTokenizer(TokenizersBackend):
     refer to this superclass for more information regarding those methods.
 
     Args:
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file`.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `merges_file`.
         unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -79,31 +82,24 @@ class CodeGenTokenizer(TokenizersBackend):
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (CodeGen tokenizer detect beginning of words by the preceding space).
-        add_bos_token (`bool`, *optional*, defaults to `False`):
-            Whether or not to add an initial beginning of sentence token to the input.
         return_token_type_ids (`bool`, *optional*, defaults to `False`):
             Whether to return token type IDs.
-        vocab (`dict`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`list`, *optional*):
-            Custom merges list. If not provided, merges are loaded from merges_file.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
     def __init__(
         self,
-        unk_token="<|endoftext|>",
-        bos_token="<|endoftext|>",
-        eos_token="<|endoftext|>",
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
+        unk_token: str = "<|endoftext|>",
+        bos_token: str = "<|endoftext|>",
+        eos_token: str = "<|endoftext|>",
         pad_token=None,
-        add_prefix_space=False,
-        add_bos_token=False,
-        return_token_type_ids=False,
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
+        add_prefix_space: bool = False,
+        return_token_type_ids: bool = False,
         **kwargs,
     ):
         self.return_token_type_ids = return_token_type_ids
@@ -112,17 +108,8 @@ class CodeGenTokenizer(TokenizersBackend):
 
         self.add_prefix_space = add_prefix_space
 
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {}
-
-        if merges is not None:
-            self._merges = merges
-        else:
-            self._merges = []
+        self._vocab = vocab if vocab is not None else {}
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(
@@ -141,39 +128,22 @@ class CodeGenTokenizer(TokenizersBackend):
             add_prefix_space=True, use_regex=True, trim_offsets=False
         )
 
-        tokenizer_object = self._tokenizer
-
-        # Set these before calling super().__init__() so the base class _post_init() can use them
-        self._add_bos_token = add_bos_token
-        self._add_eos_token = False
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
-            add_bos_token=add_bos_token,
             return_token_type_ids=return_token_type_ids,
             **kwargs,
         )
-
-        self._post_init()
-
-    def _post_init(self):
-        self._tokenizer.post_processor = processors.ByteLevel(
-            add_prefix_space=True, use_regex=True, trim_offsets=False
-        )
-        # Ensure base class post-init runs to register special/extra tokens, etc.
-        super()._post_init()
 
     def decode(
         self,
         token_ids: Union[int, list[int], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
-        truncate_before_pattern: Optional[list[str]] = None,
+        clean_up_tokenization_spaces: bool | None = None,
+        truncate_before_pattern: list[str] | None = None,
         **kwargs,
     ) -> str:
         """

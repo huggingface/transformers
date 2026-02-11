@@ -20,20 +20,17 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, EetqCo
 from transformers.testing_utils import (
     backend_empty_cache,
     require_accelerate,
-    require_eetq,
+    require_kernels,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_torch_available
+from transformers.utils import is_torch_available
 
 
 if is_torch_available():
     import torch
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 
 @require_torch_gpu
@@ -62,8 +59,8 @@ class EetqConfigTest(unittest.TestCase):
 
 @slow
 @require_torch_gpu
-@require_eetq
 @require_accelerate
+@require_kernels
 class EetqTest(unittest.TestCase):
     model_name = "facebook/opt-350m"
 
@@ -95,15 +92,13 @@ class EetqTest(unittest.TestCase):
         """
         Simple test that checks if the quantized model has been converted properly
         """
-        from eetq import EetqLinear
-
         from transformers.integrations import replace_with_eetq_linear
+        from transformers.integrations.eetq import EetqLinear
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
-        quantization_config = EetqConfig(weights="int8")
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
 
         nb_linears = 0
@@ -111,25 +106,24 @@ class EetqTest(unittest.TestCase):
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
 
-        model = replace_with_eetq_linear(model, quantization_config=quantization_config)
+        model = replace_with_eetq_linear(model)
         nb_eetq_linear = 0
         for module in model.modules():
             if isinstance(module, EetqLinear):
                 nb_eetq_linear += 1
 
-        self.assertEqual(nb_linears - 1, nb_eetq_linear)
+        self.assertEqual(nb_linears, nb_eetq_linear)
 
         # Try with `modules_to_not_convert`
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
-        quantization_config = EetqConfig(modules_to_not_convert=["fc1"])
-        model = replace_with_eetq_linear(model, quantization_config=quantization_config)
+        model = replace_with_eetq_linear(model, modules_to_not_convert=["fc1"])
         nb_eetq_linear = 0
         for module in model.modules():
             if isinstance(module, EetqLinear):
                 nb_eetq_linear += 1
         # 25 corresponds to the lm_head along with 24 fc1 layers.
-        self.assertEqual(nb_linears - 25, nb_eetq_linear)
+        self.assertEqual(nb_linears - 24, nb_eetq_linear)
 
     def test_quantized_model(self):
         """

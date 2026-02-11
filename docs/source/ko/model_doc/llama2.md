@@ -82,7 +82,7 @@ LLaMA2를 시작하는 데 도움이 될 Hugging Face의 공식 및 커뮤니티
 - 개인 컴퓨터에서 QLoRA와 TRL을 사용하여 Llama 2 모델을 미세 조정하는 방법에 대한 [노트북](https://colab.research.google.com/drive/1SYpgFpcmtIUzdE7pxqknrM4ArCASfkFQ?usp=sharing)입니다. 🌎
 
 ⚡️ 추론
-- AutoGPTQ 라이브러리의 GPTQ를 사용하여 Llama 2 모델을 양자화하는 방법에 대한 [노트북](https://colab.research.google.com/drive/1TC56ArKerXUpbgRy5vM3woRsbTEVNq7h?usp=sharing)입니다. 🌎
+- GPT-QModel 라이브러리의 GPTQ를 사용하여 Llama 2 모델을 양자화하는 방법에 대한 [노트북](https://colab.research.google.com/drive/1TC56ArKerXUpbgRy5vM3woRsbTEVNq7h?usp=sharing)입니다. 🌎
 - 로컬 컴퓨터나 Google Colab에서 4-bit 양자화로 Llama 2 채팅 모델을 실행하는 방법에 대한 [노트북](https://colab.research.google.com/drive/1X1z9Q6domMKl2CnEM0QGHNwidLfR4dW2?usp=sharing)입니다. 🌎
 
 🚀 배포

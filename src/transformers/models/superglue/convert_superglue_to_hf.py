@@ -223,7 +223,6 @@ def add_keypoint_detector_state_dict(superglue_state_dict):
 def write_model(
     model_path,
     checkpoint_url,
-    safe_serialization=True,
     push_to_hub=False,
 ):
     os.makedirs(model_path, exist_ok=True)
@@ -270,7 +269,7 @@ def write_model(
     del model.config._name_or_path
 
     print("Saving the model...")
-    model.save_pretrained(model_path, safe_serialization=safe_serialization)
+    model.save_pretrained(model_path)
     del state_dict, model
 
     # Safety check: reload the converted model
@@ -336,6 +335,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    write_model(
-        args.pytorch_dump_folder_path, args.checkpoint_url, safe_serialization=True, push_to_hub=args.push_to_hub
-    )
+    write_model(args.pytorch_dump_folder_path, args.checkpoint_url, push_to_hub=args.push_to_hub)

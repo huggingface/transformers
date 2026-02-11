@@ -24,7 +24,7 @@ FOOTER = """
 # fmt: on
 """
 
-TASK_PATTERN = "task: Optional[str] = None"
+TASK_PATTERN = "task: str | None = None"
 
 
 def main(pipeline_file_path: str, fix_and_overwrite: bool = False):

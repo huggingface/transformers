@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Baidu Inc and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,12 +13,12 @@
 # limitations under the License.
 
 
-from typing import Optional
-
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from ... import initialization as init
+from ...backbone_utils import BackboneConfigMixin, BackboneMixin
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import (
     BackboneOutput,
@@ -30,7 +29,6 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
 )
-from ...utils.backbone_utils import BackboneConfigMixin, BackboneMixin, get_aligned_output_features_output_indices
 from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetConvLayer
 
 
@@ -131,9 +129,7 @@ class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
         self.hidden_sizes = hidden_sizes
         self.hidden_act = hidden_act
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
+        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
         self.stem_channels = stem_channels
         self.stage_in_channels = stage_in_channels
         self.stage_mid_channels = stage_mid_channels
@@ -169,6 +165,15 @@ class HGNetV2PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = ["HGNetV2BasicLayer"]
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        # We need to check it like that as d_fine models replace the BatchNorm2d by their own
+        if "BatchNorm" in module.__class__.__name__:
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.zeros_(module.running_mean)
+            init.ones_(module.running_var)
 
 
 class HGNetV2LearnableAffineBlock(nn.Module):
@@ -454,12 +459,11 @@ class HGNetV2Encoder(nn.Module):
         )
 
 
-class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
+class HGNetV2Backbone(BackboneMixin, HGNetV2PreTrainedModel):
     has_attentions = False
 
     def __init__(self, config: HGNetV2Config):
         super().__init__(config)
-        super()._init_backbone(config)
         self.depths = config.depths
         self.num_features = [config.embedding_size] + config.hidden_sizes
         self.embedder = HGNetV2Embeddings(config)
@@ -470,7 +474,11 @@ class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
 
     @auto_docstring
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -545,10 +553,11 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -559,12 +568,14 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
         Examples:
         ```python
         >>> import torch
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import HGNetV2ForImageClassification, AutoImageProcessor
         >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> model = HGNetV2ForImageClassification.from_pretrained("ustc-community/hgnet-v2")
         >>> processor = AutoImageProcessor.from_pretrained("ustc-community/hgnet-v2")

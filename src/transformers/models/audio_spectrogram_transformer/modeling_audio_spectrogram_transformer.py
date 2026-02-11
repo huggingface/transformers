@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 MIT and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """PyTorch Audio Spectrogram Transformer (AST) model."""
 
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -27,7 +25,8 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Seq
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_audio_spectrogram_transformer import ASTConfig
 
 
@@ -103,8 +102,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -115,7 +114,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -157,9 +155,9 @@ class ASTSelfAttention(nn.Module):
         value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
         query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         context_layer, attention_probs = attention_interface(
             self,
@@ -302,7 +300,7 @@ class ASTPreTrainedModel(PreTrainedModel):
     }
 
     @torch.no_grad()
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
@@ -334,11 +332,12 @@ class ASTModel(ASTPreTrainedModel):
     def get_input_embeddings(self) -> ASTPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
-        input_values: Optional[torch.Tensor] = None,
+        input_values: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -401,8 +400,8 @@ class ASTForAudioClassification(ASTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_values: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        input_values: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutput:
         r"""

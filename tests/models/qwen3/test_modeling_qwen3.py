@@ -168,6 +168,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
                 ("xpu", 3): "My favourite condiment is 100% beef and comes in a 12 oz. jar. It is sold in",
                 ("cuda", 7): "My favourite condiment is 100% natural. It's a little spicy and a little sweet, but it's the",
                 ("cuda", 8): "My favourite condiment is 100% beef, 100% beef, 100% beef.",
+                ("npu", None): "My favourite condiment is 100% chicken and beef. I love it because it's so good and I love it",
             }
         )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
@@ -181,7 +182,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
-        set_seed(0)
+        set_seed(42)
         generated_ids = model.generate(
             input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=assistant_model
         )
@@ -192,9 +193,6 @@ class Qwen3IntegrationTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
         )
@@ -214,6 +212,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
                 ("xpu", None): ["My favourite condiment is 100% plain, unflavoured, and unadulterated. It is"],
                 ("rocm", (9, 5)): ["My favourite condiment is 100% plain, unflavoured, and unadulterated."],
                 ("cuda", None): cuda_expectation,
+                ("npu", None): ["My favourite condiment is 100% plain, unsalted, unsweetened, and unflavored. It is"],
             }
         )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = expected_text_completions.get_expectation()

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 
 import torch
 
@@ -96,6 +94,62 @@ class Sam3TrackerMaskDecoderConfig(Sam2MaskDecoderConfig):
 
 
 class Sam3TrackerConfig(Sam2Config):
+    r"""
+    [`Sam3TrackerConfig`] is the configuration class to store the configuration of a [`Sam3TrackerModel`]. It is used to instantiate a
+    SAM3_TRACKER model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
+    configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
+    [facebook/sam3_tracker.1-hiera-tiny](https://huggingface.co/facebook/sam3_tracker.1-hiera-tiny) architecture.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    <Tip>
+
+    SAM3 Tracker checkpoints with `model_type="sam3_tracker_video"` are compatible with `Sam3TrackerModel` since the
+    video variant weights are a superset of the image-only model weights. You may see a warning about model type
+    mismatch when loading such checkpoints, which can be safely ignored in this case.
+
+    </Tip>
+
+    Args:
+        vision_config (Union[`dict`, `Sam3TrackerVisionConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`Sam3TrackerVisionConfig`].
+        prompt_encoder_config (Union[`dict`, `Sam3TrackerPromptEncoderConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`Sam3TrackerPromptEncoderConfig`].
+        mask_decoder_config (Union[`dict`, `Sam3TrackerMaskDecoderConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`Sam3TrackerMaskDecoderConfig`].
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            Standard deviation for parameter initialization.
+
+    Example:
+
+    ```python
+    >>> from transformers import (
+    ...     Sam3TrackerVisionConfig,
+    ...     Sam3TrackerPromptEncoderConfig,
+    ...     Sam3TrackerMaskDecoderConfig,
+    ...     Sam3TrackerModel,
+    ... )
+
+    >>> # Initializing a Sam3TrackerConfig with `"facebook/sam3_tracker.1_hiera_tiny"` style configuration
+    >>> configuration = Sam3TrackerConfig()
+
+    >>> # Initializing a Sam3TrackerModel (with random weights) from the `"facebook/sam3_tracker.1_hiera_tiny"` style configuration
+    >>> model = Sam3TrackerModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+
+    >>> # We can also initialize a Sam3TrackerConfig from a Sam3TrackerVisionConfig, Sam3TrackerPromptEncoderConfig, and Sam3TrackerMaskDecoderConfig
+    >>> # Initializing SAM3_TRACKER vision encoder, memory attention, and memory encoder configurations
+    >>> vision_config = Sam3TrackerVisionConfig()
+    >>> prompt_encoder_config = Sam3TrackerPromptEncoderConfig()
+    >>> mask_decoder_config = Sam3TrackerMaskDecoderConfig()
+
+    >>> config = Sam3TrackerConfig(vision_config, prompt_encoder_config, mask_decoder_config)
+    ```
+    """
+
     def __init__(
         self,
         vision_config=None,
@@ -136,7 +190,12 @@ class Sam3TrackerFeedForward(Sam2FeedForward):
     pass
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Segment Anything Model 3 (SAM 3) for generating segmentation masks, given an input image and
+    input points and labels, boxes, or masks.
+    """
+)
 class Sam3TrackerPreTrainedModel(Sam2PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
@@ -144,6 +203,8 @@ class Sam3TrackerPreTrainedModel(Sam2PreTrainedModel):
         if isinstance(module, Sam3TrackerModel):
             if module.no_memory_embedding is not None:
                 init.zeros_(module.no_memory_embedding)
+        elif isinstance(module, Sam3TrackerPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 class Sam3TrackerPositionalEmbedding(Sam2PositionalEmbedding):

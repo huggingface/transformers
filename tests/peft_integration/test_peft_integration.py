@@ -94,7 +94,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
                 with CaptureLogger(logger) as cl:
-                    peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                    peft_model = transformers_class.from_pretrained(model_id, use_safetensors=False).to(torch_device)
                 # ensure that under normal circumstances, there  are no warnings about keys
                 self.assertNotIn("unexpected keys", cl.out)
                 self.assertNotIn("missing keys", cl.out)
@@ -111,7 +111,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                peft_model = transformers_class.from_pretrained(model_id, revision="refs/pr/2").to(torch_device)
 
                 state_dict = peft_model.get_adapter_state_dict()
 
@@ -125,7 +125,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                peft_model = transformers_class.from_pretrained(model_id, revision="refs/pr/2").to(torch_device)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -136,13 +136,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     self.assertTrue("config.json" not in os.listdir(tmpdirname))
                     self.assertTrue("pytorch_model.bin" not in os.listdir(tmpdirname))
                     self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
-
-                    peft_model = transformers_class.from_pretrained(tmpdirname).to(torch_device)
-                    self.assertTrue(self._check_lora_correctly_converted(peft_model))
-
-                    peft_model.save_pretrained(tmpdirname, safe_serialization=False)
-                    self.assertTrue("adapter_model.bin" in os.listdir(tmpdirname))
-                    self.assertTrue("adapter_config.json" in os.listdir(tmpdirname))
 
                     peft_model = transformers_class.from_pretrained(tmpdirname).to(torch_device)
                     self.assertTrue(self._check_lora_correctly_converted(peft_model))
@@ -521,7 +514,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
     def test_peft_save_quantized_regression(self):
         """
         Simple test that tests the basic usage of PEFT model save_pretrained with quantized base models
-        Regression test to make sure everything works as expected before the safetensors integration.
         """
         # 4bit
         for model_id in self.peft_test_model_ids:
@@ -536,10 +528,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
-                    peft_model.save_pretrained(tmpdirname, safe_serialization=False)
-                    self.assertTrue("adapter_model.bin" in os.listdir(tmpdirname))
+                    peft_model.save_pretrained(tmpdirname)
+                    self.assertTrue("adapter_model.safetensors" in os.listdir(tmpdirname))
                     self.assertTrue("adapter_config.json" in os.listdir(tmpdirname))
-                    self.assertTrue("pytorch_model.bin" not in os.listdir(tmpdirname))
                     self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
 
         # 8-bit
@@ -555,11 +546,10 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
-                    peft_model.save_pretrained(tmpdirname, safe_serialization=False)
+                    peft_model.save_pretrained(tmpdirname)
 
-                    self.assertTrue("adapter_model.bin" in os.listdir(tmpdirname))
+                    self.assertTrue("adapter_model.safetensors" in os.listdir(tmpdirname))
                     self.assertTrue("adapter_config.json" in os.listdir(tmpdirname))
-                    self.assertTrue("pytorch_model.bin" not in os.listdir(tmpdirname))
                     self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
 
     def test_peft_pipeline(self):
@@ -685,11 +675,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 dummy_state_dict["foobar"] = next(iter(dummy_state_dict.values()))
 
                 with CaptureLogger(logger) as cl:
-                    model.load_adapter(
-                        adapter_state_dict=dummy_state_dict, peft_config=peft_config, low_cpu_mem_usage=False
-                    )
+                    model.load_adapter(adapter_state_dict=dummy_state_dict, peft_config=peft_config)
 
-                msg = "Loading adapter weights from state_dict led to unexpected keys not found in the model: foobar"
+                msg = "foobar | UNEXPECTED"
                 self.assertIn(msg, cl.out)
 
     def test_peft_from_pretrained_missing_keys_warning(self):
@@ -727,9 +715,8 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 key = key.removeprefix(peft_prefix)
                 # 2. Insert adapter name
                 prefix, _, suffix = key.rpartition(".")
-                key = f"{prefix}.other.{suffix}"
-
-                msg = f"Loading adapter weights from state_dict led to missing keys in the model: {key}"
+                key = f".other.{suffix}"
+                msg = f"{key} | MISSING |"
                 self.assertIn(msg, cl.out)
 
     def test_peft_load_adapter_training_inference_mode_true(self):
@@ -745,8 +732,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     peft_model.save_pretrained(tmpdirname)
                     model = transformers_class.from_pretrained(peft_model.config._name_or_path)
                     model.load_adapter(tmpdirname)
-                    assert not any(p.requires_grad for p in model.parameters())
                     assert not any(m.training for m in model.modules())
+                    grads = [n for n, p in model.named_parameters() if p.requires_grad]
+                    assert len(grads) == 0
                     del model
 
     def test_peft_load_adapter_training_inference_mode_false(self):
@@ -756,7 +744,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                peft_model = transformers_class.from_pretrained(model_id, use_safetensors=False).to(torch_device)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -888,6 +876,60 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
             # Generate text to verify pipeline works
             _ = lora_generator(text, max_new_tokens=20)
+
+    def test_non_lora_load_adapter(self):
+        """
+        Check that loading a non-LoRA adapter works. Using LoKr as an example, not testing all possible PEFT methods.
+        """
+        from peft import LoKrConfig, get_peft_model
+
+        inputs = torch.randint(0, 100, (1, 10)).to(torch_device)
+        atol, rtol = 1e-4, 1e-4
+
+        for model_id in self.transformers_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+                with torch.inference_mode():
+                    output_base = model(inputs).logits
+
+                peft_config = LoKrConfig(init_weights=False)
+                peft_model = get_peft_model(model, peft_config)
+                with torch.inference_mode():
+                    output_peft = peft_model(inputs).logits
+
+                # sanity check: should be different
+                assert not torch.allclose(output_base, output_peft, atol=atol, rtol=rtol)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    peft_model.save_pretrained(tmpdirname)
+                    del model, peft_model
+
+                    model = transformers_class.from_pretrained(tmpdirname).to(torch_device)
+                    with torch.inference_mode():
+                        output_transformers = model(inputs).logits
+                    self.assertTrue(torch.allclose(output_peft, output_transformers, atol=atol, rtol=rtol))
+
+    def test_non_lora_add_adapter(self):
+        """
+        Check that adding a non-LoRA adapter works. Using LoKr as an example, not testing all possible PEFT methods.
+        """
+        from peft import LoKrConfig
+
+        inputs = torch.randint(0, 100, (1, 10)).to(torch_device)
+        atol, rtol = 1e-4, 1e-4
+
+        for model_id in self.transformers_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+                with torch.inference_mode():
+                    output_base = model(inputs).logits
+
+                peft_config = LoKrConfig(init_weights=False)
+                model.add_adapter(peft_config)
+                with torch.inference_mode():
+                    output_peft = model(inputs).logits
+                # should be different
+                assert not torch.allclose(output_base, output_peft, atol=atol, rtol=rtol)
 
 
 @require_peft

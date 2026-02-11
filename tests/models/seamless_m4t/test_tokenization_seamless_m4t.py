@@ -27,7 +27,6 @@ from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
 )
-from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -248,7 +247,8 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         return cls
 
     def setUp(self):
-        # Some tests may change to source mode and not reset
+        # Some tests may change source/target language and not reset
+        self.tokenizer.src_lang = "eng"
         self.tokenizer.set_tgt_lang_special_tokens(self.tokenizer.tgt_lang)
 
     def test_int_remove_extra_whitespaces(self):
@@ -386,13 +386,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
-        _, vocab_scores, merges = extractor.extract()
-
-        tokenizer = SeamlessM4TTokenizer(
-            vocab=vocab_scores,
-            merges=merges,
-        )
+        tokenizer = SeamlessM4TTokenizer.from_pretrained(SAMPLE_VOCAB)
         tokenizer.add_special_tokens({"additional_special_tokens": [AddedToken("<s>", rstrip=False, lstrip=False)]})
         cls.tokenizer = tokenizer
         return cls

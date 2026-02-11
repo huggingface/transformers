@@ -14,14 +14,12 @@
 
 
 import copy
-import tempfile
 import unittest
 from functools import cached_property
 
 import pytest
 
 from transformers import T5Config, is_torch_available
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -166,6 +164,28 @@ class T5ModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
+        )
+
+    def get_config_v1_1(self):
+        return T5Config(
+            vocab_size=self.vocab_size,
+            d_model=self.hidden_size,
+            d_ff=self.d_ff,
+            d_kv=self.hidden_size // self.num_attention_heads,
+            num_layers=self.num_hidden_layers,
+            num_decoder_layers=self.decoder_layers,
+            num_heads=self.num_attention_heads,
+            relative_attention_num_buckets=self.relative_attention_num_buckets,
+            dropout_rate=self.dropout_rate,
+            initializer_factor=self.initializer_factor,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.pad_token_id,
+            pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.decoder_start_token_id,
+            # V1.1 related params: uses gated-gelu and `tie_word_embeddings=False` as an
+            # indicator to not scale decoder outputs
+            feed_forward_proj="gated-gelu",
+            tie_word_embeddings=False,
         )
 
     def check_prepare_lm_labels_via_shift_left(
@@ -432,80 +452,14 @@ class T5ModelTester:
         output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
-    def create_and_check_encoder_decoder_shared_weights(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        for model_class in [T5Model, T5ForConditionalGeneration]:
-            torch.manual_seed(0)
-            model = model_class(config=config).to(torch_device).eval()
-            # load state dict copies weights but does not tie them
-            model.encoder.load_state_dict(model.decoder.state_dict(), strict=False)
-
-            torch.manual_seed(0)
-            tied_config = copy.deepcopy(config)
-            tied_config.tie_encoder_decoder = True
-            tied_model = model_class(config=tied_config).to(torch_device).eval()
-
-            model_result = model(
-                input_ids=input_ids,
-                decoder_input_ids=decoder_input_ids,
-                attention_mask=attention_mask,
-                decoder_attention_mask=decoder_attention_mask,
-            )
-
-            tied_model_result = tied_model(
-                input_ids=input_ids,
-                decoder_input_ids=decoder_input_ids,
-                attention_mask=attention_mask,
-                decoder_attention_mask=decoder_attention_mask,
-            )
-
-            random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
-
-            # check that outputs are equal
-            self.parent.assertTrue(
-                torch.allclose(
-                    model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4
-                )
-            )
-
-            # check that outputs after saving and loading are equal
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                tied_model.save_pretrained(tmpdirname)
-                tied_model = model_class.from_pretrained(tmpdirname)
-                tied_model.to(torch_device)
-                tied_model.eval()
-
-                random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
-
-                tied_model_result = tied_model(
-                    input_ids=input_ids,
-                    decoder_input_ids=decoder_input_ids,
-                    attention_mask=attention_mask,
-                    decoder_attention_mask=decoder_attention_mask,
-                )
-
-                # check that outputs are equal
-                self.parent.assertTrue(
-                    torch.allclose(
-                        model_result[0][0, :, random_slice_idx],
-                        tied_model_result[0][0, :, random_slice_idx],
-                        atol=1e-4,
-                    )
-                )
-
     def check_resize_embeddings_t5_v1_1(
         self,
         config,
     ):
         prev_vocab_size = config.vocab_size
 
+        # V1.1 related params: uses gated-gelu and `tie_word_embeddings=False`
+        config.feed_forward_proj = "gated-gelu"
         config.tie_word_embeddings = False
         model = T5ForConditionalGeneration(config=config).to(torch_device).eval()
         model.resize_token_embeddings(prev_vocab_size - 10)
@@ -627,15 +581,17 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.assertTrue(config_and_inputs[0].scale_decoder_outputs)
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_v1_1(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        # check that gated gelu feed forward and different word embeddings work
-        config = config_and_inputs[0]
-        config.tie_word_embeddings = False
-        config.feed_forward_proj = "gated-gelu"
-        self.model_tester.create_and_check_model(config, *config_and_inputs[1:])
+        config_v1 = self.model_tester.get_config_v1_1()
+        config_and_inputs = list(config_and_inputs)
+        config_and_inputs[0] = config_v1
+
+        self.assertFalse(config_and_inputs[0].scale_decoder_outputs)
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
     # T5ForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
@@ -724,10 +680,6 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     def test_generate_with_past_key_values(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
-
-    def test_encoder_decoder_shared_weights(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
 
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
@@ -1081,7 +1033,12 @@ class T5ModelIntegrationTests(unittest.TestCase):
                 ("rocm", (9, 4)): -19.0846,
             }
         ).get_expectation()
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+        torch.testing.assert_close(
+            mtf_score,
+            EXPECTED_SCORE,
+            atol=1e-4,
+            rtol=0.0,
+        )
 
     @slow
     def test_small_v1_1_integration_test(self):
@@ -1106,8 +1063,13 @@ class T5ModelIntegrationTests(unittest.TestCase):
         loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
         mtf_score = -(labels.shape[-1] * loss.item())
 
-        EXPECTED_SCORE = -59.0293
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+        EXPECTED_SCORE = -40.1645
+        torch.testing.assert_close(
+            mtf_score,
+            EXPECTED_SCORE,
+            atol=1e-4,
+            rtol=0.0,
+        )
 
     @slow
     def test_small_byt5_integration_test(self):
@@ -1130,8 +1092,13 @@ class T5ModelIntegrationTests(unittest.TestCase):
         loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
         mtf_score = -(labels.shape[-1] * loss.item())
 
-        EXPECTED_SCORE = -60.7397
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+        EXPECTED_SCORE = -44.6276
+        torch.testing.assert_close(
+            mtf_score,
+            EXPECTED_SCORE,
+            atol=1e-4,
+            rtol=0.0,
+        )
 
     @slow
     def test_summarization(self):
@@ -1504,8 +1471,8 @@ class T5ModelIntegrationTests(unittest.TestCase):
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
-            "theory of relativity states that 1) the speed of light is constant in all inertial reference frames. the laws of physics are the same for all inertial reference frames.",
-            "ketchup is my favorite condiment.",
+            "theory of relativity states that 1) the speed of light is constant in all inertial reference frames . the laws of physics are the same for all inertial reference frames .",
+            "ketchup is my favorite condiment .",
         ]
 
         prompts = [
@@ -1564,8 +1531,6 @@ class T5ModelIntegrationTests(unittest.TestCase):
     @slow
     def test_export_encoder(self):
         """Test exporting T5EncoderModel to torch export format."""
-        if not is_torch_greater_or_equal_than_2_4:
-            self.skipTest("This test requires torch >= 2.4 to run.")
 
         from transformers.integrations.executorch import Seq2SeqLMEncoderExportableModule
 
@@ -1601,8 +1566,6 @@ class T5ModelIntegrationTests(unittest.TestCase):
     @slow
     def test_export_decoder(self):
         """Test exporting T5 decoder with static cache to torch export format."""
-        if not is_torch_greater_or_equal_than_2_4:
-            self.skipTest("This test requires torch >= 2.4 to run.")
 
         from transformers import AutoModelForSeq2SeqLM, T5ForConditionalGeneration
         from transformers.integrations.executorch import Seq2SeqLMDecoderExportableModuleWithStaticCache
@@ -1663,8 +1626,6 @@ class T5ModelIntegrationTests(unittest.TestCase):
     @slow
     def test_export_t5_summarization(self):
         """Test composing exported T5 encoder and decoder for summarization."""
-        if not is_torch_greater_or_equal_than_2_4:
-            self.skipTest("This test requires torch >= 2.4 to run.")
 
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, T5ForConditionalGeneration
         from transformers.integrations.executorch import Seq2SeqLMExportableModule
