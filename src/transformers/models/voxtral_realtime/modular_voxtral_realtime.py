@@ -107,7 +107,7 @@ class VoxtralRealtimeFeatureExtractor(LasrFeatureExtractor):
         return log_spec
 
 
-class Conv1dCacheLayer:
+class VoxtralConv1dCacheLayer:
     def __init__(self):
         self.cache: torch.Tensor | None = None
         self.is_initialized: bool = False
