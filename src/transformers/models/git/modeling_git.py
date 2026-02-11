@@ -22,7 +22,6 @@ import torch
 from torch import nn
 
 from ... import initialization as init
-from ...utils.deprecation import deprecate_kwarg
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
@@ -46,6 +45,7 @@ from ...utils import (
     logging,
     torch_int,
 )
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_git import GitConfig, GitVisionConfig
 
 
@@ -112,8 +112,8 @@ def token_type_ids_mask_function(
     return inner_mask
 
 
-# Copied from transformers.models.gemma3.modeling_gemma3.create_causal_mask_mapping
 @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
+# Copied from transformers.models.gemma3.modeling_gemma3.create_causal_mask_mapping
 def create_causal_mask_mapping(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,

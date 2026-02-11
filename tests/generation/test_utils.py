@@ -1398,7 +1398,9 @@ class GenerationTesterMixin:
 
             # Let's generate again, but passing the past key values in between (3 + 1 = 4 tokens)
             initial_output = model.generate(inputs_embeds=inputs_embeds, max_new_tokens=3, **generation_kwargs)
-            continued_embeds = torch.cat([inputs_embeds, model.get_input_embeddings()(initial_output.sequences)], dim=1)
+            continued_embeds = torch.cat(
+                [inputs_embeds, model.get_input_embeddings()(initial_output.sequences)], dim=1
+            )
             cached_output = model.generate(
                 inputs_embeds=continued_embeds,
                 max_new_tokens=1,

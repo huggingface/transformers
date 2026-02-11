@@ -20,7 +20,6 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache
-from ...utils.deprecation import deprecate_kwarg
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_masks_for_generate
@@ -36,6 +35,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_paligemma import PaliGemmaConfig
 

@@ -22,7 +22,6 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
-from ...utils.deprecation import deprecate_kwarg
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -39,6 +38,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_seamless_m4t_v2 import SeamlessM4Tv2Config
 
 

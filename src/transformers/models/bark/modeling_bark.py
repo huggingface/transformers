@@ -21,7 +21,6 @@ from torch import nn
 from torch.nn import functional as F
 
 from ... import initialization as init
-from ...utils.deprecation import deprecate_kwarg
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...generation.logits_process import (
@@ -40,6 +39,7 @@ from ...utils import (
     is_torch_accelerator_available,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,

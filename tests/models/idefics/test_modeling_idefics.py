@@ -794,7 +794,9 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             inputs["past_key_values"] = initial_output.past_key_values
 
             new_attention_len = input_ids.shape[1] + initial_output.sequences.shape[-1]
-            continued_embeds = torch.cat([inputs_embeds, model.get_input_embeddings()(initial_output.sequences)], dim=1)
+            continued_embeds = torch.cat(
+                [inputs_embeds, model.get_input_embeddings()(initial_output.sequences)], dim=1
+            )
             inputs["inputs_embeds"] = continued_embeds
 
             if "attention_mask" in inputs:

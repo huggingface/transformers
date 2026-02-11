@@ -25,7 +25,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
-from ...utils.deprecation import deprecate_kwarg
 from ...activations import get_activation
 from ...configuration_utils import PreTrainedConfig
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
@@ -49,6 +48,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_distilbert import DistilBertConfig

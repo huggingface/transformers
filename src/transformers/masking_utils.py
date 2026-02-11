@@ -20,8 +20,8 @@ import torch.nn.functional as F
 from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_xpu_available, logging
-from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.deprecation import deprecate_kwarg
+from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_or_equal, is_tracing
 
 
