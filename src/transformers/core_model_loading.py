@@ -293,7 +293,7 @@ class Transpose(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return Transpose(dim0=self.dim1, dim1=self.dim0)
+        return Transpose(dim0=self.dim1, dim1=self.dim0, sentinel=self.sentinel)
 
 
 class PermuteForRope(ConversionOps):
@@ -1269,7 +1269,12 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     # If we are still here, we need to create the (reverse) conversion mapping from scratch
     renamings = [entry for entry in reverse_weight_conversion if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in reverse_weight_conversion if isinstance(entry, WeightConverter)]
-    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
+    # Remove duplicate entries, keeping the first (see qwen3_vl_moe which has a duplicate for reverse mapping)
+    pattern_to_converter = {}
+    for converter in converters:
+        for k in converter.source_patterns:
+            if k not in pattern_to_converter:
+                pattern_to_converter[k] = converter
     conversion_mapping = {}
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
