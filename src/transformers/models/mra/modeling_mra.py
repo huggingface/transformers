@@ -21,6 +21,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
@@ -567,7 +568,7 @@ class MraSelfAttention(nn.Module):
             .transpose(1, 2)
         )
 
-        # revert changes made by get_extended_attention_mask
+        # revert changes made by float mask
         attention_mask = 1.0 + attention_mask / 10000.0
         attention_mask = (
             attention_mask.squeeze()
@@ -858,19 +859,24 @@ class MraModel(MraPreTrainedModel):
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=embedding_output[:, 0:1, :],  # Force q_len == 1
+            attention_mask=attention_mask,
+            # Force mask creation
+            and_mask_function=lambda *args: torch.tensor(True, dtype=torch.bool),
+        )
+
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )

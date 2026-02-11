@@ -28,6 +28,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 from ...activations import ACT2FN
 from ...integrations import use_kernelized_func
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -744,11 +745,15 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         pruned_keypoints_iterations = torch.ones_like(pruned_keypoints_indices)
 
         for layer_index in range(self.num_layers):
-            input_shape = descriptors.size()
             if mask is not None:
-                extended_attention_mask = self.get_extended_attention_mask(mask, input_shape)
+                extended_attention_mask = create_bidirectional_mask(
+                    config=self.config,
+                    input_embeds=descriptors[:, 0:1, :],  # force q_len == 1
+                    attention_mask=mask,
+                )
             else:
-                extended_attention_mask = torch.ones((batch_size, input_shape[-2]), device=keypoints.device)
+                extended_attention_mask = torch.ones((batch_size, descriptors.size()[-2]), device=keypoints.device)
+
             layer_output = self.transformer_layers[layer_index](
                 descriptors,
                 keypoints,

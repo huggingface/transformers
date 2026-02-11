@@ -1122,8 +1122,7 @@ class UdopStack(UdopPreTrainedModel):
             attention_mask = torch.zeros((4, 1024), device=input_ids.device, dtype=input_ids.dtype)
             bbox = torch.zeros((4, 1024, 4), device=input_ids.device, dtype=input_ids.dtype)
             input_shape = input_ids.size()
-            position_bias = torch.zeros_like(self.get_extended_attention_mask(attention_mask, input_shape))
-            # encoder_attention_mask = attention_mask
+            position_bias = torch.zeros_like(attention_mask[:, None, None, :]).to(self.dtype)
             logger.warning("Empty batch")
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]

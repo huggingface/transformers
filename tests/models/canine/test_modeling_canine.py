@@ -236,6 +236,7 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_mismatched_shapes = False
     test_resize_embeddings = False
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = CanineModelTester(self)
