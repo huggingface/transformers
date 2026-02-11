@@ -1306,88 +1306,6 @@ class TrainingArguments:
     label_names: list[str] | None = field(
         default=None, metadata={"help": "The list of keys in your dictionary of inputs that correspond to the labels."}
     )
-    load_best_model_at_end: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Whether or not to load the best model found during training at the end of training. When this option"
-                " is enabled, the best checkpoint will always be saved. See `save_total_limit` for more."
-            )
-        },
-    )
-    metric_for_best_model: str | None = field(
-        default=None, metadata={"help": "The metric to use to compare two different models."}
-    )
-    greater_is_better: bool | None = field(
-        default=None, metadata={"help": "Whether the `metric_for_best_model` should be maximized or not."}
-    )
-    ignore_data_skip: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "When resuming training, whether or not to skip the first epochs and batches to get to the same"
-                " training data."
-            )
-        },
-    )
-    fsdp: list[FSDPOption] | str | None = field(
-        default=None,
-        metadata={
-            "help": (
-                "Whether or not to use PyTorch Fully Sharded Data Parallel (FSDP) training (in distributed training"
-                " only). The base option should be `full_shard`, `shard_grad_op` or `no_shard` and you can add"
-                " CPU-offload to `full_shard` or `shard_grad_op` like this: full_shard offload` or `shard_grad_op"
-                " offload`. You can add auto-wrap to `full_shard` or `shard_grad_op` with the same syntax: full_shard"
-                " auto_wrap` or `shard_grad_op auto_wrap`."
-            ),
-        },
-    )
-    fsdp_config: dict[str, Any] | str | None = field(
-        default=None,
-        metadata={
-            "help": (
-                "Config to be used with FSDP (Pytorch Fully Sharded Data Parallel). The value is either a "
-                "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`."
-            )
-        },
-    )
-    accelerator_config: dict | str | None = field(
-        default=None,
-        metadata={
-            "help": (
-                "Config to be used with the internal Accelerator object initialization. The value is either a "
-                "accelerator json config file (e.g., `accelerator_config.json`) or an already loaded json file as `dict`."
-            )
-        },
-    )
-    parallelism_config: ParallelismConfig | None = field(
-        default=None,
-        metadata={"help": ("Parallelism configuration for the training run. Requires Accelerate `1.12.0`")},
-    )
-    deepspeed: dict | str | None = field(
-        default=None,
-        metadata={
-            "help": (
-                "Enable deepspeed and pass the path to deepspeed json config file (e.g. `ds_config.json`) or an already"
-                " loaded json file as a dict"
-            )
-        },
-    )
-    label_smoothing_factor: float = field(
-        default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
-    )
-
-    default_optim = "adamw_torch"
-    if is_torch_available():
-        from .pytorch_utils import is_torch_greater_or_equal_than_2_8
-
-        if is_torch_greater_or_equal_than_2_8:
-            default_optim = "adamw_torch_fused"
-    optim: OptimizerNames | str = field(
-        default=default_optim,
-        metadata={"help": "The optimizer to use."},
-    )
-    optim_args: str | None = field(default=None, metadata={"help": "Optional arguments to supply to optimizer."})
     train_sampling_strategy: str = field(
         default="random",
         metadata={
@@ -1397,7 +1315,9 @@ class TrainingArguments:
     )
     length_column_name: str = field(
         default="length",
-        metadata={"help": "Column name for precomputed lengths. Ignored unless `train_sampling_strategy` is 'group_by_length'."},
+        metadata={
+            "help": "Column name for precomputed lengths. Ignored unless `train_sampling_strategy` is 'group_by_length'."
+        },
     )
 
     # --- DDP ---
