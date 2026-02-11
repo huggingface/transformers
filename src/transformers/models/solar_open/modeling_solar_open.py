@@ -402,6 +402,7 @@ class SolarOpenPreTrainedModel(PreTrainedModel):
         "attentions": SolarOpenAttention,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keys_to_ignore_on_load_unexpected = None
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -483,8 +484,6 @@ class SolarOpenRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class SolarOpenModel(SolarOpenPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = []
-
     def __init__(self, config: SolarOpenConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

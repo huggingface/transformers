@@ -407,11 +407,11 @@ class GlmMoeDsaDecoderLayer(Glm4MoeLiteDecoderLayer):
 
 
 class GlmMoeDsaPreTrainedModel(Glm4MoePreTrainedModel):
-    pass
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
 
 
 class GlmMoeDsaModel(Glm4MoeModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
+    pass
 
 
 class GlmMoeDsaForCausalLM(Glm4MoeForCausalLM):

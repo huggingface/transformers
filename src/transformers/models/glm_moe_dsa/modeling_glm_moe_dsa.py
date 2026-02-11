@@ -554,6 +554,7 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
         "attentions": GlmMoeDsaAttention,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -635,8 +636,6 @@ class GlmMoeDsaRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
-
     def __init__(self, config: GlmMoeDsaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
