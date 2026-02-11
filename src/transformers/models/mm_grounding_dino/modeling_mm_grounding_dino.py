@@ -27,18 +27,13 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...file_utils import ModelOutput, is_timm_available, requires_backends
+from ...backbone_utils import load_backbone
+from ...file_utils import ModelOutput
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import meshgrid
 from ...utils import auto_docstring, torch_compilable_check
-from ...utils.backbone_utils import load_backbone
 from ..auto.modeling_auto import AutoModel
 from .configuration_mm_grounding_dino import MMGroundingDinoConfig
-
-
-if is_timm_available():
-    from timm import create_model
 
 
 class MMGroundingDinoContrastiveEmbedding(nn.Module):
@@ -182,9 +177,6 @@ class MMGroundingDinoMultiscaleDeformableAttention(nn.Module):
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
-        return tensor if position_embeddings is None else tensor + position_embeddings
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -200,7 +192,7 @@ class MMGroundingDinoMultiscaleDeformableAttention(nn.Module):
     ):
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = hidden_states + position_embeddings
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
@@ -654,46 +646,23 @@ class MMGroundingDinoConvEncoder(nn.Module):
         super().__init__()
 
         self.config = config
-
-        if config.use_timm_backbone:
-            requires_backends(self, ["timm"])
-            backbone = create_model(
-                config.backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                **config.backbone_kwargs,
-            )
-        else:
-            backbone = load_backbone(config)
+        backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = (
-            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
-        )
+        self.intermediate_channel_sizes = self.model.channels
 
-        backbone_model_type = None
-        if config.backbone is not None:
-            backbone_model_type = config.backbone
-        elif config.backbone_config is not None:
-            backbone_model_type = config.backbone_config.model_type
-        else:
-            raise ValueError("Either `backbone` or `backbone_config` should be provided in the config")
-
+        backbone_model_type = config.backbone_config.model_type
         if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
-                if config.use_timm_backbone:
-                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
-                        parameter.requires_grad_(False)
-                else:
-                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
-                        parameter.requires_grad_(False)
+                if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
+                    parameter.requires_grad_(False)
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
+        features = self.model(pixel_values, return_dict=True).feature_maps
 
         out = []
         for feature_map in features:
@@ -703,6 +672,7 @@ class MMGroundingDinoConvEncoder(nn.Module):
         return out
 
 
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->MMGroundingDino
 class MMGroundingDinoConvModel(nn.Module):
     """
     This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
@@ -1147,7 +1117,7 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
         """
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes_list):
-            ref_y, ref_x = meshgrid(
+            ref_y, ref_x = torch.meshgrid(
                 torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
                 torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
                 indexing="ij",
@@ -1921,7 +1891,7 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
             valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
-            grid_y, grid_x = meshgrid(
+            grid_y, grid_x = torch.meshgrid(
                 torch.linspace(0, height - 1, height, dtype=torch.float32, device=enc_output.device),
                 torch.linspace(0, width - 1, width, dtype=torch.float32, device=enc_output.device),
                 indexing="ij",
@@ -2228,8 +2198,6 @@ class MMGroundingDinoMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
     height and width of a bounding box w.r.t. an image.
-
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 
     """
 

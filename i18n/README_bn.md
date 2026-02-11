@@ -78,7 +78,7 @@ Transformers মডেলের ডেফিনিশন এক জায়গা�
 
 ## ইনস্টলেশন
 
-Transformers Python 3.9+ সহ কাজ করে, এবং সমর্থিত ফ্রেমওয়ার্কগুলো হলো [PyTorch](https://pytorch.org/get-started/locally/) 2.1+, [TensorFlow](https://www.tensorflow.org/install/pip) 2.6+, এবং [Flax](https://flax.readthedocs.io/en/latest/) 0.4.1+।
+Transformers Python 3.10+ সহ কাজ করে, এবং [PyTorch](https://pytorch.org/get-started/locally/) 2.4+।
 
 [venv](https://docs.python.org/3/library/venv.html) বা [uv](https://docs.astral.sh/uv/) ব্যবহার করে একটি ভার্চুয়াল এনভায়রনমেন্ট তৈরি এবং সক্রিয় করুন।
 

@@ -32,6 +32,7 @@ from ...modeling_rope_utils import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
@@ -491,9 +492,9 @@ class Gemma3Attention(Gemma2Attention):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -653,7 +654,7 @@ class Gemma3TextModel(Gemma2Model):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
@@ -740,9 +741,10 @@ class Gemma3MultiModalProjector(nn.Module):
         return projected_vision_outputs.type_as(vision_outputs)
 
 
+@deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
 def create_causal_mask_mapping(
     config: PreTrainedConfig,
-    input_embeds: torch.Tensor,
+    inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
     cache_position: torch.Tensor,
     past_key_values: Cache | None,
@@ -764,7 +766,7 @@ def create_causal_mask_mapping(
 
     mask_kwargs = {
         "config": config.get_text_config(),
-        "input_embeds": input_embeds,
+        "inputs_embeds": inputs_embeds,
         "attention_mask": attention_mask,
         "cache_position": cache_position,
         "past_key_values": past_key_values,

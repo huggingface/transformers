@@ -15,7 +15,9 @@
 import argparse
 import gc
 import json
+import logging
 import re
+from typing import Any
 
 import torch
 from safetensors.torch import load_file
@@ -29,71 +31,70 @@ from transformers import (
 )
 
 
-def update_state_dict_for_hf_model(state_dict):
-    """
-    Update the state_dict to match the HuggingFace model structure.
-    """
-    updated_state_dict = {}
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    for key, value in state_dict.items():
-        new_key = key
 
-        # Handle acoustic tokenizer transformations
-        if "acoustic_tokenizer.encoder" in key:
-            if "downsample_layers.0.0.conv." in key:
-                new_key = new_key.replace("downsample_layers.0.0.conv.", "stem.conv.conv.")
-            elif "stages.0." in key:
-                new_key = new_key.replace("stages.0.", "stem.stage.")
-            elif "downsample_layers." in key and "downsample_layers.0" not in key:
-                match = re.search(r"downsample_layers\.(\d+)", key)
-                if match:
-                    old_idx = int(match.group(1))
-                    new_idx = old_idx - 1  # Shift down by 1 since downsample_layers[0] became stem
-                    new_key = re.sub(
-                        r"downsample_layers\.\d+\.0\.conv\.", f"conv_layers.{new_idx}.conv.conv.", new_key
-                    )
-            elif "stages." in key and "stages.0." not in key:
-                match = re.search(r"stages\.(\d+)", key)
-                if match:
-                    old_idx = int(match.group(1))
-                    new_idx = old_idx - 1  # Shift down by 1 since stages[0] became stem
-                    new_key = re.sub(r"stages\.\d+\.", f"conv_layers.{new_idx}.stage.", new_key)
-            if "mixer.conv.conv.conv." in key:
-                new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
-            if ".conv.conv.conv." in new_key:
-                new_key = new_key.replace(".conv.conv.conv.", ".conv.conv.")
-            elif ".conv.conv." in key and "stem.conv.conv" not in new_key and "conv_layers." not in new_key:
-                new_key = new_key.replace(".conv.conv.", ".conv.")
-        if "acoustic_tokenizer.decoder" in key:
-            if "upsample_layers.0.0.conv.conv." in key:
-                new_key = new_key.replace(
-                    "acoustic_tokenizer.decoder.upsample_layers.0.0.conv.conv.",
-                    "acoustic_tokenizer.decoder.stem.conv.conv.",
-                )
-            elif "stages.0." in key:
-                new_key = new_key.replace("stages.0.", "stem.stage.")
-            elif "upsample_layers." in key and "upsample_layers.0" not in key:
-                match = re.search(r"upsample_layers\.(\d+)", key)
-                if match:
-                    old_idx = int(match.group(1))
-                    new_idx = old_idx - 1  # Shift down by 1 since upsample_layers[0] became conv0
-                    new_key = re.sub(
-                        r"upsample_layers\.\d+\.0\.convtr\.convtr\.", f"conv_layers.{new_idx}.convtr.convtr.", new_key
-                    )
-            elif "stages." in key and "stages.0." not in key:
-                match = re.search(r"stages\.(\d+)", key)
-                if match:
-                    old_idx = int(match.group(1))
-                    new_idx = old_idx - 1  # Shift down by 1 since stages[0] became stage0
-                    new_key = re.sub(r"stages\.\d+\.", f"conv_layers.{new_idx}.stage.", new_key)
-            if "head.conv." in key:
-                new_key = new_key.replace("head.conv.", "head.")
-            if "mixer.conv.conv.conv." in key:
-                new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
+# fmt: off
+STATE_DICT_MAPPING = {
+    # Encoder
+    r"^model\.acoustic_tokenizer\.encoder\.downsample_layers\.0\.0\.conv\.":       r"encoder.stem.conv.conv.",
+    r"^model\.acoustic_tokenizer\.encoder\.stages\.0\.":                           r"encoder.stem.stage.",
+    r"^model\.acoustic_tokenizer\.encoder\.downsample_layers\.(\d+)\.0\.conv\.":   (r"encoder.conv_layers.\1.conv.conv.", -1),
+    r"^model\.acoustic_tokenizer\.encoder\.stages\.(\d+)\.":                       (r"encoder.conv_layers.\1.stage.", -1),
+    r"^model\.acoustic_tokenizer\.encoder\.head\.conv\.":                          r"encoder.head.",
 
-        updated_state_dict[new_key] = value
+    # Decoder
+    r"^model\.acoustic_tokenizer\.decoder\.upsample_layers\.0\.0\.conv\.conv\.": r"decoder.stem.conv.conv.",
+    r"^model\.acoustic_tokenizer\.decoder\.stages\.0\.":                           r"decoder.stem.stage.",
+    r"^model\.acoustic_tokenizer\.decoder\.upsample_layers\.(\d+)\.0\.convtr\.convtr\.": (r"decoder.conv_layers.\1.convtr.convtr.", -1),
+    r"^model\.acoustic_tokenizer\.decoder\.stages\.(\d+)\.":                       (r"decoder.conv_layers.\1.stage.", -1),
+    r"^model\.acoustic_tokenizer\.decoder\.head\.conv\.":                          r"decoder.head.",
 
-    return updated_state_dict
+    # Common patterns (apply after specific patterns)
+    r"mixer\.conv\.conv\.conv\.":                                                   r"mixer.conv.",
+    r"\.conv\.conv\.conv\.":                                                        r".conv.conv.",
+}
+# fmt: on
+
+
+def map_old_key_to_new(old_key: str) -> str:
+    new_key = old_key
+
+    # Apply all regex patterns
+    for pattern, replacement in STATE_DICT_MAPPING.items():
+        # Check if replacement needs index shifting
+        if isinstance(replacement, tuple):
+            replacement_pattern, index_shift = replacement
+
+            # Use callback to handle index shifting
+            def shift_index(match):
+                result = replacement_pattern
+                for i, group in enumerate(match.groups(), 1):
+                    if group and group.isdigit():
+                        shifted_idx = int(group) + index_shift
+                        result = result.replace(f"\\{i}", str(shifted_idx))
+                    else:
+                        result = result.replace(f"\\{i}", group)
+                return result
+
+            new_key, n = re.subn(pattern, shift_index, new_key)
+        else:
+            new_key, n = re.subn(pattern, replacement, new_key)
+
+    return new_key
+
+
+def convert_state_dict(original_state_dict: dict[str, Any]) -> dict[str, Any]:
+    new_state_dict = {}
+
+    for old_key, tensor in original_state_dict.items():
+        new_key = map_old_key_to_new(old_key)
+        new_state_dict[new_key] = tensor
+        if old_key != new_key:
+            logger.debug(f"Converted: {old_key} -> {new_key}")
+
+    return new_state_dict
 
 
 def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16, processor_config=None):
@@ -103,6 +104,7 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16, processor
         dtype = torch.float32
 
     # 1) Load state dict from safetensors checkpoint
+    logger.info(f"Loading checkpoint from {checkpoint}")
     original_state_dict = load_file(checkpoint)
 
     # 2) Prepare feature extractor
@@ -125,84 +127,83 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16, processor
     with open(config_path, "r") as f:
         model_config = json.load(f)
 
-    # clean up acoustic tokenizer config
-    model_config["acoustic_tokenizer_config"]["encoder_depths"] = list(
-        map(int, model_config["acoustic_tokenizer_config"]["encoder_depths"].split("-"))
-    )
-    model_config["acoustic_tokenizer_config"]["rms_norm_eps"] = model_config["acoustic_tokenizer_config"].pop(
-        "layernorm_eps"
-    )
-    # -- reverse order of ratios here instead of in modeling (as done in original)
-    model_config["acoustic_tokenizer_config"]["downsampling_ratios"] = list(
-        reversed(model_config["acoustic_tokenizer_config"].pop("encoder_ratios"))
-    )
-    model_config["acoustic_tokenizer_config"]["n_filters"] = model_config["acoustic_tokenizer_config"].pop(
-        "encoder_n_filters"
-    )
-    model_config["acoustic_tokenizer_config"]["depths"] = model_config["acoustic_tokenizer_config"].pop(
-        "encoder_depths"
-    )
-    model_config["acoustic_tokenizer_config"]["hidden_size"] = model_config["acoustic_tokenizer_config"].pop("vae_dim")
-    model_config["acoustic_tokenizer_config"]["bias"] = model_config["acoustic_tokenizer_config"].pop("conv_bias")
-    # -- original hardcodes a scaling factor for vae_std: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L963
-    model_config["acoustic_tokenizer_config"]["vae_std"] = (
-        model_config["acoustic_tokenizer_config"].pop("fix_std") / 0.8
-    )
-    # -- remove decoder parameters as they can be derived from encoder ones
-    model_config["acoustic_tokenizer_config"].pop("decoder_depths")
-    model_config["acoustic_tokenizer_config"].pop("decoder_n_filters")
-    model_config["acoustic_tokenizer_config"].pop("decoder_ratios")
-    # -- remove unused / constant parameters that lead to unused code paths removed in HF model
-    model_config["acoustic_tokenizer_config"].pop("std_dist_type")  # always Gaussian
-    model_config["acoustic_tokenizer_config"].pop("pad_mode")  # always constant
-    model_config["acoustic_tokenizer_config"].pop("causal")  # always True
-    model_config["acoustic_tokenizer_config"].pop("mixer_layer")
-    model_config["acoustic_tokenizer_config"].pop("layernorm")
-    model_config["acoustic_tokenizer_config"].pop("disable_last_norm")
-    model_config["acoustic_tokenizer_config"].pop("conv_norm")
-    model_config["acoustic_tokenizer_config"].pop("corpus_normalize")
-    model_config["acoustic_tokenizer_config"].pop("layernorm_elementwise_affine")
+    # Clean up acoustic tokenizer config
+    acoustic_config_dict = model_config["acoustic_tokenizer_config"].copy()
+    if "encoder_depths" in acoustic_config_dict and isinstance(acoustic_config_dict["encoder_depths"], str):
+        acoustic_config_dict["encoder_depths"] = list(map(int, acoustic_config_dict["encoder_depths"].split("-")))
+    if "layernorm_eps" in acoustic_config_dict:
+        acoustic_config_dict["rms_norm_eps"] = acoustic_config_dict.pop("layernorm_eps")
+    if "encoder_ratios" in acoustic_config_dict:
+        acoustic_config_dict["downsampling_ratios"] = list(reversed(acoustic_config_dict.pop("encoder_ratios")))
+    if "encoder_n_filters" in acoustic_config_dict:
+        acoustic_config_dict["num_filters"] = acoustic_config_dict.pop("encoder_n_filters")
+    if "encoder_depths" in acoustic_config_dict:
+        acoustic_config_dict["depths"] = acoustic_config_dict.pop("encoder_depths")
+    if "vae_dim" in acoustic_config_dict:
+        acoustic_config_dict["hidden_size"] = acoustic_config_dict.pop("vae_dim")
+    if "fix_std" in acoustic_config_dict:
+        # Original hardcodes a scaling factor for vae_std
+        acoustic_config_dict["vae_std"] = acoustic_config_dict.pop("fix_std") / 0.8
 
-    # 4) Update state dict to match HF model structure
-    updated_state_dict = update_state_dict_for_hf_model(original_state_dict)
+    # Remove unused/constant parameters
+    for key in [
+        "decoder_depths",
+        "decoder_n_filters",
+        "decoder_ratios",
+        "std_dist_type",
+        "pad_mode",
+        "conv_bias",
+        "causal",
+        "mixer_layer",
+        "layernorm",
+        "disable_last_norm",
+        "conv_norm",
+        "corpus_normalize",
+        "layernorm_elementwise_affine",
+    ]:
+        acoustic_config_dict.pop(key, None)
 
-    # 5) Create and save acoustic tokenizer
-    print("\n=== Creating acoustic tokenizer ===")
-    acoustic_config = VibeVoiceAcousticTokenizerConfig(**model_config["acoustic_tokenizer_config"])
-    acoustic_model = VibeVoiceAcousticTokenizerModel(acoustic_config).to(dtype)
-    # -- filter for acoustic tokenizer weights
-    prefix = "model.acoustic_tokenizer"
+    # 4) Convert state dict to match HF model structure
+    logger.info("Converting state dict")
+    converted_state_dict = convert_state_dict(original_state_dict)
+
+    # 5) Filter for acoustic tokenizer weights
     acoustic_state_dict = {
-        k[len(prefix) + 1 :]: v  # +1 to remove the dot after the prefix
-        for k, v in updated_state_dict.items()
-        if k.startswith(prefix)
+        k: v for k, v in converted_state_dict.items() if k.startswith("encoder.") or k.startswith("decoder.")
     }
-    # -- load into HF model
+
+    # 6) Create and save acoustic tokenizer
+    logger.info("Creating acoustic tokenizer model")
+    acoustic_config = VibeVoiceAcousticTokenizerConfig(**acoustic_config_dict)
+    acoustic_model = VibeVoiceAcousticTokenizerModel(acoustic_config).to(dtype)
+
+    # Load weights into HF model
+    logger.info("Loading weights into model")
     missing, unexpected = acoustic_model.load_state_dict(acoustic_state_dict, strict=False)
     if len(unexpected) != 0:
         raise ValueError(f"Unexpected keys: {unexpected}")
     if len(missing) != 0:
-        raise ValueError(f"missing keys found: {missing}")
-    if push_to_hub:
-        hub_repo = push_to_hub.split("/")[0] + "/VibeVoice-AcousticTokenizer"
-        print(f"------ Pushing to hub as {hub_repo} ------")
-        feature_extractor.push_to_hub(hub_repo)
-        acoustic_model.push_to_hub(hub_repo)
+        raise ValueError(f"Missing keys: {missing}")
 
-    # 6) Check model
-    gc.collect()
-    print("Reloading the model to check if it's saved correctly.")
-    AutoFeatureExtractor.from_pretrained(push_to_hub)
-    AutoModel.from_pretrained(push_to_hub, dtype=torch.bfloat16, device_map="auto")
-    print("Model reloaded successfully.")
+    if push_to_hub:
+        logger.info(f"Pushing to hub as {push_to_hub}")
+        feature_extractor.push_to_hub(push_to_hub)
+        acoustic_model.push_to_hub(push_to_hub)
+
+        gc.collect()
+        logger.info("Verifying conversion by reloading model")
+        AutoFeatureExtractor.from_pretrained(push_to_hub)
+        AutoModel.from_pretrained(push_to_hub, dtype=torch.bfloat16, device_map="auto")
+        logger.info("Model reloaded successfully!")
+        logger.info("Conversion complete!")
 
 
 """
-Conversion script to convert extract acoustic tokenizer from the original VibeVoice model checkpoint
-and push a checkpoint for an `VibeVoiceAcousticTokenizerModel` object.
+Conversion script to extract the acoustic tokenizer from the original VibeVoice model checkpoint and push a checkpoint
+for an `VibeVoiceAcousticTokenizerModel` object.
 
 
-First download 1.5B model.
+1) download 1.5B model.
 ```bash
 # -- download checkpoint and configs
 # -- download script here: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-download_vibevoice_checkpoint-py
@@ -211,7 +212,7 @@ wget https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/config.json -P
 wget https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/preprocessor_config.json -P /raid/eric/vibevoice
 ```
 
-Then we can run conversion with:
+2) run conversion with:
 ```
 python src/transformers/models/vibevoice_acoustic_tokenizer/convert_vibevoice_acoustic_tokenizer_to_hf.py \
     --checkpoint /raid/eric/vibevoice/VibeVoice-1.5B-combined.safetensors \

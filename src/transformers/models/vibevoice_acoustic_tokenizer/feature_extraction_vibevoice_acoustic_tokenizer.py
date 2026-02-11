@@ -68,9 +68,7 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: int | None = None,
         padding: bool | str | PaddingStrategy | None = True,
         pad_to_multiple_of: int | None = None,
-        max_length: int | None = None,
         return_attention_mask: bool | None = True,
-        return_tensors: str | type | None = None,
     ) -> BatchFeature:
         """
         Args:
@@ -92,6 +90,7 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
                   lengths).
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value.
+
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -106,10 +105,8 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        # Ensure batch
+        # Ensure batch of mono tensors
         audio = make_list_of_audio(audio)
-
-        # Ensure torch tensors and mono
         for idx, example in enumerate(audio):
             example = torch.tensor(example, dtype=torch.float32)
             if example.ndim != 1:
@@ -126,21 +123,18 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
                 audio[idx] = example
 
         output_values = BatchFeature({"input_values": audio})
-        if padding:
+        if padding or pad_to_multiple_of:
             output_values = self.pad(
                 output_values,
+                padding=padding,
                 pad_to_multiple_of=pad_to_multiple_of,
                 return_attention_mask=return_attention_mask,
-                padding=padding,
-                max_length=max_length,
-                return_tensors=return_tensors,
             )
             if return_attention_mask:
                 output_values["padding_mask"] = output_values.pop("attention_mask")
 
-        # add channel dimension if missing
-        if output_values["input_values"].ndim == 2:
-            output_values["input_values"] = output_values["input_values"][:, None, :]
+        # add channel dimension
+        output_values["input_values"] = output_values["input_values"][:, None, :]
 
         return output_values
 

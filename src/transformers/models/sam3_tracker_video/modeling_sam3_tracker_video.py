@@ -41,7 +41,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import OutputRecorder, is_flash_attention_requested
+from ...utils.generic import is_flash_attention_requested
+from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoModel
 from .configuration_sam3_tracker_video import (
     Sam3TrackerVideoConfig,
@@ -478,9 +479,9 @@ class Sam3TrackerVideoAttention(nn.Module):
         key = self.k_proj(key).view(*new_shape).transpose(1, 2)
         value = self.v_proj(value).view(*new_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         if is_flash_attention_requested(self.config) and attention_similarity is not None:
             # Target guided masks are represented as float masks and are incompatible with Flash Attention
@@ -511,7 +512,7 @@ class Sam3TrackerVideoAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Sam3TrackerVideoTwoWayAttentionBlock(nn.Module):
+class Sam3TrackerVideoTwoWayAttentionBlock(GradientCheckpointingLayer):
     def __init__(self, config: Sam3TrackerVideoMaskDecoderConfig, skip_first_layer_pe: bool = False):
         """
         A transformer block with four layers:
@@ -871,9 +872,9 @@ class Sam3TrackerVideoRoPEAttention(nn.Module):
             query, key, cos, sin, repeat_freqs_k=self.rope_k_repeat, num_k_exclude_rope=num_k_exclude_rope
         )
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,

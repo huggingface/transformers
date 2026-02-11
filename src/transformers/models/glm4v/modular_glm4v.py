@@ -42,7 +42,8 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
 from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, Glm4RotaryEmbedding, eager_attention_forward
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -206,6 +207,9 @@ class Glm4vTextConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
+
 
     ```python
     >>> from transformers import Glm4vTextModel, Glm4vConfig
@@ -229,8 +233,8 @@ class Glm4vTextConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_up_proj": "colwise_rep",  # we need to replicate here due to the `chunk` operation
-        "layers.*.mlp.down_proj": "rowwise_rep",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.gate_up_proj": "colwise_gather_output",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.down_proj": "rowwise_split_input",  # input is replicated due to the `chunk` operation
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -253,6 +257,7 @@ class Glm4vTextConfig(PreTrainedConfig):
         use_cache: bool | None = True,
         attention_dropout: float | None = 0.0,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -273,6 +278,7 @@ class Glm4vTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
+        self.pad_token_id = pad_token_id
 
         super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
@@ -622,9 +628,9 @@ class Glm4vTextAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -782,7 +788,8 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb, pos_ids
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
@@ -856,7 +863,8 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
         del self.has_sliding_layers
 
     @auto_docstring
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -909,7 +917,7 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
 
         mask_kwargs = {
             "config": self.config,
-            "input_embeds": inputs_embeds,
+            "inputs_embeds": inputs_embeds,
             "attention_mask": attention_mask,
             "cache_position": cache_position,
             "past_key_values": past_key_values,
@@ -1311,10 +1319,7 @@ class Glm4vModel(Qwen2_5_VLModel):
         )
 
         return Glm4vModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            **outputs,
             rope_deltas=self.rope_deltas,
         )
 
@@ -1360,14 +1365,14 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Glm4vForConditionalGeneration
 
-        >>> model = Glm4vForConditionalGeneration.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
-        >>> processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
+        >>> model = Glm4vForConditionalGeneration.from_pretrained("zai-org/GLM-4.1V-9B-Thinking")
+        >>> processor = AutoProcessor.from_pretrained("zai-org/GLM-4.1V-9B-Thinking")
 
         >>> messages = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "image"},
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
                     {"type": "text", "text": "What is shown in this image?"},
                 ],
             },
@@ -1451,7 +1456,7 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             **kwargs,
         )
 
-        # GLM-4.1V position_ids are prepareed with rope_deltas in forward
+        # GLM-V position_ids are prepared with rope_deltas in forward
         model_inputs["position_ids"] = None
 
         if not is_first_iteration and use_cache:

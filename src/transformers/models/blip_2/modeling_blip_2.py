@@ -47,7 +47,8 @@ from ...utils import (
     logging,
     torch_int,
 )
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 
@@ -331,10 +332,9 @@ class Blip2Attention(nn.Module):
         )
         query_states, key_states, value_states = mixed_qkv[0], mixed_qkv[1], mixed_qkv[2]
 
-        attention_interface: Callable = eager_attention_forward
-
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -500,7 +500,8 @@ class Blip2VisionModel(Blip2PreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -953,7 +954,8 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

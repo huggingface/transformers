@@ -25,11 +25,7 @@ from ...generation import GenerationMixin
 from ...integrations import lazy_load_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, is_torchdynamo_compiling, logging
 from .configuration_mamba2 import Mamba2Config
 
 
@@ -160,6 +156,7 @@ class Mamba2Cache:
             dtype=dtype,
         )
 
+    @torch.no_grad()
     def update_conv_state(
         self, layer_idx: int, new_conv_state: torch.Tensor, cache_init: bool = False
     ) -> torch.Tensor:
@@ -170,6 +167,7 @@ class Mamba2Cache:
             self.conv_states[layer_idx][:, :, -1] = new_conv_state[:, 0, :].to(self.conv_states.device)
         return self.conv_states[layer_idx]
 
+    @torch.no_grad()
     def update_ssm_state(self, layer_idx: int, new_ssm_state: torch.Tensor):
         self.ssm_states[layer_idx] = new_ssm_state.to(self.ssm_states.device)
         return self.ssm_states[layer_idx]
@@ -658,7 +656,7 @@ class Mamba2Mixer(nn.Module):
         cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
     ):
-        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
+        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
         return self.torch_forward(hidden_states, cache_params, cache_position, attention_mask)
 

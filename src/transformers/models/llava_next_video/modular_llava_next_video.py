@@ -34,7 +34,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging, torch_compilable_check
-from ...utils.generic import check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -179,6 +179,12 @@ class LlavaNextVideoConfig(PreTrainedConfig):
 
         self.text_config = text_config
 
+        # The default value is `False` but this config is used with many model types
+        # Attr `tie_word_embeddings` was saved in text config for those models, so we
+        # need an ugly workaround and forward-pass the attr from text config
+        if not tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = self.text_config.tie_word_embeddings
+
         super().__init__(**kwargs)
 
 
@@ -270,7 +276,8 @@ class LlavaNextVideoModel(LlavaNextModel):
         self.vision_resampler = LlavaNextVideoPooler(config)
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
+    @merge_with_config_defaults
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -342,7 +349,8 @@ class LlavaNextVideoModel(LlavaNextModel):
 
         return image_outputs
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
+    @merge_with_config_defaults
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )
@@ -434,7 +442,7 @@ class LlavaNextVideoModel(LlavaNextModel):
             )
         return special_image_mask, special_video_mask
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -549,7 +557,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             **kwargs,
         )
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

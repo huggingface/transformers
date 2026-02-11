@@ -620,7 +620,7 @@ def window_function(
     return padded_window
 
 
-# TODO This method does not support batching yet as we are mainly focused on inference.
+# Note: This method processes a single waveform. For batch processing, use spectrogram_batch().
 def spectrogram(
     waveform: np.ndarray,
     window: np.ndarray,

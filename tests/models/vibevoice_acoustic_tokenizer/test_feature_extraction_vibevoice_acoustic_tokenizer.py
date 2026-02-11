@@ -114,49 +114,27 @@ class VibeVoiceAcousticTokenizerFeatureExtractionTest(SequenceFeatureExtractionT
     def test_call(self):
         TOL = 1e-6
 
-        # Tests that all call wrap to encode_plus and batch_encode_plus
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         sampling_rate = feature_extractor.sampling_rate
-        # create three inputs of length 800, 1000, and 1200
         audio_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         np_audio_inputs = [np.asarray(audio_input) for audio_input in audio_inputs]
         torch_audio_inputs = [torch.tensor(audio_input) for audio_input in audio_inputs]
 
-        # Test not batched input
-        encoded_sequences_1 = feature_extractor(
-            torch_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np"
-        ).input_values
-        encoded_sequences_2 = feature_extractor(
-            np_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np"
-        ).input_values
+        # Test non-batched input
+        encoded_sequences_1 = feature_extractor(torch_audio_inputs[0], sampling_rate=sampling_rate).input_values
+        encoded_sequences_2 = feature_extractor(np_audio_inputs[0], sampling_rate=sampling_rate).input_values
         self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=TOL))
 
-        # Test batched
-        encoded_sequences_1 = feature_extractor(
-            torch_audio_inputs, sampling_rate=sampling_rate, padding=True, return_tensors="np"
-        ).input_values
-        encoded_sequences_2 = feature_extractor(
-            np_audio_inputs, sampling_rate=sampling_rate, padding=True, return_tensors="np"
-        ).input_values
+        # Test batched input
+        encoded_sequences_1 = feature_extractor(torch_audio_inputs, sampling_rate=sampling_rate).input_values
+        encoded_sequences_2 = feature_extractor(np_audio_inputs, sampling_rate=sampling_rate).input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=TOL))
-
-    def test_double_precision_pad(self):
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        np_audio_inputs = np.random.rand(100).astype(np.float64)
-        py_audio_inputs = np_audio_inputs.tolist()
-
-        for inputs in [py_audio_inputs, np_audio_inputs]:
-            np_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="np")
-            self.assertTrue(np_processed.input_values.dtype == np.float32)
-            pt_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="pt")
-            self.assertTrue(pt_processed.input_values.dtype == torch.float32)
 
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        # automatic decoding with librispeech
         audio_samples = ds.sort("id")[:num_samples]["input_values"]
 
         return [x["array"] for x in audio_samples]
@@ -168,7 +146,7 @@ class VibeVoiceAcousticTokenizerFeatureExtractionTest(SequenceFeatureExtractionT
 
         # Test with very low amplitude audio (should increase amplitude)
         low_amplitude_audio = np.random.randn(1000).astype(np.float32) * 0.01
-        result = feature_extractor([low_amplitude_audio], return_tensors="pt")
+        result = feature_extractor([low_amplitude_audio])
         normalized_audio = result.input_values.squeeze()
         self.assertGreater(
             torch.abs(normalized_audio).max().item(), torch.abs(torch.tensor(low_amplitude_audio)).max().item()
@@ -176,7 +154,7 @@ class VibeVoiceAcousticTokenizerFeatureExtractionTest(SequenceFeatureExtractionT
 
         # Test with normalization disabled (should be close to original)
         feature_extractor_no_norm = VibeVoiceAcousticTokenizerFeatureExtractor(normalize_audio=False)
-        result_no_norm = feature_extractor_no_norm([low_amplitude_audio], return_tensors="pt")
+        result_no_norm = feature_extractor_no_norm([low_amplitude_audio])
         torch.testing.assert_close(
             result_no_norm.input_values.squeeze(), torch.tensor(low_amplitude_audio), rtol=1e-5, atol=1e-5
         )
@@ -186,25 +164,19 @@ class VibeVoiceAcousticTokenizerFeatureExtractionTest(SequenceFeatureExtractionT
         feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor(sampling_rate=24000)
         input_audio = np.random.randn(1000).astype(np.float32)
 
-        # Should work with correct sampling rate
-        result = feature_extractor([input_audio], sampling_rate=24000, return_tensors="pt")
+        result = feature_extractor([input_audio], sampling_rate=24000)
         self.assertIsInstance(result.input_values, torch.Tensor)
 
-        # Should raise error with incorrect sampling rate
         with self.assertRaises(ValueError):
-            feature_extractor([input_audio], sampling_rate=16000, return_tensors="pt")
+            feature_extractor([input_audio], sampling_rate=16000)
 
     def test_padding_mask_generation(self):
         """Test that padding masks are generated correctly."""
         feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor()
-
-        # Create audio samples of different lengths
         audio1 = np.random.randn(100).astype(np.float32)
         audio2 = np.random.randn(200).astype(np.float32)
 
-        result = feature_extractor([audio1, audio2], padding=True, return_tensors="pt", return_attention_mask=True)
-
-        # Should have padding_mask
+        result = feature_extractor([audio1, audio2], padding=True, return_attention_mask=True)
         self.assertIn("padding_mask", result)
         self.assertEqual(result.padding_mask.shape, result.input_values.squeeze(1).shape)
 

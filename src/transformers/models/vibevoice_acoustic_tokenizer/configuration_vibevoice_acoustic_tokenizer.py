@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
 
 from ...configuration_utils import PretrainedConfig
 
@@ -21,8 +20,13 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VibeVoiceAcousticTokenizerModel`]. It is used to
     instantiate a VibeVoice acoustic tokenizer model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    acoustic tokenizer of [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B).
+    architecture. Instantiating a configuration with the defaults will yield a similar configuration of the acoustic
+    tokenizer within the VibeVoice architecture.
+
+    e.g. [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B)
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         channels (`int`, *optional*, defaults to 1):
@@ -33,13 +37,11 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
             Kernel size for convolutional layers.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             Epsilon value for RMSNorm layers.
-        bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in convolution and feed-forward layers.
         layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
             Initial value for layer scaling.
         initializer_range (`float`, *optional*, defaults to 0.01):
             Standard deviation for weight initialization.
-        n_filters (`int`, *optional*, defaults to 32):
+        num_filters (`int`, *optional*, defaults to 32):
             Number of filters in initial convolutional layer, and doubles after each downsampling.
         downsampling_ratios (`List[int]`, *optional*, defaults to `[2, 2, 4, 5, 5, 8]`):
             Downsampling ratios for each layer.
@@ -49,10 +51,8 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
             Activation function to use.
         ffn_expansion (`int`, *optional*, defaults to 4):
             Expansion factor for feed-forward networks.
-        vae_std (`float`, *optional*, defaults to 0.5):
-            Standard deviation used during VAE sampling.
-        vae_scaling_factor (`float`, *optional*, defaults to 0.8):
-            Scaling factor applied to VAE standard deviation. (Hardcoded in original implementation.)
+        vae_std (`float`, *optional*, defaults to 0.625):
+            Standard deviation used for VAE sampling after encoder.
     Example:
 
     ```python
@@ -76,10 +76,9 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         hidden_size=64,
         kernel_size=7,
         rms_norm_eps=1e-5,
-        bias=True,
         layer_scale_init_value=1e-6,
         initializer_range=1e-2,
-        n_filters=32,
+        num_filters=32,
         downsampling_ratios=[2, 2, 4, 5, 5, 8],
         depths=[3, 3, 3, 3, 3, 3, 8],
         hidden_act="gelu",
@@ -93,18 +92,13 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.kernel_size = kernel_size
         self.rms_norm_eps = rms_norm_eps
-        self.bias = bias
         self.layer_scale_init_value = layer_scale_init_value
         self.ffn_expansion = ffn_expansion
         self.initializer_range = initializer_range
-        self.n_filters = n_filters
+        self.num_filters = num_filters
         self.downsampling_ratios = downsampling_ratios
         self.depths = depths
         self.vae_std = vae_std
-
-    @property
-    def hop_length(self) -> int:
-        return np.prod(self.downsampling_ratios)
 
     @property
     def upsampling_ratios(self):

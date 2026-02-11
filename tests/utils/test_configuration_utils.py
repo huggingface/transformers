@@ -222,20 +222,22 @@ class ConfigTestUtils(unittest.TestCase):
 
         import transformers as new_transformers
 
-        new_transformers.configuration_utils.__version__ = "v4.0.0"
-        new_configuration, kwargs = new_transformers.models.auto.AutoConfig.from_pretrained(
-            repo, return_unused_kwargs=True
-        )
-        self.assertEqual(new_configuration.hidden_size, 2)
-        # This checks `_configuration_file` ia not kept in the kwargs by mistake.
-        self.assertDictEqual(kwargs, {})
+        # Matt: Use a context manager to ensure everything is correctly reverted and we
+        #       don't leak state between tests
+        with mock.patch.object(new_transformers.configuration_utils, "__version__", "v4.0.0"):
+            new_configuration, kwargs = new_transformers.models.auto.AutoConfig.from_pretrained(
+                repo, return_unused_kwargs=True
+            )
+            self.assertEqual(new_configuration.hidden_size, 2)
+            # This checks `_configuration_file` ia not kept in the kwargs by mistake.
+            self.assertDictEqual(kwargs, {})
 
         # Testing an older version by monkey-patching the version in the module it's used.
         import transformers as old_transformers
 
-        old_transformers.configuration_utils.__version__ = "v3.0.0"
-        old_configuration = old_transformers.models.auto.AutoConfig.from_pretrained(repo)
-        self.assertEqual(old_configuration.hidden_size, 768)
+        with mock.patch.object(old_transformers.configuration_utils, "__version__", "v3.0.0"):
+            old_configuration = old_transformers.models.auto.AutoConfig.from_pretrained(repo)
+            self.assertEqual(old_configuration.hidden_size, 768)
 
     def test_saving_config_with_custom_generation_kwargs_raises_error(self):
         config = BertConfig()

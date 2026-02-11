@@ -491,7 +491,7 @@ Ampere GPU 및 PyTorch 1.7 이상의 경우 일부 연산에 대해 더 효율�
 </hfoption>
 <hfoption id="fp16">
 
-PyTorch AMP와 같은 fp16 혼합 정밀도를 구성하면 메모리 사용량이 줄어들고 훈련 속도가 빨라집니다.[`Trainer`]는 `args.fp16_backend` 값에 따라 fp16을 자동으로 활성화 또는 비활성화하며, 나머지 구성은 사용자가 설정할 수 있습니다. 명령줄에서 다음 인수를 전달하면 fp16이 활성화됩니다: `fp16`, `--fp16_backend amp` 또는 `--fp16_full_eval`.
+fp16 혼합 정밀도를 구성하려면 아래와 같이 `"auto"` 또는 직접 값을 설정하세요. [`Trainer`]는 `fp16` 또는 `fp16_full_eval` 값에 따라 fp16을 자동으로 활성화 또는 비활성화하며, 나머지 구성은 사용자가 설정할 수 있습니다. 명령줄에서 `--fp16` 또는 `--fp16_full_eval` 인수를 전달하면 fp16이 활성화됩니다.
 
 ```yaml
 {
