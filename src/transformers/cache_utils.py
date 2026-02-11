@@ -307,7 +307,6 @@ class StaticLayer(CacheLayerMixin):
 
         self.is_initialized = True
 
-    @torch.no_grad()
     def update(
         self,
         key_states: torch.Tensor,
@@ -383,7 +382,6 @@ class StaticSlidingWindowLayer(StaticLayer):
         super().__init__(max_cache_len=effective_max_cache_len)
         self.cumulative_length = 0
 
-    @torch.no_grad()
     def update(
         self,
         key_states: torch.Tensor,
@@ -517,7 +515,6 @@ class QuantizedLayer(DynamicLayer):
         self.residual_length = residual_length
         self.cumulative_length = 0
 
-    @torch.no_grad()
     def update(
         self,
         key_states: torch.Tensor,
