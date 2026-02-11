@@ -529,7 +529,7 @@ class LasrEncoder(LasrPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            inputs_embed=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 

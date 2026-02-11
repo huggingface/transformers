@@ -434,7 +434,7 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
         patch_attention_mask = patch_attention_mask.view(batch_size, -1)
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            inputs_embed=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=patch_attention_mask,
         )
 

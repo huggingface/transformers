@@ -1286,7 +1286,7 @@ class BltModel(BltPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            inputs_embed=encoder_embeds,
+            inputs_embeds=encoder_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values.self_attention_cache if past_key_values is not None else None,
@@ -1317,7 +1317,7 @@ class BltModel(BltPreTrainedModel):
         global_position_ids = global_cache_position.unsqueeze(0)
         global_causal_mask = create_causal_mask(
             config=self.config,
-            inputs_embed=encoder_cross_states,
+            inputs_embeds=encoder_cross_states,
             attention_mask=None,
             cache_position=global_cache_position,
             past_key_values=None,
@@ -1325,7 +1325,7 @@ class BltModel(BltPreTrainedModel):
         )
 
         global_hidden_states = self.global_transformer(
-            inputs_embed=encoder_cross_states,
+            inputs_embeds=encoder_cross_states,
             attention_mask=global_causal_mask,
             position_ids=global_position_ids,
             **kwargs,

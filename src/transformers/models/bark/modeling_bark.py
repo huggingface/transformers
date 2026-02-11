@@ -468,7 +468,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            inputs_embed=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
 
@@ -621,7 +621,7 @@ class BarkSemanticModel(BarkCausalModel):
         # (except to get the input seq_len - that's why we keep the first 257 tokens)
         semantic_output = super().generate(
             torch.ones((batch_size, max_input_semantic_length + 1), dtype=torch.int, device=self.device),
-            inputs_embed=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             logits_processor=[suppress_tokens_logits_processor, early_stopping_logits_processor],
             generation_config=semantic_generation_config,
             **kwargs,
@@ -1061,7 +1061,7 @@ class BarkFineModel(BarkPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            inputs_embed=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
 

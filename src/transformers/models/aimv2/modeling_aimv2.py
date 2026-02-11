@@ -545,7 +545,7 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
         if attention_mask is not None:
             attention_mask = create_causal_mask(
                 config=self.config,
-                inputs_embed=hidden_states,
+                inputs_embeds=hidden_states,
                 position_ids=position_ids,
                 attention_mask=attention_mask,
                 cache_position=cache_position,

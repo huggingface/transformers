@@ -492,7 +492,7 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         patch_attention_mask = patch_attention_mask.view(batch_size, -1)
         patch_attention_mask = create_bidirectional_mask(
             config=self.config,
-            inputs_embed=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=patch_attention_mask,
         )
 
@@ -736,7 +736,7 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
         attention_mask = torch.cat([attention_mask, latent_attention_mask], dim=-1)
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            inputs_embed=latents,
+            inputs_embeds=latents,
             attention_mask=attention_mask,
         )
 

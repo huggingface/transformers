@@ -497,7 +497,7 @@ class Idefics3VisionTransformer(Idefics3PreTrainedModel):
         # Create the correct attention mask based on the attention implementation
         patch_attention_mask = create_bidirectional_mask(
             config=self.config,
-            inputs_embed=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=patch_attention_mask,
         )
 

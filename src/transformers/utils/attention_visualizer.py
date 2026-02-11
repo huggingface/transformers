@@ -215,7 +215,7 @@ class AttentionMaskVisualizer:
 
         causal_mask = create_causal_mask(
             config=model.config,
-            inputs_embed=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=None,

@@ -402,7 +402,7 @@ class AlbertModel(AlbertPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            inputs_embed=embedding_output,
+            inputs_embeds=embedding_output,
             attention_mask=attention_mask,
         )
 
