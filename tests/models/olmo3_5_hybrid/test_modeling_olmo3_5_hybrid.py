@@ -19,6 +19,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import Olmo3_5HybridConfig, is_torch_available
+from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -27,7 +28,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils.import_utils import is_flash_linear_attention_available
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import (
@@ -115,7 +115,7 @@ class Olmo3_5HybridModelTester(CausalLMModelTester):
         )
 
         # Hybrid-specific config
-        self.layer_types = ["full_attention", "linear_attention"]
+        self.layer_types = ["linear_attention", "full_attention"]
         self.linear_num_key_heads = num_attention_heads
         self.linear_num_value_heads = num_attention_heads
         self.linear_key_head_dim = hidden_size // num_attention_heads
@@ -269,58 +269,9 @@ class Olmo3_5HybridModelTest(CausalLMModelTest, unittest.TestCase):
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    # Static cache tests - hybrid linear attention doesn't support static cache
-    @unittest.skip("Static cache not supported for hybrid linear attention models")
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip("Static cache not supported for hybrid linear attention models")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("Static cache not supported for hybrid linear attention models")
-    def test_generate_compilation_all_outputs(self):
-        pass
-
-    @unittest.skip("torch.compile fullgraph not supported with dynamic layer types")
-    def test_generate_compile_model_forward_fullgraph(self):
-        pass
-
-    @unittest.skip("Hybrid model requires layer_types in config")
-    def test_config(self):
-        pass
-
-    @unittest.skip("Hybrid model requires layer_types in config")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @unittest.skip("Hybrid model requires layer_types in config")
-    def test_model_rope_scaling_from_config(self):
-        pass
-
-    @unittest.skip("Hybrid model has special A_log/dt_bias initialization")
-    def test_can_init_all_missing_weights(self):
-        pass
-
     @unittest.skip("Triton kernels require CUDA")
     def test_training_overfit(self):
         pass
-
-    @unittest.skip("Hybrid model requires layer_types in config")
-    def test_model_rope_scaling_from_config_1_dynamic(self, *args, **kwargs):
-        pass
-
-    def _skip_if_no_fla(self, reason="Fallback only supports bfloat16/float16, not float32"):
-        if not is_flash_linear_attention_available():
-            self.skipTest(reason)
-
-    def test_resize_tokens_embeddings(self):
-        self._skip_if_no_fla("Fallback path has numerical issues with small vocab sizes")
-        super().test_resize_tokens_embeddings()
-
-    def test_resize_embeddings_untied(self):
-        self._skip_if_no_fla("Fallback path has numerical issues with small vocab sizes")
-        super().test_resize_embeddings_untied()
 
     @require_torch_multi_gpu
     def test_can_use_device_map(self):
@@ -429,3 +380,16 @@ class Olmo3_5HybridIntegrationTest(unittest.TestCase):
         )
         EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=rtol, atol=atol)
+
+    @slow
+    def test_model_greedy_generation(self):
+        EXPECTED_TEXT_COMPLETION = "Simply put, the theory of relativity states that \xa0the laws of physics are the same for all non-accelerating observers. This means that the laws of physics are the same for all observers, regardless of their relative motion or the strength of the gravitational field they are in. This theory was first proposed by Albert Einstein in 1905 and has since been confirmed"
+        prompt = "Simply put, the theory of relativity states that "
+        tokenizer = AutoTokenizer.from_pretrained("yanhong-l/olmo-3.5-test")
+        model = Olmo3_5HybridForCausalLM.from_pretrained(
+            "yanhong-l/olmo-3.5-test", device_map="auto", torch_dtype=torch.bfloat16
+        )
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
+        generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
