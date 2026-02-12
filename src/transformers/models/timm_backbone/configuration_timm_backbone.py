@@ -78,7 +78,6 @@ class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
         self.output_stride = output_stride
         self.freeze_batch_norm_2d = freeze_batch_norm_2d
 
-        # self._out_features = kwargs.pop("out_features", None)
         super().__init__(**kwargs)
 
     @property

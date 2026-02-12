@@ -596,6 +596,9 @@ class VideoLlama3Model(Qwen2VLModel):
     def get_rope_index(self):
         raise AttributeError("Not needed for VideoLLaMA3")
 
+    def compute_3d_position_ids(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
+
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -896,6 +899,9 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             model_inputs["pixel_values_videos"] = None
 
         return model_inputs
+
+    def _prepare_position_ids_for_generation(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
 
     def _get_image_nums_and_video_nums(
         self,

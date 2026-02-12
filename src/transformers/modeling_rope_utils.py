@@ -275,7 +275,7 @@ def _compute_yarn_parameters(
             *   rope_parameters (`dict[str, float | int]`): The standard RoPE scaling parameters, from which the following
                 keys will be accessed:
                 *   `attention_factor` (`float`, *optional*): The scaling factor to be applied to the computed cos/sin.
-                    If None, the value is inferred from `factor`, `mscale`, and `mscale_all_dim` as avaialble.
+                    If None, the value is inferred from `factor`, `mscale`, and `mscale_all_dim` as available.
                 *   `beta_fast` (`float`, *optional*, defaults to 32): Parameter to set the boundary for extrapolation
                     (only) in the linear ramp function.
                 *   `beta_slow` (`float`, *optional*, defaults to 1): Parameter to set the boundary for interpolation
