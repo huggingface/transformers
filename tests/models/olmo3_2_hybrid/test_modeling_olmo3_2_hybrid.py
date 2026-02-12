@@ -11,14 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Olmo3_5Hybrid model."""
+"""Testing suite for the PyTorch Olmo3_2Hybrid model."""
 
 import tempfile
 import unittest
 
 from parameterized import parameterized
 
-from transformers import Olmo3_5HybridConfig, is_torch_available
+from transformers import Olmo3_2HybridConfig, is_torch_available
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     Expectations,
@@ -41,20 +41,20 @@ if is_torch_available():
 
     from transformers import (
         Cache,
-        Olmo3_5HybridForCausalLM,
-        Olmo3_5HybridModel,
+        Olmo3_2HybridForCausalLM,
+        Olmo3_2HybridModel,
     )
-    from transformers.models.olmo3_5_hybrid.modeling_olmo3_5_hybrid import (
-        Olmo3_5HybridDynamicCache,
-        Olmo3_5HybridRotaryEmbedding,
+    from transformers.models.olmo3_2_hybrid.modeling_olmo3_2_hybrid import (
+        Olmo3_2HybridDynamicCache,
+        Olmo3_2HybridRotaryEmbedding,
     )
 
 
-class Olmo3_5HybridModelTester(CausalLMModelTester):
+class Olmo3_2HybridModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = Olmo3_5HybridConfig
-        base_model_class = Olmo3_5HybridModel
-        causal_lm_class = Olmo3_5HybridForCausalLM
+        config_class = Olmo3_2HybridConfig
+        base_model_class = Olmo3_2HybridModel
+        causal_lm_class = Olmo3_2HybridForCausalLM
 
     def __init__(
         self,
@@ -125,7 +125,7 @@ class Olmo3_5HybridModelTester(CausalLMModelTester):
         self.linear_allow_neg_eigval = False
 
     def get_config(self):
-        return Olmo3_5HybridConfig(
+        return Olmo3_2HybridConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -150,20 +150,20 @@ class Olmo3_5HybridModelTester(CausalLMModelTester):
 
 
 @require_torch
-class Olmo3_5HybridModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (Olmo3_5HybridModel, Olmo3_5HybridForCausalLM) if is_torch_available() else ()
+class Olmo3_2HybridModelTest(CausalLMModelTest, unittest.TestCase):
+    all_model_classes = (Olmo3_2HybridModel, Olmo3_2HybridForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": Olmo3_5HybridModel, "text-generation": Olmo3_5HybridForCausalLM}
+        {"feature-extraction": Olmo3_2HybridModel, "text-generation": Olmo3_2HybridForCausalLM}
         if is_torch_available()
         else {}
     )
-    model_tester_class = Olmo3_5HybridModelTester
-    rotary_embedding_layer = Olmo3_5HybridRotaryEmbedding if is_torch_available() else None
+    model_tester_class = Olmo3_2HybridModelTester
+    rotary_embedding_layer = Olmo3_2HybridRotaryEmbedding if is_torch_available() else None
 
     # === Cache helper methods (same pattern as Qwen3Next) ===
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """Olmo3_5Hybrid has a special Cache as it alternates with gated deltanet layers"""
-        self.assertIsInstance(past_key_values, Olmo3_5HybridDynamicCache)
+        """Olmo3_2Hybrid has a special Cache as it alternates with gated deltanet layers"""
+        self.assertIsInstance(past_key_values, Olmo3_2HybridDynamicCache)
 
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -180,7 +180,7 @@ class Olmo3_5HybridModelTest(CausalLMModelTest, unittest.TestCase):
         )
 
     def _check_caches_are_equal(self, cache1: Cache, cache2: Cache):
-        """Olmo3_5Hybrid has a special Cache as it alternates with gated deltanet layers"""
+        """Olmo3_2Hybrid has a special Cache as it alternates with gated deltanet layers"""
         if not len(cache1) == len(cache2):
             raise ValueError("Both caches do not have the same number of layers.")
 
@@ -192,7 +192,7 @@ class Olmo3_5HybridModelTest(CausalLMModelTest, unittest.TestCase):
 
     # === Override test_attention_outputs (same pattern as Qwen3Next) ===
     def test_attention_outputs(self):
-        """Needs to be overwritten as Olmo3_5Hybrid alternates between attention layers and gated deltanet layers."""
+        """Needs to be overwritten as Olmo3_2Hybrid alternates between attention layers and gated deltanet layers."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
         config._attn_implementation = "eager"
@@ -305,7 +305,7 @@ class Olmo3_5HybridModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch
-class Olmo3_5HybridIntegrationTest(unittest.TestCase):
+class Olmo3_2HybridIntegrationTest(unittest.TestCase):
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
 
@@ -315,7 +315,7 @@ class Olmo3_5HybridIntegrationTest(unittest.TestCase):
     @slow
     def test_model_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = Olmo3_5HybridForCausalLM.from_pretrained("yanhong-l/olmo-3.5-test").to(
+        model = Olmo3_2HybridForCausalLM.from_pretrained("yanhong-l/olmo-3.5-test").to(
             torch_device, dtype=torch.bfloat16
         )
         out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
@@ -386,7 +386,7 @@ class Olmo3_5HybridIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETION = "Simply put, the theory of relativity states that \xa0the laws of physics are the same for all non-accelerating observers. This means that the laws of physics are the same for all observers, regardless of their relative motion or the strength of the gravitational field they are in. This theory was first proposed by Albert Einstein in 1905 and has since been confirmed"
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("yanhong-l/olmo-3.5-test")
-        model = Olmo3_5HybridForCausalLM.from_pretrained(
+        model = Olmo3_2HybridForCausalLM.from_pretrained(
             "yanhong-l/olmo-3.5-test", device_map="auto", torch_dtype=torch.bfloat16
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)

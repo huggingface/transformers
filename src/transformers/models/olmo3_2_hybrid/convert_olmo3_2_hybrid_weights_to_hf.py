@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Convert OLMo 3.5 Hybrid model checkpoints (with FLA layers) to HuggingFace format.
+Convert OLMo 3.2 Hybrid model checkpoints (with FLA layers) to HuggingFace format.
 
-This script handles OLMo 3.5 Hybrid models that mix standard attention layers with
+This script handles OLMo 3.2 Hybrid models that mix standard attention layers with
 linear attention (GatedDeltaNet) layers.
 
 UPDATED: Now aligned with the OLMo-core conversion script, including support for:
@@ -25,7 +25,7 @@ UPDATED: Now aligned with the OLMo-core conversion script, including support for
 Sample usage:
 
 ```bash
-TRUST_REMOTE_CODE=True python src/transformers/models/olmo3_5_hybrid/convert_olmo3_5_hybrid_weights_to_hf.py \
+TRUST_REMOTE_CODE=True python src/transformers/models/olmo3_2_hybrid/convert_olmo3_2_hybrid_weights_to_hf.py \
     --input_dir /path/to/downloaded/olmo3.5-hybrid/weights \
     --output_dir /output/path
 ```
@@ -33,9 +33,9 @@ TRUST_REMOTE_CODE=True python src/transformers/models/olmo3_5_hybrid/convert_olm
 Thereafter, models can be loaded via:
 
 ```python
-from transformers import Olmo3_5HybridForCausalLM, AutoTokenizer
+from transformers import Olmo3_2HybridForCausalLM, AutoTokenizer
 
-model = Olmo3_5HybridForCausalLM.from_pretrained("/output/path")
+model = Olmo3_2HybridForCausalLM.from_pretrained("/output/path")
 tokenizer = AutoTokenizer.from_pretrained("/output/path")
 ```
 
@@ -64,7 +64,7 @@ from torch.distributed.checkpoint.metadata import Metadata, MetadataIndex, Stora
 from torch.distributed.checkpoint.planner import LoadItemType, ReadItem
 from torch.futures import Future
 
-from transformers import AutoTokenizer, Olmo3_5HybridConfig
+from transformers import AutoTokenizer, Olmo3_2HybridConfig
 
 
 # Mapping from string dtype names to torch dtypes
@@ -407,7 +407,7 @@ def write_model(
     device: str | None = None,
 ):
     """
-    Convert OLMo 3.5 Hybrid checkpoint to HuggingFace format.
+    Convert OLMo 3.2 Hybrid checkpoint to HuggingFace format.
 
     Args:
         model_path: Output directory for the HuggingFace model.
@@ -508,7 +508,7 @@ def write_model(
 
     print(f"Total parameters: {param_count}")
 
-    config = Olmo3_5HybridConfig(
+    config = Olmo3_2HybridConfig(
         vocab_size=model_config["vocab_size"],
         hidden_size=dim,
         intermediate_size=block_config["feed_forward"]["hidden_size"],
@@ -537,7 +537,7 @@ def write_model(
 
     # Explicitly set architectures (normally set by model.save_pretrained, but we
     # save directly without the model roundtrip)
-    config.architectures = ["Olmo3_5HybridForCausalLM"]
+    config.architectures = ["Olmo3_2HybridForCausalLM"]
 
     # Save config and weights directly (no from_pretrained roundtrip, which can
     # corrupt embeddings and fail to cast buffers like A_log)
@@ -592,11 +592,11 @@ def _write_tokenizer(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Convert OLMo 3.5 Hybrid weights to HuggingFace format.")
+    parser = argparse.ArgumentParser(description="Convert OLMo 3.2 Hybrid weights to HuggingFace format.")
     parser.add_argument(
         "--input_dir",
         required=True,
-        help="Location of OLMo 3.5 Hybrid weights, which contains config.json and model_and_optim/.",
+        help="Location of OLMo 3.2 Hybrid weights, which contains config.json and model_and_optim/.",
     )
     parser.add_argument(
         "--no_tokenizer",

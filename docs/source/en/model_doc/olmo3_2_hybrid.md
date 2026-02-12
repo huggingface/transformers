@@ -20,9 +20,9 @@ limitations under the License.
     </div>
 </div>
 
-# OLMo 3.5 Hybrid
+# OLMo 3.2 Hybrid
 
-OLMo 3.5 Hybrid is a hybrid architecture model from Ai2 that combines standard transformer attention layers with linear attention layers using the Gated Deltanet. This hybrid approach aims to improve efficiency while maintaining model quality by interleaving full attention layers with linear attention layers.
+OLMo 3.2 Hybrid is a hybrid architecture model from Ai2 that combines standard transformer attention layers with linear attention layers using the Gated Deltanet. This hybrid approach aims to improve efficiency while maintaining model quality by interleaving full attention layers with linear attention layers.
 
 > [!TIP]
 > For optimal performance, install the [flash-linear-attention](https://github.com/fla-org/flash-linear-attention) library. The model will work without it using a PyTorch fallback, but FLA provides significant speedups for the linear attention layers.
@@ -37,7 +37,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="allenai/OLMo-3.5-1B-Hybrid",
+    model="allenai/OLMo-3.2-1B-Hybrid",
     torch_dtype=torch.bfloat16,
 )
 
@@ -52,11 +52,11 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained(
-    "allenai/OLMo-3.5-1B-Hybrid"
+    "allenai/OLMo-3.2-1B-Hybrid"
 )
 
 model = AutoModelForCausalLM.from_pretrained(
-    "allenai/OLMo-3.5-1B-Hybrid",
+    "allenai/OLMo-3.2-1B-Hybrid",
     torch_dtype=torch.bfloat16,
     device_map="auto",
 )
@@ -69,7 +69,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoption>
 <hfoption id="transformers CLI">
 ```bash
-echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model allenai/OLMo-3.5-1B-Hybrid --device 0
+echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model allenai/OLMo-3.2-1B-Hybrid --device 0
 ```
 
 
@@ -80,18 +80,18 @@ echo -e "Plants create energy through a process known as" | transformers-cli run
   pip install flash-linear-attention
 ```
 
-- The model uses a custom cache (`Olmo3_5HybridDynamicCache`) that handles both KV cache for attention layers and recurrent state for linear attention layers.
+- The model uses a custom cache (`Olmo3_2HybridDynamicCache`) that handles both KV cache for attention layers and recurrent state for linear attention layers.
 
-## Olmo3_5HybridConfig
+## Olmo3_2HybridConfig
 
-[[autodoc]] Olmo3_5HybridConfig
+[[autodoc]] Olmo3_2HybridConfig
 
-## Olmo3_5HybridModel
+## Olmo3_2HybridModel
 
-[[autodoc]] Olmo3_5HybridModel
+[[autodoc]] Olmo3_2HybridModel
     - forward
 
-## Olmo3_5HybridForCausalLM
+## Olmo3_2HybridForCausalLM
 
-[[autodoc]] Olmo3_5HybridForCausalLM
+[[autodoc]] Olmo3_2HybridForCausalLM
     - forward

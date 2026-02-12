@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_olmo3_5_hybrid import *
-    from .modeling_olmo3_5_hybrid import *
+    from .configuration_olmo3_2_hybrid import *
+    from .modeling_olmo3_2_hybrid import *
 else:
     import sys
 

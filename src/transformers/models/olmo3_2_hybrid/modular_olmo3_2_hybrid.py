@@ -66,14 +66,14 @@ is_fast_path_available = all(
 logger = logging.get_logger(__name__)
 
 
-class Olmo3_5HybridConfig(Olmo3Config):
+class Olmo3_2HybridConfig(Olmo3Config):
     r"""
-    This is the configuration class to store the configuration of a [`Olmo3_5HybridModel`]. It is used to instantiate
-    an OLMo 3.5 Hybrid model according to the specified arguments, defining the model architecture. Instantiating a
+    This is the configuration class to store the configuration of a [`Olmo3_2HybridModel`]. It is used to instantiate
+    an OLMo 3.2 Hybrid model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
-    [allenai/OLMo-3.5-1B-Hybrid](https://huggingface.co/allenai/OLMo-3.5-1B-Hybrid) model.
+    [allenai/OLMo-3.2-1B-Hybrid](https://huggingface.co/allenai/OLMo-3.2-1B-Hybrid) model.
 
-    The OLMo 3.5 Hybrid model combines standard transformer attention layers with GatedDeltaNet linear attention
+    The OLMo 3.2 Hybrid model combines standard transformer attention layers with GatedDeltaNet linear attention
     layers for improved efficiency while maintaining model quality.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
@@ -81,8 +81,8 @@ class Olmo3_5HybridConfig(Olmo3Config):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 100352):
-            Vocabulary size of the Olmo3_5Hybrid model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`Olmo3_5HybridModel`].
+            Vocabulary size of the Olmo3_2Hybrid model. Defines the number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`Olmo3_2HybridModel`].
         hidden_size (`int`, *optional*, defaults to 3840):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -127,7 +127,7 @@ class Olmo3_5HybridConfig(Olmo3Config):
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         sliding_window (`int`, *optional*):
-            Size of the sliding window attention. Not used in OLMo 3.5 Hybrid.
+            Size of the sliding window attention. Not used in OLMo 3.2 Hybrid.
         layer_types (`list`, *optional*):
             Attention pattern for each layer. Can contain `"full_attention"` or `"linear_attention"`.
             Defaults to linear attention for most layers with full attention for every 4th layer.
@@ -147,20 +147,20 @@ class Olmo3_5HybridConfig(Olmo3Config):
             Whether to allow negative eigenvalues in the GatedDeltaNet recurrence. When `True`, the beta
             parameter is scaled by 2.0 to allow values in range [0, 2] instead of [0, 1].
     ```python
-    >>> from transformers import Olmo3_5HybridModel, Olmo3_5HybridConfig
+    >>> from transformers import Olmo3_2HybridModel, Olmo3_2HybridConfig
 
-    >>> # Initializing an Olmo3.5 Hybrid style configuration
-    >>> configuration = Olmo3_5HybridConfig()
+    >>> # Initializing an Olmo3.2 Hybrid style configuration
+    >>> configuration = Olmo3_2HybridConfig()
 
-    >>> # Initializing a model from the Olmo3.5 Hybrid style configuration
-    >>> model = Olmo3_5HybridModel(configuration)
+    >>> # Initializing a model from the Olmo3.2 Hybrid style configuration
+    >>> model = Olmo3_2HybridModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
     """
 
-    model_type = "olmo3_5_hybrid"
+    model_type = "olmo3_2_hybrid"
 
     def __init__(
         self,
@@ -205,9 +205,9 @@ class Olmo3_5HybridConfig(Olmo3Config):
         layer_type_validation(layer_types, num_hidden_layers)
 
         if "linear_attention" not in layer_types:
-            raise ValueError("OLMo3.5 Hybrid expects at least one 'linear_attention' layer.")
+            raise ValueError("OLMo3.2 Hybrid expects at least one 'linear_attention' layer.")
         if all(t == "linear_attention" for t in layer_types):
-            raise ValueError("OLMo3.5 Hybrid expects at least one attention layer.")
+            raise ValueError("OLMo3.2 Hybrid expects at least one attention layer.")
 
         super().__init__(
             vocab_size=vocab_size,
@@ -251,7 +251,7 @@ class Olmo3_5HybridConfig(Olmo3Config):
         self.linear_allow_neg_eigval = linear_allow_neg_eigval
 
 
-class Olmo3_5HybridDynamicCache(Qwen3NextDynamicCache):
+class Olmo3_2HybridDynamicCache(Qwen3NextDynamicCache):
     """
     Cache for hybrid model supporting both attention KV cache and linear attention state.
 
@@ -259,7 +259,7 @@ class Olmo3_5HybridDynamicCache(Qwen3NextDynamicCache):
     stores separate conv states for q, k, v (instead of a single conv_states list).
     """
 
-    def __init__(self, config: Olmo3_5HybridConfig):
+    def __init__(self, config: Olmo3_2HybridConfig):
         super().__init__(config)
         # Replace single conv_states with separate q, k, v conv states
         self.conv_states_q = [None for _ in range(config.num_hidden_layers)]
@@ -306,15 +306,15 @@ class Olmo3_5HybridDynamicCache(Qwen3NextDynamicCache):
         return self.conv_states_q[self.last_linear_layer] is not None
 
 
-class Olmo3_5HybridRMSNormGated(Qwen3NextRMSNormGated):
+class Olmo3_2HybridRMSNormGated(Qwen3NextRMSNormGated):
     pass
 
 
-class Olmo3_5HybridRMSNorm(Olmo3RMSNorm):
+class Olmo3_2HybridRMSNorm(Olmo3RMSNorm):
     pass
 
 
-class Olmo3_5HybridShortConvolution(nn.Conv1d):
+class Olmo3_2HybridShortConvolution(nn.Conv1d):
     def __init__(
         self,
         hidden_size: int,
@@ -368,15 +368,15 @@ class Olmo3_5HybridShortConvolution(nn.Conv1d):
         return out.transpose(1, 2), conv_state
 
 
-class Olmo3_5HybridAttention(nn.Module):
+class Olmo3_2HybridAttention(nn.Module):
     """
-    Multi-headed attention for OLMo 3.5 Hybrid that supports optional RoPE.
+    Multi-headed attention for OLMo 3.2 Hybrid that supports optional RoPE.
 
     When position_embeddings is None (NoPE mode for long context extension),
     rotary position embeddings are skipped entirely.
     """
 
-    def __init__(self, config: Olmo3_5HybridConfig, layer_idx: int):
+    def __init__(self, config: Olmo3_2HybridConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -396,8 +396,8 @@ class Olmo3_5HybridAttention(nn.Module):
             config.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=config.attention_bias)
-        self.q_norm = Olmo3_5HybridRMSNorm(self.num_heads * self.head_dim, config.rms_norm_eps)
-        self.k_norm = Olmo3_5HybridRMSNorm(self.num_key_value_heads * self.head_dim, config.rms_norm_eps)
+        self.q_norm = Olmo3_2HybridRMSNorm(self.num_heads * self.head_dim, config.rms_norm_eps)
+        self.k_norm = Olmo3_2HybridRMSNorm(self.num_key_value_heads * self.head_dim, config.rms_norm_eps)
 
     def forward(
         self,
@@ -452,9 +452,9 @@ class Olmo3_5HybridAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Olmo3_5HybridRotaryEmbedding(nn.Module):
+class Olmo3_2HybridRotaryEmbedding(nn.Module):
     """
-    RoPE for OLMo 3.5 Hybrid that returns float32 cos/sin to match OLMo-core.
+    RoPE for OLMo 3.2 Hybrid that returns float32 cos/sin to match OLMo-core.
 
     The only difference from standard RoPE is NOT casting cos/sin back to x.dtype,
     preserving float32 precision like OLMo-core's full_precision=True.
@@ -541,8 +541,8 @@ class Olmo3_5HybridRotaryEmbedding(nn.Module):
         return cos, sin
 
 
-class Olmo3_5HybridGatedDeltaNet(nn.Module):
-    def __init__(self, config: Olmo3_5HybridConfig, layer_idx: int):
+class Olmo3_2HybridGatedDeltaNet(nn.Module):
+    def __init__(self, config: Olmo3_2HybridConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_v_heads = config.linear_num_value_heads
@@ -568,7 +568,7 @@ class Olmo3_5HybridGatedDeltaNet(nn.Module):
 
         self.o_proj = nn.Linear(self.value_dim, self.hidden_size, bias=False)
 
-        Conv1dClass = ShortConvolution if ShortConvolution is not None else Olmo3_5HybridShortConvolution
+        Conv1dClass = ShortConvolution if ShortConvolution is not None else Olmo3_2HybridShortConvolution
 
         self.q_conv1d = Conv1dClass(
             hidden_size=self.key_dim,
@@ -600,11 +600,11 @@ class Olmo3_5HybridGatedDeltaNet(nn.Module):
 
         # Output norm - NOTE: FLA's FusedRMSNormGated uses eps=1e-5 by default
         o_norm_eps = 1e-5
-        NormClass = FusedRMSNormGated if FusedRMSNormGated is not None else Olmo3_5HybridRMSNormGated
+        NormClass = FusedRMSNormGated if FusedRMSNormGated is not None else Olmo3_2HybridRMSNormGated
         if self.use_gate:
             self.o_norm = NormClass(self.head_v_dim, eps=o_norm_eps)
         else:
-            self.o_norm = Olmo3_5HybridRMSNorm(self.head_v_dim, eps=o_norm_eps)
+            self.o_norm = Olmo3_2HybridRMSNorm(self.head_v_dim, eps=o_norm_eps)
 
         self.chunk_gated_delta_rule = chunk_gated_delta_rule or torch_chunk_gated_delta_rule
         self.recurrent_gated_delta_rule = fused_recurrent_gated_delta_rule or torch_recurrent_gated_delta_rule
@@ -619,7 +619,7 @@ class Olmo3_5HybridGatedDeltaNet(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Olmo3_5HybridDynamicCache | None = None,
+        cache_params: Olmo3_2HybridDynamicCache | None = None,
         cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
@@ -716,27 +716,27 @@ class Olmo3_5HybridGatedDeltaNet(nn.Module):
         return output
 
 
-class Olmo3_5MLP(Olmo3MLP):
+class Olmo3_2MLP(Olmo3MLP):
     pass
 
 
-class Olmo3_5HybridAttentionDecoderLayer(Olmo3DecoderLayer):
-    def __init__(self, config: Olmo3_5HybridConfig, layer_idx: int):
+class Olmo3_2HybridAttentionDecoderLayer(Olmo3DecoderLayer):
+    def __init__(self, config: Olmo3_2HybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.layer_type = "full_attention"
-        self.self_attn = Olmo3_5HybridAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = Olmo3_2HybridAttention(config=config, layer_idx=layer_idx)
 
 
-class Olmo3_5HybridLinearDecoderLayer(Olmo3DecoderLayer):
-    def __init__(self, config: Olmo3_5HybridConfig, layer_idx: int):
+class Olmo3_2HybridLinearDecoderLayer(Olmo3DecoderLayer):
+    def __init__(self, config: Olmo3_2HybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.layer_type = "linear_attention"
         del self.self_attn
         del self.post_attention_layernorm
         del self.post_feedforward_layernorm
-        self.linear_attn = Olmo3_5HybridGatedDeltaNet(config, layer_idx=layer_idx)
-        self.attention_layer_norm = Olmo3_5HybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.feedforward_layer_norm = Olmo3_5HybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.linear_attn = Olmo3_2HybridGatedDeltaNet(config, layer_idx=layer_idx)
+        self.attention_layer_norm = Olmo3_2HybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.feedforward_layer_norm = Olmo3_2HybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -771,12 +771,12 @@ class Olmo3_5HybridLinearDecoderLayer(Olmo3DecoderLayer):
         return hidden_states
 
 
-class Olmo3_5HybridPreTrainedModel(Qwen3NextPreTrainedModel):
+class Olmo3_2HybridPreTrainedModel(Qwen3NextPreTrainedModel):
     _is_stateful = True
-    _no_split_modules = ["Olmo3_5HybridAttentionDecoderLayer", "Olmo3_5HybridLinearDecoderLayer"]
+    _no_split_modules = ["Olmo3_2HybridAttentionDecoderLayer", "Olmo3_2HybridLinearDecoderLayer"]
     _can_record_outputs = {
-        "hidden_states": (Olmo3_5HybridAttentionDecoderLayer, Olmo3_5HybridLinearDecoderLayer),
-        "attentions": Olmo3_5HybridAttention,
+        "hidden_states": (Olmo3_2HybridAttentionDecoderLayer, Olmo3_2HybridLinearDecoderLayer),
+        "attentions": Olmo3_2HybridAttention,
     }
 
     @torch.no_grad()
@@ -794,18 +794,18 @@ class Olmo3_5HybridPreTrainedModel(Qwen3NextPreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, (Olmo3_5HybridRMSNorm, Olmo3_5HybridRMSNormGated)) or (
+        elif isinstance(module, (Olmo3_2HybridRMSNorm, Olmo3_2HybridRMSNormGated)) or (
             FusedRMSNormGated is not None and isinstance(module, FusedRMSNormGated)
         ):
             init.ones_(module.weight)
-        elif isinstance(module, Olmo3_5HybridGatedDeltaNet):
+        elif isinstance(module, Olmo3_2HybridGatedDeltaNet):
             init.copy_(module.A_log, torch.empty_like(module.A_log).uniform_(0, 16).log_())
             dt_min, dt_max, dt_init_floor = 0.001, 0.1, 1e-4
             dt = torch.exp(torch.rand_like(module.dt_bias) * (math.log(dt_max) - math.log(dt_min)) + math.log(dt_min))
             dt = torch.clamp(dt, min=dt_init_floor)
             inv_dt = dt + torch.log(-torch.expm1(-dt))
             init.copy_(module.dt_bias, inv_dt)
-        elif isinstance(module, Olmo3_5HybridRotaryEmbedding):
+        elif isinstance(module, Olmo3_2HybridRotaryEmbedding):
             if not module.disabled:
                 rope_init_fn = module.compute_default_rope_parameters
                 if module.rope_type != "default":
@@ -815,8 +815,8 @@ class Olmo3_5HybridPreTrainedModel(Qwen3NextPreTrainedModel):
                 init.copy_(module.original_inv_freq, inv_freq)
 
 
-class Olmo3_5HybridModel(Olmo3_5HybridPreTrainedModel):
-    def __init__(self, config: Olmo3_5HybridConfig):
+class Olmo3_2HybridModel(Olmo3_2HybridPreTrainedModel):
+    def __init__(self, config: Olmo3_2HybridConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -824,14 +824,14 @@ class Olmo3_5HybridModel(Olmo3_5HybridPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [
-                Olmo3_5HybridLinearDecoderLayer(config, layer_idx)
+                Olmo3_2HybridLinearDecoderLayer(config, layer_idx)
                 if config.layer_types[layer_idx] == "linear_attention"
-                else Olmo3_5HybridAttentionDecoderLayer(config, layer_idx)
+                else Olmo3_2HybridAttentionDecoderLayer(config, layer_idx)
                 for layer_idx in range(config.num_hidden_layers)
             ]
         )
-        self.norm = Olmo3_5HybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Olmo3_5HybridRotaryEmbedding(config=config)
+        self.norm = Olmo3_2HybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = Olmo3_2HybridRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -854,8 +854,8 @@ class Olmo3_5HybridModel(Olmo3_5HybridPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache:
-            if past_key_values is None or not isinstance(past_key_values, Olmo3_5HybridDynamicCache):
-                past_key_values = Olmo3_5HybridDynamicCache(config=self.config)
+            if past_key_values is None or not isinstance(past_key_values, Olmo3_2HybridDynamicCache):
+                past_key_values = Olmo3_2HybridDynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -906,15 +906,15 @@ class Olmo3_5HybridModel(Olmo3_5HybridPreTrainedModel):
         return linear_attn_mask
 
 
-class Olmo3_5HybridForCausalLM(Olmo3ForCausalLM):
+class Olmo3_2HybridForCausalLM(Olmo3ForCausalLM):
     pass
 
 
 __all__ = [
-    "Olmo3_5HybridConfig",
-    "Olmo3_5HybridForCausalLM",
-    "Olmo3_5HybridModel",
-    "Olmo3_5HybridPreTrainedModel",
-    "Olmo3_5HybridLinearDecoderLayer",
-    "Olmo3_5HybridAttentionDecoderLayer",
+    "Olmo3_2HybridConfig",
+    "Olmo3_2HybridForCausalLM",
+    "Olmo3_2HybridModel",
+    "Olmo3_2HybridPreTrainedModel",
+    "Olmo3_2HybridLinearDecoderLayer",
+    "Olmo3_2HybridAttentionDecoderLayer",
 ]
