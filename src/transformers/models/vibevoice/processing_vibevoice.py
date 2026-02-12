@@ -38,15 +38,15 @@ class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
             "padding": True,
             "padding_side": "left",
             "add_special_tokens": False,
-            "return_attention_mask": True,
+            "return_tensors": "pt"
+            
         },
         "audio_kwargs": {
             "sampling_rate": 24000,
-            "padding": True,
-            "return_attention_mask": True,
+            "padding": True,    # TODO remove like in ASR model
             "pad_to_multiple_of": 3200,  # acoustic_tokenizer.hop_length
         },
-        "common_kwargs": {"return_tensors": "pt"},
+        "common_kwargs": {"return_attention_mask": True},
     }
 
 
