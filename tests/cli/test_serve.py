@@ -464,7 +464,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             expected_output_content = expected_output["content"]
             output_content = output["content"]
 
-            assert type(expected_output_content) == type(output_content)
+            assert type(expected_output_content) is type(output_content)
 
             if isinstance(expected_output_content, list):
                 for expected_output_content_item, output_content_item in zip(expected_output_content, output_content):
@@ -561,7 +561,7 @@ class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.Te
         tool_calls = [payload.choices[0].delta.tool_calls[0] for payload in all_payloads[1:-1]]
         first_tool_call = tool_calls[0]
         assert first_tool_call["function"]["name"] == "flux1_schnell_infer"
-        assert first_tool_call["function"]["arguments"] == None
+        assert first_tool_call["function"]["arguments"] is None
         other_tool_calls = tool_calls[1:]
         assert all(tool_call["function"]["name"] is None for tool_call in other_tool_calls)
         assert all(tool_call["function"]["arguments"] is not None for tool_call in other_tool_calls)
