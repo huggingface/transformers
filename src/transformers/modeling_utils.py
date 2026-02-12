@@ -4436,6 +4436,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         If we don't add them back in `self.all_tied_weights_keys`, they will be re-initialized
         and all params in tied group get random weights.
         """
+        if not hasattr(self, "all_tied_weights_keys"):
+            self.all_tied_weights_keys = {}
         param_pointers = defaultdict(list)
         for param_name, param_value in self.state_dict().items():
             param_pointers[param_value.data_ptr()].append(param_name)
@@ -4562,6 +4564,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         later as they will be tied (overwritten) anyway.
         This is very important as most embeddings are tied, and they are huge params (vocabularies are often 256k), so
         running inits on them is very costly."""
+        if not hasattr(self, "all_tied_weights_keys"):
+            return
         for tied_param in self.all_tied_weights_keys.keys():
             param = self.get_parameter(tied_param)
             param._is_hf_initialized = True
