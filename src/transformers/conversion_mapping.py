@@ -141,6 +141,7 @@ def _build_checkpoint_conversion_mapping():
         ],
         "qwen3_vl_moe": [
             # We use a sentinel to make sure that weights that would already be in the correct format do not re-transpose
+            # Note that we specifically used those 2 dimensions for the sentinel as they will never be sharded during TP
             WeightConverter(
                 source_patterns="mlp.experts.gate_up_proj",
                 target_patterns="mlp.experts.gate_up_proj",
