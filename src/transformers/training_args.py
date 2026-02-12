@@ -1443,6 +1443,16 @@ class TrainingArguments:
         },
     )
 
+    convert_deepspeed_universal_checkpoint: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether or not to convert deepspeed zero checkpoint to universal checkpoint when "
+                "loaded world size is changed."
+            )
+        },
+    )
+
     def __post_init__(self):
         # ── 1. Defaults & Normalization ──
         if self.output_dir is None:
