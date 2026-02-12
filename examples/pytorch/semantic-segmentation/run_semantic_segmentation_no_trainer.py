@@ -269,11 +269,19 @@ def main():
             api = HfApi()
             repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
 
-            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
-                if "step_*" not in gitignore:
-                    gitignore.write("step_*\n")
-                if "epoch_*" not in gitignore:
-                    gitignore.write("epoch_*\n")
+            os.makedirs(args.output_dir, exist_ok=True)
+            gitignore_path = os.path.join(args.output_dir, ".gitignore")
+            content = ""
+            if os.path.exists(gitignore_path):
+                with open(gitignore_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+            with open(gitignore_path, "a", encoding="utf-8") as f:
+                if content and not content.endswith("\n"):
+                    f.write("\n")
+                if "step_*" not in content:
+                    f.write("step_*\n")
+                if "epoch_*" not in content:
+                    f.write("epoch_*\n")
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
@@ -611,7 +619,7 @@ def main():
             all_results = {
                 f"eval_{k}": v.tolist() if isinstance(v, np.ndarray) else v for k, v in eval_metrics.items()
             }
-            with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+            with open(os.path.join(args.output_dir, "all_results.json"), "w", encoding="utf-8") as f:
                 json.dump(all_results, f, indent=2)
 
     accelerator.wait_for_everyone()
