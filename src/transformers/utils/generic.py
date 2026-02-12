@@ -789,13 +789,13 @@ def is_timm_local_checkpoint(pretrained_model_path: str) -> bool:
 
     # pretrained_model_path is a file
     if is_file and pretrained_model_path.endswith(".json"):
-        with open(pretrained_model_path) as f:
+        with open(pretrained_model_path, encoding="utf-8") as f:
             config_dict = json.load(f)
         return is_timm_config_dict(config_dict)
 
     # pretrained_model_path is a directory with a config.json
     if is_dir and os.path.exists(os.path.join(pretrained_model_path, "config.json")):
-        with open(os.path.join(pretrained_model_path, "config.json")) as f:
+        with open(os.path.join(pretrained_model_path, "config.json"), encoding="utf-8") as f:
             config_dict = json.load(f)
         return is_timm_config_dict(config_dict)
 

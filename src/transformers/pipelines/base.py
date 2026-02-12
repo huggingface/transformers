@@ -517,7 +517,7 @@ class CsvPipelineDataFormat(PipelineDataFormat):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
     def __iter__(self):
-        with open(self.input_path, "r") as f:
+        with open(self.input_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 if self.is_multi_columns:
@@ -532,7 +532,7 @@ class CsvPipelineDataFormat(PipelineDataFormat):
         Args:
             data (`list[dict]`): The data to store.
         """
-        with open(self.output_path, "w") as f:
+        with open(self.output_path, "w", encoding="utf-8") as f:
             if len(data) > 0:
                 writer = csv.DictWriter(f, list(data[0].keys()))
                 writer.writeheader()
@@ -560,7 +560,7 @@ class JsonPipelineDataFormat(PipelineDataFormat):
     ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
-        with open(input_path, "r") as f:
+        with open(input_path, "r", encoding="utf-8") as f:
             self._entries = json.load(f)
 
     def __iter__(self):
@@ -577,7 +577,7 @@ class JsonPipelineDataFormat(PipelineDataFormat):
         Args:
             data (`dict`): The data to store.
         """
-        with open(self.output_path, "w") as f:
+        with open(self.output_path, "w", encoding="utf-8") as f:
             json.dump(data, f)
 
 

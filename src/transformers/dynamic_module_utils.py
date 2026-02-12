@@ -770,7 +770,7 @@ def check_python_requirements(path_or_repo_id, requirements_file="requirements.t
     failed = []  # error messages regarding requirements
     try:
         requirements = cached_file(path_or_repo_id=path_or_repo_id, filename=requirements_file, **kwargs)
-        with open(requirements, "r") as f:
+        with open(requirements, "r", encoding="utf-8") as f:
             requirements = f.readlines()
 
         for requirement in requirements:

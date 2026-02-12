@@ -240,7 +240,7 @@ def log_model_debug_trace(debug_path: str | None, model):
 
     prune_outputs_if_children(model._call_tree)
 
-    with open(full_path, "w") as f:
+    with open(full_path, "w", encoding="utf-8") as f:
         json.dump(model._call_tree, f, indent=2)
 
     # summary-only version for readability - traversing the tree again #TODO optimize?
@@ -263,7 +263,7 @@ def log_model_debug_trace(debug_path: str | None, model):
     tree_copy = json.loads(json.dumps(model._call_tree))  # deep copy
     strip_values(tree_copy)
 
-    with open(summary_path, "w") as f:
+    with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(tree_copy, f, indent=2)
 
 
