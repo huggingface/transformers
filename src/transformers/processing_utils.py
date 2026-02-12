@@ -1502,7 +1502,7 @@ class ProcessorMixin(PushToHubMixin):
 
             if (
                 "tokenizer" in sub_processor_type
-            ):  # This is only necessary for the checkpoint in test_modeling_mistral3.py which has no config.json and
+            ):  # This is only necessary for the checkpoint in test_processing_mistral3.py which has no config.json and
                 # the tokenizer_config.json references LlamaTokenizerFast. TODO: update the config on the hub.
                 if "PixtralProcessor" in cls.__name__:
                     from .tokenization_utils_tokenizers import TokenizersBackend
