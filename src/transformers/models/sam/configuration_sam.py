@@ -314,6 +314,7 @@ class SamConfig(PreTrainedConfig):
         prompt_encoder_config=None,
         mask_decoder_config=None,
         initializer_range=0.02,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         vision_config = vision_config if vision_config is not None else {}
@@ -331,6 +332,7 @@ class SamConfig(PreTrainedConfig):
         self.prompt_encoder_config = SamPromptEncoderConfig(**prompt_encoder_config)
         self.mask_decoder_config = SamMaskDecoderConfig(**mask_decoder_config)
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 
