@@ -46,7 +46,7 @@
     - local: processors
       title: Processors
     - local: tokenizer_summary
-      title: Summary of the tokenizers
+      title: Tokenization algorithms
     - local: pad_truncation
       title: Padding and truncation
     title: Preprocessors
