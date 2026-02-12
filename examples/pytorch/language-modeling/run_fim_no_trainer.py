@@ -380,12 +380,13 @@ def main():
             if os.path.exists(gitignore_path):
                 with open(gitignore_path, "r", encoding="utf-8") as f:
                     content = f.read()
+            existing_lines = set(line.strip() for line in content.splitlines()) if content else set()
             with open(gitignore_path, "a", encoding="utf-8") as f:
                 if content and not content.endswith("\n"):
                     f.write("\n")
-                if "step_*" not in content:
+                if "step_*" not in existing_lines:
                     f.write("step_*\n")
-                if "epoch_*" not in content:
+                if "epoch_*" not in existing_lines:
                     f.write("epoch_*\n")
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
