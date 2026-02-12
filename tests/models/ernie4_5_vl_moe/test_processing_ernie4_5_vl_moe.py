@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import AutoProcessor, LlamaTokenizerFast
+from transformers import AutoProcessor, TokenizersBackend
 from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -93,7 +93,7 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertIsInstance(processor.tokenizer, LlamaTokenizerFast)
+        self.assertIsInstance(processor.tokenizer, TokenizersBackend)
         self.assertIsInstance(processor.image_processor, Ernie4_5_VL_MoeImageProcessorFast)
 
     def test_image_processor(self):
@@ -247,7 +247,11 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 expected_video_token_count += thw[0] * thw[1] * thw[2]
             mm_len = expected_video_token_count
         else:
-            mm_len = batch_size * 192
+            # Calculate expected image token count based on image_grid_thw
+            expected_image_token_count = 0
+            for thw in out_dict["image_grid_thw"]:
+                expected_image_token_count += thw[0] * thw[1] * thw[2]
+            mm_len = expected_image_token_count
         self.assertEqual(len(out_dict[input_name]), mm_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}

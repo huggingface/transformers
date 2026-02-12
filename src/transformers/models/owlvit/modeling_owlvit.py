@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Google AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 from torch import Tensor, nn
@@ -26,13 +25,13 @@ from ...activations import ACT2FN
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
     TransformersKwargs,
     auto_docstring,
-    filter_out_non_signature_kwargs,
+    can_return_tuple,
     is_vision_available,
     logging,
     torch_int,
@@ -86,11 +85,11 @@ class OwlViTOutput(ModelOutput):
         The output of the [`OwlViTVisionModel`].
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits_per_image: Optional[torch.FloatTensor] = None
-    logits_per_text: Optional[torch.FloatTensor] = None
-    text_embeds: Optional[torch.FloatTensor] = None
-    image_embeds: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits_per_image: torch.FloatTensor | None = None
+    logits_per_text: torch.FloatTensor | None = None
+    text_embeds: torch.FloatTensor | None = None
+    image_embeds: torch.FloatTensor | None = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
@@ -204,13 +203,13 @@ class OwlViTObjectDetectionOutput(ModelOutput):
         The output of the [`OwlViTVisionModel`].
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[dict] = None
-    logits: Optional[torch.FloatTensor] = None
-    pred_boxes: Optional[torch.FloatTensor] = None
-    text_embeds: Optional[torch.FloatTensor] = None
-    image_embeds: Optional[torch.FloatTensor] = None
-    class_embeds: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    loss_dict: dict | None = None
+    logits: torch.FloatTensor | None = None
+    pred_boxes: torch.FloatTensor | None = None
+    text_embeds: torch.FloatTensor | None = None
+    image_embeds: torch.FloatTensor | None = None
+    class_embeds: torch.FloatTensor | None = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
@@ -256,12 +255,12 @@ class OwlViTImageGuidedObjectDetectionOutput(ModelOutput):
         The output of the [`OwlViTVisionModel`].
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    image_embeds: Optional[torch.FloatTensor] = None
-    query_image_embeds: Optional[torch.FloatTensor] = None
-    target_pred_boxes: Optional[torch.FloatTensor] = None
-    query_pred_boxes: Optional[torch.FloatTensor] = None
-    class_embeds: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor | None = None
+    image_embeds: torch.FloatTensor | None = None
+    query_image_embeds: torch.FloatTensor | None = None
+    target_pred_boxes: torch.FloatTensor | None = None
+    query_pred_boxes: torch.FloatTensor | None = None
+    class_embeds: torch.FloatTensor | None = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
@@ -358,9 +357,9 @@ class OwlViTTextEmbeddings(nn.Module):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
 
@@ -488,14 +487,26 @@ class OwlViTEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
+        output_attentions: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> tuple[torch.FloatTensor]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+                `(config.encoder_attention_heads,)`.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+        """
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            output_attentions=output_attentions,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -589,9 +600,12 @@ class OwlViTEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -605,12 +619,21 @@ class OwlViTEncoder(nn.Module):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask,
+                output_attentions=output_attentions,
                 **kwargs,
             )
 
@@ -619,23 +642,29 @@ class OwlViTEncoder(nn.Module):
         )
 
 
-class OwlViTTextTransformer(nn.Module):
+class OwlViTTextTransformer(OwlViTPreTrainedModel):
     def __init__(self, config: OwlViTTextConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
+
         embed_dim = config.hidden_size
         self.embeddings = OwlViTTextEmbeddings(config)
         self.encoder = OwlViTEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
+        # Initialize weights and apply final processing
+        self.post_init()
+
     @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -649,16 +678,19 @@ class OwlViTTextTransformer(nn.Module):
 
         attention_mask = create_causal_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
             cache_position=torch.arange(hidden_states.shape[1], device=hidden_states.device),
             past_key_values=None,
         )
-        kwargs.pop("is_causal", None)
 
-        encoder_outputs: BaseModelOutput = self.encoder(
+        kwargs.pop("is_causal", None)
+        encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             is_causal=True,
             **kwargs,
         )
@@ -702,9 +734,12 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -733,23 +768,34 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         )
 
 
-class OwlViTVisionTransformer(nn.Module):
+class OwlViTVisionTransformer(OwlViTPreTrainedModel):
     def __init__(self, config: OwlViTVisionConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
 
         self.embeddings = OwlViTVisionEmbeddings(config)
         self.pre_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.encoder = OwlViTEncoder(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+        # Initialize weights and apply final processing
+        self.post_init()
+
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        interpolate_pos_encoding: Optional[bool] = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        interpolate_pos_encoding: bool | None = False,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithPooling:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         # Cast the input to the expected `dtype`
         expected_input_dtype = self.embeddings.patch_embedding.weight.dtype
         pixel_values = pixel_values.to(expected_input_dtype)
@@ -759,6 +805,9 @@ class OwlViTVisionTransformer(nn.Module):
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             **kwargs,
         )
 
@@ -793,21 +842,26 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, OwlViTVisionModel
 
         >>> model = OwlViTVisionModel.from_pretrained("google/owlvit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -846,22 +900,19 @@ class OwlViTModel(OwlViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
-
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`OwlViTTextModel`].
 
         Examples:
         ```python
@@ -877,23 +928,26 @@ class OwlViTModel(OwlViTPreTrainedModel):
         ...     text_features = model.get_text_features(**inputs)
         ```"""
         # Get embeddings for all text queries in all batch samples
-        text_outputs: BaseModelOutputWithPooling = self.text_model(input_ids=input_ids, attention_mask=attention_mask)
-        text_features = self.text_projection(text_outputs.pooler_output)
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            return_dict=True,
+            **kwargs,
+        )
+        pooled_output = text_outputs.pooler_output
+        text_outputs.pooler_output = self.text_projection(pooled_output)
 
-        return text_features
+        return text_outputs
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
         interpolate_pos_encoding: bool = False,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`OwlViTVisionModel`].
-
         Examples:
         ```python
         >>> import torch
@@ -913,23 +967,28 @@ class OwlViTModel(OwlViTPreTrainedModel):
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
+            **kwargs,
         )
-        image_features = self.visual_projection(vision_outputs.pooler_output)
+        vision_outputs.pooler_output = self.visual_projection(vision_outputs.pooler_output)
 
-        return image_features
+        return vision_outputs
 
     @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        return_loss: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        return_loss: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        return_base_image_embeds: Optional[bool] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, OwlViTOutput]:
+        return_base_image_embeds: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | OwlViTOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
@@ -939,13 +998,15 @@ class OwlViTModel(OwlViTPreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, OwlViTModel
 
         >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
@@ -1031,8 +1092,8 @@ class OwlViTClassPredictionHead(nn.Module):
     def forward(
         self,
         image_embeds: torch.FloatTensor,
-        query_embeds: Optional[torch.FloatTensor],
-        query_mask: Optional[torch.Tensor],
+        query_embeds: torch.FloatTensor | None,
+        query_mask: torch.Tensor | None,
     ) -> tuple[torch.FloatTensor]:
         image_class_embeds = self.dense0(image_embeds)
         if query_embeds is None:
@@ -1103,11 +1164,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return box_coordinates
 
-    def compute_box_bias(
-        self, num_patches_height: int, num_patches_width: int, feature_map: Optional[torch.FloatTensor] = None
-    ) -> torch.Tensor:
-        if feature_map is not None:
-            raise ValueError("feature_map has been deprecated as an input. Please pass in num_patches instead")
+    def compute_box_bias(self, num_patches_height: int, num_patches_width: int) -> torch.Tensor:
         # The box center is biased to its position on the feature grid
         box_coordinates = self.normalize_grid_corner_coordinates(num_patches_height, num_patches_width)
         box_coordinates = torch.clip(box_coordinates, 0.0, 1.0)
@@ -1161,8 +1218,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def class_predictor(
         self,
         image_feats: torch.FloatTensor,
-        query_embeds: Optional[torch.FloatTensor] = None,
-        query_mask: Optional[torch.Tensor] = None,
+        query_embeds: torch.FloatTensor | None = None,
+        query_mask: torch.Tensor | None = None,
     ) -> tuple[torch.FloatTensor]:
         """
         Args:
@@ -1182,6 +1239,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         input_ids: torch.Tensor,
         pixel_values: torch.FloatTensor,
         attention_mask: torch.Tensor,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor]:
@@ -1243,6 +1302,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def image_embedder(
         self,
         pixel_values: torch.FloatTensor,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor]:
@@ -1331,9 +1392,11 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def image_guided_detection(
         self,
         pixel_values: torch.FloatTensor,
-        query_pixel_values: Optional[torch.FloatTensor] = None,
+        query_pixel_values: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        **kwargs: Unpack[TransformersKwargs],
+        return_dict: bool | None = None,
     ) -> OwlViTImageGuidedObjectDetectionOutput:
         r"""
         query_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -1341,7 +1404,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
         >>> from transformers import AutoProcessor, OwlViTForObjectDetection
@@ -1349,9 +1413,11 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch16")
         >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch16")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> query_url = "http://images.cocodataset.org/val2017/000000001675.jpg"
-        >>> query_image = Image.open(requests.get(query_url, stream=True).raw)
+        >>> with httpx.stream("GET", query_url) as response:
+        ...     query_image = Image.open(BytesIO(response.read()))
         >>> inputs = processor(images=image, query_images=query_image, return_tensors="pt")
         >>> with torch.no_grad():
         ...     outputs = model.image_guided_detection(**inputs)
@@ -1414,10 +1480,12 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        **kwargs: Unpack[TransformersKwargs],
+        return_dict: bool | None = None,
+        **kwargs,
     ) -> OwlViTObjectDetectionOutput:
         r"""
         output_hidden_states (`bool`, *optional*):
@@ -1430,7 +1498,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
 
@@ -1440,7 +1509,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> text_labels = [["a photo of a cat", "a photo of a dog"]]
         >>> inputs = processor(text=text_labels, images=image, return_tensors="pt")
         >>> outputs = model(**inputs)

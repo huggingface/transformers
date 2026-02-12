@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 the Falcon authors and HuggingFace Inc. team.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Falcon configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -85,11 +82,15 @@ class FalconConfig(PreTrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 11):
             The id of the "end-of-sequence" token.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
         ffn_hidden_size (`int`, *optional*):
             The hidden size of the feedforward layer in the Transformer decoder.
             defaults to 4x hidden dim
         activation (`str`, *optional*, defaults to `"gelu"`):
             The activation function used in the feedforward layer.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -111,28 +112,30 @@ class FalconConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 65024,
-        hidden_size: Optional[int] = 4544,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 71,
-        num_ln_in_parallel_attn: Optional[int] = None,
-        layer_norm_epsilon: Optional[int] = 1e-5,
-        initializer_range: Optional[float] = 0.02,
-        use_cache: Optional[bool] = True,
-        hidden_dropout: Optional[float] = 0.0,
-        attention_dropout: Optional[float] = 0.0,
-        num_kv_heads: Optional[int] = None,
-        alibi: Optional[bool] = False,
-        new_decoder_architecture: Optional[bool] = False,
-        multi_query: Optional[bool] = True,
-        parallel_attn: Optional[bool] = True,
-        bias: Optional[bool] = False,
-        max_position_embeddings: Optional[int] = 2048,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        bos_token_id: Optional[int] = 11,
-        eos_token_id: Optional[int] = 11,
-        ffn_hidden_size: Optional[int] = None,
-        activation: Optional[str] = "gelu",
+        vocab_size: int | None = 65024,
+        hidden_size: int | None = 4544,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 71,
+        num_ln_in_parallel_attn: int | None = None,
+        layer_norm_epsilon: int | None = 1e-5,
+        initializer_range: float | None = 0.02,
+        use_cache: bool | None = True,
+        hidden_dropout: float | None = 0.0,
+        attention_dropout: float | None = 0.0,
+        num_kv_heads: int | None = None,
+        alibi: bool | None = False,
+        new_decoder_architecture: bool | None = False,
+        multi_query: bool | None = True,
+        parallel_attn: bool | None = True,
+        bias: bool | None = False,
+        max_position_embeddings: int | None = 2048,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        bos_token_id: int | None = 11,
+        eos_token_id: int | None = 11,
+        pad_token_id: int | None = None,
+        ffn_hidden_size: int | None = None,
+        activation: str | None = "gelu",
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -148,6 +151,7 @@ class FalconConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
         self.num_kv_heads = num_attention_heads if num_kv_heads is None else num_kv_heads
         self.alibi = alibi
         self.new_decoder_architecture = new_decoder_architecture
@@ -157,6 +161,7 @@ class FalconConfig(PreTrainedConfig):
         self.num_ln_in_parallel_attn = num_ln_in_parallel_attn
         self.max_position_embeddings = max_position_embeddings
         self.activation = activation
+        self.tie_word_embeddings = tie_word_embeddings
         if ffn_hidden_size is None:
             self.ffn_hidden_size = hidden_size * 4
         else:
@@ -164,7 +169,7 @@ class FalconConfig(PreTrainedConfig):
 
         self.rope_parameters = rope_parameters
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
 
     @property
     def head_dim(self):

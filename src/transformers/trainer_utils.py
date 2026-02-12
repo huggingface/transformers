@@ -23,10 +23,12 @@ import json
 import os
 import random
 import re
+import shutil
 import threading
 import time
 from collections.abc import Callable
 from functools import partial
+from pathlib import Path
 from typing import Any, NamedTuple
 
 import numpy as np
@@ -36,6 +38,7 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     ExplicitEnum,
     check_torch_load_is_safe,
+    is_peft_available,
     is_psutil_available,
     is_torch_available,
     is_torch_cuda_available,
@@ -46,13 +49,96 @@ from .utils import (
     is_torch_npu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
+    logging,
     requires_backends,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 if is_torch_available():
     import torch
     from safetensors.torch import load_file as safe_load_file
+
+if is_peft_available():
+    from peft import PeftMixedModel, PeftModel
+
+
+def _is_peft_model(model):
+    if is_peft_available():
+        return isinstance(model, (PeftModel, PeftMixedModel))
+    return False
+
+
+def unwrap_peft_model(model):
+    """
+    Extract the base model from a PEFT-wrapped model.
+
+    If the model is not a PEFT model, returns it unchanged. Otherwise, attempts to
+    unwrap the base model using ``get_base_model()`` or the ``base_model.model`` attribute.
+
+    Args:
+        model: The model to unwrap.
+
+    Returns:
+        The unwrapped base model.
+
+    Raises:
+        AttributeError: If the model is a PEFT model but cannot be unwrapped safely.
+    """
+    if not _is_peft_model(model):
+        return model
+    if hasattr(model, "get_base_model"):
+        return model.get_base_model()
+    elif hasattr(model, "base_model") and hasattr(model.base_model, "model"):
+        # PeftMixedModel do not provide a `get_base_model` method
+        return model.base_model.model
+    else:
+        raise AttributeError("Cannot extract base model safely from this PEFT wrapper.")
+
+
+def validate_quantization_for_training(model):
+    """
+    Validate that a quantized model is set up correctly for training.
+
+    Raises `ValueError` when:
+    - A quantized + compiled model is used (torch.compile is not supported with PEFT fine-tuning).
+    - A purely quantized model has no trainable adapters attached (unless it supports QAT).
+    - The quantization method does not support training.
+
+    Args:
+        model: The model to validate.
+    """
+    _is_quantized_and_base_model = getattr(model, "is_quantized", False) and not getattr(
+        model, "_hf_peft_config_loaded", False
+    )
+    _quantization_method_supports_training = (
+        getattr(model, "hf_quantizer", None) is not None and model.hf_quantizer.is_trainable
+    )
+    _is_model_quantized_and_qat_trainable = getattr(model, "hf_quantizer", None) is not None and getattr(
+        model.hf_quantizer, "is_qat_trainable", False
+    )
+
+    # Filter out quantized + compiled models
+    if _is_quantized_and_base_model and hasattr(model, "_orig_mod"):
+        raise ValueError(
+            "You cannot fine-tune quantized model with `torch.compile()` make sure to pass a non-compiled model when fine-tuning a quantized model with PEFT"
+        )
+
+    # At this stage the model is already loaded
+    if _is_quantized_and_base_model and not _is_peft_model(model) and not _is_model_quantized_and_qat_trainable:
+        raise ValueError(
+            "You cannot perform fine-tuning on purely quantized models. Please attach trainable adapters on top of"
+            " the quantized model to correctly perform fine-tuning. Please see: https://huggingface.co/docs/transformers/peft"
+            " for more details"
+        )
+    elif _is_quantized_and_base_model and not _quantization_method_supports_training:
+        raise ValueError(
+            f"The model you are trying to fine-tune is quantized with {model.hf_quantizer.quantization_config.quant_method}"
+            " but that quantization method do not support training. Please open an issue on GitHub: https://github.com/huggingface/transformers"
+            f" to request the support for training support for {model.hf_quantizer.quantization_config.quant_method}"
+        )
 
 
 def seed_worker(worker_id: int, num_workers: int, rank: int):
@@ -118,32 +204,6 @@ def set_seed(seed: int, deterministic: bool = False):
         torch.hpu.manual_seed_all(seed)
     if is_torch_xpu_available():
         torch.xpu.manual_seed_all(seed)
-
-
-def neftune_post_forward_hook(module, input, output):
-    """
-    Implements the NEFTune forward pass for the model using forward hooks. Note this works only for torch.nn.Embedding
-    layers. This method is slightly adapted from the original source code that can be found here:
-    https://github.com/neelsjain/NEFTune Simply add it to your model as follows:
-    ```python
-    model = ...
-    model.embed_tokens.neftune_noise_alpha = 0.1
-    model.embed_tokens.register_forward_hook(neftune_post_forward_hook)
-    ```
-    Args:
-        module (`torch.nn.Module`):
-            The embedding module where the hook is attached. Note that you need to set `module.neftune_noise_alpha` to
-            the desired noise alpha value.
-        input (`torch.Tensor`):
-            The input tensor to the model.
-        output (`torch.Tensor`):
-            The output tensor of the model (i.e. the embeddings).
-    """
-    if module.training:
-        dims = torch.tensor(output.size(1) * output.size(2))
-        mag_norm = module.neftune_noise_alpha / torch.sqrt(dims)
-        output = output + torch.zeros_like(output).uniform_(-mag_norm, mag_norm)
-    return output
 
 
 class EvalPrediction:
@@ -216,6 +276,113 @@ def get_last_checkpoint(folder):
     if len(checkpoints) == 0:
         return
     return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
+
+
+def sort_checkpoints(
+    output_dir: str,
+    checkpoint_prefix: str = PREFIX_CHECKPOINT_DIR,
+    use_mtime: bool = False,
+    best_model_checkpoint: str | None = None,
+) -> list[str]:
+    """
+    Return checkpoint directories sorted by step number (oldest first).
+
+    Args:
+        output_dir (`str`):
+            The directory containing the checkpoints.
+        checkpoint_prefix (`str`, *optional*, defaults to `"checkpoint"`):
+            The prefix used for checkpoint directory names.
+        use_mtime (`bool`, *optional*, defaults to `False`):
+            Whether to sort by modification time instead of step number.
+        best_model_checkpoint (`str`, *optional*):
+            If provided, this checkpoint is moved to second-to-last position to protect
+            it from deletion while keeping the most recent checkpoint last for resuming.
+
+    Returns:
+        `list[str]`: Sorted list of checkpoint directory paths (oldest first).
+    """
+    glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{checkpoint_prefix}-*") if os.path.isdir(x)]
+
+    ordering_and_checkpoint_path = []
+    for path in glob_checkpoints:
+        if use_mtime:
+            ordering_and_checkpoint_path.append((os.path.getmtime(path), path))
+        else:
+            regex_match = re.match(f".*{checkpoint_prefix}-([0-9]+)", path)
+            if regex_match is not None and regex_match.groups() is not None:
+                ordering_and_checkpoint_path.append((int(regex_match.groups()[0]), path))
+
+    checkpoints_sorted = sorted(ordering_and_checkpoint_path)
+
+    # mtime is not reliable on some filesystems (e.g., cloud fuse filesystems)
+    # so we check if the mtime is fake and fall back to numerical ordering
+    if use_mtime and len(checkpoints_sorted) > 1:
+        mtime_diff = checkpoints_sorted[-1][0] - checkpoints_sorted[0][0]
+        if mtime_diff < 1.0:
+            logger.warning("mtime may not be reliable on this filesystem, falling back to numerical ordering")
+            return sort_checkpoints(
+                output_dir, checkpoint_prefix, use_mtime=False, best_model_checkpoint=best_model_checkpoint
+            )
+
+    checkpoints_sorted = [path for _, path in checkpoints_sorted]
+
+    # Move best_model_checkpoint to second-to-last position to protect it from deletion
+    # while keeping the most recent checkpoint at the end for resuming training.
+    if best_model_checkpoint is not None:
+        best_model_checkpoint = str(Path(best_model_checkpoint))
+        if best_model_checkpoint in checkpoints_sorted and checkpoints_sorted[-1] != best_model_checkpoint:
+            most_recent = checkpoints_sorted[-1]
+            checkpoints_sorted = [c for c in checkpoints_sorted if c not in {best_model_checkpoint, most_recent}]
+            checkpoints_sorted += [best_model_checkpoint, most_recent]
+
+    return checkpoints_sorted
+
+
+def rotate_checkpoints(
+    output_dir: str,
+    save_total_limit: int | None = None,
+    best_model_checkpoint: str | None = None,
+    use_mtime: bool = False,
+    checkpoint_prefix: str = PREFIX_CHECKPOINT_DIR,
+) -> None:
+    """
+    Delete older checkpoints, keeping at most `save_total_limit`.
+
+    Always preserves the most recent checkpoint and the best model checkpoint (if provided).
+
+    Args:
+        output_dir (`str`):
+            The directory containing the checkpoints.
+        save_total_limit (`int`, *optional*):
+            Maximum number of checkpoints to keep. No deletion if `None` or <= 0.
+        best_model_checkpoint (`str`, *optional*):
+            Path to best checkpoint (will always be preserved).
+        use_mtime (`bool`, *optional*, defaults to `False`):
+            Whether to sort by modification time instead of step number.
+        checkpoint_prefix (`str`, *optional*, defaults to `"checkpoint"`):
+            The prefix used for checkpoint directory names.
+    """
+    if save_total_limit is None or save_total_limit <= 0:
+        return
+
+    checkpoints = sort_checkpoints(output_dir, checkpoint_prefix, use_mtime)
+    if len(checkpoints) <= save_total_limit:
+        return
+
+    # Checkpoints that must not be deleted
+    protected = {checkpoints[-1]}  # most recent, for resuming
+    if best_model_checkpoint is not None:
+        protected.add(str(Path(best_model_checkpoint)))
+
+    # Delete oldest non-protected checkpoints until we have save_total_limit left
+    num_to_keep = max(save_total_limit, len(protected))
+    remaining = len(checkpoints)
+    for checkpoint in checkpoints:
+        if remaining <= num_to_keep:
+            break
+        if checkpoint not in protected:
+            shutil.rmtree(checkpoint, ignore_errors=True)
+            remaining -= 1
 
 
 class IntervalStrategy(ExplicitEnum):
@@ -955,3 +1122,117 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
 
     # Return the same thing as PyTorch load_state_dict function.
     return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
+
+
+def compare_trainer_and_checkpoint_args(training_args, trainer_state):
+    """
+    Compare training arguments with those stored in a checkpoint's trainer state.
+
+    Logs a warning if there are mismatches between the current training arguments
+    and the ones saved in the checkpoint.
+
+    Args:
+        training_args: The current training arguments.
+        trainer_state: The trainer state loaded from a checkpoint.
+    """
+    attributes_map = {
+        "logging_steps": "logging_steps",
+        "eval_steps": "eval_steps",
+        "save_steps": "save_steps",
+    }
+
+    has_warning = False
+    warning_str = "Warning: The following arguments do not match the ones in the `trainer_state.json` within the checkpoint directory: "
+    for arg_attr, state_attr in attributes_map.items():
+        arg_value = getattr(training_args, arg_attr, None)
+        state_value = getattr(trainer_state, state_attr, None)
+
+        if arg_value is not None and state_value is not None and arg_value != state_value:
+            warning_str += f"\n\t{arg_attr}: {arg_value} (from args) != {state_value} (from trainer_state.json)"
+            has_warning = True
+
+    # train bs is special as we need to account for multi-GPU
+    train_bs_args = training_args.per_device_train_batch_size
+    train_bs_state = trainer_state.train_batch_size // max(1, training_args.n_gpu)
+
+    if train_bs_args != train_bs_state:
+        warning_str += f"\n\tper_device_train_batch_size: {train_bs_args} (from args) != {train_bs_state} (from trainer_state.json)"
+        has_warning = True
+
+    if has_warning:
+        logger.warning_once(warning_str)
+
+
+def align_special_tokens(model, processing_class):
+    """
+    Aligns the special tokens of the tokenizer with the model configs.
+
+    A new tokens may be defined in the tokenizer for fine-tuning purposes, e.g. an "end of turn" token may be
+    added on chat models. In that case, we want the model configs to be aligned with the tokenizer, so that all
+    downstream uses work as expected. This alignment should happen before training, to ensure the prediction step
+    uses the new tokens as well.
+    """
+    from .processing_utils import ProcessorMixin
+    from .tokenization_utils_base import PreTrainedTokenizerBase
+
+    if isinstance(processing_class, ProcessorMixin):
+        tokenizer: PreTrainedTokenizerBase = processing_class.tokenizer
+    else:
+        tokenizer = processing_class
+    model_has_generation_config = hasattr(model, "generation_config") and model.generation_config is not None
+    updated_tokens = {}
+
+    # 1 - Align EOS token. EOS is more complex than the others, as `generation_config` may hold more than one EOS
+    # token.
+    tokenizer_has_new_eos = tokenizer.eos_token_id != getattr(model.config, "eos_token_id", None)
+    if model_has_generation_config:
+        # `generation_config.eos_token_id` is None: direct comparison
+        if model.generation_config.eos_token_id is None:
+            tokenizer_has_new_eos |= tokenizer.eos_token_id != model.generation_config.eos_token_id
+        else:
+            # `generation_config.eos_token_id` is an `int`: convert it to list (and continue below)
+            if isinstance(model.generation_config.eos_token_id, int):
+                model.generation_config.eos_token_id = [model.generation_config.eos_token_id]
+            # `generation_config.eos_token_id` is a `list`: check if the tokenizer's EOS token is in the list
+            tokenizer_has_new_eos |= tokenizer.eos_token_id not in model.generation_config.eos_token_id
+
+    if tokenizer_has_new_eos:
+        updated_tokens["eos_token_id"] = tokenizer.eos_token_id
+        model.config.eos_token_id = tokenizer.eos_token_id
+        # The generation config may hold more than one EOS token. We preserve the original EOS tokens: any of the
+        # EOS tokens defined here will halt generation.
+        if model_has_generation_config:
+            all_eos_tokens = [tokenizer.eos_token_id]
+            if model.generation_config.eos_token_id is not None:
+                all_eos_tokens += list(model.generation_config.eos_token_id)
+            model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
+
+    # 2 - Align BOS
+    tokenizer_has_new_bos = tokenizer.bos_token_id != getattr(model.config, "bos_token_id", None)
+    if model_has_generation_config:
+        tokenizer_has_new_bos |= tokenizer.bos_token_id != model.generation_config.bos_token_id
+
+    if tokenizer_has_new_bos:
+        updated_tokens["bos_token_id"] = tokenizer.bos_token_id
+        model.config.bos_token_id = tokenizer.bos_token_id
+        if model_has_generation_config:
+            model.generation_config.bos_token_id = tokenizer.bos_token_id
+
+    # 3 - Align PAD
+    tokenizer_has_new_pad = tokenizer.pad_token_id != getattr(model.config, "pad_token_id", None)
+    if model_has_generation_config:
+        tokenizer_has_new_pad |= tokenizer.pad_token_id != model.generation_config.pad_token_id
+
+    if tokenizer_has_new_pad:
+        updated_tokens["pad_token_id"] = tokenizer.pad_token_id
+        model.config.pad_token_id = tokenizer.pad_token_id
+        if model_has_generation_config:
+            model.generation_config.pad_token_id = tokenizer.pad_token_id
+
+    # 4 - Warn users about the changes
+    if len(updated_tokens) > 0:
+        logger.warning(
+            "The tokenizer has new PAD/BOS/EOS tokens that differ from the model config and generation config. "
+            "The model config and generation config were aligned accordingly, being updated with the tokenizer's "
+            f"values. Updated tokens: {updated_tokens}."
+        )

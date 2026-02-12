@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2010, DPR authors, The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -64,9 +63,18 @@ class DPRConfig(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
         projection_dim (`int`, *optional*, defaults to 0):
             Dimension of the projection for the context and question encoders. If it is set to zero (default), then no
             projection is done.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether cross-attention layers should be added to the model.
 
     Example:
 
@@ -100,10 +108,19 @@ class DPRConfig(PreTrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        bos_token_id=None,
+        eos_token_id=None,
         projection_dim: int = 0,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size

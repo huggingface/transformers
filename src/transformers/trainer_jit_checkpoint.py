@@ -1,7 +1,6 @@
 import os
 import signal
 import threading
-from typing import Optional
 
 from .trainer_callback import TrainerCallback
 from .trainer_utils import PREFIX_CHECKPOINT_DIR
@@ -88,7 +87,7 @@ class JITCheckpointCallback(TrainerCallback):
 
     def __init__(self):
         self.trainer = None
-        self.jit_manager: Optional[CheckpointManager] = None
+        self.jit_manager: CheckpointManager | None = None
 
     def set_trainer(self, trainer):
         self.trainer = trainer

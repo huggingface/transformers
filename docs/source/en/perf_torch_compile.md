@@ -64,7 +64,7 @@ Refer to the table below for performance benchmarks comparing the mean inference
 Select **Subset** in the table below to switch between different GPUs, as well as benchmarks on [PyTorch nightly](https://download.pytorch.org/whl/nightly/cu118) 2.1.0dev and torch.compile with `reduce-overhead` mode enabled.
 
 <iframe
-  src="https://huggingface.co/datasets/stevhliu/compile-benchmarks/embed/viewer/t4/train"
+  src="https://huggingface.co/datasets/docs-benchmarks/compile-benchmarks/embed/viewer/A100/train"
   frameborder="0"
   width="100%"
   height="560px"

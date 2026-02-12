@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Meta Inc. and the HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -14,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -28,11 +26,11 @@ from ....transformers.models.dinov2.modeling_dinov2 import (
     Dinov2PreTrainedModel,
 )
 from ... import initialization as init
+from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging, torch_int
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -163,9 +161,7 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PreTrainedConfig):
         self.use_swiglu_ffn = use_swiglu_ffn
         self.num_register_tokens = num_register_tokens
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_hidden_layers + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
+        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
         self.apply_layernorm = apply_layernorm
         self.reshape_hidden_states = reshape_hidden_states
 
@@ -246,7 +242,7 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         # Combine class and patch embeddings
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
@@ -279,7 +275,7 @@ class Dinov2WithRegistersEncoder(Dinov2Encoder):
 
 class Dinov2WithRegistersPreTrainedModel(Dinov2PreTrainedModel):
     @torch.no_grad()
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
@@ -304,8 +300,8 @@ class Dinov2WithRegistersModel(Dinov2Model):
 class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
         r"""
@@ -340,7 +336,6 @@ class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
 class Dinov2WithRegistersBackbone(Dinov2Backbone):
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_register_tokens = config.num_register_tokens
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
@@ -358,7 +353,7 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
         r"""
@@ -368,10 +363,12 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("facebook/dinov2-with-registers-base")
         >>> model = AutoBackbone.from_pretrained(

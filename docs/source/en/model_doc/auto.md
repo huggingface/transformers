@@ -257,10 +257,6 @@ The following auto classes are available for the following multimodal tasks.
 
 [[autodoc]] AutoModelForVisualQuestionAnswering
 
-### AutoModelForVision2Seq
-
-[[autodoc]] AutoModelForVision2Seq
-
 ### AutoModelForImageTextToText
 
 [[autodoc]] AutoModelForImageTextToText
