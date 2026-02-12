@@ -20,16 +20,47 @@ rendered properly in your Markdown viewer.
 
 Audio-text-to-text models, take audio and text inputs and generate text outputs. These models can understand audio and generate text, enabling tasks like audio question answering, audio reasoning, and spoken dialogue understanding. Unlike traditional ASR models that simply transcribe speech, audio-text-to-text models can reason about audio content, follow instructions, and generate contextual responses.
 
+Here is an example of how to use an audio-text-to-text model:
+
+```python
+from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
+model_id = "nvidia/audio-flamingo-3-hf"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Transcribe the input speech."},
+            {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/WhDJDIviAOg_120_10.mp3"},
+        ],
+    }
+]
+
+inputs = processor.apply_chat_template(
+    conversation,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_dict=True,
+).to(model.device)
+
+outputs = model.generate(**inputs, max_new_tokens=500)
+
+decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+print(decoded_outputs)
+```
+
 This guide will show you how to:
 
 1. Fine-tune [Audio Flamingo 3](https://huggingface.co/nvidia/audio-flamingo-3-hf) on the [AudioCaps](https://huggingface.co/datasets/OpenSound/AudioCaps) dataset for audio captioning using LoRA.
 2. Use your fine-tuned model for inference.
 
-<Tip>
+> [!TIP]
 
 To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/audio-text-to-text)
 
-</Tip>
 
 Before you begin, make sure you have all the necessary libraries installed:
 
@@ -141,11 +172,10 @@ Instantiate the data collator:
 
 ## Train
 
-<Tip>
+> [!TIP]
 
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training)!
 
-</Tip>
 
 Load the Audio Flamingo model. We use `bfloat16` precision and `device_map="auto"` for efficient memory usage:
 
@@ -190,11 +220,10 @@ Load the Audio Flamingo model. We use `bfloat16` precision and `device_map="auto
 >>> model.print_trainable_parameters()
 ```
 
-<Tip>
+> [!TIP]
 
 This LoRA configuration targets the language model's attention and feed-forward layers, which is sufficient for fine-tuning on audio captioning tasks. The audio encoder remains frozen and uses its pretrained weights.
 
-</Tip>
 
 ### Setup training
 
@@ -339,11 +368,10 @@ You can also use the [`Pipeline`] API for quick inference. First, merge the LoRA
 >>> print(result[0]["generated_text"])
 ```
 
-<Tip>
+> [!TIP]
 
 For more advanced use cases like multi-turn conversations with audio, you can structure your messages with alternating user and assistant roles, similar to [image-text-to-text](./image_text_to_text) models.
 
-</Tip>
 
 ## Further Reading
 
