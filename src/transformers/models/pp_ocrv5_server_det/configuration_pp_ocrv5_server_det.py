@@ -25,12 +25,27 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     Args:
         interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
             The interpolation mode used for upsampling or downsampling feature maps in the neck network.
+        depths (`list[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
+            Number of layers in each stage of the backbone network.
         stem_channels (`list[int]`, *optional*, defaults to `[3, 32, 48]`):
             The number of output channels for the stem layers in the backbone network.
-        backbone_config (`dict`, *optional*, defaults to `None`):
-            The configuration of the backbone model. If `None`, the default backbone configuration for PPOCRV5 Server Det
-            will be used.
-        use_lab (`bool`, *optional*, defaults to `False`):
+        stage_in_channels (`list[int]`, *optional*, defaults to `[48, 128, 512, 1024]`):
+            Input channel dimensions for each stage in the backbone network.
+        stage_mid_channels (`list[int]`, *optional*, defaults to `[48, 96, 192, 384]`):
+            Intermediate channel dimensions for each stage in the backbone network, used in bottleneck blocks.
+        stage_out_channels (`list[int]`, *optional*, defaults to `[128, 512, 1024, 2048]`):
+            Output channel dimensions for each stage in the backbone network.
+        stage_num_blocks (`list[int]`, *optional*, defaults to `[1, 1, 3, 1]`):
+            Number of blocks in each stage of the backbone network.
+        stage_downsample (`list[bool]`, *optional*, defaults to `[False, True, True, True]`):
+            Whether to apply downsampling (strided convolution/pooling) at the start of each backbone stage.
+        stage_light_block (`list[bool]`, *optional*, defaults to `[False, False, True, True]`):
+            Whether to use lightweight blocks (instead of standard blocks) in each backbone stage to reduce computation.
+        stage_kernel_size (`list[int]`, *optional*, defaults to `[3, 3, 5, 5]`):
+            Kernel size of convolutional layers in each backbone stage for feature extraction.
+        stage_num_of_layers (`list[int]`, *optional*, defaults to `[6, 6, 6, 6]`):
+            Number of sub-layers within each block of the backbone stages (fixed to 6 for PP-OCRv5).
+        use_learnable_affine_block (`bool`, *optional*, defaults to `False`):
             Whether to use Large Adaptive Blocks (LAB) in the backbone architecture.
         use_last_conv (`bool`, *optional*, defaults to `True`):
             Whether to include the last convolutional layer in the backbone feature extractor.
@@ -41,7 +56,9 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         class_num (`int`, *optional*, defaults to 1000):
             The number of classes for the pre-training task (typically ImageNet-1k).
         out_indices (`list[int]`, *optional*, defaults to `[0, 1, 2, 3]`):
-            the indices of the backbone layers from which to extract feature maps for the neck.
+            The indices of the backbone layers from which to extract feature maps for the neck.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of input channels (3 for RGB images, 1 for grayscale).
         neck_out_channels (`int`, *optional*, defaults to 256):
             The number of output channels from the neck network, responsible for feature fusion and refinement.
         reduce_factor (`int`, *optional*, defaults to 2):
@@ -58,8 +75,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
             The non-linear activation function used in the hidden layers. Supported functions include `"relu"`, `"hswish"`, etc.
         kernel_list (`list[int]`, *optional*, defaults to `[3, 2, 2]`):
             The list of kernel sizes for convolutional layers in the head network for multi-scale feature extraction.
-        fix_nan (`bool`, *optional*, defaults to `False`):
-            Whether to enable numerical stability patches to prevent NaN values during training or inference.
 
     Examples:
     ```python
@@ -73,17 +88,26 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     ```
     """
 
-    def __init__(
+    def init(
         self,
         interpolate_mode: str = "nearest",
+        depths: list[int] = [3, 4, 6, 3],
         stem_channels: list[int] = [3, 32, 48],
-        backbone_config: dict | None = None,
-        use_lab: bool = False,
+        stage_in_channels: list[int] = [48, 128, 512, 1024],
+        stage_mid_channels: list[int] = [48, 96, 192, 384],
+        stage_out_channels: list[int] = [128, 512, 1024, 2048],
+        stage_num_blocks: list[int] = [1, 1, 3, 1],
+        stage_downsample: list[bool] = [False, True, True, True],
+        stage_light_block: list[bool] = [False, False, True, True],
+        stage_kernel_size: list[int] = [3, 3, 5, 5],
+        stage_numb_of_layers: list[int] = [6, 6, 6, 6],
+        use_learnable_affine_block: bool = False,
         use_last_conv: bool = True,
         class_expand: int = 2048,
         dropout_prob: float = 0.0,
         class_num: int = 1000,
         out_indices: list[int] = [0, 1, 2, 3],
+        num_channels: int = 3,
         neck_out_channels: int = 256,
         reduce_factor: int = 2,
         intraclblock_config: dict | None = None,
@@ -98,16 +122,24 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
 
         self.mode = mode
         self.interpolate_mode = interpolate_mode
-
-        # Backbone
+        self.depths = depths
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
         self.stem_channels = stem_channels
-        self.backbone_config = backbone_config
-        self.use_lab = use_lab
+        self.stage_in_channels = stage_in_channels
+        self.stage_mid_channels = stage_mid_channels
+        self.stage_out_channels = stage_out_channels
+        self.stage_num_blocks = stage_num_blocks
+        self.stage_downsample = stage_downsample
+        self.stage_light_block = stage_light_block
+        self.stage_kernel_size = stage_kernel_size
+        self.stage_numb_of_layers = stage_numb_of_layers
+        self.use_learnable_affine_block = use_learnable_affine_block
         self.use_last_conv = use_last_conv
         self.class_expand = class_expand
         self.dropout_prob = dropout_prob
         self.class_num = class_num
         self.out_indices = out_indices
+        self.num_channels = num_channels
 
         self.neck_out_channels = neck_out_channels
         self.reduce_factor = reduce_factor

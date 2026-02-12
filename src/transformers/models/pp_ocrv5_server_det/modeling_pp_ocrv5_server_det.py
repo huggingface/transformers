@@ -10,7 +10,9 @@ from typing import Any, Optional, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import Tensor
 
+from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring
@@ -18,426 +20,390 @@ from .configuration_pp_ocrv5_server_det import PPOCRV5ServerDetConfig
 
 
 class PPOCRV5ServerDetLearnableAffineBlock(nn.Module):
-    """
-    Applies a learnable affine transformation (element-wise scaling and shifting) to the input tensor.
-    This is often used after normalization or activation layers to provide additional modeling flexibility.
-
-    Args:
-        scale_value (`float`, *optional*, defaults to 1.0):
-            The initial value for the learnable scale parameter (`gamma`).
-        bias_value (`float`, *optional*, defaults to 0.0):
-            The initial value for the learnable bias parameter (`beta`).
-    """
-
     def __init__(self, scale_value: float = 1.0, bias_value: float = 0.0):
         super().__init__()
-        self.scale = nn.Parameter(torch.tensor([scale_value]))
-        self.bias = nn.Parameter(torch.tensor([bias_value]))
+        self.scale = nn.Parameter(torch.tensor([scale_value]), requires_grad=True)
+        self.bias = nn.Parameter(torch.tensor([bias_value]), requires_grad=True)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of the PPOCRV5ServerDetLearnableAffineBlock.
-
-        Args:
-            x (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`):
-                The input feature map from the previous layer.
-
-        Returns:
-            `torch.FloatTensor`: The transformed output tensor of the same shape as the input `x`.
-                Computed as: $y = \text{scale} \\cdot x + \text{bias}$
-        """
-        return self.scale * x + self.bias
+    def forward(self, hidden_state: Tensor) -> Tensor:
+        hidden_state = self.scale * hidden_state + self.bias
+        return hidden_state
 
 
 class PPOCRV5ServerDetConvBNAct(nn.Module):
-    """
-    Standard sequence of Convolution, Batch Normalization, and optional Activation/LAB.
-    Args:
-        in_channels (`int`):
-            Number of input channels.
-        out_channels (`int`):
-            Number of output channels.
-        kernel_size (`int`, *optional*, defaults to 3):
-            Size of the convolving kernel.
-        stride (`int`, *optional*, defaults to 1):
-            Stride of the convolution.
-        padding (`Union[int, str]`, *optional*, defaults to 1):
-            Zero-padding added to both sides of the input. If string, typically "same".
-        groups (`int`, *optional*, defaults to 1):
-            Number of blocked connections from input channels to output channels.
-        use_act (`bool`, *optional*, defaults to True):
-            Whether to apply the ReLU activation function.
-        use_lab (`bool`, *optional*, defaults to False):
-            Whether to apply the Learnable Affine Block (LAB) after activation.
-    """
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int = 3,
-        stride: int = 1,
-        padding: Union[int, str] = 1,
-        groups: int = 1,
-        use_act: bool = True,
-        use_lab: bool = False,
-    ) -> None:
-        super().__init__()
-        self.use_act = use_act
-        self.use_lab = use_lab
-        self.conv = nn.Conv2d(
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride,
-            padding=padding if isinstance(padding, str) else (kernel_size - 1) // 2,
-            groups=groups,
-            bias=False,
-        )
-
-        self.bn = nn.BatchNorm2d(out_channels, momentum=0.9)
-
-        if self.use_act:
-            self.act = nn.ReLU()
-            if self.use_lab:
-                self.lab = PPOCRV5ServerDetLearnableAffineBlock()
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of the PPOCRV5ServerDetConvBNAct module.
-
-        Args:
-            x (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
-                Input feature map.
-
-        Returns:
-            `torch.FloatTensor`: Output feature map after convolution, normalization, and activation.
-                Shape is `(batch_size, out_channels, out_height, out_width)`.
-        """
-        x = self.conv(x)
-        x = self.bn(x)
-        if self.use_act:
-            x = self.act(x)
-            if self.use_lab:
-                x = self.lab(x)
-        return x
-
-
-class PPOCRV5ServerDetLightConvBNAct(nn.Module):
-    """
-    Lightweight version of PPOCRV5ServerDetConvBNAct using Pointwise Convolution followed by Depthwise Convolution.
-    This effectively separates spatial and channel-wise processing to reduce parameters.
-
-    Args:
-        in_channels (`int`):
-            Number of input channels.
-        out_channels (`int`):
-            Number of output channels.
-        kernel_size (`int`):
-            Size of the kernel for the depthwise convolution step.
-        use_lab (`bool`, *optional*, defaults to False):
-            Whether to apply the Learnable Affine Block (LAB) in both sub-layers.
-        **kwargs:
-            Additional arguments passed to the sub-PPOCRV5ServerDetConvBNAct layers.
-    """
-
     def __init__(
         self,
         in_channels: int,
         out_channels: int,
         kernel_size: int,
-        use_lab: bool = False,
-        **kwargs,
+        stride: int = 1,
+        groups: int = 1,
+        activation: str = "relu",
+        use_learnable_affine_block: bool = False,
     ):
         super().__init__()
-        self.conv1 = PPOCRV5ServerDetConvBNAct(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=1,
-            use_act=False,
-            use_lab=use_lab,
+        self.convolution = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            groups=groups,
+            padding=(kernel_size - 1) // 2,
+            bias=False,
         )
-        self.conv2 = PPOCRV5ServerDetConvBNAct(
-            in_channels=out_channels,
-            out_channels=out_channels,
+        self.normalization = nn.BatchNorm2d(out_channels)
+        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
+        if activation and use_learnable_affine_block:
+            self.lab = PPOCRV5ServerDetLearnableAffineBlock()
+        else:
+            self.lab = nn.Identity()
+
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = self.convolution(input)
+        hidden_state = self.normalization(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        hidden_state = self.lab(hidden_state)
+        return hidden_state
+
+
+class PPOCRV5ServerDetConvLayer(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int = 1,
+        groups: int = 1,
+        activation: str = "relu",
+        use_learnable_affine_block: bool = False,
+    ):
+        super().__init__()
+        self.convolution = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            groups=groups,
+            padding=(kernel_size - 1) // 2,
+            bias=False,
+        )
+        self.normalization = nn.BatchNorm2d(out_channels)
+        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
+        if activation and use_learnable_affine_block:
+            self.lab = PPOCRV5ServerDetLearnableAffineBlock()
+        else:
+            self.lab = nn.Identity()
+
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = self.convolution(input)
+        hidden_state = self.normalization(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        hidden_state = self.lab(hidden_state)
+        return hidden_state
+
+
+class PPOCRV5ServerDetLightConvBNAct(nn.Module):
+    def __init__(
+        self, in_channels: int, out_channels: int, kernel_size: int, use_learnable_affine_block: bool = False
+    ):
+        super().__init__()
+        self.conv1 = PPOCRV5ServerDetConvLayer(
+            in_channels,
+            out_channels,
+            kernel_size=1,
+            activation=None,
+            use_learnable_affine_block=use_learnable_affine_block,
+        )
+        self.conv2 = PPOCRV5ServerDetConvLayer(
+            out_channels,
+            out_channels,
             kernel_size=kernel_size,
             groups=out_channels,
-            use_act=True,
-            use_lab=use_lab,
+            use_learnable_affine_block=use_learnable_affine_block,
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.conv1(x)
-        x = self.conv2(x)
-        return x
+    def forward(self, hidden_state: Tensor) -> Tensor:
+        hidden_state = self.conv1(hidden_state)
+        hidden_state = self.conv2(hidden_state)
+        return hidden_state
 
 
 class PPOCRV5ServerDetStemBlock(nn.Module):
-    """
-    Stem block of PPOCRV5ServerDetHGNetV2, performing initial feature extraction and spatial downsampling.
-    It splits the input into two branches: one for max pooling and another for convolution,
-    then concatenates them to enrich feature representation.
-
-    Args:
-        in_channels (`int`):
-            Number of input image channels (typically 3 for RGB).
-        mid_channels (`int`):
-            Intermediate channel dimension used across the stem convolutions.
-        out_channels (`int`):
-            Final output channel dimension of the stem block.
-        use_lab (`bool`, *optional*, defaults to `False`):
-            Whether to use Learnable Affine Block (LAB) in the internal PPOCRV5ServerDetConvBNAct layers.
-    """
-
-    def __init__(
-        self,
-        in_channels: int,
-        mid_channels: int,
-        out_channels: int,
-        use_lab: bool = False,
-    ):
+    def __init__(self, config: PPOCRV5ServerDetConfig):
         super().__init__()
-        self.stem1 = PPOCRV5ServerDetConvBNAct(
-            in_channels=in_channels,
-            out_channels=mid_channels,
+
+        self.stem1 = PPOCRV5ServerDetConvLayer(
+            config.stem_channels[0],
+            config.stem_channels[1],
             kernel_size=3,
             stride=2,
-            use_lab=use_lab,
+            activation=config.hidden_act,
+            use_learnable_affine_block=config.use_learnable_affine_block,
         )
-        self.stem2a = PPOCRV5ServerDetConvBNAct(
-            in_channels=mid_channels,
-            out_channels=mid_channels // 2,
+        self.stem2a = PPOCRV5ServerDetConvLayer(
+            config.stem_channels[1],
+            config.stem_channels[1] // 2,
             kernel_size=2,
             stride=1,
-            padding="same",
-            use_lab=use_lab,
+            activation=config.hidden_act,
+            use_learnable_affine_block=config.use_learnable_affine_block,
         )
-        self.stem2b = PPOCRV5ServerDetConvBNAct(
-            in_channels=mid_channels // 2,
-            out_channels=mid_channels,
+        self.stem2b = PPOCRV5ServerDetConvLayer(
+            config.stem_channels[1] // 2,
+            config.stem_channels[1],
             kernel_size=2,
             stride=1,
-            padding="same",
-            use_lab=use_lab,
+            activation=config.hidden_act,
+            use_learnable_affine_block=config.use_learnable_affine_block,
         )
-        self.stem3 = PPOCRV5ServerDetConvBNAct(
-            in_channels=mid_channels * 2,
-            out_channels=mid_channels,
+        self.stem3 = PPOCRV5ServerDetConvLayer(
+            config.stem_channels[1] * 2,
+            config.stem_channels[1],
             kernel_size=3,
             stride=2,
-            use_lab=use_lab,
+            activation=config.hidden_act,
+            use_learnable_affine_block=config.use_learnable_affine_block,
         )
-        self.stem4 = PPOCRV5ServerDetConvBNAct(
-            in_channels=mid_channels,
-            out_channels=out_channels,
+        self.stem4 = PPOCRV5ServerDetConvLayer(
+            config.stem_channels[1],
+            config.stem_channels[2],
             kernel_size=1,
             stride=1,
-            use_lab=use_lab,
+            activation=config.hidden_act,
+            use_learnable_affine_block=config.use_learnable_affine_block,
         )
 
-        self.padding = [0, 1, 0, 1]
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=1, ceil_mode=True)
+        self.num_channels = config.num_channels
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of the PPOCRV5ServerDetStemBlock.
+    def forward(self, pixel_values: Tensor) -> Tensor:
+        num_channels = pixel_values.shape[1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        embedding = self.stem1(pixel_values)
+        embedding = F.pad(embedding, (0, 1, 0, 1))
+        emb_stem_2a = self.stem2a(embedding)
+        emb_stem_2a = F.pad(emb_stem_2a, (0, 1, 0, 1))
+        emb_stem_2a = self.stem2b(emb_stem_2a)
+        pooled_emb = self.pool(embedding)
+        embedding = torch.cat([pooled_emb, emb_stem_2a], dim=1)
+        embedding = self.stem3(embedding)
+        embedding = self.stem4(embedding)
+        return embedding
 
-        Args:
-            x (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
-                Input image tensor.
 
-        Returns:
-            `torch.FloatTensor`:
-                Processed feature map of shape `(batch_size, out_channels, height/4, width/4)`.
-        """
-        x = self.stem1(x)
-        x2 = self.stem2a(x)
-        x2 = self.stem2b(x2)
-        x1 = F.max_pool2d(F.pad(x, self.padding), kernel_size=2, stride=1, padding=0)
-        x = torch.cat([x1, x2], dim=1)
-        x = self.stem3(x)
-        x = self.stem4(x)
-        return x
+class PPOCRV5ServerDetConvLayerLight(nn.Module):
+    def __init__(
+        self, in_channels: int, out_channels: int, kernel_size: int, use_learnable_affine_block: bool = False
+    ):
+        super().__init__()
+        self.conv1 = PPOCRV5ServerDetConvLayer(
+            in_channels,
+            out_channels,
+            kernel_size=1,
+            activation=None,
+            use_learnable_affine_block=use_learnable_affine_block,
+        )
+        self.conv2 = PPOCRV5ServerDetConvLayer(
+            out_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            groups=out_channels,
+            use_learnable_affine_block=use_learnable_affine_block,
+        )
+
+    def forward(self, hidden_state: Tensor) -> Tensor:
+        hidden_state = self.conv1(hidden_state)
+        hidden_state = self.conv2(hidden_state)
+        return hidden_state
 
 
 class PPOCRV5ServerDetHGV2_Block(nn.Module):
-    """
-    PPOCRV5ServerDetHGV2_Block (Hierarchical Grouping Variable Block V2), the fundamental building block of PPOCRV5ServerDetHGNetV2 stages.
-    It uses a dense connection style to collect multi-scale features and a squeeze-excitation
-    aggregation to refine the final output.
-
-    Args:
-        in_channels (`int`):
-            Number of input channels.
-        mid_channels (`int`):
-            Hidden channel dimension for each convolutional layer in the block.
-        out_channels (`int`):
-            Final output channel dimension after feature aggregation.
-        kernel_size (`int`, *optional*, defaults to 3):
-            Size of the convolution kernel for each layer.
-        layer_num (`int`, *optional*, defaults to 6):
-            Number of convolutional layers to be densely stacked.
-        identity (`bool`, *optional*, defaults to `False`):
-            Whether to add a residual connection between the input and the final output.
-        light_block (`bool`, *optional*, defaults to `True`):
-            Whether to use `PPOCRV5ServerDetLightConvBNAct` (depthwise separable) instead of standard `PPOCRV5ServerDetConvBNAct`.
-        use_lab (`bool`, *optional*, defaults to `False`):
-            Whether to use Learnable Affine Block (LAB) in the internal layers.
-    """
-
     def __init__(
         self,
         in_channels: int,
-        mid_channels: int,
+        middle_channels: int,
         out_channels: int,
+        layer_num: int,
         kernel_size: int = 3,
-        layer_num: int = 6,
-        identity: bool = False,
-        light_block: bool = True,
-        use_lab: bool = False,
+        residual: bool = False,
+        light_block: bool = False,
+        drop_path: float = 0.0,
+        use_learnable_affine_block: bool = False,
     ):
         super().__init__()
-        self.identity = identity
+        self.residual = residual
 
         self.layers = nn.ModuleList()
-        block_type = PPOCRV5ServerDetLightConvBNAct if light_block else PPOCRV5ServerDetConvBNAct
         for i in range(layer_num):
-            self.layers.append(
-                block_type(
-                    in_channels=in_channels if i == 0 else mid_channels,
-                    out_channels=mid_channels,
-                    stride=1,
+            temp_in_channels = in_channels if i == 0 else middle_channels
+            if light_block:
+                block = PPOCRV5ServerDetConvLayerLight(
+                    in_channels=temp_in_channels,
+                    out_channels=middle_channels,
                     kernel_size=kernel_size,
-                    use_lab=use_lab,
+                    use_learnable_affine_block=use_learnable_affine_block,
                 )
-            )
+            else:
+                block = PPOCRV5ServerDetConvLayer(
+                    in_channels=temp_in_channels,
+                    out_channels=middle_channels,
+                    kernel_size=kernel_size,
+                    use_learnable_affine_block=use_learnable_affine_block,
+                    stride=1,
+                )
+            self.layers.append(block)
+
         # feature aggregation
-        total_channels = in_channels + layer_num * mid_channels
-        self.aggregation_squeeze_conv = PPOCRV5ServerDetConvBNAct(
-            in_channels=total_channels,
-            out_channels=out_channels // 2,
+        total_channels = in_channels + layer_num * middle_channels
+        aggregation_squeeze_conv = PPOCRV5ServerDetConvLayer(
+            total_channels,
+            out_channels // 2,
             kernel_size=1,
             stride=1,
-            use_lab=use_lab,
+            use_learnable_affine_block=use_learnable_affine_block,
         )
-        self.aggregation_excitation_conv = PPOCRV5ServerDetConvBNAct(
-            in_channels=out_channels // 2,
-            out_channels=out_channels,
+        aggregation_excitation_conv = PPOCRV5ServerDetConvLayer(
+            out_channels // 2,
+            out_channels,
             kernel_size=1,
             stride=1,
-            use_lab=use_lab,
+            use_learnable_affine_block=use_learnable_affine_block,
         )
+        self.aggregation = nn.Sequential(
+            aggregation_squeeze_conv,
+            aggregation_excitation_conv,
+        )
+        self.drop_path = nn.Dropout(drop_path) if drop_path else nn.Identity()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of the PPOCRV5ServerDetHGV2_Block.
-
-        Args:
-            x (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
-                Input feature map.
-
-        Returns:
-            `torch.FloatTensor`:
-                The aggregated and optionally residual output of shape `(batch_size, out_channels, height, width)`.
-        """
-        identity = x
-        output = []
-        output.append(x)
+    def forward(self, hidden_state: Tensor) -> Tensor:
+        identity = hidden_state
+        output = [hidden_state]
         for layer in self.layers:
-            x = layer(x)
-            output.append(x)
-        x = torch.cat(output, dim=1)
-        x = self.aggregation_squeeze_conv(x)
-        x = self.aggregation_excitation_conv(x)
-        if self.identity:
-            x += identity
-        return x
+            hidden_state = layer(hidden_state)
+            output.append(hidden_state)
+        hidden_state = torch.cat(output, dim=1)
+        hidden_state = self.aggregation(hidden_state)
+        if self.residual:
+            hidden_state = self.drop_path(hidden_state) + identity
+        return hidden_state
+
+
+class PPOCRV5ServerDetBasicLayer(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        middle_channels: int,
+        out_channels: int,
+        layer_num: int,
+        kernel_size: int = 3,
+        residual: bool = False,
+        light_block: bool = False,
+        drop_path: float = 0.0,
+        use_learnable_affine_block: bool = False,
+    ):
+        super().__init__()
+        self.residual = residual
+
+        self.layers = nn.ModuleList()
+        for i in range(layer_num):
+            temp_in_channels = in_channels if i == 0 else middle_channels
+            if light_block:
+                block = PPOCRV5ServerDetConvLayerLight(
+                    in_channels=temp_in_channels,
+                    out_channels=middle_channels,
+                    kernel_size=kernel_size,
+                    use_learnable_affine_block=use_learnable_affine_block,
+                )
+            else:
+                block = PPOCRV5ServerDetConvLayer(
+                    in_channels=temp_in_channels,
+                    out_channels=middle_channels,
+                    kernel_size=kernel_size,
+                    use_learnable_affine_block=use_learnable_affine_block,
+                    stride=1,
+                )
+            self.layers.append(block)
+
+        # feature aggregation
+        total_channels = in_channels + layer_num * middle_channels
+        aggregation_squeeze_conv = PPOCRV5ServerDetConvLayer(
+            total_channels,
+            out_channels // 2,
+            kernel_size=1,
+            stride=1,
+            use_learnable_affine_block=use_learnable_affine_block,
+        )
+        aggregation_excitation_conv = PPOCRV5ServerDetConvLayer(
+            out_channels // 2,
+            out_channels,
+            kernel_size=1,
+            stride=1,
+            use_learnable_affine_block=use_learnable_affine_block,
+        )
+        self.aggregation = nn.Sequential(
+            aggregation_squeeze_conv,
+            aggregation_excitation_conv,
+        )
+        self.drop_path = nn.Dropout(drop_path) if drop_path else nn.Identity()
+
+    def forward(self, hidden_state: Tensor) -> Tensor:
+        identity = hidden_state
+        output = [hidden_state]
+        for layer in self.layers:
+            hidden_state = layer(hidden_state)
+            output.append(hidden_state)
+        hidden_state = torch.cat(output, dim=1)
+        hidden_state = self.aggregation(hidden_state)
+        if self.residual:
+            hidden_state = self.drop_path(hidden_state) + identity
+        return hidden_state
 
 
 class PPOCRV5ServerDetHGV2_Stage(nn.Module):
-    """
-    PPOCRV5ServerDetHGV2_Stage consists of an optional downsampling layer followed by a sequence of `PPOCRV5ServerDetHGV2_Block`s.
-
-    Args:
-        in_channels (`int`):
-            Number of input channels from the previous stage or stem.
-        mid_channels (`int`):
-            Hidden channel dimension within each `PPOCRV5ServerDetHGV2_Block`.
-        out_channels (`int`):
-            Final output channel dimension for this stage.
-        block_num (`int`):
-            Number of `PPOCRV5ServerDetHGV2_Block` units to stack in this stage.
-        layer_num (`int`, *optional*, defaults to 6):
-            Number of layers inside each `PPOCRV5ServerDetHGV2_Block`.
-        is_downsample (`bool`, *optional*, defaults to `True`):
-            Whether to apply a stride-2 depthwise convolution at the start of the stage.
-        light_block (`bool`, *optional*, defaults to `True`):
-            Whether to use depthwise separable convolutions in the blocks.
-        kernel_size (`int`, *optional*, defaults to 3):
-            Kernel size for the convolutions within the blocks.
-        use_lab (`bool`, *optional*, defaults to `False`):
-            Whether to use Learnable Affine Block (LAB) in the convolutions.
-        stride (`int`, *optional*, defaults to 2):
-            Stride for the downsampling layer.
-    """
-
-    def __init__(
-        self,
-        in_channels: int,
-        mid_channels: int,
-        out_channels: int,
-        block_num: int,
-        layer_num: int = 6,
-        is_downsample: bool = True,
-        light_block: bool = True,
-        kernel_size: int = 3,
-        use_lab: bool = False,
-        stride: int = 2,
-    ):
+    def __init__(self, config: PPOCRV5ServerDetConfig, stage_index: int, drop_path: float = 0.0):
         super().__init__()
-        self.is_downsample = is_downsample
-        if self.is_downsample:
-            self.downsample = PPOCRV5ServerDetConvBNAct(
-                in_channels=in_channels,
-                out_channels=in_channels,
-                kernel_size=3,
-                stride=stride,
-                groups=in_channels,
-                use_act=False,
-                use_lab=use_lab,
+        in_channels = config.stage_in_channels[stage_index]
+        mid_channels = config.stage_mid_channels[stage_index]
+        out_channels = config.stage_out_channels[stage_index]
+        num_blocks = config.stage_num_blocks[stage_index]
+        num_layers = config.stage_numb_of_layers[stage_index]
+        downsample = config.stage_downsample[stage_index]
+        light_block = config.stage_light_block[stage_index]
+        kernel_size = config.stage_kernel_size[stage_index]
+        use_learnable_affine_block = config.use_learnable_affine_block
+
+        if downsample:
+            self.downsample = PPOCRV5ServerDetConvLayer(
+                in_channels, in_channels, kernel_size=3, stride=2, groups=in_channels, activation=None
             )
+        else:
+            self.downsample = nn.Identity()
 
         blocks_list = []
-        for i in range(block_num):
+        for i in range(num_blocks):
             blocks_list.append(
-                PPOCRV5ServerDetHGV2_Block(
-                    in_channels=in_channels if i == 0 else out_channels,
-                    mid_channels=mid_channels,
-                    out_channels=out_channels,
+                PPOCRV5ServerDetBasicLayer(
+                    in_channels if i == 0 else out_channels,
+                    mid_channels,
+                    out_channels,
+                    num_layers,
+                    residual=(i != 0),
                     kernel_size=kernel_size,
-                    layer_num=layer_num,
-                    identity=i != 0,
                     light_block=light_block,
-                    use_lab=use_lab,
+                    drop_path=drop_path,
+                    use_learnable_affine_block=use_learnable_affine_block,
                 )
             )
-        self.blocks = nn.Sequential(*blocks_list)
+        self.blocks = nn.ModuleList(blocks_list)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of the PPOCRV5ServerDetHGV2_Stage.
-
-        Args:
-            x (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
-                Input feature map.
-
-        Returns:
-            `torch.FloatTensor`:
-                Processed feature map of shape `(batch_size, out_channels, height/stride, width/stride)`.
-        """
-        if self.is_downsample:
-            x = self.downsample(x)
-        x = self.blocks(x)
-        return x
+    def forward(self, hidden_state: Tensor) -> Tensor:
+        hidden_state = self.downsample(hidden_state)
+        for block in self.blocks:
+            hidden_state = block(hidden_state)
+        return hidden_state
 
 
 class PPOCRV5ServerDetHGNetV2(nn.Module):
@@ -450,13 +416,13 @@ class PPOCRV5ServerDetHGNetV2(nn.Module):
             Configuration object containing model hyperparameters:
             - **backbone_config**: Parameters for each HGV2 stage.
             - **out_indices**: Indices of stages to return features from.
-            - **use_lab**: Global flag for Learnable Affine Block.
+            - **use_learnable_affine_block**: Global flag for Learnable Affine Block.
             - **use_last_conv**: Whether to apply final global pooling and classification head.
     """
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
         super().__init__()
-        self.use_lab = config.use_lab
+        self.use_learnable_affine_block = config.use_learnable_affine_block
         self.use_last_conv = config.use_last_conv
         self.class_expand = config.class_expand
         self.class_num = config.class_num
@@ -464,49 +430,21 @@ class PPOCRV5ServerDetHGNetV2(nn.Module):
         self.out_channels = []
 
         # stem
-        self.stem = PPOCRV5ServerDetStemBlock(
-            in_channels=config.stem_channels[0],
-            mid_channels=config.stem_channels[1],
-            out_channels=config.stem_channels[2],
-            use_lab=config.use_lab,
-        )
+        self.stem = PPOCRV5ServerDetStemBlock(config)
 
         # stages
-        self.stages = nn.ModuleList()
-        for i, k in enumerate(config.backbone_config):
-            (
-                in_channels,
-                mid_channels,
-                out_channels,
-                block_num,
-                is_downsample,
-                light_block,
-                kernel_size,
-                layer_num,
-                stride,
-            ) = config.backbone_config[k]
-            self.stages.append(
-                PPOCRV5ServerDetHGV2_Stage(
-                    in_channels,
-                    mid_channels,
-                    out_channels,
-                    block_num,
-                    layer_num,
-                    is_downsample,
-                    light_block,
-                    kernel_size,
-                    config.use_lab,
-                    stride,
-                )
-            )
-            if i in self.out_indices:
-                self.out_channels.append(out_channels)
+        self.stages = nn.ModuleList([])
+        for stage_index in range(len(config.stage_in_channels)):
+            resnet_stage = PPOCRV5ServerDetHGV2_Stage(config, stage_index)
+            self.stages.append(resnet_stage)
+            if stage_index in self.out_indices:
+                self.out_channels.append(config.stage_out_channels[stage_index])
 
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
 
         if self.use_last_conv:
             self.last_conv = nn.Conv2d(
-                in_channels=out_channels,
+                in_channels=config.stage_out_channels[-1],
                 out_channels=self.class_expand,
                 kernel_size=1,
                 stride=1,
@@ -514,7 +452,7 @@ class PPOCRV5ServerDetHGNetV2(nn.Module):
                 bias=False,
             )
             self.act = nn.ReLU()
-            if self.use_lab:
+            if self.use_learnable_affine_block:
                 self.lab = PPOCRV5ServerDetLearnableAffineBlock()
             self.dropout = nn.Dropout(p=config.dropout_prob)
 
