@@ -1680,7 +1680,7 @@ class LEDDecoder(LEDPreTrainedModel):
         if input_shape[-1] > 1:  # only create a causal mask when we go over a single token
             combined_attention_mask = create_causal_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 cache_position=cache_position,
                 past_key_values=past_key_values,
@@ -1688,7 +1688,7 @@ class LEDDecoder(LEDPreTrainedModel):
 
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
         )

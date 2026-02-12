@@ -1110,7 +1110,7 @@ class MimiTransformerModel(nn.Module):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
