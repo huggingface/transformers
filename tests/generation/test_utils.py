@@ -1343,7 +1343,10 @@ class GenerationTesterMixin:
             # if there are multimodal data which don't belong anywhere inside `text_tokens`
             keys_to_pop = []
             for key in inputs:
-                if ("pixel" in key or key in ["image_patches", "input_feature"]) and key != model.main_input_name:
+                if (
+                    "pixel" in key
+                    or key in ["image_patches", "input_feature", "input_features", "feature_attention_mask"]
+                ) and key != model.main_input_name:
                     keys_to_pop.append(key)
             for key in keys_to_pop:
                 inputs.pop(key)
