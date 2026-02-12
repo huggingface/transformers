@@ -57,7 +57,7 @@ class CheckpointManager:
 
             # Create a sentinel file to indicate checkpointing is in progress
             sentinel_file = os.path.join(output_dir, checkpoint_folder, "checkpoint-is-incomplete.txt")
-                with open(sentinel_file, "w", encoding="utf-8") as f:
+            with open(sentinel_file, "w", encoding="utf-8") as f:
                 f.write(f"Checkpoint started at step {current_step} and in progress...")
             logger.info(f"Created checkpoint progress sentinel marker file: {sentinel_file}")
 
