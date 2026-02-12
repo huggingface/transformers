@@ -273,7 +273,7 @@ def main():
             gitignore_path = os.path.join(args.output_dir, ".gitignore")
             content = ""
             if os.path.exists(gitignore_path):
-                with open(gitignore_path, "r", encoding="utf-8") as f:
+                with open(gitignore_path, "r", encoding="utf-8", errors="replace") as f:
                     content = f.read()
             existing_lines = set(line.strip() for line in content.splitlines()) if content else set()
             with open(gitignore_path, "a", encoding="utf-8") as f:
