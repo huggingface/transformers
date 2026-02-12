@@ -657,10 +657,8 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
                 full_text += content if content is not None else ""
 
         # Verify that the system prompt went through.
-        assert (
-            full_text.startswith(
-                "I can assist you with a wide range of tasks, from answering questions to providing information on various sports topics."
-            )
+        assert full_text.startswith(
+            "I can assist you with a wide range of tasks, from answering questions to providing information on various sports topics."
         )
 
     def test_max_tokens_not_set_in_req(self):
@@ -681,10 +679,8 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
                 full_text += content if content is not None else ""
 
         # Verify that the system prompt went through.
-        assert (
-            full_text.startswith(
-                "I can assist you with a wide range of tasks, from answering questions to providing information on various sports topics."
-            )
+        assert full_text.startswith(
+            "I can assist you with a wide range of tasks, from answering questions to providing information on various sports topics."
         )
 
     def test_request_cancellation(self):
