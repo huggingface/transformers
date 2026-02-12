@@ -634,6 +634,12 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], set())
 
+    @unittest.skip(
+        reason="FineModel has uses a ModuleList to embed codebook-idx which doesn't have a `forward` method "
+    )
+    def test_inputs_embeds(self):
+        pass
+
     @unittest.skip(reason="FineModel relies on codebook idx and does not return same logits")
     def test_inputs_embeds_matches_input_ids(self):
         pass

@@ -131,7 +131,6 @@ class FalconHybridMambaAttentionDynamicCache:
     def __getitem__(self, layer_idx):
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
-    @torch.no_grad()
     def update(
         self,
         key_states: torch.Tensor,

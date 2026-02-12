@@ -1280,6 +1280,18 @@ class GenerationTesterMixin:
             if "token_type_ids" in inputs:
                 del inputs["token_type_ids"]
 
+            # Ensure left padding in the mask because otherwise position ids will
+            # not be consecutive. Randomly mask leftmost tokens
+            if (
+                (attention_mask := inputs.get("attention_mask")) is not None
+                and attention_mask.ndim == 2
+                and 0 in attention_mask[:, -1]
+            ):
+                attention_mask = torch.ones_like(attention_mask)
+                attention_mask[0, :1] = 0
+                attention_mask[1:, :2] = 0
+                inputs["attention_mask"] = attention_mask
+
             model = model_class(config).to(torch_device)
             model.eval()
 
@@ -2254,6 +2266,50 @@ class GenerationTesterMixin:
 
             # Assert the last tokens are actually the same (except for the natural fluctuation due to order of FP ops)
             torch.testing.assert_close(all_logits[:, -1:, :], last_token_logits, rtol=1e-5, atol=1e-5)
+
+    def test_generate_with_and_without_position_ids(self):
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            model = model_class(config).to(torch_device).eval()
+            model_forward_args = inspect.signature(model.forward).parameters
+
+            if "position_ids" not in model_forward_args or "input_ids" not in inputs_dict:
+                self.skipTest("This model doesn't use `position_ids`")
+
+            if config.is_encoder_decoder:
+                self.skipTest("This model doesn't prepare `position_ids` in generate")
+
+            input_ids = inputs_dict["input_ids"]
+            seq_length = input_ids.shape[1]
+            # ensure left padding
+            if "attention_mask" in inputs_dict and 0 in inputs_dict["attention_mask"][:, -1]:
+                inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
+            else:
+                generation_config = copy.deepcopy(model.generation_config)
+                model._prepare_special_tokens(generation_config)
+                inputs_dict["attention_mask"] = model._prepare_attention_mask_for_generation(
+                    input_ids, generation_config, model_kwargs={}
+                )
+
+            out_wo_positions = model.generate(**inputs_dict, max_new_tokens=5, use_cache=True, do_sample=False)
+
+            # infer position ids from attn mask and generate again
+            if "attention_mask" in inputs_dict:
+                attention_mask = inputs_dict["attention_mask"]
+                position_ids = attention_mask.long().cumsum(-1) - 1
+                position_ids = position_ids.masked_fill(attention_mask == 0, 0)
+                position_ids = position_ids[..., -seq_length:].view(-1, seq_length)
+            else:
+                position_ids = torch.arange(0, seq_length, dtype=torch.long, device=torch_device)
+                position_ids = position_ids.unsqueeze(0)
+
+            out_w_positions = model.generate(
+                **inputs_dict, position_ids=position_ids, max_new_tokens=5, use_cache=True, do_sample=False
+            )
+
+            # The two sets of generated sequences must match, if generate can infer position ids correctly
+            # and can continue adding new ids to the already passed position ids
+            self.assertListEqual(out_wo_positions.tolist(), out_w_positions.tolist())
 
     def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
