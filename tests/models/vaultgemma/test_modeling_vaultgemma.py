@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     is_flash_attn_2_available,
+    is_kernels_available,
     is_torch_xpu_available,
     require_torch,
     require_torch_accelerator,
@@ -187,7 +188,7 @@ class VaultGemmaIntegrationTest(unittest.TestCase):
         if (
             attn_implementation == "flash_attention_2"
             and not is_flash_attn_2_available()
-            and not is_torch_xpu_available()
+            and not (is_torch_xpu_available() and is_kernels_available())
         ):
             self.skipTest("FlashAttention2 is required for this test.")
 
@@ -233,7 +234,7 @@ class VaultGemmaIntegrationTest(unittest.TestCase):
         if (
             attn_implementation == "flash_attention_2"
             and not is_flash_attn_2_available()
-            and not is_torch_xpu_available()
+            and not (is_torch_xpu_available() and is_kernels_available())
         ):
             self.skipTest("FlashAttention2 is required for this test.")
 
