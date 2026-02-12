@@ -183,10 +183,10 @@ class VoxtralRealtimeConfig(PreTrainedConfig):
         self,
         audio_config=None,
         text_config=None,
-        audio_token_id=None,
         projector_hidden_act="gelu",
         audio_length_per_tok=8,
         num_delay_tokens=6,
+        downsample_factor=4,
         **kwargs,
     ):
         if isinstance(audio_config, dict):
@@ -206,10 +206,10 @@ class VoxtralRealtimeConfig(PreTrainedConfig):
         self.text_config = text_config
 
         self.hidden_size = text_config.hidden_size
-        self.audio_token_id = audio_token_id
         self.projector_hidden_act = projector_hidden_act
         self.audio_length_per_tok = audio_length_per_tok
         self.num_delay_tokens = num_delay_tokens
+        self.downsample_factor = downsample_factor
 
         super().__init__(**kwargs)
 
