@@ -140,22 +140,7 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "qwen3_vl_moe": [
-            WeightConverter(
-                source_patterns=[
-                    "mlp.experts.*.gate_proj.weight",
-                    "mlp.experts.*.up_proj.weight",
-                ],
-                target_patterns="mlp.experts.gate_up_proj",
-                operations=[MergeModulelist(dim=0), Concatenate(dim=1), Transpose(1, 2)],
-            ),
-            WeightConverter(
-                source_patterns="mlp.experts.*.down_proj.weight",
-                target_patterns="mlp.experts.down_proj",
-                operations=[MergeModulelist(dim=0), Transpose(1, 2)],
-            ),
-            # In some checkpoints, e.g. `Qwen/Qwen3-VL-30B-A3B-Instruct` the experts are merged but not transposed so
-            # those 2 conversions are explicitly for such formats. We use a sentinel to make sure that weights that
-            # would already be in the correct format do not re-transpose
+            # We use a sentinel to make sure that weights that would already be in the correct format do not re-transpose
             WeightConverter(
                 source_patterns="mlp.experts.gate_up_proj",
                 target_patterns="mlp.experts.gate_up_proj",
