@@ -312,9 +312,9 @@ def main():
             gitignore_path = os.path.join(args.output_dir, ".gitignore")
             content = ""
             if os.path.exists(gitignore_path):
-                with open(gitignore_path, "r") as f:
+                with open(gitignore_path, "r", encoding="utf-8") as f:
                     content = f.read()
-            with open(gitignore_path, "a") as f:
+            with open(gitignore_path, "a", encoding="utf-8") as f:
                 if content and not content.endswith("\n"):
                     f.write("\n")
                 if "step_*" not in content:
@@ -723,7 +723,7 @@ def main():
                     repo_type="model",
                     token=args.hub_token,
                 )
-            with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+            with open(os.path.join(args.output_dir, "all_results.json"), "w", encoding="utf-8") as f:
                 json.dump({"perplexity": perplexity}, f)
 
     accelerator.wait_for_everyone()

@@ -154,7 +154,7 @@ def batch_generate(
     data.sort(key=lambda x: x["input"])
     data = [stats] + data
     if output_file is not None:
-        with open(output_file, "w") as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
 
     return gen_time, tok_per_sec
