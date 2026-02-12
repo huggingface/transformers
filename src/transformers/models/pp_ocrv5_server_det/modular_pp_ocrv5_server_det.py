@@ -44,6 +44,7 @@ from ...utils import (
 )
 from ...utils.generic import TensorType
 
+
 if is_cv2_available():
     import cv2
 
