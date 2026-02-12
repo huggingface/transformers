@@ -34,6 +34,7 @@ if is_cv2_available():
 def polygon_area(box: np.ndarray) -> float:
     x = box[:, 0]
     y = box[:, 1]
+
     return 0.5 * np.abs(np.sum(x[:-1] * y[1:] - x[1:] * y[:-1]))
 
 

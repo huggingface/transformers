@@ -25,8 +25,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     Args:
         interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
             The interpolation mode used for upsampling or downsampling feature maps in the neck network.
-        depths (`list[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
-            Number of layers in each stage of the backbone network.
         stem_channels (`list[int]`, *optional*, defaults to `[3, 32, 48]`):
             The number of output channels for the stem layers in the backbone network.
         stage_in_channels (`list[int]`, *optional*, defaults to `[48, 128, 512, 1024]`):
@@ -88,10 +86,9 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     ```
     """
 
-    def init(
+    def __init__(
         self,
         interpolate_mode: str = "nearest",
-        depths: list[int] = [3, 4, 6, 3],
         stem_channels: list[int] = [3, 32, 48],
         stage_in_channels: list[int] = [48, 128, 512, 1024],
         stage_mid_channels: list[int] = [48, 96, 192, 384],
@@ -122,8 +119,8 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
 
         self.mode = mode
         self.interpolate_mode = interpolate_mode
-        self.depths = depths
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        # ---- backbone ----
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(stage_in_channels) + 1)]
         self.stem_channels = stem_channels
         self.stage_in_channels = stage_in_channels
         self.stage_mid_channels = stage_mid_channels
@@ -141,10 +138,12 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         self.out_indices = out_indices
         self.num_channels = num_channels
 
+        # ---- neck ----
         self.neck_out_channels = neck_out_channels
         self.reduce_factor = reduce_factor
         self.intraclblock_config = intraclblock_config
 
+        # ---- head ----
         self.k = k
         self.scale_factor = scale_factor
         self.hidden_act = hidden_act

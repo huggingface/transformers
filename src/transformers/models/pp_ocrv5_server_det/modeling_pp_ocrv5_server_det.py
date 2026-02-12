@@ -414,7 +414,6 @@ class PPOCRV5ServerDetHGNetV2(nn.Module):
     Args:
         config (`PPOCRV5ServerDetConfig`):
             Configuration object containing model hyperparameters:
-            - **backbone_config**: Parameters for each HGV2 stage.
             - **out_indices**: Indices of stages to return features from.
             - **use_learnable_affine_block**: Global flag for Learnable Affine Block.
             - **use_last_conv**: Whether to apply final global pooling and classification head.
@@ -459,7 +458,7 @@ class PPOCRV5ServerDetHGNetV2(nn.Module):
         self.flatten = nn.Flatten(start_dim=1, end_dim=-1)
 
     def forward(
-        self, hidden_state: torch.Tensor, output_hidden_states: bool = False, return_dict: bool = True
+        self, hidden_state: torch.Tensor, output_hidden_states: bool = False
     ) -> tuple[list[torch.Tensor], torch.Tensor, Optional[tuple[torch.Tensor, ...]]]:
         """
         Forward pass of PPOCRV5ServerDetHGNetV2.
@@ -469,8 +468,6 @@ class PPOCRV5ServerDetHGNetV2(nn.Module):
                 Input image tensor (pixel values).
             output_hidden_states (`bool`, *optional*, defaults to `False`):
                 Whether to return all intermediate stage outputs.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether to return a structured output dictionary (placeholder for compatibility).
 
         Returns:
             `tuple(list, torch.FloatTensor, tuple)`:

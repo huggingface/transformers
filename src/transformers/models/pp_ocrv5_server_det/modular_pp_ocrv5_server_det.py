@@ -7,7 +7,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms.v2.functional as tvF
-from torchvision.transforms.v2.functional import InterpolationMode
+
+from transformers.models.hgnet_v2.modeling_hgnet_v2 import (
+    HGNetV2BasicLayer,
+    HGNetV2ConvLayer,
+    HGNetV2ConvLayerLight,
+    HGNetV2Embeddings,
+    HGNetV2LearnableAffineBlock,
+    HGNetV2Stage,
+)
 
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -27,20 +35,12 @@ from ...image_utils import (
 )
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from transformers.models.hgnet_v2.modeling_hgnet_v2 import (
-    HGNetV2LearnableAffineBlock, 
-    HGNetV2ConvLayer, 
-    HGNetV2ConvLayerLight, 
-    HGNetV2Embeddings, 
-    HGNetV2BasicLayer,
-    HGNetV2Stage
-)
 from ...utils import (
     ModelOutput,
     auto_docstring,
+    filter_out_non_signature_kwargs,
     is_cv2_available,
     logging,
-    filter_out_non_signature_kwargs,
 )
 from ...utils.generic import TensorType
 
@@ -67,8 +67,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     Args:
         interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
             The interpolation mode used for upsampling or downsampling feature maps in the neck network.
-        depths (`list[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
-            Number of layers in each stage of the backbone network.
         stem_channels (`list[int]`, *optional*, defaults to `[3, 32, 48]`):
             The number of output channels for the stem layers in the backbone network.
         stage_in_channels (`list[int]`, *optional*, defaults to `[48, 128, 512, 1024]`):
@@ -130,10 +128,9 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     ```
     """
 
-    def init(
+    def __init__(
         self,
         interpolate_mode: str = "nearest",
-        depths: list[int] = [3, 4, 6, 3],
         stem_channels: list[int] = [3, 32, 48],
         stage_in_channels: list[int] = [48, 128, 512, 1024],
         stage_mid_channels: list[int] = [48, 96, 192, 384],
@@ -165,8 +162,7 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         self.mode = mode
         self.interpolate_mode = interpolate_mode
         # ---- backbone ----
-        self.depths = depths
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(stage_in_channels) + 1)]
         self.stem_channels = stem_channels
         self.stage_in_channels = stage_in_channels
         self.stage_mid_channels = stage_mid_channels
@@ -197,10 +193,9 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
 
 
 def polygon_area(box: np.ndarray) -> float:
-
     x = box[:, 0]
     y = box[:, 1]
-    
+
     return 0.5 * np.abs(np.sum(x[:-1] * y[1:] - x[1:] * y[:-1]))
 
 
@@ -558,9 +553,7 @@ def process(
     """
     src_h, src_w = size
     mask = pred > threshold
-    boxes, scores = boxes_from_bitmap(
-        pred, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates
-    )
+    boxes, scores = boxes_from_bitmap(pred, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates)
     return boxes, scores
 
 
@@ -594,6 +587,7 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
         image_mean (Union[float, List[float]]): Mean values for image normalization (BGR order, compatible with model).
         image_std (Union[float, List[float]]): Standard deviation values for image normalization (BGR order).
     """
+
     model_input_names = ["pixel_values"]
 
     def __init__(
@@ -1063,7 +1057,6 @@ class PPOCRV5ServerDetHGNetV2(nn.Module):
 
         self.flatten = nn.Flatten(start_dim=1, end_dim=-1)
 
-
     def forward(
         self, hidden_state: torch.Tensor, output_hidden_states: bool = False
     ) -> tuple[list[torch.Tensor], torch.Tensor, Optional[tuple[torch.Tensor, ...]]]:
@@ -1498,7 +1491,6 @@ class PPOCRV5ServerDetHead(nn.Module):
         self.conv_bn1 = nn.BatchNorm2d(in_channels // 4, momentum=0.9)
         self.relu1 = nn.ReLU()
 
-
         self.conv2 = nn.ConvTranspose2d(
             in_channels=in_channels // 4,
             out_channels=in_channels // 4,
@@ -1508,7 +1500,6 @@ class PPOCRV5ServerDetHead(nn.Module):
 
         self.conv_bn2 = nn.BatchNorm2d(in_channels // 4, momentum=0.9)
         self.relu2 = nn.ReLU()
-
 
         self.conv3 = nn.ConvTranspose2d(
             in_channels=in_channels // 4,

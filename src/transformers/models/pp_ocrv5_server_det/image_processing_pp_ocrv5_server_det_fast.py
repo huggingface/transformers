@@ -25,6 +25,7 @@ if is_cv2_available():
 def polygon_area(box: np.ndarray) -> float:
     x = box[:, 0]
     y = box[:, 1]
+
     return 0.5 * np.abs(np.sum(x[:-1] * y[1:] - x[1:] * y[:-1]))
 
 
@@ -513,7 +514,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         """
         limit_side_len = limit_side_len or self.limit_side_len
         limit_type = limit_type or self.limit_type
-        c, h, w = img.shape
+        _, h, w = img.shape
         h, w = int(h), int(w)
 
         if limit_type == "max":
