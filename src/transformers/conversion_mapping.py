@@ -145,12 +145,12 @@ def _build_checkpoint_conversion_mapping():
             WeightConverter(
                 source_patterns="mlp.experts.gate_up_proj",
                 target_patterns="mlp.experts.gate_up_proj",
-                operations=[Transpose(1, 2, sentinel=(2, "hidden_size"))],
+                operations=[Transpose(1, 2, sentinel_dim=2, sentinel_config_field="hidden_size")],
             ),
             WeightConverter(
                 source_patterns="mlp.experts.down_proj",
                 target_patterns="mlp.experts.down_proj",
-                operations=[Transpose(1, 2, sentinel=(1, "hidden_size"))],
+                operations=[Transpose(1, 2, sentinel_dim=1, sentinel_config_field="hidden_size")],
             ),
         ],
         "phimoe": [

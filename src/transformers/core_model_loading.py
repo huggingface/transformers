@@ -249,12 +249,13 @@ class Transpose(ConversionOps):
     Transposes the given tensor along dim0 and dim1.
     """
 
-    def __init__(self, dim0: int = 0, dim1: int = 1, sentinel: tuple[int, str] | None = None):
+    def __init__(
+        self, dim0: int = 0, dim1: int = 1, sentinel_dim: int | None = None, sentinel_config_field: str | None = None
+    ):
         self.dim0 = dim0
         self.dim1 = dim1
-        # A tuple (dim, value_config_to_check) that will transpose only if the dimension at `dim` in the checkpoint is different
-        # than the value of the field `value_config_to_check`
-        self.sentinel = sentinel
+        self.sentinel_dim = sentinel_dim
+        self.sentinel_config_field = sentinel_config_field
 
     @torch.no_grad
     def convert(
@@ -264,14 +265,13 @@ class Transpose(ConversionOps):
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         # In this case, always transpose
-        if self.sentinel is None:
+        if self.sentinel_dim is None:
             return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
         # In this case, check the sentinel before transposing
         else:
-            sentinel_dim = self.sentinel[0]
-            sentinel_size = getattr(kwargs["config"].get_text_config(decoder=True), self.sentinel[1])
+            sentinel_size = getattr(kwargs["config"].get_text_config(decoder=True), self.sentinel_config_field)
             # The sentinel check is True: do NOT transpose
-            if tensor.shape[sentinel_dim] == sentinel_size:
+            if tensor.shape[self.sentinel_dim] == sentinel_size:
                 return {target_pattern: tensor}
             else:
                 return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
