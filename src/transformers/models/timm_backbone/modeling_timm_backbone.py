@@ -45,9 +45,6 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
         if config.backbone is None:
             raise ValueError("backbone is not set in the config. Please set it to a timm model name.")
 
-        if hasattr(config, "out_features") and config.out_features is not None:
-            raise ValueError("out_features is not supported by TimmBackbone. Please use out_indices instead.")
-
         # We just take the final layer by default. This matches the default for the transformers models.
         out_indices = config.out_indices if getattr(config, "out_indices", None) is not None else (-1,)
         pretrained = kwargs.pop("pretrained", False)

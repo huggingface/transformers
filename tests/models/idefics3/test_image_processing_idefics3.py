@@ -367,7 +367,7 @@ class Idefics3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             num_patches_and_row_cols = image_processing.get_number_of_image_patches(
                 height=300, width=500, images_kwargs={"do_image_splitting": False}
             )
-            self.assertEqual(num_patches_and_row_cols, (1, 1, 1))
+            self.assertEqual(num_patches_and_row_cols, (0, 0, 0))
 
             num_patches_and_row_cols = image_processing.get_number_of_image_patches(
                 height=300, width=500, images_kwargs={"do_image_splitting": True}

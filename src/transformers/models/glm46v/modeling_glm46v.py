@@ -672,9 +672,12 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
         text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
         # Early exit in case we are continuing generation from past kv
-        if self.model.rope_deltas is not None:
-            text_positions += self.model.rope_deltas
-            return text_positions
+        past_length = 0
+        if (cache := model_kwargs.get("past_key_values")) is not None:
+            past_length = cache.get_seq_length()
+        if past_length != 0 and self.model.rope_deltas is not None:
+            position_ids = text_positions[None, ...] + self.model.rope_deltas
+            return position_ids
 
         # Otherwise compute 3d position ids for vision tokens and concat with text position ids
         if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
