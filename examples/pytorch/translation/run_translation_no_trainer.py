@@ -798,8 +798,9 @@ def main():
                     repo_type="model",
                     token=args.hub_token,
                 )
-        with open(os.path.join(args.output_dir, "all_results.json"), "w", encoding="utf-8") as f:
-            json.dump({"eval_bleu": eval_metric["score"]}, f)
+        if accelerator.is_main_process:
+            with open(os.path.join(args.output_dir, "all_results.json"), "w", encoding="utf-8") as f:
+                json.dump({"eval_bleu": eval_metric["score"]}, f)
 
     accelerator.wait_for_everyone()
     accelerator.end_training()
