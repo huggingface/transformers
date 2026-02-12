@@ -17,6 +17,7 @@ import unittest
 
 import numpy as np
 
+from transformers import set_seed
 from transformers.testing_utils import is_flaky, require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -157,6 +158,8 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @is_flaky()
     def test_call_pil(self):
         for image_processing_class in self.image_processor_list:
+            # Set seed for deterministic test - ensures reproducible image generation
+            set_seed(42)
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -191,6 +194,8 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @is_flaky()
     def test_call_numpy(self):
         for image_processing_class in self.image_processor_list:
+            # Set seed for deterministic test - ensures reproducible image generation
+            set_seed(42)
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -225,6 +230,8 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @is_flaky()
     def test_call_pytorch(self):
         for image_processing_class in self.image_processor_list:
+            # Set seed for deterministic test - ensures reproducible image generation
+            set_seed(42)
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors

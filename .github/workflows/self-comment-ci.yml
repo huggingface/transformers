@@ -363,6 +363,8 @@ jobs:
           main_commit: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_BASE_SHA }}
           model_ci_result: ${{ needs.model-ci.result }}
           quantization_ci_result: ${{ needs.quantization-ci.result }}
+          model_infrastructure_ok: ${{ needs.model-ci.outputs.is_infrastructure_ok }}
+          quant_infrastructure_ok: ${{ needs.quantization-ci.outputs.is_infrastructure_ok }}
         run: |
           # Create commit links (8 chars display, full SHA in URL)
           run_commit_link="[${run_commit:0:8}](https://github.com/${github_repository}/commit/${run_commit})"
@@ -381,9 +383,34 @@ jobs:
             echo "| PR | ${pr_commit_link} | branch commit |"
             echo "| main | ${main_commit_link} | base commit |"
             echo ''
+
+            # Check infrastructure health - simple and clean!
+            infrastructure_error=false
+            
+            # Model CI
+            if [[ "$model_ci_result" != "skipped" && "$model_ci_result" != "cancelled" ]]; then
+              if [[ "$model_infrastructure_ok" == "false" ]]; then
+                echo "⚠️ **Model CI failed to report results**"
+                echo ''
+                infrastructure_error=true
+              fi
+            fi
+            
+            # Quantization CI
+            if [[ "$quantization_ci_result" != "skipped" && "$quantization_ci_result" != "cancelled" ]]; then
+              if [[ "$quant_infrastructure_ok" == "false" ]]; then
+                echo "⚠️ **Quantization CI failed to report results**"
+                echo ''
+                infrastructure_error=true
+              fi
+            fi
+            
+            if [[ "$infrastructure_error" == "true" ]]; then
+              echo 'The test failure analysis could not be completed. Please check the [workflow run]('$GITHUB_RUN_URL') for details.'
+              echo "STATUS=error" >> $GITHUB_ENV
       
             # Check if both jobs were skipped or cancelled
-            if [[ "$model_ci_result" == "skipped" || "$model_ci_result" == "cancelled" ]] && \
+            elif [[ "$model_ci_result" == "skipped" || "$model_ci_result" == "cancelled" ]] && \
                [[ "$quantization_ci_result" == "skipped" || "$quantization_ci_result" == "cancelled" ]]; then
               echo '⚠️ No test being reported (jobs are skipped or cancelled)!'
               echo "STATUS=error" >> $GITHUB_ENV

@@ -777,14 +777,14 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             model.generation_config.use_cache = True
 
             input_ids = inputs.pop("input_ids")
-            input_embeds = model.get_input_embeddings()(input_ids)
+            inputs_embeds = model.get_input_embeddings()(input_ids)
 
             generation_kwargs = {
                 "return_dict_in_generate": True,
                 "do_sample": False,
             }
 
-            inputs["inputs_embeds"] = input_embeds
+            inputs["inputs_embeds"] = inputs_embeds
 
             # Traditional way of generating text, with `return_dict_in_generate` to return the past key values
             outputs = model.generate(**inputs, max_new_tokens=4, **generation_kwargs)
@@ -794,7 +794,9 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             inputs["past_key_values"] = initial_output.past_key_values
 
             new_attention_len = input_ids.shape[1] + initial_output.sequences.shape[-1]
-            continued_embeds = torch.cat([input_embeds, model.get_input_embeddings()(initial_output.sequences)], dim=1)
+            continued_embeds = torch.cat(
+                [inputs_embeds, model.get_input_embeddings()(initial_output.sequences)], dim=1
+            )
             inputs["inputs_embeds"] = continued_embeds
 
             if "attention_mask" in inputs:

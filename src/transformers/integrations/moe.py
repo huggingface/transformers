@@ -113,10 +113,6 @@ def batched_mm_experts_forward(
     # Reshape for easier indexing
     # S is the number of selected tokens-experts pairs (S = num_tokens * num_top_k)
     token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
-    if top_k_weights.sum() == torch.tensor(0.0, device=top_k_weights.device):
-        # If all routing weights are zero local experts are not selected
-        return torch.zeros_like(hidden_states)
-
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
@@ -184,12 +180,15 @@ def _grouped_linear(
     Returns:
         `torch.Tensor`: Output tensor of shape (S, output_dim).
     """
-    if is_transposed:
-        # (S, input_dim) @ grouped (num_experts, input_dim, output_dim) -> (S, output_dim)
-        out = torch._grouped_mm(input, weight, offs=offs)
-    else:
-        # (S, input_dim) @ grouped (num_experts, output_dim, input_dim).T -> (S, output_dim)
-        out = torch._grouped_mm(input, weight.transpose(-2, -1), offs=offs)
+    # torch._grouped_mm is not autocast-enabled, so we disable autocast to avoid dtype mismatch.
+    # See: https://github.com/pytorch/pytorch/issues/174763
+    with torch.amp.autocast(device_type=input.device.type, enabled=False):
+        if is_transposed:
+            # (S, input_dim) @ grouped (num_experts, input_dim, output_dim) -> (S, output_dim)
+            out = torch._grouped_mm(input, weight, offs=offs)
+        else:
+            # (S, input_dim) @ grouped (num_experts, output_dim, input_dim).T -> (S, output_dim)
+            out = torch._grouped_mm(input, weight.transpose(-2, -1), offs=offs)
 
     if bias is not None:
         # We should be able to pass bias to the grouped_mm call, but it's not yet supported.
