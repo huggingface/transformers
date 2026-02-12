@@ -270,9 +270,8 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
-        "layers.*.mlp.experts.down_proj": "local_rowwise",
-        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -573,6 +572,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         rope_parameters: int | None = None,
         attention_bias: bool | None = False,
         sliding_window: int | None = None,
+        max_window_layers: int | None = 28,
         layer_types: list[str] | None = None,
         attention_dropout: int | None = 0,
         num_code_groups: int | None = 32,
@@ -581,7 +581,6 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         eos_token_id: int | None = None,
         **kwargs,
     ):
-        self.sliding_window = sliding_window
         self.num_code_groups = num_code_groups
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -589,7 +588,8 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window if self.use_sliding_window else None
+        self.sliding_window = sliding_window
+        self.max_window_layers = max_window_layers
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -720,15 +720,18 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
     model_type = "qwen3_omni_moe_talker_text"
     keys_to_ignore_at_inference = ["past_key_values"]
 
+    attribute_map = {
+        "num_experts": "num_local_experts",
+    }
+
     # Default tensor parallel plan for base model `Qwen3OmniMoeTalkerText`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
-        "layers.*.mlp.experts.down_proj": "local_rowwise",
-        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",

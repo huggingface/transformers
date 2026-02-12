@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch DAB-DETR model."""
 
+import copy
 import inspect
 import math
 import tempfile
@@ -233,40 +234,36 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_load_save_without_tied_weights(self):
         # DabDetrForObjectDetection forces `bbox_embed` to be tied by `self.x = y`
         # Run only DabDetrModel by overriding
-        for model_class in [DabDetrModel]:
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            config.tie_word_embeddings = False
-            try:
-                config.get_text_config().tie_word_embeddings = False
-            except Exception as _:
-                pass
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.tie_word_embeddings = False
+        config.get_text_config().tie_word_embeddings = False
 
-            model = model_class(config)  # we init the model without tie
-            # if this test fails later on, it means init tied the weights
-            with tempfile.TemporaryDirectory() as d:
-                model.save_pretrained(d)
-                with safe_open(f"{d}/model.safetensors", framework="pt") as f:
-                    serialized_keys = f.keys()
+        model = DabDetrModel(config)  # we init the model without tie
+        # if this test fails later on, it means init tied the weights
+        with tempfile.TemporaryDirectory() as d:
+            model.save_pretrained(d)
+            with safe_open(f"{d}/model.safetensors", framework="pt") as f:
+                serialized_keys = f.keys()
 
-                    model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
-                    # Checking the state dicts are correct
+                model_reloaded, infos = DabDetrModel.from_pretrained(d, output_loading_info=True)
+                # Checking the state dicts are correct
 
-                    reloaded_state = model_reloaded.state_dict()
-                    for k, v in model.state_dict().items():
-                        with self.subTest(k):
-                            torch.testing.assert_close(
-                                v,
-                                reloaded_state[k],
-                                msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}. If `False`, this means it was probably aliased and safetensors removed it. If `True` it means `_init_weights` overwrote that key",
-                            )
+                reloaded_state = model_reloaded.state_dict()
+                for k, v in model.state_dict().items():
+                    with self.subTest(k):
+                        torch.testing.assert_close(
+                            v,
+                            reloaded_state[k],
+                            msg=lambda x: f"DabDetrModel: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}. If `False`, this means it was probably aliased and safetensors removed it. If `True` it means `_init_weights` overwrote that key",
+                        )
 
-                # Checking there was no complain of missing weights
-                self.assertEqual(
-                    infos["missing_keys"],
-                    set(),
-                    "Given that the loaded weights are the same, the issue is in `tie_weights`: it tied these keys and removed them from serialization. But because of tiying (hardcoded or not) the previous check is fine.\
-                        This can happen if `save_pretrained` remove the targets and not the keys from serialiazation, or you hardcoded `self.xxx = yyy` thus forcing to always tie -> they are removed from serialization.",
-                )
+            # Checking there was no complain of missing weights
+            self.assertEqual(
+                infos["missing_keys"],
+                set(),
+                "Given that the loaded weights are the same, the issue is in `tie_weights`: it tied these keys and removed them from serialization. But because of tiying (hardcoded or not) the previous check is fine.\
+                    This can happen if `save_pretrained` remove the targets and not the keys from serialiazation, or you hardcoded `self.xxx = yyy` thus forcing to always tie -> they are removed from serialization.",
+            )
 
     # TODO: check if this works again for PyTorch 2.x.y
     @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
@@ -707,36 +704,42 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 expected_arg_names = ["pixel_values", "pixel_mask"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_different_timm_backbone(self):
+    def test_backbone_selection(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # let's pick a random timm backbone
-        config.backbone = "tf_mobilenetv3_small_075"
-        config.backbone_config = None
-        config.use_timm_backbone = True
-        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
+        def _validate_backbone_init(config):
+            for model_class in self.all_model_classes:
+                model = model_class(copy.deepcopy(config))
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                if model_class.__name__ == "DabDetrForObjectDetection":
+                    expected_shape = (
+                        self.model_tester.batch_size,
+                        self.model_tester.num_queries,
+                        self.model_tester.num_labels,
+                    )
+                    self.assertEqual(outputs.logits.shape, expected_shape)
+                    # Confirm out_indices was propagated to backbone
+                    self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+                else:
+                    # Confirm out_indices was propagated to backbone
+                    self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
 
-            if model_class.__name__ == "DabDetrForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    self.model_tester.num_labels,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
-            else:
-                # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+                self.assertTrue(outputs)
 
-            self.assertTrue(outputs)
+        # These kwargs are all removed and are supported only for BC
+        # In new models we have only `backbone_config`. Let's test that there is no regression
+        # let's test a random timm backbone
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "tf_mobilenetv3_small_075"
+        config_dict["backbone_config"] = None
+        config_dict["use_timm_backbone"] = True
+        config_dict["backbone_kwargs"] = {"out_indices": [2, 3, 4]}
+        config = config.__class__(**config_dict)
+        _validate_backbone_init(config)
 
 
 TOLERANCE = 1e-4

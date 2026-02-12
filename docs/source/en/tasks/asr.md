@@ -262,7 +262,7 @@ At this point, only three steps remain:
 ...     max_steps=2000,
 ...     gradient_checkpointing=True,
 ...     fp16=True,
-...     group_by_length=True,
+...     train_sampling_strategy="group_by_length",
 ...     eval_strategy="steps",
 ...     per_device_eval_batch_size=8,
 ...     save_steps=1000,

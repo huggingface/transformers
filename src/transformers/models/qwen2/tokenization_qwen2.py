@@ -42,8 +42,6 @@ class Qwen2Tokenizer(TokenizersBackend):
         self,
         vocab: str | dict[str, int] | None = None,
         merges: str | list[str] | None = None,
-        vocab_file=None,
-        merges_file=None,
         unk_token: str = "<|endoftext|>",
         bos_token=None,
         eos_token: str = "<|endoftext|>",
@@ -89,8 +87,6 @@ class Qwen2Tokenizer(TokenizersBackend):
         )
 
         super().__init__(
-            vocab_file=vocab_file,
-            merges_file=merges_file,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,

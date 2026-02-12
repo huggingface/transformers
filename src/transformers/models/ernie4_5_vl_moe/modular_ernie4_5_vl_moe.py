@@ -48,7 +48,7 @@ from ...image_utils import (
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -57,10 +57,10 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchdynamo_compiling,
     logging,
 )
-from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..ernie4_5_moe.configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 from ..ernie4_5_moe.modeling_ernie4_5_moe import (
     Ernie4_5_MoeAttention,
@@ -80,6 +80,7 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionRotaryEmbedding,
     Qwen2_5_VLModel,
     Qwen2_5_VLPreTrainedModel,
+    Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
 )
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
@@ -699,6 +700,23 @@ class Ernie4_5_VL_MoeDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class Ernie4_5_VL_MoeVisionAttention(Qwen2_5_VLVisionAttention):
+    pass
+
+
+class Ernie4_5_VL_MoeVisionBlock(Qwen2_5_VLVisionBlock):
+    def __init__(self, config) -> None:
+        super().__init__(config, None)
+
+        self.norm1 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
+        self.norm2 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
+        self.mlp = Ernie4_5VLVisionMLP(
+            dim=config.hidden_size,
+            hidden_dim=config.intermediate_size,
+            hidden_act=config.hidden_act,
+        )
+
+
 class Ernie4_5_VL_MoePreTrainedModel(Qwen2_5_VLPreTrainedModel):
     _can_compile_fullgraph = False
 
@@ -729,7 +747,8 @@ class Ernie4_5_VL_MoeTextModel(Ernie4_5_MoeModel):
         super().__init__(config)
         self.rotary_emb = Ernie4_5_VL_MoeTextRotaryEmbedding(config=config)
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -783,7 +802,7 @@ class Ernie4_5_VL_MoeTextModel(Ernie4_5_MoeModel):
 
         attention_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -841,20 +860,13 @@ class Ernie4_5_VL_MoeVisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
     pass
 
 
-class Ernie4_5_VL_MoeVisionBlock(Qwen2_5_VLVisionBlock):
-    def __init__(self, config) -> None:
-        super().__init__(config, None)
-
-        self.norm1 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
-        self.norm2 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
-        self.mlp = Ernie4_5VLVisionMLP(
-            dim=config.hidden_size,
-            hidden_dim=config.intermediate_size,
-            hidden_act=config.hidden_act,
-        )
-
-
 class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretrainedModel):
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Ernie4_5_VL_MoeMoeBlock, index=1),
+        "hidden_states": Ernie4_5_VL_MoeVisionBlock,
+        "attentions": Ernie4_5_VL_MoeVisionAttention,
+    }
+
     def __init__(self, config) -> None:
         super().__init__(config)
 
@@ -877,12 +889,11 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPret
     def get_device(self):
         raise AttributeError("Ernie 4.5 VL Moe does not need this!")
 
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        grid_thw: torch.Tensor,
-        **kwargs,
-    ) -> torch.Tensor:
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
         hidden_states = self.patch_embed(hidden_states)
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
@@ -906,7 +917,7 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPret
                 **kwargs,
             )
         hidden_states = self.ln(hidden_states)
-        return hidden_states
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
 class Ernie4_5_VL_MoeVisionMLP(nn.Module):
@@ -1037,72 +1048,6 @@ class Ernie4_5_VL_MoeModel(Qwen2_5_VLModel):
         self.vision_tower = Ernie4_5_VL_MoeVisionTransformerPretrainedModel._from_config(config.vision_config)
         self.resampler_model = Ernie4_5_VL_MoeVariableResolutionResamplerModel(config)
 
-    # TODO: Should be moved to generation loop instead in the future
-    # Relevant PR(s): https://github.com/huggingface/transformers/pull/42088
-    def get_position_ids(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
-        mm_token_type_ids: torch.IntTensor | None = None,
-    ):
-        """
-        Calculating the 3D position ids with a custom mechanism / caching
-            - First forward calculates the initial positions and the respective
-              deltas (offset) for subsequent positions. See `get_rope_index` for
-              more details.
-            - Second and on (generation), uses the cache position combined with the
-              cached deltas to determine the current position.
-
-        NOTE: We assume that the position ids are `None` and recalculate them here in any case.
-        """
-        # Calculate RoPE index once per generation in the pre-fill stage only.
-        # When compiling, we can't check tensor values thus we check only input length
-        # It is safe to assume that `length!=1` means we're in pre-fill because compiled
-        # models currently cannot do asssisted decoding
-        prefill_compiled_stage = is_torchdynamo_compiling() and (
-            (input_ids is not None and input_ids.shape[1] != 1)
-            or (inputs_embeds is not None and inputs_embeds.shape[1] != 1)
-        )
-        prefill_noncompiled_stage = not is_torchdynamo_compiling() and (
-            (cache_position is not None and cache_position[0] == 0)
-            or (past_key_values is None or past_key_values.get_seq_length() == 0)
-        )
-        if (prefill_compiled_stage or prefill_noncompiled_stage) or self.rope_deltas is None:
-            position_ids, rope_deltas = self.get_rope_index(
-                input_ids,
-                image_grid_thw,
-                video_grid_thw,
-                attention_mask=attention_mask,
-                mm_token_type_ids=mm_token_type_ids,
-            )
-            self.rope_deltas = rope_deltas
-        # then use the prev pre-calculated rope-deltas to get the correct position ids
-        else:
-            if input_ids is not None:
-                batch_size, seq_length, device = input_ids.shape[0], 1, input_ids.device
-            elif inputs_embeds is not None:
-                batch_size, seq_length, device = inputs_embeds.shape[0], 1, inputs_embeds.device
-            else:
-                raise ValueError(
-                    "Cannot calculate position ids without any input to the model. "
-                    "Need either `input_ids` or `inputs_embeds`!"
-                )
-
-            delta = (cache_position[0] + self.rope_deltas).to(device) if cache_position is not None else 0
-            position_ids = torch.arange(seq_length, device=device)
-            position_ids = position_ids.view(1, -1).expand(batch_size, -1)
-            if cache_position is not None:  # otherwise `deltas` is an int `0`
-                delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
-            position_ids = position_ids.add(delta)
-            position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
-
-        return position_ids
-
     def get_rope_index(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1110,6 +1055,7 @@ class Ernie4_5_VL_MoeModel(Qwen2_5_VLModel):
         video_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Calculate the 3D rope index based on image and video's temporal, height and width in LLM.
@@ -1169,133 +1115,139 @@ class Ernie4_5_VL_MoeModel(Qwen2_5_VLModel):
         spatial_merge_size = self.config.vision_config.spatial_merge_size
 
         mrope_position_deltas = []
-        if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
-            total_input_ids = input_ids
-            if attention_mask is None:
-                attention_mask = torch.ones_like(total_input_ids)
-            position_ids = torch.ones(
-                3,
-                input_ids.shape[0],
-                input_ids.shape[1],
-                dtype=input_ids.dtype,
-                device=input_ids.device,
-            )
-            image_index, video_index = 0, 0
-            attention_mask = attention_mask.to(total_input_ids.device)
-            for i, input_ids in enumerate(total_input_ids):
-                # If we don't have `mm_token_type_ids`, then we have text tokens only (== 0)
-                if mm_token_type_ids is None:
-                    input_token_type = torch.zeros_like(input_ids)[attention_mask[i] == 1].tolist()
-                else:
-                    input_token_type = mm_token_type_ids[i, attention_mask[i] == 1].tolist()
-
-                input_type_group = []
-                for key, group in itertools.groupby(enumerate(input_token_type), lambda x: x[1]):
-                    group = list(group)
-                    start_index = group[0][0]
-                    end_index = group[-1][0] + 1
-                    input_type_group.append((key, start_index, end_index))
-
-                llm_pos_ids_list = []
-                for modality_type, start_idx, end_idx in input_type_group:
-                    st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-
-                    # text == 0
-                    if modality_type == 0:
-                        text_len = end_idx - start_idx
-                        llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
-
-                    # image == 1, video == 2
-                    else:
-                        grid_thw = image_grid_thw if modality_type == 1 else video_grid_thw
-                        mm_index = image_index if modality_type == 1 else video_index
-                        t_merge_size = 1 if modality_type == 1 else temporal_merge_size
-
-                        t, h, w = (
-                            grid_thw[mm_index][0],
-                            grid_thw[mm_index][1],
-                            grid_thw[mm_index][2],
-                        )
-                        llm_grid_t, llm_grid_h, llm_grid_w = (
-                            t.item() // t_merge_size,
-                            h.item() // spatial_merge_size,
-                            w.item() // spatial_merge_size,
-                        )
-
-                        for t_idx in range(llm_grid_t):
-                            t_index = torch.tensor(t_idx).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten()
-                            h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(1, -1, llm_grid_w).flatten()
-                            w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(1, llm_grid_h, -1).flatten()
-                            llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
-
-                        if modality_type == 1:
-                            image_index += 1
-                        else:
-                            video_index += 1
-
-                llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
-                position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
-                mrope_position_deltas.append(llm_positions.max() + 1 - len(total_input_ids[i]))
-            mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
-            return position_ids, mrope_position_deltas
-        else:
-            if attention_mask is not None:
-                position_ids = attention_mask.long().cumsum(-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
-                max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
-                mrope_position_deltas = max_position_ids + 1 - attention_mask.shape[-1]
+        total_input_ids = input_ids
+        if attention_mask is None:
+            attention_mask = torch.ones_like(total_input_ids)
+        position_ids = torch.ones(
+            3,
+            input_ids.shape[0],
+            input_ids.shape[1],
+            dtype=input_ids.dtype,
+            device=input_ids.device,
+        )
+        image_index, video_index = 0, 0
+        attention_mask = attention_mask.to(total_input_ids.device)
+        for i, input_ids in enumerate(total_input_ids):
+            # If we don't have `mm_token_type_ids`, then we have text tokens only (== 0)
+            if mm_token_type_ids is None:
+                input_token_type = torch.zeros_like(input_ids)[attention_mask[i] == 1].tolist()
             else:
-                position_ids = (
-                    torch.arange(input_ids.shape[1], device=input_ids.device)
-                    .view(1, 1, -1)
-                    .expand(3, input_ids.shape[0], -1)
-                )
-                mrope_position_deltas = torch.zeros(
-                    [input_ids.shape[0], 1],
-                    device=input_ids.device,
-                    dtype=input_ids.dtype,
-                )
+                input_token_type = mm_token_type_ids[i, attention_mask[i] == 1].tolist()
+            input_type_group = []
+            for key, group in itertools.groupby(enumerate(input_token_type), lambda x: x[1]):
+                group = list(group)
+                start_index = group[0][0]
+                end_index = group[-1][0] + 1
+                input_type_group.append((key, start_index, end_index))
+            llm_pos_ids_list = []
+            for modality_type, start_idx, end_idx in input_type_group:
+                st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
+                # text == 0
+                if modality_type == 0:
+                    text_len = end_idx - start_idx
+                    llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
+                # image == 1, video == 2
+                else:
+                    grid_thw = image_grid_thw if modality_type == 1 else video_grid_thw
+                    mm_index = image_index if modality_type == 1 else video_index
+                    t_merge_size = 1 if modality_type == 1 else temporal_merge_size
+                    t, h, w = (
+                        grid_thw[mm_index][0],
+                        grid_thw[mm_index][1],
+                        grid_thw[mm_index][2],
+                    )
+                    llm_grid_t, llm_grid_h, llm_grid_w = (
+                        t.item() // t_merge_size,
+                        h.item() // spatial_merge_size,
+                        w.item() // spatial_merge_size,
+                    )
+                    for t_idx in range(llm_grid_t):
+                        t_index = torch.tensor(t_idx).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten()
+                        h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(1, -1, llm_grid_w).flatten()
+                        w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(1, llm_grid_h, -1).flatten()
+                        llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
+                    if modality_type == 1:
+                        image_index += 1
+                    else:
+                        video_index += 1
+            llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
+            position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
+            mrope_position_deltas.append(llm_positions.max() + 1 - len(total_input_ids[i]))
+        mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
+        return position_ids, mrope_position_deltas
 
-            return position_ids, mrope_position_deltas
-
+    @can_return_tuple
+    @auto_docstring
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: torch.LongTensor | None = None
-    ):
-        """
-        Encodes videos into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input videos.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-        """
-        video_embeds = self.vision_tower(pixel_values_videos, video_grid_thw)
-        video_embeds = self.resampler_model(video_embeds, video_grid_thw)
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
+        video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw)
         split_sizes = (
             video_grid_thw.prod(-1)
             // self.vision_tower.spatial_merge_size**2
             // self.resampler_model.temporal_merge_size
         ).tolist()
         video_embeds = torch.split(video_embeds, split_sizes)
-        return video_embeds
+        video_outputs.pooler_output = video_embeds
+        return video_outputs
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-        """
-        image_embeds = self.vision_tower(pixel_values, image_grid_thw)
-        image_embeds = self.resampler_model(image_embeds, image_grid_thw)
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        image_outputs = self.vision_tower(pixel_values, image_grid_thw, return_dict=True, **kwargs)
+        image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
         split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
         image_embeds = torch.split(image_embeds, split_sizes)
-        return image_embeds
+        image_outputs.pooler_output = image_embeds
+        return image_outputs
+
+    def compute_3d_position_ids(
+        self,
+        input_ids: torch.Tensor | None,
+        inputs_embeds: torch.Tensor | None,
+        image_grid_thw: torch.Tensor | None = None,
+        video_grid_thw: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: torch.Tensor | None = None,
+        mm_token_type_ids: torch.Tensor | None = None,
+    ) -> torch.Tensor | None:
+        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        can_compute_mrope = input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None)
+
+        if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
+            position_ids, rope_deltas = self.get_rope_index(
+                input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                attention_mask=attention_mask,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+            self.rope_deltas = rope_deltas
+        # Use pre-calculated rope-deltas to infer correct 3D position ids
+        elif self.rope_deltas is not None:
+            batch_size, seq_length, _ = inputs_embeds.shape
+            if attention_mask is not None:
+                position_ids = attention_mask.long().cumsum(-1) - 1
+                position_ids = position_ids.masked_fill(attention_mask == 0, 0)
+                position_ids = position_ids.view(1, batch_size, -1).repeat(3, 1, 1).to(inputs_embeds.device)
+            else:
+                position_ids = torch.arange(past_key_values_length, past_key_values_length + seq_length)
+                position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1).to(inputs_embeds.device)
+            delta = self.rope_deltas.repeat_interleave(batch_size // self.rope_deltas.shape[0], dim=0)
+            position_ids = (position_ids + delta).to(device=inputs_embeds.device)
+        else:
+            # Can't build correct 3D positions. Let the model infer it from `cache_position`
+            position_ids = None
+        return position_ids
 
     @auto_docstring
     @can_return_tuple
@@ -1333,7 +1285,7 @@ class Ernie4_5_VL_MoeModel(Qwen2_5_VLModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -1341,7 +1293,7 @@ class Ernie4_5_VL_MoeModel(Qwen2_5_VLModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, return_dict=True).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -1349,15 +1301,14 @@ class Ernie4_5_VL_MoeModel(Qwen2_5_VLModel):
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         if position_ids is None:
-            position_ids = self.get_position_ids(
+            position_ids = self.compute_3d_position_ids(
                 input_ids=input_ids,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-                inputs_embeds=inputs_embeds,
                 image_grid_thw=image_grid_thw,
                 video_grid_thw=video_grid_thw,
-                cache_position=cache_position,
                 mm_token_type_ids=mm_token_type_ids,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
             )
 
         outputs = self.language_model(
@@ -1392,6 +1343,14 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Glm4vForConditionalGeneration, Gen
         self.num_experts = config.text_config.moe_num_experts
         self.num_experts_per_tok = config.text_config.moe_k
 
+    @auto_docstring
+    def get_video_features(self, **super_kwargs):
+        return super().get_video_features(**super_kwargs)
+
+    @auto_docstring
+    def get_image_features(self, **super_kwargs):
+        return super().get_image_features(**super_kwargs)
+
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1403,7 +1362,6 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Glm4vForConditionalGeneration, Gen
         video_grid_thw=None,
         use_cache=True,
         is_first_iteration=False,
-        # Intentionally ignore position ids to force custom cache logic
         position_ids=None,
         **kwargs,
     ):
@@ -1417,19 +1375,8 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Glm4vForConditionalGeneration, Gen
             video_grid_thw=video_grid_thw,
             use_cache=use_cache,
             is_first_iteration=is_first_iteration,
+            position_ids=position_ids,
             **kwargs,
-        )
-
-        # Using our own caching with rope delta
-        model_inputs["position_ids"] = self.model.get_position_ids(
-            input_ids=model_inputs.get("input_ids"),
-            attention_mask=model_inputs.get("attention_mask"),
-            past_key_values=model_inputs.get("past_key_values"),
-            inputs_embeds=model_inputs.get("inputs_embeds"),
-            image_grid_thw=model_inputs.get("image_grid_thw"),
-            video_grid_thw=model_inputs.get("video_grid_thw"),
-            cache_position=model_inputs.get("cache_position"),
-            mm_token_type_ids=model_inputs.get("mm_token_type_ids"),
         )
 
         if not is_first_iteration and use_cache:

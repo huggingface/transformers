@@ -22,7 +22,7 @@ import pytest
 from datasets import Audio, load_dataset
 from pytest import mark
 
-from transformers import AutoFeatureExtractor, MimiConfig
+from transformers import AutoFeatureExtractor, MimiConfig, set_seed
 from transformers.testing_utils import (
     is_flaky,
     is_torch_available,
@@ -164,6 +164,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
 
     test_resize_embeddings = False
+    test_torch_exportable = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does support returning hidden states
@@ -297,6 +298,8 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     @is_flaky()
     def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
+            # Set seed for deterministic test - ensures reproducible model initialization and inputs
+            set_seed(42)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 

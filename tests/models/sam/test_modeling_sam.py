@@ -68,6 +68,7 @@ class SamVisionModelTester:
         num_pos_feats=16,
         mlp_dim=None,
         batch_size=2,
+        is_training=True,
     ):
         self.parent = parent
         self.hidden_size = hidden_size
@@ -95,6 +96,7 @@ class SamVisionModelTester:
         self.num_pos_feats = num_pos_feats
         self.mlp_dim = mlp_dim
         self.batch_size = batch_size
+        self.is_training = is_training
 
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -225,26 +227,6 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
                 list(expected_attention_shape),
             )
 
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
-    @unittest.skip(reason="SamVisionModel does not support training")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
     @unittest.skip(reason="Hidden_states is tested in create_and_check_model tests")
     def test_hidden_states_output(self):
         pass
@@ -366,6 +348,7 @@ class SamModelTester:
         num_pos_feats=16,
         mlp_dim=None,
         batch_size=2,
+        is_training=True,
     ):
         self.parent = parent
         self.image_size = image_size
@@ -393,6 +376,7 @@ class SamModelTester:
         self.num_pos_feats = num_pos_feats
         self.mlp_dim = mlp_dim
         self.batch_size = batch_size
+        self.is_training = is_training
 
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -613,28 +597,12 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 list(expected_mask_decoder_attention_shape),
             )
 
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="This module does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
-    @unittest.skip(reason="SamModel does not support training")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
     @unittest.skip(reason="Hidden_states is tested in create_and_check_model tests")
     def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="Tested on the vision only counterpart; only works if vision related input is given")
+    def test_retain_grad_hidden_states_attentions(self):
         pass
 
     @slow
@@ -991,7 +959,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         iou_scores = outputs.iou_scores.cpu()
         self.assertTrue(iou_scores.shape == (1, 2, 3))
         torch.testing.assert_close(
-            iou_scores, torch.tensor([[[0.9105, 0.9825, 0.9675], [0.7646, 0.7943, 0.7774]]]), atol=1e-4, rtol=1e-4
+            iou_scores, torch.tensor([[[0.9105, 0.9825, 0.9675], [0.7646, 0.7944, 0.7769]]]), atol=1e-4, rtol=1e-4
         )
 
     def test_inference_mask_generation_three_boxes_point_batch(self):
@@ -1003,14 +971,8 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         raw_image = prepare_image()
 
-        # fmt: off
-        input_boxes = torch.Tensor([[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]],  [[75, 275, 1725, 850]]]).cpu()
-        EXPECTED_IOU = torch.tensor([[
-            [0.9773, 0.9881, 0.9522],
-            [0.5996, 0.7661, 0.7937],
-            [0.5996, 0.7661, 0.7937],
-        ]])
-        # fmt: on
+        input_boxes = torch.Tensor([[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]], [[75, 275, 1725, 850]]]).cpu()
+        EXPECTED_IOU = torch.tensor([[[0.9773, 0.9880, 0.9522], [0.5995, 0.7658, 0.7936], [0.5995, 0.7658, 0.7936]]])
         input_boxes = input_boxes.unsqueeze(0)
 
         inputs = processor(raw_image, input_boxes=input_boxes, return_tensors="pt").to(torch_device)

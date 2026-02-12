@@ -108,9 +108,9 @@ class SolarOpenConfig(Glm4MoeConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
-        "layers.*.mlp.experts.down_proj": "local_rowwise",
-        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
 
     def __init__(
@@ -183,28 +183,6 @@ class SolarOpenConfig(Glm4MoeConfig):
         del self.first_k_dense_replace
         del self.use_qk_norm
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
-        default_rope_params = RopeParameters(
-            rope_type="yarn",
-            factor=2.0,
-            original_max_position_embeddings=65_536,
-        )
-
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or self.rope_parameters
-        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
-
-        # Standardize and validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
-
-        if "partial_rotary_factor" in kwargs:
-            self.rope_parameters.setdefault("partial_rotary_factor", kwargs["partial_rotary_factor"])
-            ignore_keys_at_rope_validation = {"partial_rotary_factor"}
-
-        self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
-        return kwargs
-
 
 class SolarOpenDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: SolarOpenConfig, layer_idx: int):
@@ -227,11 +205,11 @@ class SolarOpenRMSNorm(Glm4MoeRMSNorm):
 
 
 class SolarOpenPreTrainedModel(Glm4MoePreTrainedModel):
-    pass
+    _keys_to_ignore_on_load_unexpected = None
 
 
 class SolarOpenModel(Glm4MoeModel):
-    _keys_to_ignore_on_load_unexpected = []
+    pass
 
 
 class SolarOpenForCausalLM(Glm4MoeForCausalLM):

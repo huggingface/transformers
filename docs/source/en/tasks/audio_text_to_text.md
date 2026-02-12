@@ -59,7 +59,7 @@ This guide will show you how to:
 
 > [!TIP]
 
-To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/audio-text-to-text)
+To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/audio-text-to-text).
 
 
 Before you begin, make sure you have all the necessary libraries installed:

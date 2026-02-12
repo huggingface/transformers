@@ -798,7 +798,7 @@ class XLMModel(XLMPreTrainedModel):
             if input_ids is not None:
                 lengths = (input_ids != self.pad_index).sum(dim=1).long()
             else:
-                lengths = torch.tensor([slen] * bs, device=device)
+                lengths = torch.full((bs,), slen, device=device, dtype=torch.long)
 
         # check inputs
         assert lengths.size(0) == bs
@@ -959,6 +959,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
         # They are calculated on the fly on XLMModel.forward()
         kwargs.pop("token_type_ids", None)
         kwargs.pop("attention_mask", None)
+        kwargs.pop("position_ids", None)
 
         # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
         for key, value in kwargs.items():

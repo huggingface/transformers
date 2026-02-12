@@ -402,6 +402,14 @@ class Sam3Config(PreTrainedConfig):
 
     This is the main configuration class that combines all sub-configurations for the SAM3 model.
 
+    <Tip>
+
+    SAM3 checkpoints with `model_type="sam3_video"` are compatible with `Sam3Model` since the video variant weights
+    are a superset of the image-only model weights. You may see a warning about model type mismatch when loading
+    such checkpoints, which can be safely ignored in this case.
+
+    </Tip>
+
     Args:
         vision_config (`dict` or `Sam3VisionConfig`, *optional*):
             Configuration for the vision encoder.

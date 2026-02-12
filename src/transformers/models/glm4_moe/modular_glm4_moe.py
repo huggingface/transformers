@@ -137,9 +137,8 @@ class Glm4MoeConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
-        "layers.*.mlp.experts.down_proj": "local_rowwise",
-        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.experts.gate_up_proj": "rowwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -281,11 +280,11 @@ class Glm4MoeDecoderLayer(DeepseekV3DecoderLayer):
 
 
 class Glm4MoePreTrainedModel(DeepseekV3PreTrainedModel):
-    pass
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
 
 
 class Glm4MoeModel(DeepseekV3Model):
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
+    pass
 
 
 class Glm4MoeForCausalLM(DeepseekV3ForCausalLM):
