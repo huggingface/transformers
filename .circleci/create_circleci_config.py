@@ -121,7 +121,7 @@ class CircleCIJob:
             test_file = os.path.join("test_preparation" , f"{self.job_name}_test_list.txt")
             print("Looking for ", test_file)
             if os.path.exists(test_file):
-                with open(test_file) as f:
+                with open(test_file, encoding="utf-8") as f:
                     expanded_tests = f.read().strip().split("\n")
                 self.tests_to_run = expanded_tests
                 print("Found:", expanded_tests)
@@ -399,7 +399,7 @@ def create_circleci_config(folder=None):
     else:
         # For public repo. (e.g. `transformers`)
         config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
-    with open(os.path.join(folder, "generated_config.yml"), "w") as f:
+    with open(os.path.join(folder, "generated_config.yml"), "w", encoding="utf-8") as f:
         f.write(yaml.dump(config, sort_keys=False, default_flow_style=False).replace("' << pipeline", " << pipeline").replace(">> '", " >>"))
 
 
