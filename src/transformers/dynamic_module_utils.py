@@ -771,7 +771,7 @@ def check_python_requirements(path_or_repo_id, requirements_file="requirements.t
     try:
         requirements = cached_file(path_or_repo_id=path_or_repo_id, filename=requirements_file, **kwargs)
         with open(requirements, "r") as f:
-            requirements = f.readlines()
+            requirements = list(f)
 
         for requirement in requirements:
             requirement = requirement.strip()

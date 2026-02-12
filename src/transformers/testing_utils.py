@@ -2417,7 +2417,7 @@ def nested_simplify(obj, decimals=3):
 
 def check_json_file_has_correct_format(file_path):
     with open(file_path) as f:
-        lines = f.readlines()
+        lines = list(f)
         if len(lines) == 1:
             # length can only be 1 if dict is empty
             assert lines[0] == "{}"
