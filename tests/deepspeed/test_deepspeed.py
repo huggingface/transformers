@@ -511,6 +511,73 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                         self.assertEqual(len(param.shape), 3, f"down_proj should be 3D, got {param.shape}")
                         self.assertEqual(param.shape[0], 8, f"Should have 8 experts, got {param.shape[0]}")
 
+    def test_init_zero3_qwen3next_loads_checkpoint_weights(self):
+        # Regression test: ZeRO-3 + conversion mapping must not drop non-converted keys when loading
+        # checkpoints already saved in the new packed-expert format.
+        import tempfile
+
+        from transformers import Qwen3NextConfig, Qwen3NextForCausalLM
+
+        tiny_config = Qwen3NextConfig(
+            vocab_size=128,
+            hidden_size=64,
+            intermediate_size=128,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            head_dim=16,
+            max_position_embeddings=256,
+            linear_conv_kernel_dim=4,
+            linear_key_head_dim=16,
+            linear_value_head_dim=16,
+            linear_num_key_heads=4,
+            linear_num_value_heads=4,
+            decoder_sparse_step=1,
+            moe_intermediate_size=32,
+            shared_expert_intermediate_size=32,
+            num_experts_per_tok=2,
+            num_experts=8,
+        )
+
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+
+        dschf = HfDeepSpeedConfig(ds_config)
+        self.assertTrue(dschf.is_zero3())
+        self.assertTrue(is_deepspeed_zero3_enabled())
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            with LoggingLevel(logging.INFO):
+                with mockenv_context(**self.dist_env_1_gpu):
+                    model = Qwen3NextForCausalLM(tiny_config)
+                    model.save_pretrained(tmpdirname)
+
+            with LoggingLevel(logging.INFO):
+                with mockenv_context(**self.dist_env_1_gpu):
+                    loaded_model, loading_info = Qwen3NextForCausalLM.from_pretrained(
+                        tmpdirname, output_loading_info=True, dtype=torch.float32
+                    )
+
+            self.assertEqual(len(loading_info["missing_keys"]), 0)
+            self.assertEqual(len(loading_info["unexpected_keys"]), 0)
+            self.assertEqual(len(loading_info["mismatched_keys"]), 0)
+
+            import deepspeed
+
+            packed_params = [
+                param
+                for name, param in loaded_model.named_parameters()
+                if "mlp.experts.gate_up_proj" in name or "mlp.experts.down_proj" in name
+            ]
+            self.assertGreater(len(packed_params), 0)
+            with deepspeed.zero.GatheredParameters(packed_params, modifier_rank=0):
+                for param in packed_params:
+                    self.assertEqual(len(param.shape), 3)
+
     def test_init_zero3_variance_scaling(self):
         """
         Tests whether variance scaling initializations (`lecun_normal_`, `default_flax_embed_init_`) work correctly

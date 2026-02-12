@@ -383,11 +383,15 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
             # Only WeightConverter needs convert(); WeightRenaming is just a simple rename
             if not isinstance(mapping, WeightConverter):
                 continue
-            realized_value, _ = mapping.convert(
+            converted = mapping.convert(
                 renamed_key,
                 model=model,
                 config=model.config,
             )
+            # Be robust to both conversion APIs:
+            # - legacy: (converted_tensors, conversion_errors)
+            # - current: converted_tensors
+            realized_value = converted[0] if isinstance(converted, tuple) else converted
             for target_name, param in realized_value.items():
                 param = param[0] if isinstance(param, list) else param
                 new_state_dict[target_name] = param
