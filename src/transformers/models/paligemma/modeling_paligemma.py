@@ -35,6 +35,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_paligemma import PaliGemmaConfig
 
@@ -139,9 +140,10 @@ def token_type_ids_mask_function(
     return inner_mask
 
 
+@deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
 def create_causal_mask_mapping(
     config: PreTrainedConfig,
-    input_embeds: torch.Tensor,
+    inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
     cache_position: torch.Tensor,
     past_key_values: Cache | None,
@@ -163,7 +165,7 @@ def create_causal_mask_mapping(
 
     mask_kwargs = {
         "config": config.get_text_config(),
-        "input_embeds": input_embeds,
+        "inputs_embeds": inputs_embeds,
         "attention_mask": attention_mask,
         "cache_position": cache_position,
         "past_key_values": past_key_values,
@@ -190,7 +192,7 @@ def create_causal_mask_mapping(
                 "passing `token_type_ids` to the model to prevent bad attention masking."
             )
             # NOTE: this branch can't be reached when training because `token_type_ids` is required as a model input.
-            token_type_ids = torch.ones_like(input_embeds)[:, :, 0]
+            token_type_ids = torch.ones_like(inputs_embeds)[:, :, 0]
 
     # Logic originally copied from Gemma3. It holds up for Paligemma as well because Paligemma assumes up to one image
     # per prompt AND we reverse `token_type_ids` above. Gemma3 uses a bidirectional mask for images, tagged through
@@ -587,9 +589,10 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         return model_inputs
 
     @staticmethod
+    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def create_masks_for_generate(
         config: PreTrainedConfig,
-        input_embeds: torch.Tensor,
+        inputs_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None,
         cache_position: torch.Tensor,
         past_key_values: Cache | None,
@@ -601,7 +604,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         # Uses the overwritten `create_masks_for_generate` with `token_type_ids` masking
         return create_causal_mask_mapping(
             config,
-            input_embeds,
+            inputs_embeds,
             attention_mask,
             cache_position,
             past_key_values,
