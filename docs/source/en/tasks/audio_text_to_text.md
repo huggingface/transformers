@@ -27,7 +27,7 @@ This guide will show you how to:
 
 <Tip>
 
-To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/audio-text-to-text)
+To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/audio-text-to-text).
 
 </Tip>
 
