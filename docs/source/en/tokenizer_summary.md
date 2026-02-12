@@ -77,7 +77,10 @@ Including all Unicode characters would make the base vocabulary enormous. Byte-l
 ```
 
 2. Unigram scores how well the current vocabulary tokenizes the training data at each step.
-3. For every token, Unigram measures how much removing the token would increase the overall loss. For example, removing `"pu"` barely affects the loss because `"pug"` and `"pun"` can still be tokenized as `["p", "ug"]` and `["p", "un"]`. But removing `"ug"` would significantly increase the loss because `"hug"`, `"pug"`, and `"hugs"` all rely on it.
+3. For every token, Unigram measures how much removing the token would increase the overall loss. For example, removing `"pu"` barely affects the loss because `"pug"` and `"pun"` can still be tokenized as `["p", "ug"]` and `["p", "un"]`.
+
+    But removing `"ug"` would significantly increase the loss because `"hug"`, `"pug"`, and `"hugs"` all rely on it.
+
 4. Unigram removes the tokens with the lowest loss increase, usually the bottom 10-20%. Base characters always remain so any word can be tokenized. Tokens like `"bu"`, `"pu"`, `"gs"`, `"pug"`, and `"bun"` are removed because they contributed least to the overall likelihood.
 
 ```text
@@ -108,13 +111,26 @@ At decoding, SentencePiece concatenates all tokens and replaces `"▁"` with a s
 
 [WordPiece](https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/37842.pdf) is the tokenization algorithm for BERT-family models like DistilBERT and Electra.
 
-It's similar to [BPE](#byte-pair-encoding-bpe) and iteratively merges pairs from the bottom up, but differs in how it selects pairs. WordPiece merges pairs that maximize the likelihood of the training data.
+It's similar to [BPE](#byte-pair-encoding-bpe) and iteratively merges pairs from the bottom up, but differs in how it selects pairs.
+
+```text
+("h" "u" "g", 10), ("p" "u" "g", 5), ("p" "u" "n", 12), ("b" "u" "n", 4), ("h" "u" "g" "s", 5)
+```
+
+WordPiece merges pairs that maximize the likelihood of the training data.
 
 ```text
 score("u", "g") = frequency("ug") / (frequency("u") × frequency("g"))
 ```
 
-The score favors merging pairs where the combined token appears more often than expected from the individual token frequencies. BPE simply merges whichever pair appears the most. WordPiece measures how *informative* each merge is. Two tokens that appear together far more than chance predicts get merged first.
+| pair | frequency | score |
+|---|---|---|
+| `"u"` + `"g"` | 20 | 20 / (36 × 20) = 0.028 |
+| `"u"` + `"n"` | 16 | 16 / (36 × 16) = 0.028 |
+| `"h"` + `"u"` | 15 | 15 / (15 × 36) = 0.028 |
+| `"g"` + `"s"` | 5 | 5 / (20 × 5) = 0.050 |
+
+The score favors merging `"g"` and `"s"` where the combined token appears more often than expected from the individual token frequencies. BPE simply merges whichever pair appears the most. WordPiece measures how *informative* each merge is. Two tokens that appear together far more than chance predicts get merged first.
 
 ## Word-level tokenization
 
