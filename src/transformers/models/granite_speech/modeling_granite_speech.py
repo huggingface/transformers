@@ -307,18 +307,32 @@ class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     def forward(
-        self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+        self, hidden_states: torch.Tensor,
+        output_hidden_states: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
         hidden_states = self.input_linear(hidden_states)
+        if output_hidden_states:
+            all_hidden_states = [hidden_states]
+        else:
+            all_hidden_states = None
         for idx, layer in enumerate(self.layers, start=1):
             hidden_states = layer(hidden_states, attention_dists=self.attention_dists)
+            if all_hidden_states is not None:
+                all_hidden_states.append(hidden_states)
 
             if idx == self.num_layers // 2:
                 hidden_states_mid = hidden_states.clone()
                 hidden_states_mid = self.out(hidden_states_mid)
                 hidden_states += self.out_mid(nn.Softmax(dim=-1)(hidden_states_mid))
-
-        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
+        if all_hidden_states is not None:
+            all_hidden_states = tuple(all_hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states,
+                                          hidden_states=all_hidden_states)
 
 
 @auto_docstring(
@@ -371,8 +385,14 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
     def get_audio_features(
         self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        audio_outputs = self.encoder(input_features, return_dict=True, **kwargs)
-        projected_embeds = self.projector(audio_outputs.last_hidden_state)
+        use_hidden_states = (self.config.encoder_hidden_layers is not None) and (len(self.config.encoder_hidden_layers) > 0)
+        audio_outputs = self.encoder(input_features, output_hidden_states=use_hidden_states,
+                                     return_dict=True, **kwargs)
+        encoder_embeds = audio_outputs.last_hidden_state
+        if use_hidden_states and (audio_outputs.hidden_states is not None):
+            other_embeds = [audio_outputs.hidden_states[l] for l in self.config.encoder_hidden_layers]
+            encoder_embeds = torch.cat(other_embeds + [encoder_embeds], dim=-1)
+        projected_embeds = self.projector(encoder_embeds)
         audio_outputs.pooler_output = projected_embeds
 
         return audio_outputs

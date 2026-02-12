@@ -129,6 +129,8 @@ class GraniteSpeechConfig(PreTrainedConfig):
             Downsample rate for the audio feature extractor.
         window_size (`int`, *optional*, defaults to 15):
             Window size for the audio feature projector.
+        encoder_hidden_layers (`list[int]`, *optional*):
+            List of hidden layers from the encoder that are used by the projector.
 
     Example:
 
@@ -165,6 +167,7 @@ class GraniteSpeechConfig(PreTrainedConfig):
         has_lora_adapter=True,
         downsample_rate=5,
         window_size=15,
+        encoder_hidden_layers=None,
         **kwargs,
     ):
         if isinstance(text_config, dict):
@@ -191,6 +194,12 @@ class GraniteSpeechConfig(PreTrainedConfig):
         self.has_lora_adapter = has_lora_adapter
         self.downsample_rate = downsample_rate
         self.window_size = window_size
+        if encoder_hidden_layers is not None:
+            # Verify that all the required hidden layers are in the encoder's range
+            for idx in encoder_hidden_layers:
+                if (idx < 0) or (idx >= encoder_config.num_layers):
+                    raise ValueError(f"Asking for hidden layer {idx} but number of layers is {encoder_config.num_labels}.")
+        self.encoder_hidden_layers = encoder_hidden_layers
         super().__init__(**kwargs)
 
 
