@@ -372,7 +372,7 @@ def main():
             if os.path.exists(gitignore_path):
                 with open(gitignore_path, "r", encoding="utf-8", errors="replace") as f:
                     content = f.read()
-            existing_lines = set(line.strip() for line in content.splitlines()) if content else set()
+            existing_lines = {line.strip() for line in content.splitlines()} if content else set()
             with open(gitignore_path, "a", encoding="utf-8") as f:
                 if content and not content.endswith("\n"):
                     f.write("\n")
