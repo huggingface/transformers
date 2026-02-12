@@ -213,6 +213,10 @@ class VibeVoiceConfig(PretrainedConfig):
         rms_norm_eps=1e-5,
         hidden_act="silu",
         frequency_embedding_size=256,
+        noise_scheduler_class="DPMSolverMultistepScheduler",
+        noise_scheduler_config=None,
+        classifier_free_guidance_scale=1.3,
+        num_diffusion_steps=10,
         **kwargs,
     ):
         if isinstance(acoustic_tokenizer_config, dict):
@@ -254,6 +258,16 @@ class VibeVoiceConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.hidden_act = hidden_act
         self.frequency_embedding_size = frequency_embedding_size
+
+        self.classifier_free_guidance_scale = classifier_free_guidance_scale
+        self.num_diffusion_steps = num_diffusion_steps
+        self.noise_scheduler_class = noise_scheduler_class
+        if noise_scheduler_config is None:
+            noise_scheduler_config={
+                "beta_schedule": "squaredcos_cap_v2",
+                "prediction_type": "v_prediction",
+            }
+        self.noise_scheduler_config = noise_scheduler_config
 
         # NOTE (ebezzam) to use LlamaMLP via modular
         self.mlp_bias = False
@@ -633,6 +647,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         input_values: torch.FloatTensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
         acoustic_loss_mask: torch.BoolTensor | None = None,
+        noise_scheduler: object | None = None,
         **kwargs,
     ) -> tuple | VibeVoiceCausalLMOutputWithPast:
         r"""
@@ -642,6 +657,8 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             Masks indicating valid input frames.
         acoustic_loss_mask (`torch.BoolTensor`, *optional*):
             Mask to compute diffusion loss only on specific acoustic tokens.
+        noise_scheduler (*optional*):
+            Noise scheduler which is needed use for computing noise targets for the diffusion loss.
         """
 
         outputs = self.model(

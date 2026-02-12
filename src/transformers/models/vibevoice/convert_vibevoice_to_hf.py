@@ -348,35 +348,15 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         raise ValueError(f"{len(load_result.missing_keys)} missing keys: {load_result.missing_keys}")
     logger.info("Full model checkpoint loaded successfully")
 
-    # Calculate speech token IDs from tokenizer for generation config
-    audio_bos_token_id = tokenizer.convert_tokens_to_ids("<|vision_start|>")
-    audio_eos_token_id = tokenizer.convert_tokens_to_ids("<|vision_end|>")
-    audio_diffusion_id = tokenizer.convert_tokens_to_ids("<|vision_pad|>")
-
     # Set default generation config
     vibevoice_model.generation_config._from_model_config = False
-    vibevoice_model.generation_config.audio_bos_token_id = audio_bos_token_id
-    vibevoice_model.generation_config.audio_eos_token_id = audio_eos_token_id
-    vibevoice_model.generation_config.audio_diffusion_id = audio_diffusion_id
-    vibevoice_model.generation_config.bos_token_id = tokenizer.bos_token_id
-    vibevoice_model.generation_config.eos_token_id = tokenizer.eos_token_id
-    vibevoice_model.generation_config.pad_token_id = tokenizer.pad_token_id
-    vibevoice_model.generation_config.cfg_scale = 1.3
-    vibevoice_model.n_diffusion_steps = 10
-    vibevoice_model.generation_config.do_sample = False
-    vibevoice_model.generation_config.noise_scheduler_class = "DPMSolverMultistepScheduler"
-    vibevoice_model.generation_config.noise_scheduler_config = {
-        "num_train_timesteps": 1000,
-        "beta_schedule": "squaredcos_cap_v2",
-        "prediction_type": "v_prediction",
-    }
-    vibevoice_model.generation_config.n_diffusion_steps = 10
     if "7B" in checkpoint:
         vibevoice_model.generation_config.max_new_tokens = 20250
         vibevoice_model.generation_config.max_length = 20250
     else:
         vibevoice_model.generation_config.max_new_tokens = 40500
         vibevoice_model.generation_config.max_length = 40500
+    vibevoice_model.generation_config.do_sample = False
 
     logger.info(f"Saving model to {output_dir}")
     vibevoice_model.save_pretrained(output_dir, max_shard_size=max_shard_size)

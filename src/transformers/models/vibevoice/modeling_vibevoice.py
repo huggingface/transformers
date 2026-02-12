@@ -688,6 +688,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         input_values: torch.FloatTensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
         acoustic_loss_mask: torch.BoolTensor | None = None,
+        noise_scheduler: object | None = None,
         **kwargs,
     ) -> tuple | VibeVoiceCausalLMOutputWithPast:
         r"""
@@ -697,6 +698,8 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             Masks indicating valid input frames.
         acoustic_loss_mask (`torch.BoolTensor`, *optional*):
             Mask to compute diffusion loss only on specific acoustic tokens.
+        noise_scheduler (*optional*):
+            Noise scheduler which is needed use for computing noise targets for the diffusion loss.
         """
 
         outputs = self.model(

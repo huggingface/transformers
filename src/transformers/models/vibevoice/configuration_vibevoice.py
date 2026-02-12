@@ -185,6 +185,10 @@ class VibeVoiceConfig(PretrainedConfig):
         rms_norm_eps=1e-5,
         hidden_act="silu",
         frequency_embedding_size=256,
+        noise_scheduler_class="DPMSolverMultistepScheduler",
+        noise_scheduler_config=None,
+        classifier_free_guidance_scale=1.3,
+        num_diffusion_steps=10,
         **kwargs,
     ):
         if isinstance(acoustic_tokenizer_config, dict):
@@ -198,6 +202,8 @@ class VibeVoiceConfig(PretrainedConfig):
             acoustic_tokenizer_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer"]()
         self.acoustic_tokenizer_config = acoustic_tokenizer_config
 
+        # TODO after VibeVoice ASR is merged: https://github.com/huggingface/transformers/pull/43625
+        # can use the encoder only object `VibeVoiceAsrEncoderModel` from there
         if isinstance(semantic_tokenizer_config, dict):
             semantic_tokenizer_config["model_type"] = semantic_tokenizer_config.get(
                 "model_type", "vibevoice_semantic_tokenizer"
@@ -224,6 +230,16 @@ class VibeVoiceConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.hidden_act = hidden_act
         self.frequency_embedding_size = frequency_embedding_size
+
+        self.classifier_free_guidance_scale = classifier_free_guidance_scale
+        self.num_diffusion_steps = num_diffusion_steps
+        self.noise_scheduler_class = noise_scheduler_class
+        if noise_scheduler_config is None:
+            noise_scheduler_config = {
+                "beta_schedule": "squaredcos_cap_v2",
+                "prediction_type": "v_prediction",
+            }
+        self.noise_scheduler_config = noise_scheduler_config
 
         # NOTE (ebezzam) to use LlamaMLP via modular
         self.mlp_bias = False

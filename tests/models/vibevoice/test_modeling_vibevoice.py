@@ -103,7 +103,7 @@ class VibeVoiceModelTester:
             "model_type": "vibevoice_acoustic_tokenizer",
             "hidden_size": 16,
             "kernel_size": 3,
-            "n_filters": 4,
+            "num_filters": 4,
             "downsampling_ratios": [2],
             "depths": [1, 1],
         },
@@ -112,7 +112,7 @@ class VibeVoiceModelTester:
             "channels": 1,
             "hidden_size": 32,
             "kernel_size": 3,
-            "n_filters": 4,
+            "num_filters": 4,
             "downsampling_ratios": [2],
             "depths": [1, 1],
         },
@@ -357,8 +357,8 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
                 min_new_tokens=max_new_tokens,
                 do_sample=False,
                 return_dict_in_generate=True,
-                cfg_scale=1.3,
-                n_diffusion_steps=10,
+                classifier_free_guidance_scale=1.3,
+                num_diffusion_steps=10,
             )
         self.assertIsNotNone(output.sequences)
         self.assertEqual(output.sequences.shape[0], self.model_tester.batch_size)
@@ -374,7 +374,8 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
 
 class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_checkpoint = "bezzam/VibeVoice-1.5B"
+        # self.model_checkpoint = "bezzam/VibeVoice-1.5B"
+        self.model_checkpoint = "bezzam/VibeVoice-1.5Bv2"
         self.sampling_rate = 24000
 
     def tearDown(self):
@@ -426,10 +427,15 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         # Generate audio
+        from diffusers import DPMSolverMultistepScheduler
+        noise_scheduler = DPMSolverMultistepScheduler(
+            beta_schedule="squaredcos_cap_v2", prediction_type="v_prediction"
+        )
         generated_speech = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
             return_dict_in_generate=False,
+            noise_scheduler=noise_scheduler,
         )
         generated_speech = generated_speech[0].cpu().float()
 
@@ -494,10 +500,15 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).to(torch_device, dtype=next(model.parameters()).dtype)
 
         # Generate audio
+        from diffusers import DPMSolverMultistepScheduler
+        noise_scheduler = DPMSolverMultistepScheduler(
+            beta_schedule="squaredcos_cap_v2", prediction_type="v_prediction"
+        )
         generated_speech = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
             return_dict_in_generate=False,
+            noise_scheduler=noise_scheduler,
         )
         generated_speech = generated_speech[0].cpu().float()
 
