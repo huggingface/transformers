@@ -293,19 +293,19 @@ class ServeCompletionsMixin:
 
         # Finish reason: the last payload should have a finish reason of "length" or "stop", all others should be empty
         finish_reasons = [payload.choices[0].finish_reason for payload in all_payloads]
-        self.assertTrue(finish_reasons[-1] in ["length", "stop"])
-        self.assertTrue(all(reason is None for reason in finish_reasons[:-1]))
+        assert finish_reasons[-1] in ["length", "stop"]
+        assert all(reason is None for reason in finish_reasons[:-1])
 
         # Role: the first payload should have a role of "assistant", all others should be empty
         roles = [payload.choices[0].delta.role for payload in all_payloads]
-        self.assertEqual(roles[0], "assistant")
-        self.assertTrue(all(role is None for role in roles[1:]))
+        assert roles[0] == "assistant"
+        assert all(role is None for role in roles[1:])
 
         # Content: the first and the last payload shouldn't have content (role and finish reason). It may be empty
         # in some other payload positions, e.g. tool calls.
         contents = [payload.choices[0].delta.content for payload in all_payloads]
-        self.assertTrue(contents[0] is None and contents[-1] is None)
-        self.assertTrue(any(content is not None for content in contents[1:-1]))
+        assert contents[0] is None and contents[-1] is None
+        assert any(content is not None for content in contents[1:-1])
         # TODO: add "usage" field to output and test it
 
     def test_generation_config_in_request(self):
@@ -325,7 +325,7 @@ class ServeCompletionsMixin:
         output_text = "".join([text for text in contents if text is not None])
         # The generation config sets greedy decoding, so the output is reproducible. By default, `Qwen/Qwen3-0.6B`
         # sets `do_sample=True`
-        self.assertEqual(output_text, '<think>\nOkay, the user just asked, "')
+        assert output_text == '<think>\nOkay, the user just asked, "'
 
     def test_early_return_due_to_length(self):
         request = {
@@ -337,7 +337,7 @@ class ServeCompletionsMixin:
 
         all_payloads = self.run_server(request)
         last_payload = all_payloads[-1]
-        self.assertTrue(last_payload.choices[0]["finish_reason"] == "length")
+        assert last_payload.choices[0]["finish_reason"] == "length"
 
     def test_continues_until_stop(self):
         request = {
@@ -349,7 +349,7 @@ class ServeCompletionsMixin:
 
         all_payloads = self.run_server(request)
         last_payload = all_payloads[-1]
-        self.assertTrue(last_payload.choices[0]["finish_reason"] == "stop")
+        assert last_payload.choices[0]["finish_reason"] == "stop"
 
 
 class ServeCompletionsGenerateMockTests(unittest.TestCase):
@@ -361,7 +361,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             {"role": "user", "content": "Can you help me write tests?"},
         ]
         outputs = Serve.get_processor_inputs_from_inbound_messages(messages, modality)
-        self.assertListEqual(expected_outputs, outputs)
+        assert expected_outputs == outputs
 
         messages_with_type = [
             {"role": "user", "content": [{"type": "text", "text": "How are you doing?"}]},
@@ -374,7 +374,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             {"role": "user", "content": [{"type": "text", "text": "Can you help me write tests?"}]},
         ]
         outputs = Serve.get_processor_inputs_from_inbound_messages(messages_with_type, modality)
-        self.assertListEqual(expected_outputs, outputs)
+        assert expected_outputs == outputs
 
         messages_multiple_text = [
             {
@@ -392,7 +392,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             },
         ]
         outputs = Serve.get_processor_inputs_from_inbound_messages(messages_multiple_text, modality)
-        self.assertListEqual(expected_outputs_multiple_text, outputs)
+        assert expected_outputs_multiple_text == outputs
 
     def test_processor_inputs_from_inbound_messages_vlm_text_only(self):
         modality = Modality.VLM
@@ -414,7 +414,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
         ]
 
         outputs = Serve.get_processor_inputs_from_inbound_messages(messages, modality)
-        self.assertListEqual(expected_outputs, outputs)
+        assert expected_outputs == outputs
 
     def test_processor_inputs_from_inbound_messages_vlm_text_and_image_in_base_64(self):
         modality = Modality.VLM
@@ -464,19 +464,19 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             expected_output_content = expected_output["content"]
             output_content = output["content"]
 
-            self.assertEqual(type(expected_output_content), type(output_content))
+            assert type(expected_output_content) == type(output_content)
 
             if isinstance(expected_output_content, list):
                 for expected_output_content_item, output_content_item in zip(expected_output_content, output_content):
-                    self.assertIn("type", expected_output_content_item)
-                    self.assertIn("type", output_content_item)
-                    self.assertTrue(expected_output_content_item["type"] == output_content_item["type"])
+                    assert "type" in expected_output_content_item
+                    assert "type" in output_content_item
+                    assert expected_output_content_item["type"] == output_content_item["type"]
 
                     if expected_output_content_item["type"] == "text":
-                        self.assertEqual(expected_output_content_item["text"], output_content_item["text"])
+                        assert expected_output_content_item["text"] == output_content_item["text"]
 
                     if expected_output_content_item["type"] == "image":
-                        self.assertTrue(os.path.exists(output_content_item["url"]))
+                        assert os.path.exists(output_content_item["url"])
             else:
                 raise ValueError("VLMs should only receive content as lists.")
 
@@ -549,28 +549,28 @@ class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.Te
 
         # The first payload should contain the role
         roles = [payload.choices[0].delta.role for payload in all_payloads]
-        self.assertEqual(roles[0], "assistant")
-        self.assertTrue(all(role is None for role in roles[1:]))
+        assert roles[0] == "assistant"
+        assert all(role is None for role in roles[1:])
 
         # All other payloads (except the last one) should be tool call related, for this specific request
         contents = [payload.choices[0].delta.content for payload in all_payloads]
-        self.assertTrue(all(content is None for content in contents))
+        assert all(content is None for content in contents)
 
         # The first tool call delta should contain the tool name. The other tool call deltas should contain the tool
         # arguments.
         tool_calls = [payload.choices[0].delta.tool_calls[0] for payload in all_payloads[1:-1]]
         first_tool_call = tool_calls[0]
-        self.assertEqual(first_tool_call["function"]["name"], "flux1_schnell_infer")
-        self.assertEqual(first_tool_call["function"]["arguments"], None)
+        assert first_tool_call["function"]["name"] == "flux1_schnell_infer"
+        assert first_tool_call["function"]["arguments"] == None
         other_tool_calls = tool_calls[1:]
-        self.assertTrue(all(tool_call["function"]["name"] is None for tool_call in other_tool_calls))
-        self.assertTrue(all(tool_call["function"]["arguments"] is not None for tool_call in other_tool_calls))
+        assert all(tool_call["function"]["name"] is None for tool_call in other_tool_calls)
+        assert all(tool_call["function"]["arguments"] is not None for tool_call in other_tool_calls)
 
         # Finally, the last payload should contain a finish reason
         finish_reasons = [payload.choices[0].finish_reason for payload in all_payloads]
         # TODO: I think the finish reason for a tool call is different? double check this
-        self.assertTrue(finish_reasons[-1] in ["stop", "length"])
-        self.assertTrue(all(reason is None for reason in finish_reasons[:-1]))
+        assert finish_reasons[-1] in ["stop", "length"]
+        assert all(reason is None for reason in finish_reasons[:-1])
 
 
 def _get_scheduler(serve_command):
@@ -657,7 +657,7 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
                 full_text += content if content is not None else ""
 
         # Verify that the system prompt went through.
-        self.assertTrue(
+        assert (
             full_text.startswith(
                 "I can assist you with a wide range of tasks, from answering questions to providing information on various sports topics."
             )
@@ -681,7 +681,7 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
                 full_text += content if content is not None else ""
 
         # Verify that the system prompt went through.
-        self.assertTrue(
+        assert (
             full_text.startswith(
                 "I can assist you with a wide range of tasks, from answering questions to providing information on various sports topics."
             )
@@ -695,8 +695,8 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
 
         # Ensure the server is up before sending a request
         response = _call_healthcheck(base_url)
-        self.assertIsNotNone(response, "Failed to connect to the server health endpoint.")
-        self.assertEqual(response.status_code, 200)
+        assert response is not None, "Failed to connect to the server health endpoint."
+        assert response.status_code == 200
 
         _open_stream_and_cancel(base_url, request_id)
 
@@ -713,10 +713,9 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
             time.sleep(0.1)  # don't spin the CPU
 
         is_cancelled = scheduler.request_is_cancelled(request_id)
-        self.assertTrue(
-            is_cancelled,
+        assert is_cancelled, (
             f"Request {request_id} still present in scheduler after cancellation "
-            f"(last seen at {last_seen}). Check cancellation propagation.",
+            f"(last seen at {last_seen}). Check cancellation propagation."
         )
 
 
@@ -751,22 +750,22 @@ class ServeResponsesMixin:
         all_payloads = self.run_server(request)
 
         # Allow variable number of delta events depending on tokenizer/streamer behavior
-        self.assertGreaterEqual(len(all_payloads), 8)
+        assert len(all_payloads) >= 8
 
         # Start markers
-        self.assertIsInstance(all_payloads[0], ResponseCreatedEvent)
-        self.assertIsInstance(all_payloads[1], ResponseInProgressEvent)
-        self.assertIsInstance(all_payloads[2], ResponseOutputItemAddedEvent)
-        self.assertIsInstance(all_payloads[3], ResponseContentPartAddedEvent)
+        assert isinstance(all_payloads[0], ResponseCreatedEvent)
+        assert isinstance(all_payloads[1], ResponseInProgressEvent)
+        assert isinstance(all_payloads[2], ResponseOutputItemAddedEvent)
+        assert isinstance(all_payloads[3], ResponseContentPartAddedEvent)
 
         # At least one delta event during streaming
-        self.assertTrue(any(isinstance(p, ResponseTextDeltaEvent) for p in all_payloads[4:-4]))
+        assert any(isinstance(p, ResponseTextDeltaEvent) for p in all_payloads[4:-4])
 
         # Closing markers
-        self.assertIsInstance(all_payloads[-4], ResponseTextDoneEvent)
-        self.assertIsInstance(all_payloads[-3], ResponseContentPartDoneEvent)
-        self.assertIsInstance(all_payloads[-2], ResponseOutputItemDoneEvent)
-        self.assertIsInstance(all_payloads[-1], ResponseCompletedEvent)
+        assert isinstance(all_payloads[-4], ResponseTextDoneEvent)
+        assert isinstance(all_payloads[-3], ResponseContentPartDoneEvent)
+        assert isinstance(all_payloads[-2], ResponseOutputItemDoneEvent)
+        assert isinstance(all_payloads[-1], ResponseCompletedEvent)
 
     # TODO: one test for each request flag, to confirm it is working as expected
     # TODO: speed-based test to confirm that KV cache is working across requests
@@ -810,8 +809,8 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
         # Verify that the system prompt went through.
         # With deterministic decoding, exact wording can still vary across versions.
         # Assert non-empty output and that it references sports.
-        self.assertTrue(len(full_text) > 0)
-        self.assertIn("sports", full_text.lower())
+        assert len(full_text) > 0
+        assert "sports" in full_text.lower()
 
     @slow
     def test_non_streaming_request(self):
@@ -829,16 +828,16 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
         )
 
         # Should be a single Response object with completed status and one output item containing text
-        self.assertIsInstance(resp, OpenAIResponse)
-        self.assertEqual(resp.status, "completed")
-        self.assertTrue(len(resp.output) >= 1)
+        assert isinstance(resp, OpenAIResponse)
+        assert resp.status == "completed"
+        assert len(resp.output) >= 1
         first_item = resp.output[0]
-        self.assertEqual(first_item.type, "message")
-        self.assertEqual(first_item.status, "completed")
-        self.assertTrue(len(first_item.content) >= 1)
+        assert first_item.type == "message"
+        assert first_item.status == "completed"
+        assert len(first_item.content) >= 1
         first_part = first_item.content[0]
-        self.assertEqual(first_part.type, "output_text")
-        self.assertIsInstance(first_part.text, str)
+        assert first_part.type == "output_text"
+        assert isinstance(first_part.text, str)
 
 
 class ServeInfrastructureTest(unittest.TestCase):
@@ -852,6 +851,6 @@ class ServeInfrastructureTest(unittest.TestCase):
     def test_healthcheck(self):
         """Tests that the healthcheck endpoint works."""
         response = _call_healthcheck(f"http://localhost:{self.port}")
-        self.assertIsNotNone(response, "Failed to connect to the server health endpoint.")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"status": "ok"})
+        assert response is not None, "Failed to connect to the server health endpoint."
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
