@@ -134,7 +134,6 @@ class HybridMambaAttentionDynamicCache:
     def __getitem__(self, layer_idx):
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
-    @torch.no_grad()
     def update(
         self,
         key_states: torch.Tensor,
@@ -1200,7 +1199,7 @@ class BambaModel(BambaPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,

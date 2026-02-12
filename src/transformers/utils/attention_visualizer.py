@@ -210,12 +210,12 @@ class AttentionMaskVisualizer:
         model.train()
 
         batch_size, seq_length = attention_mask.shape
-        input_embeds = torch.zeros((batch_size, seq_length, model.config.hidden_size), dtype=self.model.dtype)
+        inputs_embeds = torch.zeros((batch_size, seq_length, model.config.hidden_size), dtype=self.model.dtype)
         cache_position = torch.arange(seq_length)
 
         causal_mask = create_causal_mask(
             config=model.config,
-            input_embeds=input_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=None,
