@@ -141,12 +141,12 @@ def _build_checkpoint_conversion_mapping():
         ],
         "qwen3_vl_moe": [
             WeightConverter(
-                source_patterns="mlp.experts.gate_up_proj",
+                source_patterns="mlp.experts.gate_up_proj$",
                 target_patterns="mlp.experts.gate_up_proj",
                 operations=[Transpose(1, 2)],
             ),
             WeightConverter(
-                source_patterns="mlp.experts.down_proj",
+                source_patterns="mlp.experts.down_proj$",
                 target_patterns="mlp.experts.down_proj",
                 operations=[Transpose(1, 2)],
             ),
