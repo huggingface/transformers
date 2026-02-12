@@ -4720,9 +4720,30 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, byte_count in total_byte_count.items():
         if device.type in ["cuda", "xpu"]:
-            torch_accelerator_module = getattr(torch, device.type)
-            index = device.index if device.index is not None else torch_accelerator_module.current_device()
-            device_memory = torch_accelerator_module.mem_get_info(index)[0]
+            accelerator_module = getattr(torch, device.type)
+            index = device.index if device.index is not None else accelerator_module.current_device()
+            free_device_memory, total_device_memory = accelerator_module.mem_get_info(index)
+            unused_memory = accelerator_module.memory_reserved(index) - accelerator_module.memory_allocated(index)
+            # If we have reserved but unused memory, we can lower the allocation we want to make, but only if it's still
+            # higher than the unused memory. This is because otherwise torch will use that unused memory when performing
+            # our own allocation, thus not allocating any new memory from the GPU. For example if byte_count=6 GiB,
+            # unused_memory=4 GiB, then we cannot allocate only 2 GiB as this would *likely* (may not be exact, due to
+            # fragmentation issues) simply use the pool of 4 GiB unused memory that is available. In those cases, it's better
+            # to allocate more than the technically only 2 GiB required
+            if byte_count - unused_memory > unused_memory:
+                byte_count = byte_count - unused_memory
+            # Minimum amount that will trigger new gpu allocation, even if it's technically "too much" compared to what we need
+            elif byte_count - unused_memory > 1.5 * 1024**3:
+                # Nothing we can do here, the memory will need to fill itself as we load params, but we cannot reallocate
+                # from gpu until the unused memory is not filled
+                if unused_memory + 1 > free_device_memory:
+                    byte_count = 0
+                # We allocate the minimum amount that will force new gpu allocation, even if it's technically "too much"
+                else:
+                    byte_count = unused_memory + 1
+            # If we only need to reallocate less than 1.5 GiB of what is already allocated, then don't allocate more
+            else:
+                byte_count = 0
             # Allow up to (max device memory - 1.2 GiB) in resource-constrained hardware configurations. Trying to reserve more
             # than that amount might sometimes lead to unnecessary cuda/xpu OOM, if the last parameter to be loaded on the device is large,
             # and the remaining reserved memory portion is smaller than the param size -> torch will then try to fully re-allocate all
@@ -4730,12 +4751,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
             # to OOM. See https://github.com/huggingface/transformers/issues/37436#issuecomment-2808982161 for more details.
             # Note that we use an absolute value instead of device proportion here, as a 8GiB device could still allocate too much
             # if using e.g. 90% of device size, while a 140GiB device would allocate too little
-            byte_count = min(byte_count, max(0, int(device_memory - 1.2 * 1024**3)))
-            # If there is *unused* reserved cuda/xpu memory, we can skip/reduce the allocation.
-            unused_memory = torch_accelerator_module.memory_reserved(
-                index
-            ) - torch_accelerator_module.memory_allocated(index)
-            byte_count = int(max(0, byte_count - unused_memory))
+            byte_count = min(byte_count, total_device_memory - 1.2 * 1024**3)
         # We divide by 2 here as we allocate in fp16
         _ = torch.empty(int(byte_count // 2), dtype=torch.float16, device=device, requires_grad=False)
 
