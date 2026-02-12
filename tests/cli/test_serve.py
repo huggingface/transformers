@@ -464,7 +464,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             expected_output_content = expected_output["content"]
             output_content = output["content"]
 
-            assert type(expected_output_content) is type(output_content)
+            assert isinstance(output_content, type(expected_output_content))
 
             if isinstance(expected_output_content, list):
                 for expected_output_content_item, output_content_item in zip(expected_output_content, output_content):
