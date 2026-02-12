@@ -333,9 +333,8 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
     @pytest.mark.generate
     def test_vibevoice_generate_max_new_tokens(self):
         """
-        Test VibeVoice-specific generation to ensure sequences output has correct length.
-        This test verifies that the returned sequences include the original input_ids
-        plus the newly generated tokens as specified by max_new_tokens.
+        Verifies that the returned sequences include the original input_ids plus the newly generated tokens as
+        specified by max_new_tokens.
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config, input_ids, attention_mask = config_and_inputs
@@ -357,7 +356,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
                 min_new_tokens=max_new_tokens,
                 do_sample=False,
                 return_dict_in_generate=True,
-                classifier_free_guidance_scale=1.3,
+                guidance_scale=1.3,
                 num_diffusion_steps=10,
             )
         self.assertIsNotNone(output.sequences)

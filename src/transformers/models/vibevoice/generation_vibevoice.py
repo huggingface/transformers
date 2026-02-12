@@ -76,7 +76,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             report the progress of the audio generation. The function takes a tensor argument `p` of shape `(n, 2)`,
             where `n` is the batch size. `p[i, 0]` contains the current generation step for batch item `i`, and `p[i, 1]`
             contains the maximum generation steps for batch item `i`. No return value is expected.
-        - `classifier_free_guidance_scale`: A classifier-free guidance scale to use during generation.
         - `num_diffusion_steps`: Number of diffusion steps to use during generation of each audio chunk.
         """
         # Call the base class method to load from default generation_config.json
@@ -100,8 +99,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         generation_config.noise_scheduler = noise_scheduler
         if "monitor_progress" in model_kwargs:
             generation_config.monitor_progress = model_kwargs.pop("monitor_progress")
-        if "classifier_free_guidance_scale" in model_kwargs:
-            generation_config.classifier_free_guidance_scale = model_kwargs.pop("classifier_free_guidance_scale")
         if "num_diffusion_steps" in model_kwargs:
             generation_config.num_diffusion_steps = model_kwargs.pop("num_diffusion_steps")
         return generation_config, model_kwargs
@@ -159,7 +156,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         # *************** VibeVoice specific ***************
         noise_scheduler = generation_config.noise_scheduler
         monitor_progress = getattr(generation_config, "monitor_progress", None)
-        classifier_free_guidance_scale = getattr(generation_config, "classifier_free_guidance_scale", self.config.classifier_free_guidance_scale)
+        guidance_scale = generation_config.guidance_scale
         num_diffusion_steps = getattr(generation_config, "num_diffusion_steps", self.config.num_diffusion_steps)
         diffusion_head_device = next(self.model.diffusion_head.parameters()).device
         if do_sample:
@@ -315,10 +312,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 negative_input_ids[diffusion_start_idx, -1] = self.config.audio_bos_token_id
                 if negative_model_kwargs.get("past_key_values") is not None:
                     for layer in negative_model_kwargs["past_key_values"].layers:
-                        k_cache = layer.keys
-                        v_cache = layer.values
-                        k_cache[diffusion_start_idx, :, -1, :] = k_cache[diffusion_start_idx, :, 0, :].clone()
-                        v_cache[diffusion_start_idx, :, -1, :] = v_cache[diffusion_start_idx, :, 0, :].clone()
+                        if layer.keys is not None and layer.values is not None:
+                            layer.keys[diffusion_start_idx, :, -1, :] = layer.keys[diffusion_start_idx, :, 0, :].clone()
+                            layer.values[diffusion_start_idx, :, -1, :] = layer.values[diffusion_start_idx, :, 0, :].clone()
 
             diffusion_mask = unfinished_sequences.bool() & (next_tokens == self.config.audio_diffusion_token_id)
             diffusion_idx = diffusion_mask.nonzero(as_tuple=True)[0].cpu()
@@ -346,7 +342,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                         combined, timestep.repeat(combined.shape[0]).to(combined), condition=condition
                     )
                     cond_eps, uncond_eps = torch.split(eps, half_noise_latent_length, dim=0)
-                    half_eps = uncond_eps + classifier_free_guidance_scale * (cond_eps - uncond_eps)
+                    half_eps = uncond_eps + guidance_scale * (cond_eps - uncond_eps)
                     eps = torch.cat([half_eps, half_eps], dim=0)
                     noisy_audio_latent = noise_scheduler.step(eps, timestep, noisy_audio_latent).prev_sample
                 audio_latent = noisy_audio_latent[:half_noise_latent_length].unsqueeze(1)

@@ -40,57 +40,35 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 # fmt: off
 STATE_DICT_MAPPING = {
-    # Language model
-    r"^model\.language_model\.embed_tokens\.weight":                                r"model.language_model.embed_tokens.weight",
-    r"^model\.language_model\.layers\.(\d+)\.self_attn\.(q|k|v|o)_proj\.":         r"model.language_model.layers.\1.self_attn.\2_proj.",
-    r"^model\.language_model\.layers\.(\d+)\.mlp\.(gate|up|down)_proj\.":          r"model.language_model.layers.\1.mlp.\2_proj.",
-    r"^model\.language_model\.layers\.(\d+)\.input_layernorm\.":                   r"model.language_model.layers.\1.input_layernorm.",
-    r"^model\.language_model\.layers\.(\d+)\.post_attention_layernorm\.":          r"model.language_model.layers.\1.post_attention_layernorm.",
-    r"^model\.language_model\.norm\.":                                              r"model.language_model.norm.",
-    r"^lm_head\.":                                                                  r"lm_head.",
+    # Tokenizer encoder: downsample_layers.0 -> stem, downsample_layers.N -> conv_layers.N-1
+    r"(?:semantic|acoustic)_tokenizer\.encoder\.downsample_layers\.0\.0\.conv\.":    r"TOKENIZER_TYPE_tokenizer.encoder.stem.conv.conv.",
+    r"(?:semantic|acoustic)_tokenizer\.encoder\.stages\.0\.":                        r"TOKENIZER_TYPE_tokenizer.encoder.stem.stage.",
+    r"(?:semantic|acoustic)_tokenizer\.encoder\.downsample_layers\.(\d+)\.0\.conv\.": r"TOKENIZER_TYPE_tokenizer.encoder.conv_layers.PLACEHOLDER.conv.conv.",
+    r"(?:semantic|acoustic)_tokenizer\.encoder\.stages\.(\d+)\.":                    r"TOKENIZER_TYPE_tokenizer.encoder.conv_layers.PLACEHOLDER.stage.",
+    r"(?:semantic|acoustic)_tokenizer\.encoder\.head\.conv\.":                       r"TOKENIZER_TYPE_tokenizer.encoder.head.",
 
-    # Semantic tokenizer (encoder only)
-    r"^model\.semantic_tokenizer\.encoder\.downsample_layers\.0\.0\.conv\.":       r"model.semantic_tokenizer.encoder.stem.conv.conv.",
-    r"^model\.semantic_tokenizer\.encoder\.stages\.0\.":                           r"model.semantic_tokenizer.encoder.stem.stage.",
-    r"^model\.semantic_tokenizer\.encoder\.downsample_layers\.(\d+)\.0\.conv\.":   r"model.semantic_tokenizer.encoder.conv_layers.PLACEHOLDER.conv.conv.",
-    r"^model\.semantic_tokenizer\.encoder\.stages\.(\d+)\.":                       r"model.semantic_tokenizer.encoder.conv_layers.PLACEHOLDER.stage.",
-    r"^model\.semantic_tokenizer\.encoder\.head\.conv\.":                          r"model.semantic_tokenizer.encoder.head.",
+    # Acoustic tokenizer decoder: upsample_layers.0 -> stem, upsample_layers.N -> conv_layers.N-1
+    r"acoustic_tokenizer\.decoder\.upsample_layers\.0\.0\.conv\.conv\.":           r"acoustic_tokenizer.decoder.stem.conv.conv.",
+    r"acoustic_tokenizer\.decoder\.stages\.0\.":                                   r"acoustic_tokenizer.decoder.stem.stage.",
+    r"acoustic_tokenizer\.decoder\.upsample_layers\.(\d+)\.0\.convtr\.convtr\.":  r"acoustic_tokenizer.decoder.conv_layers.PLACEHOLDER.convtr.convtr.",
+    r"acoustic_tokenizer\.decoder\.stages\.(\d+)\.":                               r"acoustic_tokenizer.decoder.conv_layers.PLACEHOLDER.stage.",
+    r"acoustic_tokenizer\.decoder\.head\.conv\.":                                  r"acoustic_tokenizer.decoder.head.",
 
-    # Acoustic tokenizer (encoder and decoder)
-    r"^model\.acoustic_tokenizer\.encoder\.downsample_layers\.0\.0\.conv\.":       r"model.acoustic_tokenizer.encoder.stem.conv.conv.",
-    r"^model\.acoustic_tokenizer\.encoder\.stages\.0\.":                           r"model.acoustic_tokenizer.encoder.stem.stage.",
-    r"^model\.acoustic_tokenizer\.encoder\.downsample_layers\.(\d+)\.0\.conv\.":   r"model.acoustic_tokenizer.encoder.conv_layers.PLACEHOLDER.conv.conv.",
-    r"^model\.acoustic_tokenizer\.encoder\.stages\.(\d+)\.":                       r"model.acoustic_tokenizer.encoder.conv_layers.PLACEHOLDER.stage.",
-    r"^model\.acoustic_tokenizer\.encoder\.head\.conv\.":                          r"model.acoustic_tokenizer.encoder.head.",
-    r"^model\.acoustic_tokenizer\.decoder\.upsample_layers\.0\.0\.conv\.conv\.":   r"model.acoustic_tokenizer.decoder.stem.conv.conv.",
-    r"^model\.acoustic_tokenizer\.decoder\.stages\.0\.":                           r"model.acoustic_tokenizer.decoder.stem.stage.",
-    r"^model\.acoustic_tokenizer\.decoder\.upsample_layers\.(\d+)\.0\.convtr\.convtr\.": r"model.acoustic_tokenizer.decoder.conv_layers.PLACEHOLDER.convtr.convtr.",
-    r"^model\.acoustic_tokenizer\.decoder\.stages\.(\d+)\.":                       r"model.acoustic_tokenizer.decoder.conv_layers.PLACEHOLDER.stage.",
-    r"^model\.acoustic_tokenizer\.decoder\.head\.conv\.":                          r"model.acoustic_tokenizer.decoder.head.",
-
-    # Connectors
-    r"^model\.acoustic_connector\.fc1\.":                                           r"model.acoustic_connector.fc1.",
-    r"^model\.acoustic_connector\.fc2\.":                                           r"model.acoustic_connector.fc2.",
-    r"^model\.acoustic_connector\.norm\.":                                          r"model.acoustic_connector.norm.",
-    r"^model\.semantic_connector\.fc1\.":                                           r"model.semantic_connector.fc1.",
-    r"^model\.semantic_connector\.fc2\.":                                           r"model.semantic_connector.fc2.",
-    r"^model\.semantic_connector\.norm\.":                                          r"model.semantic_connector.norm.",
-
-    # Diffusion head
-    r"^model\.prediction_head\.t_embedder\.mlp\.0\.":                              r"model.diffusion_head.timestep_embedder.layer_1.",
-    r"^model\.prediction_head\.t_embedder\.mlp\.2\.":                              r"model.diffusion_head.timestep_embedder.layer_2.",
-    r"^model\.prediction_head\.layers\.(\d+)\.adaLN_modulation\.1\.":              r"model.diffusion_head.layers.\1.linear.",
-    r"^model\.prediction_head\.final_layer\.adaLN_modulation\.1\.":                r"model.diffusion_head.final_layer.linear_1.",
-    r"^model\.prediction_head\.final_layer\.linear\.":                             r"model.diffusion_head.final_layer.linear_2.",
-    r"^model\.prediction_head\.":                                                   r"model.diffusion_head.",
+    # Diffusion head renaming
+    r"prediction_head\.t_embedder\.mlp\.0\.":                                      r"diffusion_head.timestep_embedder.layer_1.",
+    r"prediction_head\.t_embedder\.mlp\.2\.":                                      r"diffusion_head.timestep_embedder.layer_2.",
+    r"prediction_head\.layers\.(\d+)\.adaLN_modulation\.1\.":                     r"diffusion_head.layers.\1.linear.",
+    r"prediction_head\.final_layer\.adaLN_modulation\.1\.":                       r"diffusion_head.final_layer.linear_1.",
+    r"prediction_head\.final_layer\.linear\.":                                     r"diffusion_head.final_layer.linear_2.",
+    r"prediction_head\.":                                                          r"diffusion_head.",
 
     # Latent factors
-    r"^model\.speech_scaling_factor":                                               r"latent_scaling_factor",
-    r"^model\.speech_bias_factor":                                                  r"latent_bias_factor",
+    r"^model\.speech_scaling_factor":                                              r"latent_scaling_factor",
+    r"^model\.speech_bias_factor":                                                 r"latent_bias_factor",
 
-    # Clean up nested conv layers - must be after above mappings
-    r"mixer\.conv\.conv\.conv\.":                                                   r"mixer.conv.",
-    r"\.conv\.conv\.conv\.":                                                        r".conv.conv.",
+    # Clean up nested conv layers (must be after above mappings)
+    r"mixer\.conv\.conv\.conv\.":                                                  r"mixer.conv.",
+    r"\.conv\.conv\.conv\.":                                                       r".conv.conv.",
 }
 # fmt: on
 
@@ -101,6 +79,11 @@ def map_old_key_to_new(old_key: str) -> str:
     for pattern, replacement in STATE_DICT_MAPPING.items():
         match = re.search(pattern, new_key)
         if match:
+            # Handle tokenizer type replacement for non-capturing group patterns
+            if "TOKENIZER_TYPE" in replacement:
+                tokenizer_type = "semantic" if "semantic_tokenizer" in new_key else "acoustic"
+                replacement = replacement.replace("TOKENIZER_TYPE", tokenizer_type)
+            
             # Handle index shifts for conv_layers (downsample_layers/upsample_layers indexed from 1)
             if "PLACEHOLDER" in replacement and match.groups():
                 layer_idx = int(match.group(1))
@@ -124,6 +107,28 @@ def convert_state_dict(original_state_dict: dict[str, Any]) -> dict[str, Any]:
 
     return new_state_dict
 
+
+def process_tokenizer_config(config_dict: dict[str, Any], keys_to_remove: list[str]) -> dict[str, Any]:
+    if "encoder_depths" in config_dict and isinstance(config_dict["encoder_depths"], str):
+        config_dict["encoder_depths"] = list(map(int, config_dict["encoder_depths"].split("-")))
+    
+    # Rename keys
+    if "layernorm_eps" in config_dict:
+        config_dict["rms_norm_eps"] = config_dict.pop("layernorm_eps")
+    if "encoder_ratios" in config_dict:
+        config_dict["downsampling_ratios"] = list(reversed(config_dict.pop("encoder_ratios")))
+    if "encoder_n_filters" in config_dict:
+        config_dict["num_filters"] = config_dict.pop("encoder_n_filters")
+    if "encoder_depths" in config_dict:
+        config_dict["depths"] = config_dict.pop("encoder_depths")
+    if "vae_dim" in config_dict:
+        config_dict["hidden_size"] = config_dict.pop("vae_dim")
+    
+    # Remove unwanted keys
+    for key in keys_to_remove:
+        config_dict.pop(key, None)
+    
+    return config_dict
 
 
 def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None, max_shard_size="2GB"):
@@ -165,84 +170,45 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     with open(config_path, "r") as f:
         model_config = json.load(f)
 
+    # fmt: off
     config_keys_to_remove = [
-        "decoder_depths",
-        "decoder_n_filters",
-        "decoder_ratios",
-        "std_dist_type",
-        "fix_std",
-        "pad_mode",
-        "conv_bias",
-        "causal",
-        "mixer_layer",
-        "layernorm",
-        "disable_last_norm",
-        "conv_norm",
-        "corpus_normalize",
+        "decoder_depths", "decoder_n_filters", "decoder_ratios", "std_dist_type", "fix_std", "pad_mode", "conv_bias",
+        "causal", "mixer_layer", "layernorm", "disable_last_norm", "conv_norm", "corpus_normalize",
         "layernorm_elementwise_affine",
     ]
+    # fmt: on
 
-    # Prepare semantic tokenizer config
-    semantic_config_dict = model_config.get("semantic_tokenizer_config", {}).copy()
-    if "encoder_depths" in semantic_config_dict and isinstance(semantic_config_dict["encoder_depths"], str):
-        semantic_config_dict["encoder_depths"] = list(map(int, semantic_config_dict["encoder_depths"].split("-")))
-    if "layernorm_eps" in semantic_config_dict:
-        semantic_config_dict["rms_norm_eps"] = semantic_config_dict.pop("layernorm_eps")
-    if "encoder_ratios" in semantic_config_dict:
-        semantic_config_dict["downsampling_ratios"] = list(reversed(semantic_config_dict.pop("encoder_ratios")))
-    if "encoder_n_filters" in semantic_config_dict:
-        semantic_config_dict["num_filters"] = semantic_config_dict.pop("encoder_n_filters")
-    if "encoder_depths" in semantic_config_dict:
-        semantic_config_dict["depths"] = semantic_config_dict.pop("encoder_depths")
-    if "vae_dim" in semantic_config_dict:
-        semantic_config_dict["hidden_size"] = semantic_config_dict.pop("vae_dim")
-    for key in config_keys_to_remove:
-        semantic_config_dict.pop(key, None)
-
-    # Prepare acoustic tokenizer config
-    acoustic_config_dict = model_config.get("acoustic_tokenizer_config", {}).copy()
-    if "encoder_depths" in acoustic_config_dict and isinstance(acoustic_config_dict["encoder_depths"], str):
-        acoustic_config_dict["encoder_depths"] = list(map(int, acoustic_config_dict["encoder_depths"].split("-")))
-    if "layernorm_eps" in acoustic_config_dict:
-        acoustic_config_dict["rms_norm_eps"] = acoustic_config_dict.pop("layernorm_eps")
-    if "encoder_ratios" in acoustic_config_dict:
-        acoustic_config_dict["downsampling_ratios"] = list(reversed(acoustic_config_dict.pop("encoder_ratios")))
-    if "encoder_n_filters" in acoustic_config_dict:
-        acoustic_config_dict["num_filters"] = acoustic_config_dict.pop("encoder_n_filters")
-    if "encoder_depths" in acoustic_config_dict:
-        acoustic_config_dict["depths"] = acoustic_config_dict.pop("encoder_depths")
-    if "vae_dim" in acoustic_config_dict:
-        acoustic_config_dict["hidden_size"] = acoustic_config_dict.pop("vae_dim")
-    if "fix_std" in acoustic_config_dict:
-        # Original hardcodes a scaling factor for vae_std: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L963
-        acoustic_config_dict["vae_std"] = acoustic_config_dict.pop("fix_std") / 0.8
-    for key in config_keys_to_remove:
-        acoustic_config_dict.pop(key, None)
-
-    # clean up diffusion head config
-    model_config["intermediate_size"] = int(
-        model_config["diffusion_head_config"].pop("head_ffn_ratio")
-        * model_config["diffusion_head_config"]["hidden_size"]
+    # Process tokenizer configs
+    semantic_config_dict = process_tokenizer_config(
+        model_config.get("semantic_tokenizer_config", {}).copy(), config_keys_to_remove
     )
-    model_config["diffusion_head_config"]["num_head_layers"] = model_config["diffusion_head_config"].pop("head_layers")
-    if model_config["diffusion_head_config"]["ddpm_beta_schedule"] == "cosine":
-        model_config["diffusion_head_config"]["ddpm_beta_schedule"] = "squaredcos_cap_v2"
-    for key in ["speech_vae_dim", "diffusion_type", "ddpm_batch_mul", "latent_size", "hidden_size"]:
-        model_config["diffusion_head_config"].pop(key, None)
+    acoustic_config_dict = process_tokenizer_config(
+        model_config.get("acoustic_tokenizer_config", {}).copy(), config_keys_to_remove
+    )
+    # Acoustic tokenizer has additional vae_std parameter
+    if "fix_std" in acoustic_config_dict:
+        acoustic_config_dict["vae_std"] = acoustic_config_dict.pop("fix_std") / 0.8
 
-    # -- flatten diffusion head config
-    for k, v in model_config["diffusion_head_config"].items():
-        model_config[k] = v
+    # Process diffusion head config
+    diffusion_config = model_config["diffusion_head_config"]
+    model_config["intermediate_size"] = int(diffusion_config.pop("head_ffn_ratio") * diffusion_config["hidden_size"])
+    diffusion_config["num_head_layers"] = diffusion_config.pop("head_layers")
+    if diffusion_config["ddpm_beta_schedule"] == "cosine":
+        diffusion_config["ddpm_beta_schedule"] = "squaredcos_cap_v2"
+    for key in ["speech_vae_dim", "diffusion_type", "ddpm_batch_mul", "latent_size", "hidden_size"]:
+        diffusion_config.pop(key, None)
+    # Flatten diffusion config into main config
+    model_config.update(diffusion_config)
     del model_config["diffusion_head_config"]
 
-    # clean up language model config
+    # Process language model config
     model_config["text_config"] = model_config.pop("decoder_config")
     model_config["text_config"]["dtype"] = model_config["text_config"].pop("torch_dtype")
 
-    # clean up main model config
+    # Clean up main model config
+    model_config["dtype"] = model_config.pop("torch_dtype", None)
     for key in ["acoustic_vae_dim", "semantic_vae_dim", "tie_word_embeddings"]:
         model_config.pop(key, None)
-    model_config["dtype"] = model_config.pop("torch_dtype", None)
 
     # 4) Update state dict to match HF model structure
     logger.info("Converting state dict")
@@ -357,6 +323,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         vibevoice_model.generation_config.max_new_tokens = 40500
         vibevoice_model.generation_config.max_length = 40500
     vibevoice_model.generation_config.do_sample = False
+    vibevoice_model.generation_config.guidance_scale = 1.3
 
     logger.info(f"Saving model to {output_dir}")
     vibevoice_model.save_pretrained(output_dir, max_shard_size=max_shard_size)

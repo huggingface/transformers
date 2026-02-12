@@ -187,7 +187,6 @@ class VibeVoiceConfig(PretrainedConfig):
         frequency_embedding_size=256,
         noise_scheduler_class="DPMSolverMultistepScheduler",
         noise_scheduler_config=None,
-        classifier_free_guidance_scale=1.3,
         num_diffusion_steps=10,
         **kwargs,
     ):
@@ -231,7 +230,6 @@ class VibeVoiceConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.frequency_embedding_size = frequency_embedding_size
 
-        self.classifier_free_guidance_scale = classifier_free_guidance_scale
         self.num_diffusion_steps = num_diffusion_steps
         self.noise_scheduler_class = noise_scheduler_class
         if noise_scheduler_config is None:
