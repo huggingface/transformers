@@ -293,7 +293,12 @@ class Transpose(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return Transpose(dim0=self.dim1, dim1=self.dim0, sentinel=self.sentinel)
+        return Transpose(
+            dim0=self.dim1,
+            dim1=self.dim0,
+            sentinel_dim=self.sentinel_dim,
+            sentinel_config_field=self.sentinel_config_field,
+        )
 
 
 class PermuteForRope(ConversionOps):
