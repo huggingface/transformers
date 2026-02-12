@@ -812,12 +812,19 @@ def spawn_tp_materialize(
 
 
 def dot_natural_key(s: str):
-    parts = s.split(".")
-    for i, p in enumerate(parts):
-        # whole-segment digits -> int; otherwise leave as str
+    """Sort key for state-dict names: split on ``"."`` and sort digit
+    segments numerically.  Each element is turned into a ``(type_rank, int_value, str_value)``
+    tuple so that segments that are numeric at one position but textual at
+    the same position in a different key never cause a ``TypeError`` during
+    comparison (ints and strs are not orderable in Python 3).
+    """
+    result = []
+    for p in s.split("."):
         if p.isdigit():
-            parts[i] = int(p)
-    return parts
+            result.append((0, int(p), p))
+        else:
+            result.append((1, 0, p))
+    return result
 
 
 @contextmanager
