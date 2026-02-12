@@ -3735,7 +3735,7 @@ def _format_tensor(t, indent_level=0, sci_mode=None):
     if not isinstance(t, torch.Tensor):
         t = torch.tensor(t)
 
-    # Simply make the processing below simpler (not to handle both case)
+    # Simply make the processing below simpler (not to handle both cases)
     is_scalar = False
     if t.ndim == 0:
         t = torch.tensor([t])
@@ -3774,8 +3774,8 @@ def _format_tensor(t, indent_level=0, sci_mode=None):
 
         return t_str
 
-    # Otherwise, we separate the representations of every elements along an outer dimension by new lines (after a `,`).
-    # The representatioin each element is obtained by calling this function recursively with current `indent_level`.
+    # Otherwise, we separate the representations of each element along an outer dimension by new lines (after a `,`).
+    # The representation of each element is obtained by calling this function recursively with current `indent_level`.
     else:
         t_str = str(t)
 
