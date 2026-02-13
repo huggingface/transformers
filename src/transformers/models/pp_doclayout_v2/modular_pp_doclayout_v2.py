@@ -34,9 +34,7 @@ from ..layoutlmv3.modeling_layoutlmv3 import (
     LayoutLMv3Encoder,
     LayoutLMv3Intermediate,
     LayoutLMv3Layer,
-    LayoutLMv3Output,
     LayoutLMv3SelfAttention,
-    LayoutLMv3SelfOutput,
     LayoutLMv3TextEmbeddings,
 )
 from ..pp_doclayout_v3.image_processing_pp_doclayout_v3_fast import PPDocLayoutV3ImageProcessorFast
@@ -143,20 +141,8 @@ class PPDocLayoutV2Config(PreTrainedConfig):
             The epsilon used by the batch normalization layers.
         backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `RTDetrResNetConfig()`):
             The configuration of the backbone model.
-        backbone (`str`, *optional*):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone.
-        use_timm_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
-            library.
         freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
             Whether to freeze the batch normalization layers in the backbone.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         encoder_hidden_dim (`int`, *optional*, defaults to 256):
             Dimension of the layers in hybrid encoder.
         encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
@@ -563,16 +549,36 @@ class PPDocLayoutV2ReadingOrderSelfAttention(LayoutLMv3SelfAttention):
         return outputs
 
 
-class PPDocLayoutV2ReadingOrderSelfOutput(LayoutLMv3SelfOutput):
-    pass
+class PPDocLayoutV2ReadingOrderSelfOutput(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.norm(hidden_states + input_tensor)
+        return hidden_states
 
 
 class PPDocLayoutV2ReadingOrderIntermediate(LayoutLMv3Intermediate):
     pass
 
 
-class PPDocLayoutV2ReadingOrderOutput(LayoutLMv3Output):
-    pass
+class PPDocLayoutV2ReadingOrderOutput(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.norm(hidden_states + input_tensor)
+        return hidden_states
 
 
 class PPDocLayoutV2ReadingOrderAttention(LayoutLMv3Attention):
@@ -621,6 +627,8 @@ class PPDocLayoutV2TextEmbeddings(LayoutLMv3TextEmbeddings):
     def __init__(self, config):
         super().__init__(config)
 
+        del self.LayerNorm
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         spatial_embed_dim = 4 * config.coordinate_size + 2 * config.shape_size
         self.spatial_proj = nn.Linear(spatial_embed_dim, config.hidden_size)
 
@@ -721,7 +729,7 @@ class PPDocLayoutV2ReadingOrder(nn.Module):
             label_proj = torch.zeros_like(bbox_embedding)
 
         final_embeddings = bbox_embedding + label_proj
-        final_embeddings = self.embeddings.LayerNorm(final_embeddings)
+        final_embeddings = self.embeddings.norm(final_embeddings)
         final_embeddings = self.embeddings.dropout(final_embeddings)
 
         attn_1d = pred_col_idx < (num_pred + 2).unsqueeze(1)

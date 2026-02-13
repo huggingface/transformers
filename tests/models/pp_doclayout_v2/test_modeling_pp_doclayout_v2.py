@@ -614,9 +614,7 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/PP-DocLayoutV2_safetensors"
         self.model = PPDocLayoutV2ForObjectDetection.from_pretrained(model_path).to(torch_device)
-        self.image_processor = (
-            PPDocLayoutV2ImageProcessorFast.from_pretrained(model_path)
-        )
+        self.image_processor = PPDocLayoutV2ImageProcessorFast.from_pretrained(model_path)
         url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
         self.image = Image.open(requests.get(url, stream=True).raw)
 
@@ -643,8 +641,8 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
         expected_shape_order_logits = torch.Size((1, 300, 300))
         expected_order_logits = torch.tensor(
             [
-                [-10000.0000,    43.8388,     -32.8785],
-                [-10000.0000, -10000.0000,    -63.9118],
+                [-10000.0000, 43.8388, -32.8785],
+                [-10000.0000, -10000.0000, -63.9118],
                 [-10000.0000, -10000.0000, -10000.0000],
             ]
         ).to(torch_device)
@@ -657,7 +655,22 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
         )[0]
 
         expected_scores = torch.tensor(
-            [0.9878, 0.9675, 0.9882, 0.9852, 0.9828, 0.9843, 0.9700, 0.8182, 0.5148, 0.8273, 0.8718, 0.9494, 0.8733, 0.9266]
+            [
+                0.9878,
+                0.9675,
+                0.9882,
+                0.9852,
+                0.9828,
+                0.9843,
+                0.9700,
+                0.8182,
+                0.5148,
+                0.8273,
+                0.8718,
+                0.9494,
+                0.8733,
+                0.9266,
+            ]
         ).to(torch_device)
         torch.testing.assert_close(results["scores"], expected_scores, rtol=2e-2, atol=2e-2)
 
@@ -666,10 +679,10 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
 
         expected_slice_boxes = torch.tensor(
             [
-                [ 335.3923,  184.2622,  896.4918,  654.4847],
-                [ 337.1364,  683.4911,  869.4224,  798.2716],
-                [ 335.7133,  843.0425,  891.1711, 1454.1525],
-                [ 920.4213,  185.5302, 1476.3922,  464.2497],
+                [335.3923, 184.2622, 896.4918, 654.4847],
+                [337.1364, 683.4911, 869.4224, 798.2716],
+                [335.7133, 843.0425, 891.1711, 1454.1525],
+                [920.4213, 185.5302, 1476.3922, 464.2497],
             ]
         ).to(torch_device)
         torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=2e-2, atol=2e-2)

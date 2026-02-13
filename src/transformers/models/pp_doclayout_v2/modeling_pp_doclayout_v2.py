@@ -45,7 +45,8 @@ from ...utils import (
     torch_compilable_check,
     torch_int,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_pp_doclayout_v2 import PPDocLayoutV2Config
 
 
@@ -213,13 +214,13 @@ class PPDocLayoutV2ReadingOrderSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = self.norm(hidden_states + input_tensor)
         return hidden_states
 
 
@@ -242,13 +243,13 @@ class PPDocLayoutV2ReadingOrderOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = self.norm(hidden_states + input_tensor)
         return hidden_states
 
 
@@ -464,8 +465,6 @@ class PPDocLayoutV2TextEmbeddings(nn.Module):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
-
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
@@ -482,7 +481,7 @@ class PPDocLayoutV2TextEmbeddings(nn.Module):
         self.y_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.coordinate_size)
         self.h_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.shape_size)
         self.w_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.shape_size)
-
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         spatial_embed_dim = 4 * config.coordinate_size + 2 * config.shape_size
         self.spatial_proj = nn.Linear(spatial_embed_dim, config.hidden_size)
 
@@ -861,7 +860,7 @@ class PPDocLayoutV2ReadingOrder(nn.Module):
             label_proj = torch.zeros_like(bbox_embedding)
 
         final_embeddings = bbox_embedding + label_proj
-        final_embeddings = self.embeddings.LayerNorm(final_embeddings)
+        final_embeddings = self.embeddings.norm(final_embeddings)
         final_embeddings = self.embeddings.dropout(final_embeddings)
 
         attn_1d = pred_col_idx < (num_pred + 2).unsqueeze(1)
@@ -1127,7 +1126,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -1664,7 +1662,8 @@ class PPDocLayoutV2HybridEncoder(PPDocLayoutV2PreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
         inputs_embeds=None,
@@ -1739,7 +1738,8 @@ class PPDocLayoutV2Decoder(PPDocLayoutV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         inputs_embeds=None,
