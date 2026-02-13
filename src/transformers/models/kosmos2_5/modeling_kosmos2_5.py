@@ -1491,7 +1491,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
         )
 
         # Pixel values are used only in the first iteration if available
-        # In subsquent iterations, they are already cached
+        # In subsequent iterations, they are already cached
         if past_key_values is not None and past_key_values.get_seq_length() > 0:
             model_inputs["image_embeds"] = None
             model_inputs["image_embeds_position_mask"] = None
