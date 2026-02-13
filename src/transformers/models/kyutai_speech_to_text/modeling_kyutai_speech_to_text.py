@@ -491,9 +491,8 @@ class KyutaiSpeechToTextAttention(nn.Module):
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
 
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-            attn_weights = attn_weights + causal_mask
+        if attention_mask is not None:
+            attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
@@ -860,7 +859,7 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
         if attention_mask is not None:
             causal_mask = create_causal_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 cache_position=cache_position,
                 past_key_values=past_key_values,

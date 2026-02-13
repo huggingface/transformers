@@ -32,7 +32,8 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..dinov2.modeling_dinov2 import (
     Dinov2Embeddings,
     Dinov2Layer,
@@ -499,7 +500,8 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
 
         return attn_mask
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

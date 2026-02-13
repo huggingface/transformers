@@ -31,7 +31,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
@@ -1503,7 +1504,8 @@ class Gemma3nAudioEncoder(PreTrainedModel):
         )
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | Gemma3nAudioEncoderModelOutput:
@@ -1692,12 +1694,14 @@ class Gemma3nTextAltUp(nn.Module):
         innovation = innovation.repeat(self.config.altup_num_inputs, 1, 1, 1)  # Repeat on dim0 to match predictions
 
         if self.training and self.config.altup_coef_clip is not None:
-            self.correction_coefs.weight.data.clamp_(-self.config.altup_coef_clip, self.config.altup_coef_clip)
+            weight = self.correction_coefs.weight.clamp(-self.config.altup_coef_clip, self.config.altup_coef_clip)
+            all_coefs = torch.nn.functional.linear(modalities, weight, bias=None) + 1.0
+        else:
+            all_coefs = self.correction_coefs(modalities) + 1.0
 
         # all_coefs adapted from jax.numpy.einsum("...p,pi->...i", ...)
         # Permute to (altup_num_inputs, batch_size, num_tokens) as the last dim is a scalar applied to each altup input
         # and expand on dim1 for broadcastability
-        all_coefs: torch.Tensor = self.correction_coefs(modalities) + 1.0
         all_coefs = all_coefs.permute(2, 0, 1).unsqueeze(-1)
 
         corrected = torch.mul(innovation, all_coefs)
@@ -2032,7 +2036,8 @@ class Gemma3nTextModel(Gemma3TextModel):
         )
 
     # Last hidden states should be before reprojecting, to stay consistent with the other layer outputs
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -2074,7 +2079,7 @@ class Gemma3nTextModel(Gemma3TextModel):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,

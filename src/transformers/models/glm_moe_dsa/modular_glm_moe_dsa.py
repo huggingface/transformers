@@ -24,9 +24,7 @@ from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...models.llama.modeling_llama import (
-    apply_rotary_pos_emb,
-)
+from ...models.llama.modeling_llama import apply_rotary_pos_emb
 from ...processing_utils import Unpack
 from ...utils import logging
 from ...utils.import_utils import is_tracing
@@ -409,11 +407,11 @@ class GlmMoeDsaDecoderLayer(Glm4MoeLiteDecoderLayer):
 
 
 class GlmMoeDsaPreTrainedModel(Glm4MoePreTrainedModel):
-    pass
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
 
 
 class GlmMoeDsaModel(Glm4MoeModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
+    pass
 
 
 class GlmMoeDsaForCausalLM(Glm4MoeForCausalLM):

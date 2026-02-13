@@ -348,9 +348,6 @@ class FalconAttention(nn.Module):
 
         kv_length = key_layer.shape[-2]
 
-        if attention_mask is not None:
-            attention_mask = attention_mask[:, :, :, : key_layer.shape[-2]]
-
         if alibi is None:
             if self.config._attn_implementation == "sdpa" and not output_attentions:
                 # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
@@ -782,7 +779,7 @@ class FalconModel(FalconPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,

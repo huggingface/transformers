@@ -642,3 +642,67 @@ def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path, load_module_str
             raise ValueError(f"[deepspeed] failed to resume from checkpoint {checkpoint_path}")
     else:
         raise ValueError(f"Can't find a valid checkpoint at {checkpoint_path}")
+
+
+def propagate_args_to_deepspeed(accelerator, args, auto_find_batch_size=False):
+    """
+    Sets values in the deepspeed plugin based on the TrainingArguments.
+
+    Args:
+        accelerator (`Accelerator`): The Accelerator object.
+        args (`TrainingArguments`): The training arguments to propagate to DeepSpeed config.
+        auto_find_batch_size (`bool`, *optional*, defaults to `False`):
+            Whether batch size was auto-discovered by trying increasingly smaller sizes.
+    """
+    ds_plugin = accelerator.state.deepspeed_plugin
+
+    ds_plugin.hf_ds_config = HfTrainerDeepSpeedConfig(ds_plugin.hf_ds_config.config)
+    ds_plugin.deepspeed_config = ds_plugin.hf_ds_config.config
+    ds_plugin.hf_ds_config.trainer_config_process(args, auto_find_batch_size)
+
+
+def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
+    """
+    Computes the loss under sequence parallelism with `sp_backend="deepspeed"` and `sp_size > 1`.
+
+    Performs weighted loss aggregation across SP ranks, accounting for varying numbers of valid tokens per rank
+    (e.g., when some ranks receive only padding or prompt tokens that are masked with -100).
+
+    Args:
+        accelerator (`Accelerator`): The accelerator instance with `torch_device_mesh` support.
+        model (`torch.nn.Module`): The model to compute the loss for.
+        inputs (`dict[str, torch.Tensor | Any]`): The input data for the model. Must include `"shift_labels"` key.
+        return_outputs (`bool`): Whether to return the model outputs along with the loss.
+        pc (`accelerate.parallelism_config.ParallelismConfig`): The parallelism configuration.
+
+    Returns:
+        The loss, or a tuple of `(loss, outputs)` if `return_outputs` is `True`.
+    """
+    # DeepSpeed SP automatically injects shift_labels into inputs (pre-shifted labels for SP).
+    # The model's forward pass receives shift_labels via **kwargs and passes it to the loss function.
+    # Both standard transformer models and Liger-patched models handle shift_labels correctly,
+    # so we can directly use the computed loss from the model output.
+    # See: https://huggingface.co/docs/accelerate/en/concept_guides/sequence_parallelism
+    if "labels" not in inputs and "shift_labels" in inputs:
+        # DeepSpeed SP Dataloader removes "labels" but we need it, otherwise, we won't compute the loss.
+        inputs["labels"] = inputs["shift_labels"]
+    outputs = model(**inputs)
+    loss = outputs.loss
+
+    sp_group = accelerator.torch_device_mesh["sp"].get_group()
+    sp_world_size = pc.sp_size
+    # differentiable weighted per-shard-loss aggregation across ranks
+    losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
+    # special dealing with SFT that has prompt tokens that aren't used in loss computation
+    good_tokens = (inputs["shift_labels"] != -100).view(-1).sum()
+    good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
+    # Skip ranks with zero valid tokens
+    total_loss = sum(
+        losses_per_rank[rank] * good_tokens_per_rank[rank]
+        for rank in range(sp_world_size)
+        if good_tokens_per_rank[rank] > 0
+    )
+    total_good_tokens = sum(good_tokens_per_rank)
+    loss = total_loss / max(total_good_tokens, 1)
+
+    return (loss, outputs) if return_outputs else loss
