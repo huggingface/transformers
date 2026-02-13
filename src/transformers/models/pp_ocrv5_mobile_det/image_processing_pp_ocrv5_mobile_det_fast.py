@@ -7,33 +7,190 @@
 import math
 from typing import Optional, Union
 
-import cv2
 import numpy as np
 import torch
-from torchvision.transforms.v2.functional import InterpolationMode
+import torchvision.transforms.v2.functional as tvF
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...image_utils import PILImageResampling, SizeDict
-from ...utils import auto_docstring
+from ...image_utils import SizeDict
+from ...utils import auto_docstring, is_cv2_available
 from ...utils.generic import TensorType
 
 
-def unclip(box, unclip_ratio):
+if is_cv2_available():
+    import cv2
+
+
+def polygon_area(box: np.ndarray) -> float:
+    x = box[:, 0]
+    y = box[:, 1]
+
+    return 0.5 * np.abs(np.sum(x[:-1] * y[1:] - x[1:] * y[:-1]))
+
+
+def polygon_arc_length(box: np.ndarray, closed: bool = True) -> float:
+    diffs = box[1:] - box[:-1]
+    segment_lengths = np.sqrt(np.sum(diffs**2, axis=1))
+    total_length = np.sum(segment_lengths)
+
+    if closed:
+        last_to_first = box[0] - box[-1]
+        total_length += np.sqrt(np.sum(last_to_first**2))
+
+    return total_length
+
+
+def convex_hull(points: np.ndarray) -> np.ndarray:
+    points = np.unique(points.astype(np.float64), axis=0)
+    if len(points) <= 1:
+        return points
+
+    pivot_idx = np.lexsort((points[:, 0], points[:, 1]))[0]
+    pivot = points[pivot_idx]
+
+    def polar_angle(p):
+        return np.arctan2(p[1] - pivot[1], p[0] - pivot[0])
+
+    sorted_points = sorted(points, key=polar_angle)
+
+    hull = []
+    for p in sorted_points:
+        while len(hull) >= 2:
+            a = hull[-2]
+            b = hull[-1]
+            cross = (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])
+            if cross <= 1e-8:
+                hull.pop()
+            else:
+                break
+        hull.append(p)
+
+    return np.array(hull, dtype=np.float64)
+
+
+def min_area_rect(contour: np.ndarray) -> tuple[tuple[float, float], tuple[float, float], float]:
+    contour = contour.reshape(-1, 2).astype(np.float64)
+    hull = convex_hull(contour)
+    n = len(hull)
+
+    if n == 1:
+        return (float(hull[0][0]), float(hull[0][1])), (0.0, 0.0), 0.0
+    if n == 2:
+        dx, dy = hull[1] - hull[0]
+        length = np.hypot(dx, dy)
+        center = ((hull[0][0] + hull[1][0]) / 2, (hull[0][1] + hull[1][1]) / 2)
+        angle = np.arctan2(dy, dx) * 180 / np.pi
+        angle = angle - 90 if angle >= 0 else angle
+        return (float(center[0]), float(center[1])), (float(length), 0.0), float(angle)
+
+    min_area = float("inf")
+    best_rect = None
+    j = 1
+
+    for i in range(n):
+        p1, p2 = hull[i], hull[(i + 1) % n]
+        edge = p2 - p1
+        edge_len = np.hypot(edge[0], edge[1])
+
+        if edge_len < 1e-8:
+            continue
+
+        edge_normal = np.array([-edge[1], edge[0]]) / edge_len
+
+        while True:
+            curr_dot = np.dot(hull[j] - p1, edge_normal)
+            next_dot = np.dot(hull[(j + 1) % n] - p1, edge_normal)
+            if next_dot > curr_dot + 1e-8:
+                j = (j + 1) % n
+            else:
+                break
+
+        proj = np.dot(hull - p1, edge) / edge_len
+        min_proj, max_proj = np.min(proj), np.max(proj)
+        width = max_proj - min_proj
+
+        proj_n = np.dot(hull - p1, edge_normal)
+        min_proj_n, max_proj_n = np.min(proj_n), np.max(proj_n)
+        height = max_proj_n - min_proj_n
+
+        area = width * height
+        if area < min_area - 1e-8:
+            min_area = area
+            center_x = (
+                p1[0]
+                + edge[0] * (min_proj + max_proj) / (2 * edge_len)
+                + edge_normal[0] * (min_proj_n + max_proj_n) / 2
+            )
+            center_y = (
+                p1[1]
+                + edge[1] * (min_proj + max_proj) / (2 * edge_len)
+                + edge_normal[1] * (min_proj_n + max_proj_n) / 2
+            )
+            center = (float(center_x), float(center_y))
+
+            angle = np.arctan2(edge[1], edge[0]) * 180 / np.pi
+            if angle >= 90:
+                angle -= 180
+            elif angle >= 0:
+                angle -= 90
+            angle = float(angle)
+
+            if width < height:
+                width, height = height, width
+                angle -= 90
+
+            best_rect = (center, (float(width), float(height)), angle)
+
+    return best_rect if best_rect else ((0.0, 0.0), (0.0, 0.0), 0.0)
+
+
+def box_points(rect: tuple) -> np.ndarray:
+    center, size, angle = rect
+    cx, cy = center
+    width, height = size
+    angle_rad = angle * np.pi / 180.0
+
+    half_w = width / 2.0
+    half_h = height / 2.0
+
+    cos_a = np.cos(angle_rad)
+    sin_a = np.sin(angle_rad)
+
+    pts = [
+        (cx - half_w * cos_a - half_h * sin_a, cy - half_w * sin_a + half_h * cos_a),
+        (cx + half_w * cos_a - half_h * sin_a, cy + half_w * sin_a + half_h * cos_a),
+        (cx + half_w * cos_a + half_h * sin_a, cy + half_w * sin_a - half_h * cos_a),
+        (cx - half_w * cos_a + half_h * sin_a, cy - half_w * sin_a - half_h * cos_a),
+    ]
+    return np.array(pts, dtype=np.float32)
+
+
+def masked_mean(roi: np.ndarray, mask: np.ndarray) -> float:
+    mask = mask.astype(np.uint8)
+    roi = roi.astype(np.float64)
+
+    valid_pixels = roi[mask == 1]
+
+    if len(valid_pixels) == 0:
+        return 0.0
+
+    return float(np.mean(valid_pixels))
+
+
+def unclip(box: np.ndarray, unclip_ratio: float) -> np.ndarray:
     """
     Expands (dilates) a detected text bounding box to recover the full text region.
-
     Args:
         box (np.ndarray): Input contour of shape (N, 2), where N is the number of points.
         unclip_ratio (float): Expansion ratio, typically greater than 1.0.
-
     Returns:
         np.ndarray: Expanded contour of shape (M, 2).
     """
     box = np.array(box).reshape(-1, 2)
 
-    area = cv2.contourArea(box)
-    length = cv2.arcLength(box, True)
+    area = polygon_area(box)
+    length = polygon_arc_length(box, True)
     if length == 0:
         return box
     distance = area * unclip_ratio / length
@@ -70,7 +227,7 @@ def unclip(box, unclip_ratio):
     return np.array(new_points, dtype=np.float32)
 
 
-def get_mini_boxes(contour):
+def get_mini_boxes(contour: np.ndarray) -> tuple[list[list[float]], float]:
     """
     Computes the minimum-area bounding rectangle for a given contour and returns
     its four corners in a consistent order (top-left, bottom-left, bottom-right, top-right).
@@ -83,8 +240,8 @@ def get_mini_boxes(contour):
             - box (list): List of four corner points in order.
             - sside (float): Length of the shorter side of the bounding rectangle.
     """
-    bounding_box = cv2.minAreaRect(contour)
-    points = sorted(cv2.boxPoints(bounding_box), key=lambda x: x[0])
+    bounding_box = min_area_rect(contour)
+    points = sorted(box_points(bounding_box), key=lambda x: x[0])
 
     index_1, index_2, index_3, index_4 = 0, 1, 2, 3
     if points[1][1] > points[0][1]:
@@ -104,7 +261,7 @@ def get_mini_boxes(contour):
     return box, min(bounding_box[1])
 
 
-def box_score_fast(bitmap, _box):
+def get_box_score(bitmap: np.ndarray, _box: np.ndarray) -> float:
     """
     Computes the mean score of a bounding box region in the prediction map using
     a fast approach with axis-aligned bounding boxes.
@@ -127,124 +284,19 @@ def box_score_fast(bitmap, _box):
     box[:, 0] = box[:, 0] - xmin
     box[:, 1] = box[:, 1] - ymin
     cv2.fillPoly(mask, box.reshape(1, -1, 2).astype(np.int32), 1)
-    return cv2.mean(bitmap[ymin : ymax + 1, xmin : xmax + 1], mask)[0]
-
-
-def box_score_slow(bitmap, contour):
-    """
-    Computes the mean score of a contour region in the prediction map using
-    the exact polygon shape, which is slower but more accurate.
-
-    Args:
-        bitmap (np.ndarray): Binary or float prediction map of shape (H, W).
-        contour (np.ndarray): Contour polygon of shape (N, 2).
-
-    Returns:
-        float: Mean score within the contour region.
-    """
-    h, w = bitmap.shape[:2]
-    contour = contour.copy()
-    contour = np.reshape(contour, (-1, 2))
-
-    xmin = np.clip(np.min(contour[:, 0]), 0, w - 1)
-    xmax = np.clip(np.max(contour[:, 0]), 0, w - 1)
-    ymin = np.clip(np.min(contour[:, 1]), 0, h - 1)
-    ymax = np.clip(np.max(contour[:, 1]), 0, h - 1)
-
-    mask = np.zeros((ymax - ymin + 1, xmax - xmin + 1), dtype=np.uint8)
-
-    contour[:, 0] = contour[:, 0] - xmin
-    contour[:, 1] = contour[:, 1] - ymin
-
-    cv2.fillPoly(mask, contour.reshape(1, -1, 2).astype(np.int32), 1)
-    return cv2.mean(bitmap[ymin : ymax + 1, xmin : xmax + 1], mask)[0]
-
-
-def polygons_from_bitmap(
-    pred,
-    _bitmap,
-    dest_width,
-    dest_height,
-    box_thresh,
-    unclip_ratio,
-    min_size,
-    max_candidates,
-):
-    """
-    Extracts text polygons from a binary segmentation map.
-
-    Args:
-        pred (np.ndarray): Raw prediction map of shape (H, W).
-        _bitmap (np.ndarray): Binarized segmentation map of shape (H, W).
-        dest_width (int): Original image width for scaling back.
-        dest_height (int): Original image height for scaling back.
-        box_thresh (float): Score threshold for filtering low-confidence boxes.
-        unclip_ratio (float): Expansion ratio for contour unclipping.
-        min_size (int): Minimum side length of valid boxes.
-        max_candidates (int): Maximum number of contours to process.
-
-    Returns:
-        tuple:
-            - boxes (list): List of polygons, each of shape (N, 2).
-            - scores (list): List of corresponding scores.
-    """
-
-    bitmap = _bitmap
-    height, width = bitmap.shape
-    width_scale = dest_width / width
-    height_scale = dest_height / height
-    boxes = []
-    scores = []
-
-    contours, _ = cv2.findContours((bitmap * 255).astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-
-    for contour in contours[:max_candidates]:
-        epsilon = 0.002 * cv2.arcLength(contour, True)
-        approx = cv2.approxPolyDP(contour, epsilon, True)
-        points = approx.reshape((-1, 2))
-        if points.shape[0] < 4:
-            continue
-
-        score = box_score_fast(pred, points.reshape(-1, 2))
-        if box_thresh > score:
-            continue
-
-        if points.shape[0] > 2:
-            box = unclip(points, unclip_ratio)
-            if len(box) > 1:
-                continue
-        else:
-            continue
-        box = box.reshape(-1, 2)
-
-        if len(box) > 0:
-            _, sside = get_mini_boxes(box.reshape((-1, 1, 2)))
-            if sside < min_size + 2:
-                continue
-        else:
-            continue
-
-        box = np.array(box)
-        for i in range(box.shape[0]):
-            box[i, 0] = max(0, min(round(box[i, 0] * width_scale), dest_width))
-            box[i, 1] = max(0, min(round(box[i, 1] * height_scale), dest_height))
-
-        boxes.append(box)
-        scores.append(score)
-    return boxes, scores
+    return masked_mean(bitmap[ymin : ymax + 1, xmin : xmax + 1], mask)
 
 
 def boxes_from_bitmap(
-    pred,
-    _bitmap,
-    dest_width,
-    dest_height,
-    box_thresh,
-    unclip_ratio,
-    min_size,
-    max_candidates,
-    score_mode,
-):
+    pred: np.ndarray,
+    _bitmap: np.ndarray,
+    dest_width: int,
+    dest_height: int,
+    box_thresh: float,
+    unclip_ratio: float,
+    min_size: int,
+    max_candidates: int,
+) -> tuple[np.ndarray, list[float]]:
     """
     Extracts axis-aligned or rotated bounding boxes from a binary segmentation map.
 
@@ -257,7 +309,6 @@ def boxes_from_bitmap(
         unclip_ratio (float): Expansion ratio for contour unclipping.
         min_size (int): Minimum side length of valid boxes.
         max_candidates (int): Maximum number of contours to process.
-        score_mode (str): Scoring mode, either "fast" or "slow".
 
     Returns:
         tuple:
@@ -286,10 +337,7 @@ def boxes_from_bitmap(
         if sside < min_size:
             continue
         points = np.array(points)
-        if score_mode == "fast":
-            score = box_score_fast(pred, points.reshape(-1, 2))
-        else:
-            score = box_score_slow(pred, contour)
+        score = get_box_score(pred, points.reshape(-1, 2))
         if box_thresh > score:
             continue
         box = unclip(points, unclip_ratio).reshape(-1, 1, 2)
@@ -308,56 +356,34 @@ def boxes_from_bitmap(
 
 
 def process(
-    pred, size, thresh, box_type, box_thresh, unclip_ratio, use_dilation, min_size, max_candidates, score_mode
-):
+    pred: np.ndarray,
+    size: np.ndarray,
+    threshold: float,
+    box_thresh: float,
+    unclip_ratio: float,
+    min_size: int,
+    max_candidates: int,
+) -> tuple[Union[list[np.ndarray], np.ndarray], list[float]]:
     """
     Main post-processing function to convert model predictions into text boxes.
 
     Args:
         pred (torch.Tensor): Model output of shape (1, H, W).
         size (torch.Tensor): Original image size (height, width).
-        thresh (float): Threshold for binarizing the prediction map.
-        box_type (str): Type of boxes to extract, either "quad" or "poly".
+        threshold (float): Threshold for binarizing the prediction map.
         box_thresh (float): Score threshold for filtering boxes.
         unclip_ratio (float): Expansion ratio for unclipping.
-        use_dilation (bool): Whether to apply dilation on the segmentation mask.
         min_size (int): Minimum side length of valid boxes.
         max_candidates (int): Maximum number of boxes to extract.
-        score_mode (str): Scoring mode, either "fast" or "slow".
 
     Returns:
         tuple:
             - boxes (list or np.ndarray): Extracted text boxes.
             - scores (list): Corresponding confidence scores.
     """
-    pred = pred[0, :, :].cpu().detach().numpy()
-    segmentation = pred > thresh
-    dilation_kernel = None if not use_dilation else np.array([[1, 1], [1, 1]])
-    src_h, src_w = size.cpu().detach().numpy()
-    if dilation_kernel is not None:
-        mask = cv2.dilate(
-            np.array(segmentation).astype(np.uint8),
-            dilation_kernel,
-        )
-    else:
-        mask = segmentation
-    if box_type == "poly":
-        boxes, scores = polygons_from_bitmap(
-            pred,
-            mask,
-            src_w,
-            src_h,
-            box_thresh,
-            unclip_ratio,
-            min_size,
-            max_candidates,
-        )
-    elif box_type == "quad":
-        boxes, scores = boxes_from_bitmap(
-            pred, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates, score_mode
-        )
-    else:
-        raise ValueError("box_type can only be one of ['quad', 'poly']")
+    src_h, src_w = size
+    mask = pred > threshold
+    boxes, scores = boxes_from_bitmap(pred, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates)
     return boxes, scores
 
 
@@ -384,42 +410,21 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: list[torch.Tensor],
-        size: Optional[list[dict[str, int]]],
+        images: list["torch.Tensor"],
         do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
-        interpolation: Optional[InterpolationMode] = None,
-        resample: Optional[PILImageResampling] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Preprocesses a list of images for input to the PPOCRV5 Mobile Det model.
-
-        Args:
-            images (list[torch.Tensor]): List of input images.
-            size (list[dict[str, int]]): Target size for each image.
-            do_resize (bool): Whether to resize images.
-            do_rescale (bool): Whether to rescale pixel values.
-            rescale_factor (float): Rescale factor.
-            do_normalize (bool): Whether to normalize images.
-            image_mean (list[float] or float): Mean values for normalization.
-            image_std (list[float] or float): Std values for normalization.
-            return_tensors (str or TensorType): Type of tensors to return.
-            interpolation (InterpolationMode): Interpolation mode for resizing.
-            resample (PILImageResampling): PIL resampling mode (unused).
-
-        Returns:
-            BatchFeature: Preprocessed images and additional information.
-        """
         data = {}
         resize_imgs, target_sizes = [], []
         if do_resize:
-            # interpolation = InterpolationMode.BILINEAR
             for image in images:
                 size, shape = self.get_image_size(image, self.limit_side_len, self.limit_type, self.max_side_limit)
                 img = self.resize(image, size=size, interpolation=interpolation)
@@ -443,98 +448,39 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
     def post_process_object_detection(
         self,
         preds,
-        threshold: float = 0.5,
-        target_sizes: Union[TensorType, list[tuple]] = None,
-        thresh: float = 0.3,
-        box_thresh=0.6,
-        max_candidates=1000,
-        min_size=3,
-        unclip_ratio=1.5,
-        use_dilation=False,
-        score_mode="fast",
-        box_type="quad",
+        threshold: float = 0.3,
+        target_sizes: Optional[Union[list[tuple[int, int]], torch.Tensor]] = None,
+        box_thresh: float = 0.6,
+        max_candidates: int = 1000,
+        min_size: int = 3,
+        unclip_ratio: float = 1.5,
     ):
         """
         Converts model outputs into detected text boxes.
 
         Args:
             preds (torch.Tensor): Model outputs.
-            threshold (float): Confidence threshold (unused).
+            threshold (float):Binarization threshold.
             target_sizes (TensorType or list[tuple]): Original image sizes.
-            thresh (float): Binarization threshold.
             box_thresh (float): Box score threshold.
             max_candidates (int): Maximum number of boxes.
             min_size (int): Minimum box size.
             unclip_ratio (float): Expansion ratio.
-            use_dilation (bool): Whether to dilate the mask.
-            score_mode (str): Scoring mode.
-            box_type (str): Box type, "quad" or "poly".
 
         Returns:
             list[dict]: List of detection results.
         """
-        assert score_mode in [
-            "slow",
-            "fast",
-        ], f"Score mode must be in [slow, fast] but got: {score_mode}"
 
-        return self.postprocess(
-            preds=preds.logits,
-            thresh=thresh,
-            target_sizes=target_sizes,
-            box_thresh=box_thresh,
-            max_candidates=max_candidates,
-            min_size=min_size,
-            unclip_ratio=unclip_ratio,
-            use_dilation=use_dilation,
-            score_mode=score_mode,
-            box_type=box_type,
-        )
-
-    def postprocess(
-        self,
-        preds,
-        thresh=0.3,
-        target_sizes=None,
-        box_thresh=0.6,
-        max_candidates=1000,
-        min_size=3,
-        unclip_ratio=1.5,
-        use_dilation=False,
-        score_mode="fast",
-        box_type="quad",
-    ):
-        """
-        Post-processes model outputs to extract text boxes.
-
-        Args:
-            preds (torch.Tensor): Model logits.
-            thresh (float): Binarization threshold.
-            target_sizes (list[tuple]): Original image sizes.
-            box_thresh (float): Box score threshold.
-            max_candidates (int): Maximum number of boxes.
-            min_size (int): Minimum box size.
-            unclip_ratio (float): Expansion ratio.
-            use_dilation (bool): Whether to dilate the mask.
-            score_mode (str): Scoring mode.
-            box_type (str): Box type.
-
-        Returns:
-            list[dict]: List of detection results.
-        """
         results = []
-        for pred, size in zip(preds, target_sizes):
+        for pred, size in zip(preds.logits, target_sizes):
             box, score = process(
-                pred=pred,
-                size=size,
-                thresh=thresh,
-                box_type=box_type,
+                pred=pred[0, :, :].cpu().detach().numpy(),
+                size=size.cpu().detach().numpy(),
+                threshold=threshold,
                 box_thresh=box_thresh,
                 unclip_ratio=unclip_ratio,
-                use_dilation=use_dilation,
                 min_size=min_size,
                 max_candidates=max_candidates,
-                score_mode=score_mode,
             )
 
             results.append(
@@ -547,11 +493,11 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
 
     def get_image_size(
         self,
-        img: torch.Tensor,
-        limit_side_len: Union[int, None],
-        limit_type: Union[str, None],
-        max_side_limit: Union[int, None] = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        img: np.ndarray,
+        limit_side_len: int,
+        limit_type: str,
+        max_side_limit: int = 4000,
+    ) -> tuple[dict, np.ndarray]:
         """
         Computes the target size for resizing an image while preserving aspect ratio.
 
@@ -568,7 +514,7 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         """
         limit_side_len = limit_side_len or self.limit_side_len
         limit_type = limit_type or self.limit_type
-        c, h, w = img.shape
+        _, h, w = img.shape
         h, w = int(h), int(w)
 
         if limit_type == "max":

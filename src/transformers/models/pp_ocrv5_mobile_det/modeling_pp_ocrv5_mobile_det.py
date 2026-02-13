@@ -10,7 +10,9 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import Tensor
 
+from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring
@@ -18,35 +20,14 @@ from .configuration_pp_ocrv5_mobile_det import PPOCRV5MobileDetConfig
 
 
 class PPOCRV5MobileDetLearnableAffineBlock(nn.Module):
-    """
-    Learnable affine transformation block that applies scale and bias to the input tensor.
-    Both scale and bias are trainable parameters, allowing the model to learn optimal
-    linear transformations for feature normalization or enhancement.
-    """
-
-    def __init__(self, scale_value=1.0, bias_value=0.0):
-        """
-        Initialize the PPOCRV5MobileDetLearnableAffineBlock with initial scale and bias values.
-
-        Args:
-            scale_value (float, optional): Initial value for the scale parameter. Defaults to 1.0.
-            bias_value (float, optional): Initial value for the bias parameter. Defaults to 0.0.
-        """
+    def __init__(self, scale_value: float = 1.0, bias_value: float = 0.0):
         super().__init__()
-        self.scale = nn.Parameter(torch.tensor([scale_value]))
-        self.bias = nn.Parameter(torch.tensor([bias_value]))
+        self.scale = nn.Parameter(torch.tensor([scale_value]), requires_grad=True)
+        self.bias = nn.Parameter(torch.tensor([bias_value]), requires_grad=True)
 
-    def forward(self, hidden_state: torch.Tensor):
-        """
-        Apply the affine transformation to the input hidden state.
-
-        Args:
-            hidden_state (torch.Tensor): Input feature tensor of shape (B, C, H, W).
-
-        Returns:
-            torch.Tensor: Transformed feature tensor after applying scale and bias.
-        """
-        return self.scale * hidden_state + self.bias
+    def forward(self, hidden_state: Tensor) -> Tensor:
+        hidden_state = self.scale * hidden_state + self.bias
+        return hidden_state
 
 
 class PPOCRV5MobileDetAct(nn.Module):
@@ -66,67 +47,51 @@ class PPOCRV5MobileDetAct(nn.Module):
         super().__init__()
         if act == "hswish":
             self.act = nn.Hardswish()
-        else:
-            assert act == "relu"
+        elif act == "relu":
             self.act = nn.ReLU()
+        else:
+            raise ValueError("Act must be hswish or relu.")
         self.lab = PPOCRV5MobileDetLearnableAffineBlock()
 
     def forward(self, hidden_state: torch.Tensor):
-        """
-        Apply the non-linear activation followed by the learnable affine transformation.
-
-        Args:
-            hidden_state (torch.Tensor): Input feature tensor of shape (B, C, H, W).
-
-        Returns:
-            torch.Tensor: Activated and transformed feature tensor.
-        """
-        return self.lab(self.act(hidden_state))
+        hidden_state = self.act(hidden_state)
+        hidden_state = self.lab(hidden_state)
+        return hidden_state
 
 
 class PPOCRV5MobileDetConvBNLayer(nn.Module):
-    """
-    Convolution-Batch Normalization layer block, a fundamental building block for modern CNNs.
-    Applies 2D convolution followed by batch normalization, with He Kaiming initialization for the convolution weights.
-    """
-
-    def __init__(self, in_channels, out_channels, kernel_size, stride, groups=1):
-        """
-        Initialize the PPOCRV5MobileDetConvBNLayer with specified convolution and batch normalization parameters.
-
-        Args:
-            in_channels (int): Number of input channels for the convolution layer.
-            out_channels (int): Number of output channels for the convolution layer.
-            kernel_size (int): Size of the convolution kernel (square kernel).
-            stride (int): Stride of the convolution operation.
-            groups (int, optional): Number of groups for grouped convolution (used for depthwise convolutions).
-                Defaults to 1 (standard convolution).
-        """
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int = 1,
+        groups: int = 1,
+        activation: str = "relu",
+        use_learnable_affine_block: bool = False,
+    ):
         super().__init__()
-        self.conv = nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=out_channels,
+        self.convolution = nn.Conv2d(
+            in_channels,
+            out_channels,
             kernel_size=kernel_size,
             stride=stride,
-            padding=(kernel_size - 1) // 2,
             groups=groups,
+            padding=(kernel_size - 1) // 2,
             bias=False,
         )
+        self.normalization = nn.BatchNorm2d(out_channels)
+        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
+        if activation and use_learnable_affine_block:
+            self.lab = PPOCRV5MobileDetLearnableAffineBlock()
+        else:
+            self.lab = nn.Identity()
 
-        self.bn = nn.BatchNorm2d(out_channels, momentum=0.9)
-
-    def forward(self, hidden_state: torch.Tensor):
-        """
-        Apply convolution followed by batch normalization to the input tensor.
-
-        Args:
-            hidden_state (torch.Tensor): Input feature tensor of shape (B, in_channels, H, W).
-
-        Returns:
-            torch.Tensor: Output feature tensor of shape (B, out_channels, H', W').
-        """
-        hidden_state = self.conv(hidden_state)
-        hidden_state = self.bn(hidden_state)
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = self.convolution(input)
+        hidden_state = self.normalization(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        hidden_state = self.lab(hidden_state)
         return hidden_state
 
 
@@ -182,13 +147,14 @@ class PPOCRV5MobileDetLearnableRepLayer(nn.Module):
                     kernel_size,
                     stride,
                     groups=groups,
+                    activation=None,
                 )
                 for _ in range(self.num_conv_branches)
             ]
         )
 
         self.conv_1x1 = (
-            PPOCRV5MobileDetConvBNLayer(in_channels, out_channels, 1, stride, groups=groups)
+            PPOCRV5MobileDetConvBNLayer(in_channels, out_channels, 1, stride, groups=groups, activation=None)
             if kernel_size > 1
             else None
         )
@@ -338,27 +304,17 @@ class PPOCRV5MobileDetLCNetV3Block(nn.Module):
         return hidden_state
 
 
-def make_divisible(v, divisor: int = 16, min_value=None):
+def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
     """
-    Ensures that the input value `v` is rounded to the nearest multiple of `divisor`,
-    with a minimum value constraint. This is used to adjust channel dimensions for
-    hardware-efficient neural network inference (especially on mobile devices).
-
-    Args:
-        v (float): Input value to be adjusted (typically channel count).
-        divisor (int, optional): The divisor to align the value with. Defaults to 16.
-        min_value (int, optional): Minimum allowed value after adjustment. If None,
-            defaults to `divisor`.
-
-    Returns:
-        int: Adjusted value that is a multiple of `divisor` and meets the minimum value requirement.
+    Ensure that all layers have a channel count that is divisible by `divisor`.
     """
     if min_value is None:
         min_value = divisor
-    new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
-    if new_v < 0.9 * v:
-        new_v += divisor
-    return new_v
+    new_value = max(min_value, int(value + divisor / 2) // divisor * divisor)
+    # Make sure that round down does not go down by more than 10%.
+    if new_value < 0.9 * value:
+        new_value += divisor
+    return int(new_value)
 
 
 class PPOCRV5MobileDetBackbone(nn.Module):
@@ -385,6 +341,7 @@ class PPOCRV5MobileDetBackbone(nn.Module):
             out_channels=make_divisible(16 * config.scale, config.divisor),
             kernel_size=3,
             stride=2,
+            activation=None,
         )
 
         def _build_blocks(block_key):
@@ -779,7 +736,7 @@ class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, PPOCRV5MobileDetConvBNLayer):
-            nn.init.kaiming_normal_(module.conv.weight)
+            nn.init.kaiming_normal_(module.convolution.weight)
 
         if isinstance(module, PPOCRV5MobileDetHead):
             nn.init.constant_(module.conv_bn1.weight, 1.0)

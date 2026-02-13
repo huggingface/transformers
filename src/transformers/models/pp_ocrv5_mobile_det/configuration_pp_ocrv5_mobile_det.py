@@ -74,23 +74,23 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        backbone_config: dict | None = None,
-        scale: float = 1.0,
-        conv_kxk_num: int = 4,
-        reduction: int = 4,
-        divisor: int = 16,
-        backbone_out_channels: int = 512,
-        hidden_act: str = "hswish",
-        neck_out_channels: int = 96,
-        shortcut: bool = True,
-        interpolate_mode: str = "nearest",
-        k: int = 50,
-        kernel_list: list = [3, 2, 2],
+        backbone_config=None,
+        scale=1.0,
+        conv_kxk_num=4,
+        reduction=4,
+        divisor=16,
+        backbone_out_channels=512,
+        hidden_act="hswish",
+        neck_out_channels=96,
+        shortcut=True,
+        interpolate_mode="nearest",
+        k=50,
+        kernel_list=[3, 2, 2],
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        # Backbone
+        # ---- Backbone ----
         self.backbone_config = backbone_config
         self.scale = scale
         self.conv_kxk_num = conv_kxk_num
@@ -99,12 +99,12 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         self.backbone_out_channels = backbone_out_channels
         self.hidden_act = hidden_act
 
-        # Neck
+        # ---- Neck ----
         self.neck_out_channels = neck_out_channels
         self.shortcut = shortcut
         self.interpolate_mode = interpolate_mode
 
-        # Head
+        # ---- Head ----
         self.k = k
         self.kernel_list = kernel_list
 
