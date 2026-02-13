@@ -819,9 +819,9 @@ def dot_natural_key(s: str):
     result = []
     for p in s.split("."):
         if p.isdigit():
-            result.append((0, int(p), p))
+            result.append((0, int(p)))
         else:
-            result.append((1, 0, p))
+            result.append((1, p))
     return result
 
 
