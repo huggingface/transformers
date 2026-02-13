@@ -181,8 +181,21 @@ def _parse_type_hint(hint: str) -> dict:
 def _convert_type_hints_to_json_schema(func: Callable) -> dict:
     type_hints = get_type_hints(func)
     signature = inspect.signature(func)
+    # For methods, we need to ignore the first "self" or "cls" parameter. However, since unbound methods are just
+    # functions, we need to check the signature to see if it looks like a method rather than only relying on 
+    # inspect.ismethod(), which returns False for unbound methods.
+    qualname = getattr(func, "__qualname__", "")
+    qualname_parts = qualname.split(".")
+    has_unbound_method_signature = isfunction(func) and len(qualname_parts) >= 2 and qualname_parts[-2] != "<locals>"
+    first_param_name = next(iter(signature.parameters), None)
+    implicit_arg_name = None
+    if first_param_name in {"self", "cls"} and (inspect.ismethod(func) or has_unbound_method_signature):
+        implicit_arg_name = first_param_name
+
     required = []
     for param_name, param in signature.parameters.items():
+        if param_name == implicit_arg_name:
+            continue
         if param.annotation == inspect.Parameter.empty:
             raise TypeHintParsingException(f"Argument {param.name} is missing a type hint in function {func.__name__}")
         if param.default == inspect.Parameter.empty:
@@ -190,6 +203,8 @@ def _convert_type_hints_to_json_schema(func: Callable) -> dict:
 
     properties = {}
     for param_name, param_type in type_hints.items():
+        if param_name == implicit_arg_name:
+            continue
         properties[param_name] = _parse_type_hint(param_type)
 
     schema = {"type": "object", "properties": properties}
@@ -485,7 +500,7 @@ def render_jinja_template(
         for tool in tools:
             if isinstance(tool, dict):
                 tool_schemas.append(tool)
-            elif isfunction(tool):
+            elif isfunction(tool) or inspect.ismethod(tool):
                 tool_schemas.append(get_json_schema(tool))
             else:
                 raise ValueError(
