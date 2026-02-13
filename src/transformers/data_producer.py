@@ -47,13 +47,14 @@ from __future__ import annotations
 import logging
 import threading
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import torch
 from torch.utils.data import Dataset
 
 from .trainer_callback import TrainerCallback
+
 
 if TYPE_CHECKING:
     from torch import nn

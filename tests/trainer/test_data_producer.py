@@ -25,7 +25,6 @@ from transformers import Trainer, TrainingArguments
 from transformers.data_producer import (
     AsyncDataProducer,
     BaseDataProducer,
-    DataProducer,
     DataProducerCallback,
     PreferencePairDataset,
     ProducerConfig,

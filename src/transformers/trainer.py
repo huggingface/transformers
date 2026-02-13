@@ -30,7 +30,7 @@ import time
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -57,7 +57,7 @@ from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler
 from . import __version__
 from .configuration_utils import PreTrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
-from .data_producer import AsyncDataProducer, DataProducer, DataProducerCallback, ProducerConfig
+from .data_producer import AsyncDataProducer, DataProducer, DataProducerCallback
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .feature_extraction_utils import FeatureExtractionMixin
