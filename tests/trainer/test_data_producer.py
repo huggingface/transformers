@@ -576,5 +576,226 @@ class TestTrainerWithDataProducer(unittest.TestCase):
             self.assertTrue(np.isfinite(result.training_loss))
 
 
+# ---------------------------------------------------------------------------
+# Integration tests: eval_data_producer & test_data_producer
+# ---------------------------------------------------------------------------
+
+
+class TestTrainerWithEvalDataProducer(unittest.TestCase):
+    def test_eval_data_producer_basic(self):
+        """eval_data_producer.produce() should be called during evaluate()."""
+        eval_producer = CountingProducer(config=ProducerConfig(), dataset_size=8)
+        model = RegressionModel()
+        with tempfile.TemporaryDirectory() as tmp:
+            args = TrainingArguments(
+                output_dir=tmp,
+                max_steps=1,
+                per_device_train_batch_size=4,
+                eval_strategy="no",
+                save_strategy="no",
+                report_to="none",
+                use_cpu=True,
+            )
+            train_ds = SimpleDataset(length=8)
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=train_ds,
+                eval_data_producer=eval_producer,
+            )
+            metrics = trainer.evaluate()
+            self.assertEqual(eval_producer.call_count, 1)
+            self.assertIn("eval_loss", metrics)
+
+    def test_eval_data_producer_during_training(self):
+        """eval_data_producer should be called at eval steps during training."""
+        eval_producer = CountingProducer(config=ProducerConfig(), dataset_size=8)
+        model = RegressionModel()
+        with tempfile.TemporaryDirectory() as tmp:
+            args = TrainingArguments(
+                output_dir=tmp,
+                max_steps=4,
+                per_device_train_batch_size=4,
+                eval_strategy="steps",
+                eval_steps=2,
+                save_strategy="no",
+                report_to="none",
+                use_cpu=True,
+            )
+            train_ds = SimpleDataset(length=16)
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=train_ds,
+                eval_data_producer=eval_producer,
+            )
+            trainer.train()
+            # eval at step 2 and step 4 = 2 calls
+            self.assertEqual(eval_producer.call_count, 2)
+
+    def test_explicit_eval_dataset_overrides_producer(self):
+        """Passing eval_dataset to evaluate() should override eval_data_producer."""
+        eval_producer = CountingProducer(config=ProducerConfig(), dataset_size=8)
+        model = RegressionModel()
+        explicit_ds = SimpleDataset(length=8)
+        with tempfile.TemporaryDirectory() as tmp:
+            args = TrainingArguments(
+                output_dir=tmp,
+                max_steps=1,
+                per_device_train_batch_size=4,
+                save_strategy="no",
+                report_to="none",
+                use_cpu=True,
+            )
+            train_ds = SimpleDataset(length=8)
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=train_ds,
+                eval_data_producer=eval_producer,
+            )
+            metrics = trainer.evaluate(eval_dataset=explicit_ds)
+            # Producer should NOT have been called since explicit dataset was provided
+            self.assertEqual(eval_producer.call_count, 0)
+            self.assertIn("eval_loss", metrics)
+
+    def test_static_eval_dataset_takes_priority_over_producer(self):
+        """self.eval_dataset should take priority over eval_data_producer."""
+        eval_producer = CountingProducer(config=ProducerConfig(), dataset_size=8)
+        model = RegressionModel()
+        static_eval_ds = SimpleDataset(length=8)
+        with tempfile.TemporaryDirectory() as tmp:
+            args = TrainingArguments(
+                output_dir=tmp,
+                max_steps=1,
+                per_device_train_batch_size=4,
+                save_strategy="no",
+                report_to="none",
+                use_cpu=True,
+            )
+            train_ds = SimpleDataset(length=8)
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=train_ds,
+                eval_dataset=static_eval_ds,
+                eval_data_producer=eval_producer,
+            )
+            metrics = trainer.evaluate()
+            # Producer should NOT have been called since self.eval_dataset exists
+            self.assertEqual(eval_producer.call_count, 0)
+            self.assertIn("eval_loss", metrics)
+
+    def test_invalid_eval_data_producer_type(self):
+        """Passing a non-DataProducer as eval_data_producer should raise TypeError."""
+        model = RegressionModel()
+        with tempfile.TemporaryDirectory() as tmp:
+            args = TrainingArguments(
+                output_dir=tmp, max_steps=1, report_to="none", use_cpu=True
+            )
+            with self.assertRaises(TypeError):
+                Trainer(model=model, args=args, eval_data_producer="not a producer")
+
+    def test_eval_strategy_accepts_eval_data_producer(self):
+        """eval_strategy should not raise when eval_data_producer is set but eval_dataset is None."""
+        eval_producer = CountingProducer(config=ProducerConfig(), dataset_size=8)
+        model = RegressionModel()
+        with tempfile.TemporaryDirectory() as tmp:
+            args = TrainingArguments(
+                output_dir=tmp,
+                max_steps=2,
+                per_device_train_batch_size=4,
+                eval_strategy="steps",
+                eval_steps=1,
+                save_strategy="no",
+                report_to="none",
+                use_cpu=True,
+            )
+            train_ds = SimpleDataset(length=8)
+            # Should NOT raise ValueError about missing eval_dataset
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=train_ds,
+                eval_data_producer=eval_producer,
+            )
+            trainer.train()
+            self.assertGreater(eval_producer.call_count, 0)
+
+
+class TestTrainerWithTestDataProducer(unittest.TestCase):
+    def test_test_data_producer_basic(self):
+        """test_data_producer.produce() should be called during predict()."""
+        test_producer = CountingProducer(config=ProducerConfig(), dataset_size=8)
+        model = RegressionModel()
+        with tempfile.TemporaryDirectory() as tmp:
+            args = TrainingArguments(
+                output_dir=tmp,
+                max_steps=1,
+                per_device_train_batch_size=4,
+                save_strategy="no",
+                report_to="none",
+                use_cpu=True,
+            )
+            train_ds = SimpleDataset(length=8)
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=train_ds,
+                test_data_producer=test_producer,
+            )
+            output = trainer.predict()
+            self.assertEqual(test_producer.call_count, 1)
+            self.assertIsNotNone(output.predictions)
+
+    def test_explicit_test_dataset_overrides_producer(self):
+        """Passing test_dataset to predict() should override test_data_producer."""
+        test_producer = CountingProducer(config=ProducerConfig(), dataset_size=8)
+        model = RegressionModel()
+        explicit_ds = SimpleDataset(length=8)
+        with tempfile.TemporaryDirectory() as tmp:
+            args = TrainingArguments(
+                output_dir=tmp,
+                max_steps=1,
+                per_device_train_batch_size=4,
+                save_strategy="no",
+                report_to="none",
+                use_cpu=True,
+            )
+            train_ds = SimpleDataset(length=8)
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=train_ds,
+                test_data_producer=test_producer,
+            )
+            output = trainer.predict(test_dataset=explicit_ds)
+            # Producer should NOT have been called
+            self.assertEqual(test_producer.call_count, 0)
+            self.assertIsNotNone(output.predictions)
+
+    def test_predict_raises_without_dataset_or_producer(self):
+        """predict() with no test_dataset and no test_data_producer should raise."""
+        model = RegressionModel()
+        with tempfile.TemporaryDirectory() as tmp:
+            args = TrainingArguments(
+                output_dir=tmp, max_steps=1, report_to="none", use_cpu=True
+            )
+            train_ds = SimpleDataset(length=8)
+            trainer = Trainer(model=model, args=args, train_dataset=train_ds)
+            with self.assertRaises(ValueError):
+                trainer.predict()
+
+    def test_invalid_test_data_producer_type(self):
+        """Passing a non-DataProducer as test_data_producer should raise TypeError."""
+        model = RegressionModel()
+        with tempfile.TemporaryDirectory() as tmp:
+            args = TrainingArguments(
+                output_dir=tmp, max_steps=1, report_to="none", use_cpu=True
+            )
+            with self.assertRaises(TypeError):
+                Trainer(model=model, args=args, test_data_producer=42)
+
+
 if __name__ == "__main__":
     unittest.main()

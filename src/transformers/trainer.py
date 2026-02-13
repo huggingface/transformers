@@ -642,6 +642,8 @@ class Trainer:
         optimizer_cls_and_kwargs: tuple[type[torch.optim.Optimizer], dict[str, Any]] | None = None,
         preprocess_logits_for_metrics: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] | None = None,
         data_producer: DataProducer | None = None,
+        eval_data_producer: DataProducer | None = None,
+        test_data_producer: DataProducer | None = None,
     ):
         # Init flow:
         #   1. Args & seed               – defaults, determinism
@@ -812,6 +814,18 @@ class Trainer:
             if data_producer.config.async_prefetch:
                 self.data_producer = AsyncDataProducer(data_producer)
 
+        self.eval_data_producer = eval_data_producer
+        if eval_data_producer is not None and not isinstance(eval_data_producer, DataProducer):
+            raise TypeError(
+                f"`eval_data_producer` must be a DataProducer instance, got {type(eval_data_producer)}"
+            )
+
+        self.test_data_producer = test_data_producer
+        if test_data_producer is not None and not isinstance(test_data_producer, DataProducer):
+            raise TypeError(
+                f"`test_data_producer` must be a DataProducer instance, got {type(test_data_producer)}"
+            )
+
         # Callables
         self.compute_loss_func = compute_loss_func
         self.compute_metrics = compute_metrics
@@ -911,9 +925,16 @@ class Trainer:
                     " boolean argument which will be triggered after the last batch of the eval set to signal that the"
                     " summary statistics should be returned by the function."
                 )
-        if args.eval_strategy is not None and args.eval_strategy != "no" and self.eval_dataset is None:
+        if (
+            args.eval_strategy is not None
+            and args.eval_strategy != "no"
+            and self.eval_dataset is None
+            and getattr(self, "eval_data_producer", None) is None
+        ):
             raise ValueError(
-                f"You have set `args.eval_strategy` to {args.eval_strategy} but you didn't pass an `eval_dataset` to `Trainer`. Either set `args.eval_strategy` to `no` or pass an `eval_dataset`. "
+                f"You have set `args.eval_strategy` to {args.eval_strategy} but you didn't pass an `eval_dataset` "
+                f"or `eval_data_producer` to `Trainer`. Either set `args.eval_strategy` to `no` or pass an "
+                f"`eval_dataset` or `eval_data_producer`."
             )
         if args.save_strategy == SaveStrategy.BEST or args.load_best_model_at_end:
             if args.metric_for_best_model is None:
@@ -1689,13 +1710,17 @@ class Trainer:
         return _StaticEpochSource()
 
     @torch.no_grad()
-    def _produce_data(self, model: nn.Module) -> Dataset:
-        """Call the DataProducer to generate a fresh training dataset.
+    def _produce_data(self, model: nn.Module, producer: DataProducer | None = None) -> Dataset:
+        """Call a DataProducer to generate a fresh dataset.
+
+        Args:
+            model: The current model (may be switched to eval mode).
+            producer: The producer to call.  Defaults to ``self.data_producer``.
 
         Handles eval/train mode switching and CUDA cache clearing per
         the producer's config.
         """
-        producer = self.data_producer
+        producer = producer or self.data_producer
         config = producer.config
 
         if hasattr(producer, "on_rollout_begin"):
@@ -2897,6 +2922,11 @@ class Trainer:
         # handle multiple eval datasets
         override = eval_dataset is not None
         eval_dataset = eval_dataset if override else self.eval_dataset
+
+        # Fall back to eval_data_producer if no static dataset
+        if eval_dataset is None and getattr(self, "eval_data_producer", None) is not None:
+            eval_dataset = self._produce_data(self.model, producer=self.eval_data_producer)
+
         if isinstance(eval_dataset, dict):
             metrics = {}
             for eval_dataset_name, _eval_dataset in eval_dataset.items():
@@ -3160,7 +3190,10 @@ class Trainer:
         return EvalLoopOutput(predictions=all_preds, label_ids=all_labels, metrics=metrics, num_samples=num_samples)
 
     def predict(
-        self, test_dataset: Dataset, ignore_keys: list[str] | None = None, metric_key_prefix: str = "test"
+        self,
+        test_dataset: Dataset | None = None,
+        ignore_keys: list[str] | None = None,
+        metric_key_prefix: str = "test",
     ) -> PredictionOutput:
         """
         Run prediction and returns predictions and potential metrics.
@@ -3169,9 +3202,11 @@ class Trainer:
         will also return metrics, like in `evaluate()`.
 
         Args:
-            test_dataset (`Dataset`):
+            test_dataset (`Dataset`, *optional*):
                 Dataset to run the predictions on. If it is an `datasets.Dataset`, columns not accepted by the
-                `model.forward()` method are automatically removed. Has to implement the method `__len__`
+                `model.forward()` method are automatically removed. Has to implement the method `__len__`.
+                If not provided and a ``test_data_producer`` was set on the Trainer, a fresh dataset will be
+                produced automatically.
             ignore_keys (`list[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
@@ -3194,6 +3229,15 @@ class Trainer:
             - metrics (`dict[str, float]`, *optional*): The potential dictionary of metrics (if the dataset contained
               labels).
         """
+        # Fall back to test_data_producer if no explicit dataset
+        if test_dataset is None and getattr(self, "test_data_producer", None) is not None:
+            test_dataset = self._produce_data(self.model, producer=self.test_data_producer)
+        if test_dataset is None:
+            raise ValueError(
+                "`predict()` requires either a `test_dataset` argument or "
+                "a `test_data_producer` set on the Trainer."
+            )
+
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
 
