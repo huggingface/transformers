@@ -431,17 +431,14 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 with mockenv_context(**self.dist_env_1_gpu):
                     logger = logging.get_logger("transformers.modeling_utils")
                     with CaptureLogger(logger) as cl:
-                        loaded_model = Qwen3MoeForCausalLM.from_pretrained(tmpdirname)
+                        loaded_model, loading_info = Qwen3MoeForCausalLM.from_pretrained(
+                            tmpdirname, output_loading_info=True
+                        )
             self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
-
-            # verify no old-format parameter names exist in the loaded model
-            for name, _ in loaded_model.named_parameters():
-                self.assertNotRegex(name, r"mlp\.experts\.\d+\.(gate_proj|up_proj|down_proj)\.weight")
-
-            # verify all reference keys are present (catches missing expert params)
-            loaded_keys = set(n for n, _ in loaded_model.named_parameters())
-            missing = set(reference_weights.keys()) - loaded_keys
-            self.assertEqual(missing, set(), f"Loaded model is missing parameters: {missing}")
+            self.assertEqual(len(loading_info["missing_keys"]), 0, f"Missing keys: {loading_info['missing_keys']}")
+            self.assertEqual(
+                len(loading_info["unexpected_keys"]), 0, f"Unexpected keys: {loading_info['unexpected_keys']}"
+            )
 
             # gather all params and verify they match the original weights exactly
             all_params = list(loaded_model.named_parameters())
