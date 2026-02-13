@@ -2245,6 +2245,10 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
             attentions=reformer_outputs.attentions,
         )
 
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        # Overwritten -- attention mask or input ids size doesn't match with actual input size
+        return None
+
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, is_first_iteration=False, **kwargs
     ):

@@ -2453,7 +2453,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
             # we cycle source as it should be dispatch in many target if regex
             for target_n, source_n in zip(target_params, cycle(source_params)):
-                # If the source is already registed as a target, use the original corresponding source. This should never
+                # If the source is already registered as a target, use the original corresponding source. This should never
                 # happen in general, but some models such as `d_fine` have complicated regex patterns, so it end up being
                 # the case for simplicity of the regexes. Fix it silently here
                 if source_n in expanded_tied_weights.keys():
@@ -2541,7 +2541,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Tie the weights
             setattr(parent, name, source_param)
             self._adjust_bias(parent, source_param)
-            # Remove from missing if necesary
+            # Remove from missing if necessary
             if missing_keys is not None and remove_from_missing:
                 missing_keys.discard(target_param_name)
 
@@ -3175,7 +3175,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 keys of the state dict of adapters needs to be prepended with `base_model.model`. Advanced users can
                 disable this behaviours by setting `save_peft_format` to `False`.
             save_original_format (`bool`, *optional*, defaults to `True`):
-                For backward compatibility with the previous versions of `transfomers` you can save the checkpoint with
+                For backward compatibility with the previous versions of `transformers` you can save the checkpoint with
                 its reverse mapping. The reverse mapping needs to exists even if the model was loaded from a None legacy
                 checkpoint.
             kwargs (`dict[str, Any]`, *optional*):
@@ -3702,7 +3702,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(`bool`, *optional*, defaults to `False`):
-                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
+                Whether or not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
             token (`str` or `bool`, *optional*):
@@ -4531,7 +4531,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """Adjust the `missing_keys` and `unexpected_keys` based on current model's exception rules, to avoid
         raising unneeded warnings/errors. This is performed in-place.
         """
-        # Old checkpoints may have keys for rotary_emb.inv_freq forach layer, however we moved this buffer to the main model
+        # Old checkpoints may have keys for rotary_emb.inv_freq for each layer, however we moved this buffer to the main model
         # (so the buffer name has changed). Remove them in such a case. This is another exception that was not added to
         # `_keys_to_ignore_on_load_unexpected` as it touches many models -> we add it manually to the existing patterns
         has_inv_freq_buffers = any(buffer.endswith("rotary_emb.inv_freq") for buffer, _ in self.named_buffers())

@@ -133,14 +133,14 @@ class DiaModelTester:
             vocab_size=self.vocab_size,
             hidden_act=self.hidden_act,
             num_channels=self.num_channels,
+            eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
+            bos_token_id=self.bos_token_id,
         )
 
         config = DiaConfig(
             encoder_config=encoder_config,
             decoder_config=decoder_config,
-            eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
-            bos_token_id=self.bos_token_id,
             delay_pattern=self.delay_pattern,
         )
 

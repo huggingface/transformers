@@ -761,7 +761,7 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
         if attention_mask is not None:
             attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=hidden_states,
+                inputs_embeds=hidden_states,
                 attention_mask=attention_mask,
             )
 
@@ -895,7 +895,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         if attention_mask is not None:
             attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=hidden_states,
+                inputs_embeds=hidden_states,
                 attention_mask=attention_mask,
             )
 
@@ -903,7 +903,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=hidden_states,
+                inputs_embeds=hidden_states,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )
