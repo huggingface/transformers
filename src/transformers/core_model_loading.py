@@ -812,11 +812,9 @@ def spawn_tp_materialize(
 
 
 def dot_natural_key(s: str):
-    """Sort key for state-dict names: split on ``"."`` and sort digit
-    segments numerically.  Each element is turned into a ``(type_rank, int_value, str_value)``
-    tuple so that segments that are numeric at one position but textual at
-    the same position in a different key never cause a ``TypeError`` during
-    comparison (ints and strs are not orderable in Python 3).
+    """Sort key for state-dict names: split on ``"."`` and sort digits numerically
+    and strings alphabetically. We emit a tuple at each point to sort ints
+    first and strings second to avoid int-string comparison failures.
     """
     result = []
     for p in s.split("."):
