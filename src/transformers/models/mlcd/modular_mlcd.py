@@ -22,7 +22,6 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import check_model_inputs
 from ..clip.modeling_clip import (
     CLIPMLP,
     CLIPAttention,
@@ -396,7 +395,6 @@ class MLCDVisionTransformer(CLIPVisionTransformer):
         self.vision_rotary_embedding = MLCDRotaryEmbedding(config.hidden_size // config.num_attention_heads // 2)
         self.class_pos_emb = nn.Parameter(torch.randn(1, config.hidden_size // config.num_attention_heads // 2))
 
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -433,8 +431,6 @@ class MLCDVisionTransformer(CLIPVisionTransformer):
 
 
 class MLCDVisionModel(CLIPVisionModel):
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,

@@ -247,7 +247,11 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 expected_video_token_count += thw[0] * thw[1] * thw[2]
             mm_len = expected_video_token_count
         else:
-            mm_len = batch_size * 192
+            # Calculate expected image token count based on image_grid_thw
+            expected_image_token_count = 0
+            for thw in out_dict["image_grid_thw"]:
+                expected_image_token_count += thw[0] * thw[1] * thw[2]
+            mm_len = expected_image_token_count
         self.assertEqual(len(out_dict[input_name]), mm_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}

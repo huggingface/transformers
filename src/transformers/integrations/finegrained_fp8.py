@@ -84,14 +84,9 @@ def _supports_cutlass(block_size: list[int] | None, output_dtype: torch.dtype) -
         return False
 
 
-try:
-    _FP8_DTYPE = torch.float8_e4m3fn
-    _FP8_MIN = torch.finfo(_FP8_DTYPE).min
-    _FP8_MAX = torch.finfo(_FP8_DTYPE).max
-except AttributeError:
-    _FP8_DTYPE = None
-    _FP8_MIN, _FP8_MAX = -448, 448
-    logger.warning_once("torch.float8_e4m3fn not available")
+_FP8_DTYPE = torch.float8_e4m3fn
+_FP8_MIN = torch.finfo(_FP8_DTYPE).min
+_FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
 
 # Copied from https://huggingface.co/deepseek-ai/DeepSeek-V3/blob/main/inference/kernel.py
@@ -625,6 +620,7 @@ class FP8Expert(nn.Module):
         from ..activations import ACT2FN
 
         self.block_size = block_size
+        # TODO we don't need exact expert count here but only in forward
         self.num_experts = config.num_local_experts if hasattr(config, "num_local_experts") else config.num_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = (
@@ -678,7 +674,7 @@ class FP8Expert(nn.Module):
 
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
+            if expert_idx == len(self.gate_up_proj):  # weights will load fine
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]

@@ -32,7 +32,7 @@ class AfmoeModelTester(CausalLMModelTester):
         self,
         parent,
         batch_size=4,
-        seq_length=128,
+        seq_length=12,
         is_training=True,
         use_input_mask=True,
         use_token_type_ids=False,

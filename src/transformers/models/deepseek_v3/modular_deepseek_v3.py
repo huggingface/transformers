@@ -308,6 +308,7 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
         is_grouped_mm_available()
     )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -321,7 +322,7 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
 
 
 class DeepseekV3Model(LlamaModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
+    pass
 
 
 class DeepseekV3ForCausalLM(LlamaForCausalLM):

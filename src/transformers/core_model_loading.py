@@ -18,6 +18,7 @@ from __future__ import annotations
 import math
 import os
 import re
+import traceback
 from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
@@ -65,7 +66,7 @@ def build_glob_alternation(
                 i += 1
                 body = src.replace("*", r".*")
                 branches.append(f"(?P<{group_name}>{body})")
-                tgt_group_to_glob[group_name] = glob.target_patterns[0]  # we index witht the first target
+                tgt_group_to_glob[group_name] = glob.target_patterns[0]  # we index with the first target
         else:
             group_name = f"g{i}"
             src_group_to_glob[group_name] = glob
@@ -441,7 +442,7 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
 class Force16BytesAlignment(ConversionOps):
     """
     Ensures that the given tensor is 16-bytes aligned in memory and clones it if not.
-    This garantees 16-bytes alignmenet for kernels / implementations that use TMA or SIMD instructions like torch._grouped_mm.
+    This guarantees 16-bytes alignment for kernels / implementations that use TMA or SIMD instructions like torch._grouped_mm.
     """
 
     @torch.no_grad()
@@ -637,7 +638,7 @@ class WeightTransform:
             tensors = self.collected_tensors.pop(key)
             # Async loading
             if isinstance(tensors[0], Future):
-                tensors = [future.result() for future in tensors]
+                tensors = [future.result() for future in tensors if future.result() is not None]
             # Sync loading
             elif callable(tensors[0]):
                 tensors = [func() for func in tensors]
@@ -725,7 +726,7 @@ class WeightConverter(WeightTransform):
                     collected_tensors,
                     source_patterns=self.source_patterns,
                     target_patterns=self.target_patterns,
-                    # Additional kwargs, ususally not used
+                    # Additional kwargs, usually not used
                     full_layer_name=layer_name,
                     model=model,
                     config=config,
@@ -827,7 +828,7 @@ def log_conversion_errors(
     op: list[ConversionOps] | ConversionOps | None = None,
 ):
     """Catch all exceptions during `convert` calls, and log the errors for later. Re-raise a `SkipParameters` exception
-    that will be catched later to skip the parameters that raised the original Exception."""
+    that will be caught later to skip the parameters that raised the original Exception."""
     try:
         yield
     except Exception as e:
@@ -846,15 +847,19 @@ def log_conversion_errors(
             return curr_op.__class__.__name__
 
         op_name = _format_op_name(op)
+
+        tb_str = "".join(traceback.format_exception(type(e), e, e.__traceback__))
         if isinstance(extras, tuple) and len(extras) == 2:
             length, target_keys = extras
             descriptor = f"{op_name} " if op_name else ""
             loading_info.conversion_errors[first_target_key] = (
-                f"{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {length}"
+                f"{tb_str}{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {length}"
             )
         elif isinstance(extras, str):
             suffix = f" via {op_name}" if op_name else ""
-            loading_info.conversion_errors[first_target_key] = f"{e}\nError{suffix} when processing parameter {extras}"
+            loading_info.conversion_errors[first_target_key] = (
+                f"{tb_str}{e}\nError{suffix} when processing parameter {extras}"
+            )
         elif extras is None and op_name:
             loading_info.conversion_errors[first_target_key] = f"{op_name}: {e}"
         else:
@@ -935,7 +940,7 @@ def rename_source_key(
 ) -> tuple[str, str | None]:
     """
     Rename a source key given all the renaming and weight conversion patterns we have. Also takes care of adding/removing
-    the base model prefix during loading if necesary.
+    the base model prefix during loading if necessary.
     """
     renamed_key = source_key
     # 1. apply all renamings in turns (if multiple match, it's the responsibility of the mappings to make sure they
@@ -951,7 +956,7 @@ def rename_source_key(
         if source_pattern is not None:
             break
 
-    # 3. check if we need to add or remove prefix if necesary (only during loading, not saving)
+    # 3. check if we need to add or remove prefix if necessary (only during loading, not saving)
     if prefix is not None and meta_state_dict is not None:
         if (
             renamed_key.startswith(prefix)
@@ -1150,7 +1155,11 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation = tp_layer(
                             device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
                         )
-                    shard_index = len(mapping.collected_tensors.get(original_key, []))
+                    shard_index = (
+                        len(mapping.collected_tensors.get(source_pattern, []))
+                        if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
+                        else None
+                    )
                     future_or_tensor = spawn_tp_materialize(
                         thread_pool,
                         tensor,
@@ -1214,7 +1223,7 @@ def convert_and_load_state_dict_in_model(
     # Close the pool, independently of whether the code was interrupted or finished successfully
     finally:
         if thread_pool is not None:
-            # `cancel_futures=True` in case the program was interupted, to avoid wasting time on exit
+            # `cancel_futures=True` in case the program was interrupted, to avoid wasting time on exit
             thread_pool.shutdown(wait=False, cancel_futures=True)
 
     # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)

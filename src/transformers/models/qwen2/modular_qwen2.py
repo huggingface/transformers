@@ -1,11 +1,9 @@
 from collections.abc import Callable
 
 import torch
-from packaging import version
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
-from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -14,8 +12,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import check_model_inputs
-from ...utils.import_utils import get_torch_version
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -103,35 +101,6 @@ class Qwen2Attention(LlamaAttention):
         return attn_output, attn_weights
 
 
-if version.parse(get_torch_version()) >= version.parse("2.3.0"):
-
-    class Qwen2RMSNorm(nn.RMSNorm):
-        def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-            super().__init__(normalized_shape=hidden_size, eps=eps, elementwise_affine=True)
-
-else:
-
-    @use_kernel_forward_from_hub("RMSNorm")
-    class Qwen2RMSNorm(nn.Module):
-        def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-            """
-            Qwen2RMSNorm is equivalent to T5LayerNorm
-            """
-            super().__init__()
-            self.weight = nn.Parameter(torch.ones(hidden_size))
-            self.variance_epsilon = eps
-
-        def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-            input_dtype = hidden_states.dtype
-            hidden_states = hidden_states.to(torch.float32)
-            variance = hidden_states.pow(2).mean(-1, keepdim=True)
-            hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-            return self.weight * hidden_states.to(input_dtype)
-
-        def extra_repr(self):
-            return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
 class Qwen2DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Qwen2Config, layer_idx: int):
         super().__init__(config=config, layer_idx=layer_idx)
@@ -147,7 +116,8 @@ class Qwen2Model(MistralModel):
         super().__init__(config)
         self.has_sliding_layers = "sliding_attention" in self.config.layer_types
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -183,7 +153,7 @@ class Qwen2Model(MistralModel):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
@@ -239,7 +209,7 @@ __all__ = [
     "Qwen2PreTrainedModel",
     "Qwen2Model",
     "Qwen2ForCausalLM",
-    "Qwen2RMSNorm",
+    "Qwen2RMSNorm",  # noqa: F822
     "Qwen2ForSequenceClassification",
     "Qwen2ForTokenClassification",
     "Qwen2ForQuestionAnswering",

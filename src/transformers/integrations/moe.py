@@ -116,14 +116,19 @@ def batched_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
+    # Handle invalid expert IDs from Expert Parallelism (EP)
+    # When EP is enabled, tokens assigned to experts on other devices are marked with sentinel value >= num_experts
+    valid_mask = expert_ids < self.num_experts
+    expert_ids_clamped = expert_ids.clamp(0, self.num_experts - 1)
+
     # Get current hidden states for selected samples
     selected_hidden_states = hidden_states[token_idx]
 
-    # Select expert weights and biases for selected samples
-    selected_gate_up = self.gate_up_proj[expert_ids]
-    selected_down = self.down_proj[expert_ids]
-    selected_gate_up_bias = self.gate_up_proj_bias[expert_ids] if self.has_bias else None
-    selected_down_bias = self.down_proj_bias[expert_ids] if self.has_bias else None
+    # Select expert weights and biases for selected samples (using clamped IDs for safe indexing)
+    selected_gate_up = self.gate_up_proj[expert_ids_clamped]
+    selected_down = self.down_proj[expert_ids_clamped]
+    selected_gate_up_bias = self.gate_up_proj_bias[expert_ids_clamped] if self.has_bias else None
+    selected_down_bias = self.down_proj_bias[expert_ids_clamped] if self.has_bias else None
 
     # --- Up projection per expert (batched) ---
     gate_up_out = _batched_linear(
@@ -138,8 +143,11 @@ def batched_mm_experts_forward(
         gated_out, selected_down, selected_down_bias, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
-    # Apply routing weights
+    # Apply routing weights and zero out invalid expert contributions
+    if sample_weights.shape != expert_ids_clamped.shape:
+        sample_weights = sample_weights.gather(0, expert_ids_clamped)
     out_per_sample = out_per_sample * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
+    out_per_sample = out_per_sample * valid_mask.unsqueeze(-1).to(out_per_sample.dtype)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
     # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
@@ -172,12 +180,15 @@ def _grouped_linear(
     Returns:
         `torch.Tensor`: Output tensor of shape (S, output_dim).
     """
-    if is_transposed:
-        # (S, input_dim) @ grouped (num_experts, input_dim, output_dim) -> (S, output_dim)
-        out = torch._grouped_mm(input, weight, offs=offs)
-    else:
-        # (S, input_dim) @ grouped (num_experts, output_dim, input_dim).T -> (S, output_dim)
-        out = torch._grouped_mm(input, weight.transpose(-2, -1), offs=offs)
+    # torch._grouped_mm is not autocast-enabled, so we disable autocast to avoid dtype mismatch.
+    # See: https://github.com/pytorch/pytorch/issues/174763
+    with torch.amp.autocast(device_type=input.device.type, enabled=False):
+        if is_transposed:
+            # (S, input_dim) @ grouped (num_experts, input_dim, output_dim) -> (S, output_dim)
+            out = torch._grouped_mm(input, weight, offs=offs)
+        else:
+            # (S, input_dim) @ grouped (num_experts, output_dim, input_dim).T -> (S, output_dim)
+            out = torch._grouped_mm(input, weight.transpose(-2, -1), offs=offs)
 
     if bias is not None:
         # We should be able to pass bias to the grouped_mm call, but it's not yet supported.
