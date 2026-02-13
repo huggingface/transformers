@@ -186,18 +186,33 @@ class BackboneMixin:
         Initialize the backbone model from timm. The backbone must already be loaded to backbone
         """
 
+        out_features_from_config = getattr(self.config, "out_features", None)
+        stage_names_from_config = getattr(self.config, "stage_names", None)
+
         # These will disagree with the defaults for the transformers models e.g. for resnet50
         # the transformer model has out_features = ['stem', 'stage1', 'stage2', 'stage3', 'stage4']
         # the timm model has out_features = ['act', 'layer1', 'layer2', 'layer3', 'layer4']
         self.stage_names = [stage["module"] for stage in backbone.feature_info.info]
         self.num_features = [stage["num_chs"] for stage in backbone.feature_info.info]
 
-        self.config._out_indices = list(backbone.feature_info.out_indices)
-        self.config._out_features = backbone.feature_info.module_name()
-        self.config.stage_names = self.stage_names
+        out_indices = list(backbone.feature_info.out_indices)
+        out_features = backbone.feature_info.module_name()
 
-        # We verify the out indices and out features are valid
-        self.config.verify_out_features_out_indices()
+        if out_features_from_config is not None and out_features_from_config != out_features:
+            raise ValueError(
+                f"Config has `out_features` set to {out_features_from_config} which doesn't match `out_features` "
+                "from backbone's feature_info. Please check if your checkpoint has correct out features/indices saved."
+            )
+
+        if stage_names_from_config is not None and stage_names_from_config != self.stage_names:
+            raise ValueError(
+                f"Config has `stage_names` set to {stage_names_from_config} which doesn't match `stage_names` "
+                "from backbone's feature_info. Please check if your checkpoint has correct `stage_names` saved."
+            )
+
+        # We set, align and verify out indices, out features and stage names
+        self.config.stage_names = self.stage_names
+        self.config.set_output_features_output_indices(out_features, out_indices)
 
     def _init_transformers_backbone(self) -> None:
         self.stage_names = self.config.stage_names
