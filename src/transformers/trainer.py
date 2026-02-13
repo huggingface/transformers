@@ -28,7 +28,9 @@ import sys
 import tempfile
 import time
 import warnings
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -55,6 +57,7 @@ from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler
 from . import __version__
 from .configuration_utils import PreTrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
+from .data_producer import AsyncDataProducer, DataProducer, DataProducerCallback, ProducerConfig
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .feature_extraction_utils import FeatureExtractionMixin
@@ -247,6 +250,265 @@ SCHEDULER_NAME = "scheduler.pt"
 FSDP_MODEL_NAME = "pytorch_model_fsdp"
 
 
+# ======================================================================
+# Internal data structures for the unified training loop
+# ======================================================================
+
+
+@dataclass
+class _TrainingPlan:
+    """Everything computed *before* optimizer/model setup.
+
+    Both epoch sources produce one of these so the rest of the pipeline
+    can be completely source-agnostic.
+    """
+
+    max_steps: int
+    num_train_epochs: int
+    num_train_samples: int
+    num_update_steps_per_epoch: int | None  # None for online (no fixed epoch size)
+    total_train_batch_size: int
+    num_examples: int
+    len_dataloader: int | None
+    # The "reference" dataloader used for callback setup and SP adapter.
+    initial_dataloader: DataLoader
+
+
+@dataclass
+class _EpochSpec:
+    """What the unified loop needs for one pass over a dataloader."""
+
+    epoch: float
+    dataloader: DataLoader
+    len_dataloader: int | None = None
+    # Resume from checkpoint attributes - set after a checkpoint
+    resume_from_checkpoint: str | None = None
+    steps_to_skip: int = 0
+    is_resume_epoch: bool = False
+
+
+class _EpochSource(ABC):
+    """Internal abstraction that yields epoch specs for the training loop.
+
+    Two implementations:
+    - ``_StaticEpochSource``: wraps a fixed ``train_dataset`` / DataLoader
+    - ``_OnlineEpochSource``: wraps a ``DataProducer``
+
+    The Trainer only ever sees the base class, so the training loop is
+    completely source-agnostic.
+    """
+
+    @abstractmethod
+    def compute_plan(self, trainer: "Trainer", args: "TrainingArguments") -> _TrainingPlan:
+        """Create dataloaders, compute max_steps, etc.  Called once."""
+        ...
+
+    def post_model_setup(self, model: nn.Module, trainer: "Trainer") -> None:
+        """Hook called after ``_setup_training`` wraps the model.
+
+        Use for operations that need the prepared model (e.g. SP adapter).
+        Default: no-op.
+        """
+        pass
+
+    @abstractmethod
+    def log_banner(self, plan: _TrainingPlan, args: "TrainingArguments", model: nn.Module, trainer: "Trainer") -> None:
+        """Print the various logging info before training starts."""
+        ...
+
+    @abstractmethod
+    def iter_epochs(
+        self,
+        model: nn.Module,
+        trainer: "Trainer",
+        epochs_trained: int,
+        steps_trained_in_current_epoch: int,
+        resume_from_checkpoint: str | None,
+    ) -> Iterator[_EpochSpec]:
+        """Yield one ``_EpochSpec`` per training pass over a dataloader."""
+        ...
+
+
+class _StaticEpochSource(_EpochSource):
+    """Wraps the existing ``train_dataset`` -> DataLoader -> Sampler pipeline.
+
+    This is the default path when no ``data_producer`` is set.
+    """
+
+    def __init__(self):
+        self.train_dataloader: DataLoader | None = None
+        self.num_train_epochs: int = 1
+        self.num_examples: int = 0
+        self.len_dataloader: int | None = None
+
+    def compute_plan(self, trainer, args):
+        dl = trainer.get_train_dataloader()
+        if trainer.is_fsdp_xla_v2_enabled:
+            dl = tpu_spmd_dataloader(dl)
+        self.train_dataloader = dl
+
+        total_train_batch_size = trainer.get_total_train_batch_size(args)
+
+        (
+            num_train_epochs,
+            num_update_steps_per_epoch,
+            num_examples,
+            num_train_samples,
+            epoch_based,
+            len_dataloader,
+            max_steps,
+        ) = trainer.set_initial_training_values(args, dl, total_train_batch_size)
+
+        self.num_train_epochs = num_train_epochs
+        self.num_examples = num_examples
+        self.len_dataloader = len_dataloader
+
+        return _TrainingPlan(
+            max_steps=max_steps,
+            num_train_epochs=num_train_epochs,
+            num_train_samples=num_train_samples,
+            num_update_steps_per_epoch=num_update_steps_per_epoch,
+            total_train_batch_size=total_train_batch_size,
+            num_examples=num_examples,
+            len_dataloader=len_dataloader,
+            initial_dataloader=dl,
+        )
+
+    def post_model_setup(self, model, trainer):
+        # Apply Ulysses/SP dataloader adapter
+        pc = getattr(trainer.accelerator, "parallelism_config", None)
+        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
+            self.train_dataloader = trainer.accelerator.deepspeed_ulysses_dl_adapter(self.train_dataloader, model)
+
+    def log_banner(self, plan, args, model, trainer):
+        logger.info("***** Running training *****")
+        logger.info(f"  Num examples = {plan.num_examples:,}")
+        logger.info(f"  Num Epochs = {plan.num_train_epochs:,}")
+        logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size:,}")
+        if args.per_device_train_batch_size != trainer._train_batch_size:
+            logger.info(f"  Training with DataParallel so batch size has been adjusted to: {trainer._train_batch_size:,}")
+        logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {plan.total_train_batch_size:,}")
+        logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
+        logger.info(f"  Total optimization steps = {plan.max_steps:,}")
+        logger.info(f"  Number of trainable parameters = {get_model_param_count(model, trainable_only=True):,}")
+
+    def iter_epochs(self, model, trainer, epochs_trained, steps_trained_in_current_epoch, resume_from_checkpoint):
+        for epoch in range(epochs_trained, self.num_train_epochs):
+            is_first = epoch == epochs_trained
+            has_resume = is_first and resume_from_checkpoint is not None
+            yield _EpochSpec(
+                epoch=epoch,
+                dataloader=self.train_dataloader,
+                len_dataloader=self.len_dataloader,
+                resume_from_checkpoint=resume_from_checkpoint if has_resume else None,
+                steps_to_skip=steps_trained_in_current_epoch if is_first else 0,
+                is_resume_epoch=has_resume,
+            )
+
+
+class _OnlineEpochSource(_EpochSource):
+    """Wraps a ``DataProducer`` to yield produce->train->produce->train epochs.
+
+    Each rollout round calls ``DataProducer.produce(model, step)`` to
+    generate a fresh dataset, wraps it in a DataLoader using the Trainer's
+    existing collator/sampler infrastructure, then yields ``mini_epochs``
+    passes over that data.
+    """
+
+    def __init__(self, data_producer: DataProducer):
+        self.data_producer = data_producer
+        self.config = data_producer.config
+        self.initial_dataset: Dataset | None = None
+        self.initial_dataloader: DataLoader | None = None
+
+    def compute_plan(self, trainer, args):
+        total_train_batch_size = trainer.get_total_train_batch_size(args)
+
+        # Produce initial dataset to size the training plan
+        self.initial_dataset = trainer._produce_data(trainer.model)
+
+        # IterableDataset + mini_epochs > 1 is almost certainly a bug
+        if isinstance(self.initial_dataset, IterableDataset) and self.config.mini_epochs > 1:
+            logger.warning(
+                "DataProducer returned an IterableDataset with "
+                f"mini_epochs={self.config.mini_epochs}. Each mini-epoch "
+                "will see different data because IterableDataset creates "
+                "a fresh iterator each pass. Use a map-style Dataset "
+                "(e.g. RolloutDataset) if you want multiple passes over "
+                "the same rollout data."
+            )
+
+        self.initial_dataloader = trainer._get_online_dataloader(self.initial_dataset)
+        len_dl = len(self.initial_dataloader) if has_length(self.initial_dataloader) else None
+
+        # Compute max_steps
+        if args.max_steps > 0:
+            max_steps = args.max_steps
+        elif self.config.max_rollouts is not None and len_dl is not None:
+            steps_per_mini_epoch = max(len_dl // args.gradient_accumulation_steps, 1)
+            max_steps = steps_per_mini_epoch * self.config.mini_epochs * self.config.max_rollouts
+        else:
+            raise ValueError(
+                "When using a DataProducer, you must set either "
+                "`args.max_steps` or `producer_config.max_rollouts` "
+                "(and use a map-style Dataset so its length is known)."
+            )
+
+        return _TrainingPlan(
+            max_steps=max_steps,
+            num_train_epochs=max_steps,  # not epoch-based
+            num_train_samples=max_steps * total_train_batch_size,
+            num_update_steps_per_epoch=None,
+            total_train_batch_size=total_train_batch_size,
+            num_examples=len(self.initial_dataset) if has_length(self.initial_dataset) else 0,
+            len_dataloader=len_dl,
+            initial_dataloader=self.initial_dataloader,
+        )
+
+    def log_banner(self, plan, args, model, trainer):
+        logger.info("***** Running online training *****")
+        logger.info(f"  Mini-epochs per rollout = {self.config.mini_epochs}")
+        logger.info(f"  Max rollouts = {self.config.max_rollouts or 'unlimited (use max_steps)'}")
+        logger.info(f"  Async prefetch = {self.config.async_prefetch}")
+        logger.info(f"  Total train batch size = {plan.total_train_batch_size:,}")
+        logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
+        logger.info(f"  Total optimization steps = {plan.max_steps:,}")
+        logger.info(f"  Number of trainable parameters = {get_model_param_count(model, trainable_only=True):,}")
+
+    def iter_epochs(self, model, trainer, epochs_trained, steps_trained_in_current_epoch, resume_from_checkpoint):
+        rollout = 0
+        current_dataset = self.initial_dataset
+
+        while True:
+            # Check stopping before each rollout
+            if trainer.state.global_step >= trainer.state.max_steps:
+                return
+            if self.config.max_rollouts is not None and rollout >= self.config.max_rollouts:
+                return
+            if trainer.control.should_training_stop:
+                return
+
+            # Produce (first round already produced in compute_plan)
+            if rollout > 0:
+                current_dataset = trainer._produce_data(model)
+            dl = trainer._get_online_dataloader(current_dataset)
+            len_dl = len(dl) if has_length(dl) else None
+
+            # Yield mini_epochs passes over this rollout's data
+            for mini in range(self.config.mini_epochs):
+                if trainer.state.global_step >= trainer.state.max_steps:
+                    return
+                if trainer.control.should_training_stop:
+                    return
+                yield _EpochSpec(
+                    epoch=rollout + mini / self.config.mini_epochs,
+                    dataloader=dl,
+                    len_dataloader=len_dl,
+                )
+
+            rollout += 1
+
+
 @requires(
     backends=(
         "torch",
@@ -379,6 +641,7 @@ class Trainer:
         optimizers: tuple[torch.optim.Optimizer | None, torch.optim.lr_scheduler.LambdaLR | None] = (None, None),
         optimizer_cls_and_kwargs: tuple[type[torch.optim.Optimizer], dict[str, Any]] | None = None,
         preprocess_logits_for_metrics: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] | None = None,
+        data_producer: DataProducer | None = None,
     ):
         # Init flow:
         #   1. Args & seed               – defaults, determinism
@@ -539,6 +802,16 @@ class Trainer:
         self.processing_class = processing_class
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
+        # Online / async RL support
+        self.data_producer = data_producer
+        if data_producer is not None:
+            if not isinstance(data_producer, DataProducer):
+                raise TypeError(
+                    f"`data_producer` must be a DataProducer instance, got {type(data_producer)}"
+                )
+            if data_producer.config.async_prefetch:
+                self.data_producer = AsyncDataProducer(data_producer)
+
         # Callables
         self.compute_loss_func = compute_loss_func
         self.compute_metrics = compute_metrics
@@ -565,6 +838,8 @@ class Trainer:
             callbacks, self.model, self.processing_class, self.optimizer, self.lr_scheduler
         )
         self.add_callback(PrinterCallback if self.args.disable_tqdm else DEFAULT_PROGRESS_CALLBACK)
+        if self.data_producer is not None:
+            self.add_callback(DataProducerCallback(self.data_producer))
 
         # ---- 9. Hub & output ---------------------------------------------------------
         self.hub_model_id = None  # Set by init_hf_repo() when push_to_hub is enabled
@@ -1407,6 +1682,68 @@ class Trainer:
                 ignore_keys_for_eval=ignore_keys_for_eval,
             )
 
+    def _create_epoch_source(self) -> _EpochSource:
+        """Return the appropriate epoch source for this training run."""
+        if getattr(self, "data_producer", None) is not None:
+            return _OnlineEpochSource(self.data_producer)
+        return _StaticEpochSource()
+
+    @torch.no_grad()
+    def _produce_data(self, model: nn.Module) -> Dataset:
+        """Call the DataProducer to generate a fresh training dataset.
+
+        Handles eval/train mode switching and CUDA cache clearing per
+        the producer's config.
+        """
+        producer = self.data_producer
+        config = producer.config
+
+        if hasattr(producer, "on_rollout_begin"):
+            producer.on_rollout_begin(global_step=self.state.global_step)
+
+        if config.empty_cache_before_produce and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        was_training = model.training
+        if config.eval_during_produce:
+            model.eval()
+
+        dataset = producer.produce(
+            model=model,
+            global_step=self.state.global_step,
+            processing_class=self.processing_class,
+            accelerator=self.accelerator,
+            args=self.args,
+        )
+
+        if config.eval_during_produce and was_training:
+            model.train()
+
+        if config.empty_cache_after_produce and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        if hasattr(producer, "on_rollout_end"):
+            producer.on_rollout_end(
+                dataset=dataset,
+                global_step=self.state.global_step,
+            )
+
+        return dataset
+
+    def _get_online_dataloader(self, dataset: Dataset) -> DataLoader:
+        """Create a DataLoader for a produced dataset.
+
+        Reuses the Trainer's existing collator, sampler, and accelerator
+        preparation.
+        """
+        return self._get_dataloader(
+            dataset=dataset,
+            description="OnlineTraining",
+            batch_size=self._train_batch_size,
+            sampler_fn=self._get_train_sampler,
+            is_training=True,
+        )
+
     def _inner_training_loop(
         self,
         batch_size: int | None = None,
@@ -1432,65 +1769,43 @@ class Trainer:
                     self.args.per_device_train_batch_size = original_bs
             self.state.train_batch_size = self._train_batch_size
         logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
-        # Data loader and number of training steps
-        train_dataloader = self.get_train_dataloader()
-        if self.is_fsdp_xla_v2_enabled:
-            train_dataloader = tpu_spmd_dataloader(train_dataloader)
 
-        # Setting up training control variables:
-        # number of training epochs: num_train_epochs
-        # number of training steps per epoch: num_update_steps_per_epoch
-        # total number of training steps to execute: max_steps
-        total_train_batch_size = self.get_total_train_batch_size(args)
+        # Compute training plan (source-specific: static dataset or DataProducer)
+        source = self._create_epoch_source()
+        plan = source.compute_plan(self, args)
 
-        (
-            num_train_epochs,
-            num_update_steps_per_epoch,
-            num_examples,
-            num_train_samples,
-            epoch_based,
-            len_dataloader,
-            max_steps,
-        ) = self.set_initial_training_values(args, train_dataloader, total_train_batch_size)
+        # Setup optimizer, model, checkpoint (shared)
+        model = self._setup_training(args, plan.max_steps, resume_from_checkpoint)
 
-        model, train_dataloader = self._setup_training(args, max_steps, resume_from_checkpoint, train_dataloader)
+        # Post-model-setup hook (e.g. SP adapter for static source)
+        source.post_model_setup(model, self)
 
+        # Logging banner (source-specific)
+        source.log_banner(plan, args, model, self)
+
+        # Initialize loop state (shared)
         epochs_trained, steps_trained_in_current_epoch, start_time = self._init_loop_state(
             args=args,
             model=model,
-            num_update_steps_per_epoch=num_update_steps_per_epoch,
-            num_train_epochs=num_train_epochs,
-            max_steps=max_steps,
-            total_train_batch_size=total_train_batch_size,
-            num_examples=num_examples,
-            len_dataloader=len_dataloader,
-            train_dataloader=train_dataloader,
+            plan=plan,
+            train_dataloader=plan.initial_dataloader,
             resume_from_checkpoint=resume_from_checkpoint,
             trial=trial,
             ignore_keys_for_eval=ignore_keys_for_eval,
         )
 
-        for epoch in range(epochs_trained, num_train_epochs):
-            self._run_epoch(
-                model=model,
-                epoch=epoch,
-                train_dataloader=train_dataloader,
-                len_dataloader=len_dataloader,
-                args=args,
-                trial=trial,
-                ignore_keys_for_eval=ignore_keys_for_eval,
-                start_time=start_time,
-                resume_from_checkpoint=resume_from_checkpoint,
-                epochs_trained=epochs_trained,
-                steps_trained_in_current_epoch=steps_trained_in_current_epoch,
-            )
+        # === THE UNIFIED LOOP ===
+        for spec in source.iter_epochs(
+            model, self, epochs_trained, steps_trained_in_current_epoch, resume_from_checkpoint,
+        ):
+            self._run_epoch(model, spec, args, trial, ignore_keys_for_eval, start_time)
             if self.control.should_training_stop:
                 break
 
-        return self._finalize_training(model, trial, num_train_samples, start_time)
+        return self._finalize_training(model, trial, plan.num_train_samples, start_time)
 
-    def _setup_training(self, args, max_steps, resume_from_checkpoint, train_dataloader):
-        """Create optimizer, wrap model, load checkpoint. Returns (wrapped_model, train_dataloader)."""
+    def _setup_training(self, args, max_steps, resume_from_checkpoint):
+        """Create optimizer, wrap model, load checkpoint. Returns the wrapped model."""
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
                 # nn.DataParallel(model) replicates the model, creating new variables and module
@@ -1574,11 +1889,6 @@ class Trainer:
         # Create scheduler now that the optimizer won't change anymore
         self.create_scheduler(num_training_steps=max_steps)
 
-        # since DataLoader was Accelerate prepared w/o a model arg in the same call, we now have to complete the DL wrapping for ALST/UlyssesSP, after model has been prepared
-        pc = getattr(self.accelerator, "parallelism_config", None)
-        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
-            train_dataloader = self.accelerator.deepspeed_ulysses_dl_adapter(train_dataloader, model)
-
         if self.is_fsdp_enabled:
             self.model = self.model_wrapped = model
             # Fix `got mixed torch.Tensor and DTensor` error in model.generate() for FSDP2 with LoRA
@@ -1611,18 +1921,13 @@ class Trainer:
         # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model),
         # FSDP(Transformers Model), Dynamo Optimized Module(Transformers Model) etc.
 
-        return model, train_dataloader
+        return model
 
     def _init_loop_state(
         self,
         args,
         model,
-        num_update_steps_per_epoch,
-        num_train_epochs,
-        max_steps,
-        total_train_batch_size,
-        num_examples,
-        len_dataloader,
+        plan: _TrainingPlan,
         train_dataloader,
         resume_from_checkpoint,
         trial,
@@ -1630,18 +1935,6 @@ class Trainer:
     ):
         """Initialize training loop state. Returns (epochs_trained, steps_trained_in_current_epoch, start_time)."""
         self.state.is_hyper_param_search = trial is not None
-
-        # Train!
-        logger.info("***** Running training *****")
-        logger.info(f"  Num examples = {num_examples:,}")
-        logger.info(f"  Num Epochs = {num_train_epochs:,}")
-        logger.info(f"  Instantaneous batch size per device = {self.args.per_device_train_batch_size:,}")
-        if self.args.per_device_train_batch_size != self._train_batch_size:
-            logger.info(f"  Training with DataParallel so batch size has been adjusted to: {self._train_batch_size:,}")
-        logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size:,}")
-        logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
-        logger.info(f"  Total optimization steps = {max_steps:,}")
-        logger.info(f"  Number of trainable parameters = {get_model_param_count(model, trainable_only=True):,}")
 
         self.state.epoch = 0
         start_time = time.time()
@@ -1656,17 +1949,22 @@ class Trainer:
             self.state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
             compare_trainer_and_checkpoint_args(self.args, self.state)
             self._load_callback_state()
-            epochs_trained = int(self.state.global_step // num_update_steps_per_epoch)
-            if not args.ignore_data_skip:
-                steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
-                steps_trained_in_current_epoch *= args.gradient_accumulation_steps
+            if plan.num_update_steps_per_epoch is not None:
+                epochs_trained = int(self.state.global_step // plan.num_update_steps_per_epoch)
+                if not args.ignore_data_skip:
+                    steps_trained_in_current_epoch = self.state.global_step % plan.num_update_steps_per_epoch
+                    steps_trained_in_current_epoch *= args.gradient_accumulation_steps
+                else:
+                    steps_trained_in_current_epoch = 0
             else:
+                # Online path: no fixed epoch size, so no epoch/step skipping
+                epochs_trained = 0
                 steps_trained_in_current_epoch = 0
 
             logger.info("  Continuing training from checkpoint, will skip to saved global_step")
             logger.info(f"  Continuing training from epoch {epochs_trained}")
             logger.info(f"  Continuing training from global step {self.state.global_step}")
-            if not args.ignore_data_skip:
+            if not args.ignore_data_skip and plan.num_update_steps_per_epoch is not None:
                 logger.info(
                     f"  Will skip the first {epochs_trained} epochs then the first"
                     f" {steps_trained_in_current_epoch} batches in the first epoch."
@@ -1677,7 +1975,7 @@ class Trainer:
             setattr(self.callback_handler, attr, getattr(self, attr))
         self.callback_handler.train_dataloader = train_dataloader
 
-        self.state.init_training_references(self, max_steps, num_train_epochs, trial)
+        self.state.init_training_references(self, plan.max_steps, plan.num_train_epochs, trial)
 
         # tr_loss is a tensor to avoid synchronization of TPUs through .item()
         self._tr_loss = torch.tensor(0.0, device=args.device)
@@ -1694,22 +1992,11 @@ class Trainer:
 
         return epochs_trained, steps_trained_in_current_epoch, start_time
 
-    def _run_epoch(
-        self,
-        model,
-        epoch,
-        train_dataloader,
-        len_dataloader,
-        args,
-        trial,
-        ignore_keys_for_eval,
-        start_time,
-        resume_from_checkpoint,
-        epochs_trained,
-        steps_trained_in_current_epoch,
-    ):
-        """Run one full pass over the dataloader."""
-        epoch_dataloader = train_dataloader
+    def _run_epoch(self, model, spec: _EpochSpec, args, trial, ignore_keys_for_eval, start_time):
+        """Run one full pass over a dataloader described by *spec*."""
+        epoch = spec.epoch
+        epoch_dataloader = spec.dataloader
+        len_dataloader = spec.len_dataloader
 
         steps_in_epoch = (
             len(epoch_dataloader)
@@ -1722,16 +2009,16 @@ class Trainer:
         rng_to_sync = False
 
         # Handle resumption from checkpoint
-        if epoch == epochs_trained and resume_from_checkpoint is not None:
-            if steps_trained_in_current_epoch > 0 and not args.ignore_data_skip:
-                epoch_dataloader = skip_first_batches(epoch_dataloader, steps_trained_in_current_epoch)
-                step = steps_trained_in_current_epoch - 1
+        if spec.is_resume_epoch and spec.resume_from_checkpoint is not None:
+            if spec.steps_to_skip > 0 and not args.ignore_data_skip:
+                epoch_dataloader = skip_first_batches(epoch_dataloader, spec.steps_to_skip)
+                step = spec.steps_to_skip - 1
                 rng_to_sync = True
-            elif steps_trained_in_current_epoch == 0:
-                self._load_rng_state(resume_from_checkpoint)
+            elif spec.steps_to_skip == 0:
+                self._load_rng_state(spec.resume_from_checkpoint)
 
         if hasattr(epoch_dataloader, "set_epoch"):
-            epoch_dataloader.set_epoch(epoch)
+            epoch_dataloader.set_epoch(int(epoch))
 
         epoch_iterator = iter(epoch_dataloader)
         # We chunkify the epoch iterator into gradient accumulation steps `n` batches
@@ -1787,7 +2074,7 @@ class Trainer:
                         self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
 
                 if rng_to_sync:
-                    self._load_rng_state(resume_from_checkpoint)
+                    self._load_rng_state(spec.resume_from_checkpoint)
                     rng_to_sync = False
 
                 if step % args.gradient_accumulation_steps == 0:
