@@ -476,6 +476,14 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         height, width = get_image_size(image, input_data_format)
         num_channels = image.shape[0] if input_data_format == ChannelDimension.FIRST else image.shape[-1]
 
+        # Ensure background_color is the correct shape
+        if isinstance(background_color, int):
+            background_color = [background_color]
+        elif len(background_color) != num_channels:
+            raise ValueError(
+                f"background_color must have no more than {num_channels} elements to match the number of channels"
+            )
+
         if height == width:
             image = (
                 to_channel_dimension_format(image, data_format, input_data_format)
@@ -485,14 +493,6 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
             return image
 
         max_dim = max(height, width)
-
-        # Ensure background_color is the correct shape
-        if isinstance(background_color, int):
-            background_color = [background_color]
-        elif len(background_color) != num_channels:
-            raise ValueError(
-                f"background_color must have no more than {num_channels} elements to match the number of channels"
-            )
 
         if input_data_format == ChannelDimension.FIRST:
             result = np.zeros((num_channels, max_dim, max_dim), dtype=image.dtype)

@@ -305,9 +305,6 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         """
         height, width = get_image_size(images, ChannelDimension.FIRST)
 
-        if height == width:
-            return images
-
         num_channels = images.shape[1] if len(images.shape) == 4 else images.shape[0]
         if isinstance(background_color, int):
             background_color = [background_color] + [0] * (num_channels - 1)
@@ -315,6 +312,9 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
             raise ValueError(
                 f"background_color must have no more than {num_channels} elements to match the number of channels"
             )
+
+        if height == width:
+            return images
 
         max_dim = max(height, width)
         paste_x_left = (max_dim - width) // 2
