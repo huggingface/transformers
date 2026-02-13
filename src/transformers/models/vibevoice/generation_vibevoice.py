@@ -63,15 +63,16 @@ class VibeVoiceTokenConstraintProcessor(LogitsProcessor):
 
 
 class VibeVoiceGenerationMixin(GenerationMixin):
-    def _prepare_generation_config(self, generation_config: GenerationConfig | None, **kwargs):
+    def _prepare_generation_config(
+        self, generation_config: GenerationConfig | None, **kwargs
+    ) -> tuple[GenerationConfig, dict]:
         """
         This method overrides [~generation.utils.GenerationMixin._prepare_generation_config].
 
-        It extracts VibeVoice-specific parameters for the generation config and sets up the default noise scheduler (if
-        not provided).
+        It extracts VibeVoice-specific parameters for the generation config.
 
         VibeVoice-specific parameters include:
-        - `noise_scheduler`: A noise scheduler instance.
+        - `noise_scheduler`: A noise scheduler instance (required).
         - `monitor_progress`: A callable to monitor generation progress. If provided, this function can be called to
             report the progress of the audio generation. The function takes a tensor argument `p` of shape `(n, 2)`,
             where `n` is the batch size. `p[i, 0]` contains the current generation step for batch item `i`, and `p[i, 1]`
@@ -81,11 +82,12 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         # Call the base class method to load from default generation_config.json
         generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
 
-        # try creating VibeVoice noise scheduler if not provided or not already in generation_config
+        # Extract VibeVoice noise scheduler
         noise_scheduler = model_kwargs.pop("noise_scheduler", kwargs.pop("noise_scheduler", None))
         if noise_scheduler is None:
             raise ValueError(
-                "VibeVoice generation requires a `noise scheduler` to be provided, e.g. `diffusers.DPMSolverMultistepScheduler`."
+                "VibeVoice generation requires a `noise_scheduler` to be provided, "
+                "e.g., `diffusers.DPMSolverMultistepScheduler`."
             )
         if not (
             hasattr(noise_scheduler, "set_timesteps")
@@ -93,8 +95,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             and hasattr(noise_scheduler, "timesteps")
         ):
             raise ValueError(
-                "The provided noise scheduler is not compatible with VibeVoice generation. "
-                "It must implement `set_timesteps` and `step` methods, and have a `timesteps` attribute."
+                f"The provided noise_scheduler ({type(noise_scheduler).__name__}) is not compatible with VibeVoice "
+                "generation. It must implement `set_timesteps` and `step` methods, and have a `timesteps` attribute."
             )
         generation_config.noise_scheduler = noise_scheduler
         if "monitor_progress" in model_kwargs:
@@ -156,7 +158,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         # *************** VibeVoice specific ***************
         noise_scheduler = generation_config.noise_scheduler
         monitor_progress = getattr(generation_config, "monitor_progress", None)
-        guidance_scale = generation_config.guidance_scale
         num_diffusion_steps = getattr(generation_config, "num_diffusion_steps", self.config.num_diffusion_steps)
         diffusion_head_device = next(self.model.diffusion_head.parameters()).device
         if do_sample:
@@ -342,7 +343,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                         combined, timestep.repeat(combined.shape[0]).to(combined), condition=condition
                     )
                     cond_eps, uncond_eps = torch.split(eps, half_noise_latent_length, dim=0)
-                    half_eps = uncond_eps + guidance_scale * (cond_eps - uncond_eps)
+                    half_eps = uncond_eps + generation_config.guidance_scale * (cond_eps - uncond_eps)
                     eps = torch.cat([half_eps, half_eps], dim=0)
                     noisy_audio_latent = noise_scheduler.step(eps, timestep, noisy_audio_latent).prev_sample
                 audio_latent = noisy_audio_latent[:half_noise_latent_length].unsqueeze(1)
