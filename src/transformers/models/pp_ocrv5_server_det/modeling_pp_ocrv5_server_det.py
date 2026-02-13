@@ -573,35 +573,36 @@ class PPOCRV5ServerDetDSConv(nn.Module):
                 bias=False,
             )
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of PPOCRV5ServerDetDSConv.
 
         Args:
-            inputs (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
+            hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
                 The input feature map.
 
         Returns:
             `torch.FloatTensor`: Output feature map of shape `(batch_size, out_channels, out_height, out_width)`.
         """
-        x = self.conv1(inputs)
-        x = self.bn1(x)
+        identity = hidden_state
+        hidden_state = self.conv1(hidden_state)
+        hidden_state = self.bn1(hidden_state)
 
-        x = self.conv2(x)
-        x = self.bn2(x)
+        hidden_state = self.conv2(hidden_state)
+        hidden_state = self.bn2(hidden_state)
         if self.if_act:
             if self.act == "relu":
-                x = F.relu(x)
+                hidden_state = F.relu(hidden_state)
             elif self.act == "hardswish":
-                x = F.hardswish(x)
+                hidden_state = F.hardswish(hidden_state)
             else:
                 print(f"The activation function({self.act}) is selected incorrectly.")
                 exit()
 
-        x = self.conv3(x)
+        hidden_state = self.conv3(hidden_state)
         if self._c[0] != self._c[1]:
-            x = x + self.conv_end(inputs)
-        return x
+            hidden_state = hidden_state + self.conv_end(identity)
+        return hidden_state
 
 
 class PPOCRV5ServerDetIntraCLBlock(nn.Module):
@@ -642,29 +643,30 @@ class PPOCRV5ServerDetIntraCLBlock(nn.Module):
         self.bn = nn.BatchNorm2d(in_channels)
         self.relu = nn.ReLU()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of PPOCRV5ServerDetIntraCLBlock.
 
         Args:
-            x (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
+            hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
                 The input feature map from PPOCRV5ServerDetLKPAN stages.
 
         Returns:
             `torch.FloatTensor`: Refined feature map with the same shape as input,
                 enhanced by spatial relationship modeling.
         """
-        x_new = self.conv1x1_reduce_channel(x)
+        identity = hidden_state
+        hidden_state = self.conv1x1_reduce_channel(hidden_state)
 
-        x_7 = self.c_layer_7x7(x_new) + self.v_layer_7x1(x_new) + self.q_layer_1x7(x_new)
-        x_5 = self.c_layer_5x5(x_7) + self.v_layer_5x1(x_7) + self.q_layer_1x5(x_7)
-        x_3 = self.c_layer_3x3(x_5) + self.v_layer_3x1(x_5) + self.q_layer_1x3(x_5)
+        hidden_state = self.c_layer_7x7(hidden_state) + self.v_layer_7x1(hidden_state) + self.q_layer_1x7(hidden_state)
+        hidden_state = self.c_layer_5x5(hidden_state) + self.v_layer_5x1(hidden_state) + self.q_layer_1x5(hidden_state)
+        hidden_state = self.c_layer_3x3(hidden_state) + self.v_layer_3x1(hidden_state) + self.q_layer_1x3(hidden_state)
 
-        x_relation = self.conv1x1_return_channel(x_3)
-        x_relation = self.bn(x_relation)
-        x_relation = self.relu(x_relation)
+        hidden_state = self.conv1x1_return_channel(hidden_state)
+        hidden_state = self.bn(hidden_state)
+        hidden_state = self.relu(hidden_state)
 
-        return x + x_relation
+        return identity + hidden_state
 
 
 class PPOCRV5ServerDetLKPAN(nn.Module):
@@ -746,12 +748,12 @@ class PPOCRV5ServerDetLKPAN(nn.Module):
             config.intraclblock_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
         )
 
-    def forward(self, x: list[torch.Tensor]) -> torch.Tensor:
+    def forward(self, hidden_state: list[torch.Tensor]) -> torch.Tensor:
         """
         Forward pass of PPOCRV5ServerDetLKPAN.
 
         Args:
-            x (`list` of `torch.FloatTensor`):
+            hidden_state (`list` of `torch.FloatTensor`):
                 Multi-scale features `[c2, c3, c4, c5]` from the backbone.
 
         Returns:
@@ -759,7 +761,7 @@ class PPOCRV5ServerDetLKPAN(nn.Module):
                 Fused feature map of shape `(batch_size, neck_out_channels, height/4, width/4)`.
                 This tensor is a concatenation of multi-scale refined features, ready for the head.
         """
-        c2, c3, c4, c5 = x
+        c2, c3, c4, c5 = hidden_state
 
         in5 = self.ins_conv[3](c5)
         in4 = self.ins_conv[2](c4)
@@ -838,28 +840,28 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
 
         self.bn = nn.BatchNorm2d(out_channels, momentum=0.9)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of PPOCRV5ServerDetHead.
 
         Args:
-            x (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
+            hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
                 Input tensor.
 
         Returns:
             `torch.FloatTensor`: Output tensor of shape `(batch_size, out_channels, out_height, out_width)`.
         """
-        x = self.conv(x)
-        x = self.bn(x)
+        hidden_state = self.conv(hidden_state)
+        hidden_state = self.bn(hidden_state)
         if self.if_act:
             if self.act == "relu":
-                x = F.relu(x)
+                hidden_state = F.relu(hidden_state)
             elif self.act == "hardswish":
-                x = F.hardswish(x)
+                hidden_state = F.hardswish(hidden_state)
             else:
                 print(f"The activation function({self.act}) is selected incorrectly.")
                 exit()
-        return x
+        return hidden_state
 
 
 class PPOCRV5ServerDetHead(nn.Module):
@@ -909,35 +911,35 @@ class PPOCRV5ServerDetHead(nn.Module):
         )
 
     def forward(
-        self, x: torch.Tensor, return_f: bool = False
+        self, hidden_state: torch.Tensor, return_feature: bool = False
     ) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """
         Forward pass of the PPOCRV5ServerDetHead.
 
         Args:
-            x (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
+            hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
                 Input feature map.
-            return_f (`bool`, *optional*, defaults to `False`):
+            return_feature (`bool`, *optional*, defaults to `False`):
                 Whether to return the intermediate feature map before the final convolution.
 
         Returns:
             `torch.FloatTensor` or `tuple(torch.FloatTensor, torch.FloatTensor)`:
                 - **x** (`torch.FloatTensor`): Final probability map of shape `(batch_size, 1, H*4, W*4)`.
-                - **f** (`torch.FloatTensor`, *optional*): Intermediate features, returned only if `return_f` is `True`.
+                - **f** (`torch.FloatTensor`, *optional*): Intermediate features, returned only if `return_feature` is `True`.
         """
-        x = self.conv1(x)
-        x = self.conv_bn1(x)
-        x = self.relu1(x)
-        x = self.conv2(x)
-        x = self.conv_bn2(x)
-        x = self.relu2(x)
-        if return_f is True:
-            f = x
-        x = self.conv3(x)
-        x = torch.sigmoid(x)
-        if return_f is True:
-            return x, f
-        return x
+        hidden_state = self.conv1(hidden_state)
+        hidden_state = self.conv_bn1(hidden_state)
+        hidden_state = self.relu1(hidden_state)
+        hidden_state = self.conv2(hidden_state)
+        hidden_state = self.conv_bn2(hidden_state)
+        hidden_state = self.relu2(hidden_state)
+        if return_feature is True:
+            feature = hidden_state
+        hidden_state = self.conv3(hidden_state)
+        hidden_state = torch.sigmoid(hidden_state)
+        if return_feature is True:
+            return hidden_state, feature
+        return hidden_state
 
 
 class PPOCRV5ServerDetDBHead(nn.Module):
@@ -955,18 +957,18 @@ class PPOCRV5ServerDetDBHead(nn.Module):
         self.k = k
         self.binarize = PPOCRV5ServerDetHead(in_channels=in_channels, kernel_list=kernel_list)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         """
         Forward pass to generate the initial shrink map.
 
         Args:
-            x (`torch.FloatTensor`): Input feature map.
+            hidden_state (`torch.FloatTensor`): Input feature map.
 
         Returns:
             `torch.FloatTensor`: Shrink probability map.
         """
-        shrink_maps = self.binarize(x)
-        return shrink_maps
+        hidden_state = self.binarize(hidden_state)
+        return hidden_state
 
 
 class PPOCRV5ServerDetLocalModule(nn.Module):
@@ -991,19 +993,20 @@ class PPOCRV5ServerDetLocalModule(nn.Module):
             padding=0,
         )
 
-    def forward(self, x: torch.Tensor, init_map: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor, init_map: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x (`torch.FloatTensor`): Upsampled intermediate feature map.
+            hidden_state (`torch.FloatTensor`): Upsampled intermediate feature map.
             init_map (`torch.FloatTensor`): Initial probability map (shrink map).
 
         Returns:
             `torch.FloatTensor`: Refined single-channel logit map.
         """
-        outf = torch.cat([init_map, x], dim=1)
+        hidden_state = torch.cat([init_map, hidden_state], dim=1)
         # last Conv
-        out = self.last_1(self.last_3(outf))
-        return out
+        hidden_state = self.last_3(hidden_state)
+        hidden_state = self.last_1(hidden_state)
+        return hidden_state
 
 
 class PPOCRV5ServerDetPFHeadLocal(PPOCRV5ServerDetDBHead):
@@ -1029,12 +1032,12 @@ class PPOCRV5ServerDetPFHeadLocal(PPOCRV5ServerDetDBHead):
             raise ValueError(f"mode must be 'large' or 'small', currently {config.mode}")
         self.cbn_layer = PPOCRV5ServerDetLocalModule(config.neck_out_channels // 4, mid_ch, config.hidden_act)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of PPOCRV5ServerDetPFHeadLocal, combining base shrink maps and locally refined maps.
 
         Args:
-            x (`torch.FloatTensor` of shape `(batch_size, neck_out_channels, H, W)`):
+            hidden_state (`torch.FloatTensor` of shape `(batch_size, neck_out_channels, H, W)`):
                 Fused feature map from the neck.
 
         Returns:
@@ -1042,12 +1045,13 @@ class PPOCRV5ServerDetPFHeadLocal(PPOCRV5ServerDetDBHead):
                 The final refined text detection probability map, calculated as the
                 average of the base map and the refined local map.
         """
-        shrink_maps, f = self.binarize(x, return_f=True)
-        base_maps = shrink_maps
-        cbn_maps = self.cbn_layer(self.up_conv(f), shrink_maps)
-        cbn_maps = torch.sigmoid(cbn_maps)
+        hidden_state, feature = self.binarize(hidden_state, return_feature=True)
+        identity = hidden_state
+        feature = self.up_conv(feature)
+        hidden_state = self.cbn_layer(feature, hidden_state)
+        hidden_state = torch.sigmoid(hidden_state)
 
-        return 0.5 * (base_maps + cbn_maps)
+        return 0.5 * (identity + hidden_state)
 
 
 @dataclass
