@@ -1563,16 +1563,13 @@ class Trainer:
 
         # prepare using `accelerator` prepare
         if use_accelerator_prepare:
-            self.model.train()
-            if self.is_deepspeed_enabled:
-                from accelerate.utils import DummyScheduler
+            from accelerate.utils import DummyScheduler
 
-                if isinstance(self.lr_scheduler, DummyScheduler):
-                    model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
-                        self.model, self.optimizer, self.lr_scheduler
-                    )
-                else:
-                    model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
+            self.model.train()
+            if self.is_deepspeed_enabled and isinstance(self.lr_scheduler, DummyScheduler):
+                model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
+                    self.model, self.optimizer, self.lr_scheduler
+                )
             else:
                 model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
         else:
