@@ -24,9 +24,9 @@ class VoxtralRealtimeTextConfig(MistralConfig):
 
 class VoxtralRealtimeEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
-    This is the configuration class to store the configuration of a [`VoxtralEncoder`]. It is used to instantiate a
-    Voxtral audio encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the audio encoder of the Voxtral
+    This is the configuration class to store the configuration of a [`VoxtralRealtimeEncoder`]. It is used to instantiate a
+    Voxtral Realtime audio encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the audio encoder of the Voxtral Realtime
     architecture.
 
     e.g. [mistralai/Voxtral-Mini-3B-2507](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507)
@@ -48,25 +48,37 @@ class VoxtralRealtimeEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin)
         scale_embedding (`bool`, *optional*, defaults to `False`):
             Scale embeddings by dividing by sqrt(hidden_size) if True.
         activation_function (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, "gelu",
+            The non-linear activation function (function or string) in the encoder and pooler.
         num_mel_bins (`int`, *optional*, defaults to 128):
             Number of mel features used per input features. Should correspond to the value used in the
-            `VoxtralProcessor` class.
+            `VoxtralRealtimeProcessor` class.
         max_source_positions (`int`, *optional*, defaults to 1500):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        hidden_act (`str`, *optional*, defaults to `"silu"`):
+            The activation function used in the MLP layers.
+        max_position_embeddings (`int`, *optional*, defaults to 1500):
+            The maximum sequence length that this model might ever be used with.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the RMS normalization layers.
+        rope_parameters (`Union[RopeParameters, dict]`, *optional*):
+            The parameters for the rotary position embeddings.
+        sliding_window (`int`, *optional*, defaults to 750):
+            The sliding window size for local attention.
+        head_dim (`int`, *optional*, defaults to 64):
+            The dimension of each attention head.
 
     ```python
-    >>> from transformers import VoxtralEncoderConfig, VoxtralEncoder
+    >>> from transformers import VoxtralRealtimeEncoderConfig, VoxtralRealtimeEncoder
 
-    >>> # Initializing a VoxtralEncoderConfig
-    >>> configuration = VoxtralEncoderConfig()
+    >>> # Initializing a VoxtralRealtimeEncoderConfig
+    >>> configuration = VoxtralRealtimeEncoderConfig()
 
-    >>> # Initializing a VoxtralEncoder (with random weights)
-    >>> model = VoxtralEncoder(configuration)
+    >>> # Initializing a VoxtralRealtimeEncoder (with random weights)
+    >>> model = VoxtralRealtimeEncoder(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -128,11 +140,11 @@ class VoxtralRealtimeEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin)
 
 class VoxtralRealtimeConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VoxtralForConditionalGeneration`]. It is used to instantiate an
-    Voxtral model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Voxtral-Mini-3B.
+    This is the configuration class to store the configuration of a [`VoxtralRealtimeForConditionalGeneration`]. It is used to instantiate a
+    Voxtral Realtime model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Voxtral Realtime.
 
-    e.g. [mistralai/Voxtral-Mini-3B-2507](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507)
+    e.g. [mistralai/Voxtral-Mini-4B-Realtime-2602](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602)
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -142,19 +154,23 @@ class VoxtralRealtimeConfig(PreTrainedConfig):
             The config object or dictionary of the audio encoder.
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object or dictionary of the text model.
-        audio_token_id (`int`, *optional*):
-            The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function (function or string) in the multi-modal projector.
+        audio_length_per_tok (`int`, *optional*, defaults to 8):
+            The number of audio frames corresponding to each text token.
+        default_num_delay_tokens (`int`, *optional*, defaults to 6):
+            The default number of delay tokens used for streaming.
+        downsample_factor (`int`, *optional*, defaults to 4):
+            The downsampling factor applied to audio features before projection.
 
     ```python
-    >>> from transformers import VoxtralForConditionalGeneration, VoxtralConfig
+    >>> from transformers import VoxtralRealtimeForConditionalGeneration, VoxtralRealtimeConfig
 
-    >>> # Initializing a Voxtral configuration
-    >>> configuration = VoxtralConfig(audio_token_id=24, projector_hidden_act="gelu")
+    >>> # Initializing a VoxtralRealtime configuration
+    >>> configuration = VoxtralRealtimeConfig()
 
-    >>> # Initializing a 3B model with random weights
-    >>> model = VoxtralForConditionalGeneration(configuration)
+    >>> # Initializing a model with random weights
+    >>> model = VoxtralRealtimeForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -185,7 +201,7 @@ class VoxtralRealtimeConfig(PreTrainedConfig):
         text_config=None,
         projector_hidden_act="gelu",
         audio_length_per_tok=8,
-        num_delay_tokens=6,
+        default_num_delay_tokens=6,
         downsample_factor=4,
         **kwargs,
     ):
@@ -208,7 +224,7 @@ class VoxtralRealtimeConfig(PreTrainedConfig):
         self.hidden_size = text_config.hidden_size
         self.projector_hidden_act = projector_hidden_act
         self.audio_length_per_tok = audio_length_per_tok
-        self.num_delay_tokens = num_delay_tokens
+        self.default_num_delay_tokens = default_num_delay_tokens
         self.downsample_factor = downsample_factor
 
         super().__init__(**kwargs)
