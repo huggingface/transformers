@@ -1382,10 +1382,6 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        if not isinstance(pixel_values, torch.Tensor):
-            pixel_values = torch.tensor(pixel_values, device=self.model.device)
-        if not isinstance(image_grid_thw, torch.Tensor):
-            image_grid_thw = torch.tensor(image_grid_thw, device=self.model.device)
         return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
     @can_return_tuple
