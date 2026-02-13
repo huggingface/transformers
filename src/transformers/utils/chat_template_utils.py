@@ -181,16 +181,16 @@ def _parse_type_hint(hint: str) -> dict:
 def _convert_type_hints_to_json_schema(func: Callable) -> dict:
     type_hints = get_type_hints(func)
     signature = inspect.signature(func)
-    # For methods, we need to ignore the first "self" or "cls" parameter. However, since unbound methods are just
-    # functions, we need to check the signature to see if it looks like a method rather than only relying on 
-    # inspect.ismethod(), which returns False for unbound methods.
-    qualname = getattr(func, "__qualname__", "")
-    qualname_parts = qualname.split(".")
-    has_unbound_method_signature = isfunction(func) and len(qualname_parts) >= 2 and qualname_parts[-2] != "<locals>"
+    # For methods, we need to ignore the first "self" or "cls" parameter. Here we assume that if the first parameter
+    # is named "self" or "cls" and has no type hint, it is an implicit receiver argument.
     first_param_name = next(iter(signature.parameters), None)
-    implicit_arg_name = None
-    if first_param_name in {"self", "cls"} and (inspect.ismethod(func) or has_unbound_method_signature):
+    if (
+        first_param_name in {"self", "cls"}
+        and signature.parameters[first_param_name].annotation == inspect.Parameter.empty
+    ):
         implicit_arg_name = first_param_name
+    else:
+        implicit_arg_name = None
 
     required = []
     for param_name, param in signature.parameters.items():
@@ -253,7 +253,8 @@ def get_json_schema(func: Callable) -> dict:
     mostly used for passing lists of tools to a chat template. The JSON schema contains the name and description of
     the function, as well as the names, types and descriptions for each of its arguments. `get_json_schema()` requires
     that the function has a docstring, and that each argument has a description in the docstring, in the standard
-    Google docstring format shown below. It also requires that all the function arguments have a valid Python type hint.
+    Google docstring format shown below. It also requires that all user-facing arguments have valid Python type hints.
+    When passing methods, implicit receiver arguments (`self` or `cls`) are ignored.
 
     Although it is not required, a `Returns` block can also be added, which will be included in the schema. This is
     optional because most chat templates ignore the return value of the function.
