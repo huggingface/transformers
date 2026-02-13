@@ -612,6 +612,7 @@ class TrainerMemoryTracker:
         "__init__": "init",
         "train": "train",
         "_inner_training_loop": "train",
+        "_finalize_training": "train",
         "evaluate": "eval",
         "predict": "test",
     }
