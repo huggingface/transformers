@@ -442,7 +442,7 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
 class Force16BytesAlignment(ConversionOps):
     """
     Ensures that the given tensor is 16-bytes aligned in memory and clones it if not.
-    This guarantees 16-bytes alignment for kernels / implementations that use TMA or SIMD instructions like torch._grouped_mm.
+    This guarantees 16-bytes alignment for kernels / implementations that use TMA or SIMD instructions like torch.nn.functional.grouped_mm.
     """
 
     @torch.no_grad()

@@ -180,15 +180,15 @@ def _grouped_linear(
     Returns:
         `torch.Tensor`: Output tensor of shape (S, output_dim).
     """
-    # torch._grouped_mm is not autocast-enabled, so we disable autocast to avoid dtype mismatch.
+    # torch.nn.functional.grouped_mm is not autocast-enabled, so we disable autocast to avoid dtype mismatch.
     # See: https://github.com/pytorch/pytorch/issues/174763
     with torch.amp.autocast(device_type=input.device.type, enabled=False):
         if is_transposed:
             # (S, input_dim) @ grouped (num_experts, input_dim, output_dim) -> (S, output_dim)
-            out = torch._grouped_mm(input, weight, offs=offs)
+            out = torch.nn.functional.grouped_mm(input, weight, offs=offs)
         else:
             # (S, input_dim) @ grouped (num_experts, output_dim, input_dim).T -> (S, output_dim)
-            out = torch._grouped_mm(input, weight.transpose(-2, -1), offs=offs)
+            out = torch.nn.functional.grouped_mm(input, weight.transpose(-2, -1), offs=offs)
 
     if bias is not None:
         # We should be able to pass bias to the grouped_mm call, but it's not yet supported.
@@ -203,9 +203,10 @@ def grouped_mm_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    if not hasattr(torch, "_grouped_mm"):
+    if not hasattr(torch.nn.functional, "grouped_mm"):
         raise ImportError(
-            "torch._grouped_mm is not available. Please make sure you are using a PyTorch version that includes it (2.9+)."
+            "torch.nn.functional.grouped_mm is not available. "
+            "Please make sure you are using a PyTorch version that includes it (2.10+)."
         )
 
     device = hidden_states.device
