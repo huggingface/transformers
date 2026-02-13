@@ -35,6 +35,7 @@ from ...models.mistral.modeling_mistral import (
     MistralDecoderLayer,
     MistralForCausalLM,
     MistralMLP,
+    MistralModel,
     MistralRMSNorm,
 )
 from ...models.voxtral.modeling_voxtral import (
@@ -342,16 +343,15 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
     @check_model_inputs
     def forward(
         self,
-        input_features=None,
-        padding_cache=None,
+        input_features: torch.FloatTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values=None,
-        padding_mask: torch.Tensor | None = None,
-        inputs_embeds=None,
+        past_key_values: Cache | None = None,
+        padding_cache: VoxtralRealtimeConv1dPaddingCache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         cache_position: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         use_padding_cache: bool | None = None,
-        attention_mask=None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         if (input_features is None) ^ (inputs_embeds is not None):
@@ -429,6 +429,8 @@ class VoxtralRealtimeTextMLP(MistralMLP): ...
 class VoxtralRealtimeTextDecoderLayer(MistralDecoderLayer):
     def __init__(self, config, layer_idx):
         super().__init__(config, layer_idx)
+        self.input_layernorm = VoxtralRealtimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = VoxtralRealtimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.ada_rms_norm = VoxtralRealtimeTextAdaRmsNorm(config)
 
     def forward(
@@ -468,6 +470,13 @@ class VoxtralRealtimeTextDecoderLayer(MistralDecoderLayer):
         return hidden_states
 
 
+class VoxtralRealtimeTextModel(MistralModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.norm = VoxtralRealtimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = VoxtralRealtimeRotaryEmbedding(config=config)
+
+
 class VoxtralRealtimeTextForCausalLM(MistralForCausalLM): ...
 
 
@@ -488,6 +497,8 @@ class VoxtralRealtimeTimeEmbedding(nn.Module):
 
 
 class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, GenerationMixin):
+    _keep_in_fp32_modules_strict = None
+
     def __init__(self, config):
         super().__init__(config)
         self.time_embedding = VoxtralRealtimeTimeEmbedding(config.text_config.hidden_size)
@@ -552,7 +563,12 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         num_delay_tokens: int | torch.Tensor = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
-        # TODO: @eustlb: enforce the inputs (including num_delay_tokens)
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if (input_features is None) ^ (encoder_inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_features or encoder_inputs_embeds")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -565,6 +581,10 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
                 return_dict=True,
             )
             inputs_embeds += audio_outputs.pooler_output.to(inputs_embeds.device)
+
+        if num_delay_tokens is None:
+            num_delay_tokens = self.config.default_num_delay_tokens
+            logger.warning(f"`num_delay_tokens` is not provided, using default value: {num_delay_tokens}")
 
         time_tensor = torch.full(
             (1,),
@@ -597,7 +617,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         encoder_inputs_embeds: torch.Tensor | None = None,
         **kwargs,
     ):
-        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
+        model_inputs = GenerationMixin.prepare_inputs_for_generation(*args, **kwargs)
 
         if encoder_inputs_embeds is not None:
             start_idx = model_inputs["cache_position"][0] * self.config.downsample_factor
@@ -612,8 +632,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         bos_token_id: torch.Tensor | None = None,
         model_kwargs: dict[str, torch.Tensor] | None = None,
     ) -> tuple[torch.Tensor, str | None, dict[str, torch.Tensor]]:
-        # 
-        inputs, input_name, model_kwargs = super()._prepare_model_inputs(inputs, bos_token_id, model_kwargs)
+        inputs, input_name, model_kwargs = GenerationMixin._prepare_model_inputs(inputs, bos_token_id, model_kwargs)
 
         input_features = model_kwargs.get("input_features")
         if input_features is not None and not isinstance(input_features, GeneratorType):
@@ -633,7 +652,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         if getattr(self, "_stream_exhausted", False):
             self._stream_exhausted = False
             return False
-        return super()._has_unfinished_sequences(this_peer_finished, synced_gpus, device)
+        return GenerationMixin._has_unfinished_sequences(this_peer_finished, synced_gpus, device)
 
     def _update_model_kwargs_for_generation(
         self,
@@ -642,7 +661,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         is_encoder_decoder: bool = False,
         num_new_tokens: int = 1,
     ):
-        model_kwargs = super()._update_model_kwargs_for_generation(
+        model_kwargs = GenerationMixin._update_model_kwargs_for_generation(
             outputs, model_kwargs, is_encoder_decoder, num_new_tokens
         )
 
@@ -669,7 +688,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         batch_size: int,
         max_cache_length: int,
     ):
-        super()._prepare_cache_for_generation(
+        GenerationMixin._prepare_cache_for_generation(
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
 
@@ -683,7 +702,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
                     max_cache_len=self.config.audio_config.sliding_window,
                 )
             else:
-                raise ValueError(f"TODO: {generation_config.cache_implementation}")
+                raise ValueError(f"{generation_config.cache_implementation} is not supported for VoxtralRealtime")
 
     def _get_encoder_cache(self, cache_implementation: str, batch_size: int, max_cache_len: int) -> Cache:
         offload_cache = "offloaded" in cache_implementation
@@ -714,7 +733,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         generation_config,
         **kwargs,
     ):
-        generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
+        generation_config, model_kwargs = GenerationMixin._prepare_generation_config(generation_config, **kwargs)
 
         input_features = model_kwargs.get("input_features")
         if input_features is not None and not isinstance(input_features, GeneratorType):
@@ -743,7 +762,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         # since we update max_length manually in the abobe _prepare_generation_config
         # we need to force has_default_max_length to False
         has_default_max_length = False
-        return super()._prepare_generated_length(
+        return GenerationMixin._prepare_generated_length(
             generation_config,
             has_default_max_length,
             has_default_min_length,

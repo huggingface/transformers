@@ -39,7 +39,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import check_model_inputs, maybe_autocast
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_voxtral_realtime import (
@@ -47,6 +47,9 @@ from .configuration_voxtral_realtime import (
     VoxtralRealtimeEncoderConfig,
     VoxtralRealtimeTextConfig,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 class VoxtralConv1dCacheLayer:
@@ -513,16 +516,15 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
     @check_model_inputs
     def forward(
         self,
-        input_features=None,
-        padding_cache=None,
+        input_features: torch.FloatTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values=None,
-        padding_mask: torch.Tensor | None = None,
-        inputs_embeds=None,
+        past_key_values: Cache | None = None,
+        padding_cache: VoxtralRealtimeConv1dPaddingCache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         cache_position: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         use_padding_cache: bool | None = None,
-        attention_mask=None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         if (input_features is None) ^ (inputs_embeds is not None):
@@ -670,35 +672,14 @@ class VoxtralRealtimeTextMLP(nn.Module):
         return down_proj
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class VoxtralRealtimeTextRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        VoxtralRealtimeTextRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
 class VoxtralRealtimeTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = VoxtralRealtimeTextAttention(config=config, layer_idx=layer_idx)
         self.mlp = VoxtralRealtimeTextMLP(config)
-        self.input_layernorm = VoxtralRealtimeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = VoxtralRealtimeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = VoxtralRealtimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = VoxtralRealtimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.ada_rms_norm = VoxtralRealtimeTextAdaRmsNorm(config)
 
     def forward(
@@ -757,74 +738,9 @@ class VoxtralRealtimeTextPreTrainedModel(PreTrainedModel):
     }
 
 
-class VoxtralRealtimeTextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: VoxtralRealtimeTextConfig, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: VoxtralRealtimeTextConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
 @auto_docstring
 class VoxtralRealtimeTextModel(VoxtralRealtimeTextPreTrainedModel):
-    def __init__(self, config: VoxtralRealtimeTextConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -833,8 +749,8 @@ class VoxtralRealtimeTextModel(VoxtralRealtimeTextPreTrainedModel):
         self.layers = nn.ModuleList(
             [VoxtralRealtimeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = VoxtralRealtimeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = VoxtralRealtimeTextRotaryEmbedding(config=config)
+        self.norm = VoxtralRealtimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = VoxtralRealtimeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -991,7 +907,6 @@ class VoxtralRealtimeTimeEmbedding(nn.Module):
     def forward(self, time_tensor: torch.Tensor) -> torch.Tensor:
         inv_freq = self.inv_freq.to(device=time_tensor.device, dtype=time_tensor.dtype)
         emb = time_tensor * inv_freq
-
         return torch.cat((emb.cos(), emb.sin()))
 
 
@@ -1015,7 +930,7 @@ class VoxtralRealtimeMultiModalProjector(nn.Module):
     """
 )
 class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, GenerationMixin):
-    _keep_in_fp32_modules_strict = ["embed_positions"]
+    _keep_in_fp32_modules_strict = None
 
     def __init__(self, config):
         super().__init__(config)
@@ -1139,7 +1054,12 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         >>> processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
         ["This audio is a humorous conversation between two friends, likely in English, where one of them is trying to figure out what the other's tattoo says."]
         ```"""
-        # TODO: @eustlb: enforce the inputs (including num_delay_tokens)
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if (input_features is None) ^ (encoder_inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_features or encoder_inputs_embeds")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -1152,6 +1072,10 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
                 return_dict=True,
             )
             inputs_embeds += audio_outputs.pooler_output.to(inputs_embeds.device)
+
+        if num_delay_tokens is None:
+            num_delay_tokens = self.config.default_num_delay_tokens
+            logger.warning(f"`num_delay_tokens` is not provided, using default value: {num_delay_tokens}")
 
         time_tensor = torch.full(
             (1,),
@@ -1199,7 +1123,6 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         bos_token_id: torch.Tensor | None = None,
         model_kwargs: dict[str, torch.Tensor] | None = None,
     ) -> tuple[torch.Tensor, str | None, dict[str, torch.Tensor]]:
-        # 
         inputs, input_name, model_kwargs = super()._prepare_model_inputs(inputs, bos_token_id, model_kwargs)
 
         input_features = model_kwargs.get("input_features")
@@ -1270,7 +1193,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
                     max_cache_len=self.config.audio_config.sliding_window,
                 )
             else:
-                raise ValueError(f"TODO: {generation_config.cache_implementation}")
+                raise ValueError(f"{generation_config.cache_implementation} is not supported for VoxtralRealtime")
 
     def _get_encoder_cache(self, cache_implementation: str, batch_size: int, max_cache_len: int) -> Cache:
         offload_cache = "offloaded" in cache_implementation
