@@ -12,11 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import queue
-from typing import Optional
+from ...tokenization_mistral_common import MistralCommonBackend
 from ...utils import auto_docstring, is_mistral_common_available, is_soundfile_available, is_torch_available, logging
 from ...utils.import_utils import requires
-from ...tokenization_mistral_common import MistralCommonBackend
 
 
 if is_torch_available():
@@ -32,7 +30,7 @@ if is_mistral_common_available():
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 
 
 logger = logging.get_logger(__name__)
@@ -67,14 +65,14 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
                 f"and tokenizer.tokenizer.instruct_tokenizer.audio_encoder.audio_config.window_size "
                 f"({self.mistral_common_audio_config.encoding_config.window_size}) must be equal"
             )
-        
+
         if feature_extractor.hop_length != self.mistral_common_audio_config.encoding_config.hop_length:
             raise ValueError(
                 f"feature_extractor.hop_length ({feature_extractor.hop_length}) "
                 f"and tokenizer.tokenizer.instruct_tokenizer.audio_encoder.audio_config.hop_length "
                 f"({self.mistral_common_audio_config.encoding_config.hop_length}) must be equal"
             )
-        
+
         if feature_extractor.feature_size != self.mistral_common_audio_config.encoding_config.num_mel_bins:
             raise ValueError(
                 f"feature_extractor.feature_size ({feature_extractor.feature_size}) "
@@ -98,39 +96,49 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
         return self.mistral_common_audio_config.num_delay_tokens
 
     @property
+    def num_right_pad_tokens(self):
+        return self.mistral_common_audio_config.n_right_pad_tokens
+
+    @property
     def audio_length_per_tok(self):
         return self.mistral_common_audio_config.audio_length_per_tok
 
-    def audio_chunk_num_samples(self, is_first_audio_chunk: bool = False) -> int:
-        if is_first_audio_chunk:
-            # it is actually num_left_pad_tokens + num_delay_tokens + 1
-            # but the call to `encode_transcription` will add the left pad tokens
-            num_prefill_tokens = self.num_delay_tokens + 1
-            num_prefill_mel_frames = num_prefill_tokens * self.audio_length_per_tok
-            num_prefill_audio = (num_prefill_mel_frames - 1) * self.feature_extractor.hop_length + self.feature_extractor.win_length // 2
-
-            return num_prefill_audio
-    
-        return self.audio_length_per_tok * self.feature_extractor.hop_length + self.feature_extractor.win_length
-    
     @property
-    def start_idx_second_audio_chunk(self):
+    def raw_audio_length_per_tok(self):
+        return self.mistral_common_audio_config.raw_audio_length_per_tok
+
+    @property
+    def num_mel_frames_first_audio_chunk(self):
+        # it is actually num_left_pad_tokens + num_delay_tokens + 1
+        # but the call to `encode_transcription` will add the left pad token
         num_prefill_tokens = self.num_delay_tokens + 1
         num_prefill_mel_frames = num_prefill_tokens * self.audio_length_per_tok
+        return num_prefill_mel_frames
 
-        return  num_prefill_mel_frames * self.feature_extractor.hop_length - self.feature_extractor.win_length // 2
+    @property
+    def num_samples_first_audio_chunk(self) -> int:
+        num_prefill_mel_frames = self.num_mel_frames_first_audio_chunk
+        num_prefill_audio_samples = (
+            num_prefill_mel_frames - 1
+        ) * self.feature_extractor.hop_length + self.feature_extractor.win_length // 2
+
+        return num_prefill_audio_samples
+
+    @property
+    def num_samples_per_audio_chunk(self) -> int:
+        return self.audio_length_per_tok * self.feature_extractor.hop_length + self.feature_extractor.win_length
 
     def __call__(
         self,
         audio: AudioInput | None = None,
         is_streaming: bool = False,
-        is_first_audio_chunk: Optional[bool] = None,
+        is_first_audio_chunk: bool | None = True,
         **kwargs: Unpack[VoxtralRealtimeProcessorKwargs],
     ):
         output_kwargs = self._merge_kwargs(VoxtralRealtimeProcessorKwargs, **kwargs)
 
-        if is_streaming and is_first_audio_chunk is None:
-            raise ValueError("In streaming mode (`is_streaming=True`), set `is_first_audio_chunk` to `True` or `False` to indicate whether this is the first audio chunk.")
+        if not is_streaming and not is_first_audio_chunk:
+            raise ValueError("In non-streaming mode (`is_streaming=False`), `is_first_audio_chunk` must be `True`.")
 
         audio = make_list_of_audio(audio)
         input_ids, texts, audio_arrays = [], [], []
@@ -162,7 +170,7 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
             center=is_first_audio_chunk,
             **output_kwargs["audio_kwargs"],
         )
-        
+
         encoding = {**text_encoding, **audio_encoding, "num_delay_tokens": self.num_delay_tokens}
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
