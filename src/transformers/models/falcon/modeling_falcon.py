@@ -41,11 +41,15 @@ from ...modeling_rope_utils import (
     dynamic_rope_update,
 )
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
+    can_return_tuple,
     logging,
 )
 from ...utils.generic import maybe_autocast
+from ...utils.output_capturing import capture_outputs
 from .configuration_falcon import FalconConfig
 
 
@@ -321,9 +325,9 @@ class FalconAttention(nn.Module):
         position_ids: torch.LongTensor | None = None,
         layer_past: Cache | None = None,
         use_cache: bool = False,
-        output_attentions: bool = False,
         cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv_heads
@@ -349,7 +353,7 @@ class FalconAttention(nn.Module):
         kv_length = key_layer.shape[-2]
 
         if alibi is None:
-            if self.config._attn_implementation == "sdpa" and not output_attentions:
+            if self.config._attn_implementation == "sdpa":
                 # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
                 # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
                 # The query_length > 1 is necessary to match with a bidirectional attention mask we do not have
@@ -381,7 +385,7 @@ class FalconAttention(nn.Module):
             return attn_output, attention_scores
 
         else:
-            if self.config._attn_implementation == "sdpa" and not output_attentions:
+            if self.config._attn_implementation == "sdpa":
                 # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
                 # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
                 is_causal = self.is_causal and attention_mask is None and query_length > 1
@@ -453,7 +457,6 @@ class FalconFlashAttention2(FalconAttention):
         position_ids: torch.LongTensor | None = None,
         layer_past: Cache | None = None,
         use_cache: bool = False,
-        output_attentions: bool = False,
         cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
     ):
@@ -528,9 +531,6 @@ class FalconFlashAttention2(FalconAttention):
         attn_weights = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
         attn_output = self.dense(attn_weights)
 
-        if not output_attentions:
-            attn_weights = None
-
         return attn_output, attn_weights
 
 
@@ -591,10 +591,9 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         layer_past: Cache | tuple[torch.Tensor, torch.Tensor] | None = None,
         use_cache: bool = False,
-        output_attentions: bool = False,
         cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         residual = hidden_states
 
@@ -612,7 +611,6 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             alibi=alibi,
             use_cache=use_cache,
-            output_attentions=output_attentions,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
         )
@@ -641,7 +639,7 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
 
         output = dropout_add(mlp_output, residual, self.config.hidden_dropout, training=self.training)
 
-        return output, attn_weights
+        return output
 
 
 @auto_docstring
@@ -653,6 +651,7 @@ class FalconPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = True
+    _can_record_outputs = {"hidden_states": FalconDecoderLayer, "attentions": FalconAttention}
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -704,6 +703,7 @@ class FalconModel(FalconPreTrainedModel):
     def set_input_embeddings(self, new_embeddings: torch.Tensor):
         self.word_embeddings = new_embeddings
 
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -713,9 +713,6 @@ class FalconModel(FalconPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, ...] | BaseModelOutputWithPastAndCrossAttentions:
@@ -732,12 +729,7 @@ class FalconModel(FalconPreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -806,45 +798,25 @@ class FalconModel(FalconPreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        all_self_attentions = () if output_attentions else None
-        all_hidden_states = () if output_hidden_states else None
-
         for i, block in enumerate(self.h):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            outputs = block(
+            hidden_states = block(
                 hidden_states,
                 layer_past=past_key_values,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 use_cache=use_cache,
-                output_attentions=output_attentions,
                 alibi=alibi,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
+                **kwargs,
             )
-
-            hidden_states = outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[1],)
 
         # Add last hidden state
         hidden_states = self.ln_f(hidden_states)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v for v in [hidden_states, past_key_values, all_hidden_states, all_self_attentions] if v is not None
-            )
-
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
 
 
@@ -867,6 +839,7 @@ class FalconForCausalLM(FalconPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings: torch.Tensor):
         self.lm_head = new_embeddings
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -877,9 +850,6 @@ class FalconForCausalLM(FalconPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
@@ -902,8 +872,6 @@ class FalconForCausalLM(FalconPreTrainedModel, GenerationMixin):
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
@@ -911,10 +879,8 @@ class FalconForCausalLM(FalconPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
         hidden_states = transformer_outputs[0]
 
@@ -929,10 +895,6 @@ class FalconForCausalLM(FalconPreTrainedModel, GenerationMixin):
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
-
-        if not return_dict:
-            output = (lm_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
@@ -967,6 +929,7 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -976,9 +939,6 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | SequenceClassifierOutputWithPast:
         r"""
@@ -999,17 +959,13 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = transformer_outputs[0]
@@ -1060,9 +1016,6 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
-        if not return_dict:
-            output = (pooled_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutputWithPast(
             loss=loss,
@@ -1092,6 +1045,7 @@ class FalconForTokenClassification(FalconPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1101,9 +1055,6 @@ class FalconForTokenClassification(FalconPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
         r"""
@@ -1124,17 +1075,13 @@ class FalconForTokenClassification(FalconPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = transformer_outputs[0]
@@ -1148,10 +1095,6 @@ class FalconForTokenClassification(FalconPreTrainedModel):
             loss = loss_fct(
                 logits.view(batch_size * seq_length, self.num_labels), labels.view(batch_size * seq_length)
             )
-
-        if not return_dict:
-            output = (logits,) + transformer_outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -1171,6 +1114,7 @@ class FalconForQuestionAnswering(FalconPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1179,9 +1123,6 @@ class FalconForQuestionAnswering(FalconPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | QuestionAnsweringModelOutput:
         r"""
@@ -1197,15 +1138,12 @@ class FalconForQuestionAnswering(FalconPreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1231,10 +1169,6 @@ class FalconForQuestionAnswering(FalconPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,
