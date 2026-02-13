@@ -924,8 +924,8 @@ class PPOCRV5ServerDetHead(nn.Module):
 
         Returns:
             `torch.FloatTensor` or `tuple(torch.FloatTensor, torch.FloatTensor)`:
-                - **x** (`torch.FloatTensor`): Final probability map of shape `(batch_size, 1, H*4, W*4)`.
-                - **f** (`torch.FloatTensor`, *optional*): Intermediate features, returned only if `return_feature` is `True`.
+                - **hidden_state** (`torch.FloatTensor`): Final probability map of shape `(batch_size, 1, H*4, W*4)`.
+                - **feature** (`torch.FloatTensor`, *optional*): Intermediate features, returned only if `return_feature` is `True`.
         """
         hidden_state = self.conv1(hidden_state)
         hidden_state = self.conv_bn1(hidden_state)
@@ -977,7 +977,7 @@ class PPOCRV5ServerDetLocalModule(nn.Module):
     concatenating it with higher-resolution features.
 
     Args:
-        in_c (`int`): Number of channels in the feature map `x`.
+        in_c (`int`): Number of channels in the feature map `hidden_state`.
         mid_c (`int`): Hidden channel size for the refinement layers.
         act (`str`): Activation function name.
     """
