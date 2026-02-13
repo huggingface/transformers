@@ -1388,7 +1388,7 @@ class PPOCRV5MobileDetRSELayer(nn.Module):
         self.se_block = PPOCRV5MobileDetSEModule(self.out_channels)
         self.shortcut = shortcut
 
-    def forward(self, ins):
+    def forward(self, hidden_state):
         """
         Forward pass of the PPOCRV5MobileDetRSELayer, applying convolution, SE recalibration, and optional residual connection.
 
@@ -1398,12 +1398,12 @@ class PPOCRV5MobileDetRSELayer(nn.Module):
         Returns:
             torch.Tensor: Output feature tensor of shape (B, out_channels, H, W).
         """
-        x = self.in_conv(ins)
+        hidden_state = self.in_conv(hidden_state)
         if self.shortcut:
-            out = x + self.se_block(x)
+            hidden_state = hidden_state + self.se_block(hidden_state)
         else:
-            out = self.se_block(x)
-        return out
+            hidden_state = self.se_block(hidden_state)
+        return hidden_state
 
 
 class PPOCRV5MobileDetNeck(nn.Module):
@@ -1439,17 +1439,17 @@ class PPOCRV5MobileDetNeck(nn.Module):
                 )
             )
 
-    def forward(self, x):
+    def forward(self, hidden_state):
         """
         Forward pass of the neck network, fusing multi-scale backbone features.
 
         Args:
-            x (list[torch.Tensor]): List of multi-scale feature maps from the backbone (4 feature maps).
+            hidden_state (list[torch.Tensor]): List of multi-scale feature maps from the backbone (4 feature maps).
 
         Returns:
             torch.Tensor: Concatenated fused feature tensor of shape (B, C, H, W).
         """
-        c2, c3, c4, c5 = x
+        c2, c3, c4, c5 = hidden_state
 
         in5 = self.ins_conv[3](c5)
         in4 = self.ins_conv[2](c4)
@@ -1517,25 +1517,25 @@ class PPOCRV5MobileDetHead(nn.Module):
             stride=2,
         )
 
-    def forward(self, x):
+    def forward(self, hidden_state):
         """
         Forward pass of the Head sub-module, generating binary segmentation logits.
 
         Args:
-            x (torch.Tensor): Input feature tensor of shape (B, in_channels, H, W).
+            hidden_state (torch.Tensor): Input feature tensor of shape (B, in_channels, H, W).
 
         Returns:
             torch.Tensor: Binary segmentation logits of shape (B, 1, H', W') (original image scale).
         """
-        x = self.conv1(x)
-        x = self.conv_bn1(x)
-        x = self.relu1(x)
-        x = self.conv2(x)
-        x = self.conv_bn2(x)
-        x = self.relu2(x)
-        x = self.conv3(x)
-        x = torch.sigmoid(x)
-        return x
+        hidden_state = self.conv1(hidden_state)
+        hidden_state = self.conv_bn1(hidden_state)
+        hidden_state = self.relu1(hidden_state)
+        hidden_state = self.conv2(hidden_state)
+        hidden_state = self.conv_bn2(hidden_state)
+        hidden_state = self.relu2(hidden_state)
+        hidden_state = self.conv3(hidden_state)
+        hidden_state = torch.sigmoid(hidden_state)
+        return hidden_state
 
 
 class PPOCRV5MobileDetDBHead(nn.Module):
@@ -1555,17 +1555,17 @@ class PPOCRV5MobileDetDBHead(nn.Module):
         self.k = config.k
         self.binarize = PPOCRV5MobileDetHead(config.neck_out_channels, config.kernel_list)
 
-    def forward(self, x):
+    def forward(self, hidden_state):
         """
         Forward pass of the head network, generating text segmentation (shrink) maps.
 
         Args:
-            x (torch.Tensor): Input feature tensor of shape (B, C, H, W) from the neck network.
+            hidden_state (torch.Tensor): Input feature tensor of shape (B, C, H, W) from the neck network.
 
         Returns:
             torch.Tensor: Binary segmentation shrink maps of shape (B, 1, H', W').
         """
-        shrink_maps = self.binarize(x)
+        shrink_maps = self.binarize(hidden_state)
         return shrink_maps
 
 
