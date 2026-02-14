@@ -24,7 +24,7 @@ class DummySegformerPreTrainedModel:
 class TestSegformerForImageClassification:
     def __init__(self):
         self.num_labels = 1
-        self.segformer = DummySegformer()
+        self.segformer = DummySegformerPreTrainedModel()
         self.classifier = nn.Linear(64, 1)
     
     @capture_outputs
@@ -40,26 +40,39 @@ class TestSegformerForImageClassification:
             return (sequence_output,) + outputs[1:]
     
     def test_capture_outputs_decorator(self):
-        """Test that @capture_outputs decorator is present and working."""
-        import inspect
-        # Get the forward method
-        forward_method = getattr(self, 'forward')
+        """Test that @capture_outputs and @can_return_tuple decorators work correctly."""
+        print("Test 1: Check @capture_outputs decorator")
+        has_capture = hasattr(self.segformer, "__wrapped__")
+        print(f"Result: {'PASS' if has_capture else 'FAIL'}")
         
-        # Check for decorator
-        has_capture_outputs = hasattr(forward_method, '__wrapped__')
+        print("Test 2: Check @can_return_tuple decorator")
+        has_can_return = hasattr(self.segformer, "can_return_tuple__")
+        print(f"Result: {'PASS' if has_can_return else 'FAIL'}")
         
-        print(f'Has @capture_outputs decorator: {has_capture_outputs}')
+        print("Test 3: Check _can_record_outputs property")
+        has_property = hasattr(self.segformer, "_can_record_outputs")
+        print(f"Result: {'PASS' if has_property else 'FAIL'}")
         
-        # Check that forward can handle return_dict=False
+        print("Test 4: Test forward method with return_dict=False")
         from ..utils.generic import modeling_utils
-        result = self.forward(torch.randn(2, 3, 224, 3), return_dict=False)
+        result = self.segformer.forward(torch.randn(2, 3, 224, 1), return_dict=False)
         
         # Should return a tuple since @can_return_tuple is present
         assert isinstance(result, tuple), f'Expected tuple, got {type(result)}'
-        print(f'✓ Tuple handling works correctly')
-        print(f'Result type: {type(result)}')
-        print(f'Result keys: {result.keys() if hasattr(result, \"keys\") else \"N/A\"}')
+        print(f"Result: {'PASS' if correct_type else 'FAIL'}")
+        
+        print("Test 5: Test forward method returns correct output type")
+        from ..utils.modeling_outputs import SegFormerImageClassifierOutput
+        result2 = self.segformer.forward(torch.randn(2, 3, 224, 1))
+        expected_output = SegFormerImageClassifierOutput(
+            loss=None,
+            logits=torch.randn(2, 3),
+            hidden_states=None,
+            attentions=None
+        )
+        correct_type = isinstance(result2, SegFormerImageClassifierOutput)
+        print(f"Result: {'PASS' if correct_type else 'FAIL'}")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test = TestSegformerForImageClassification()
     test.test_capture_outputs_decorator()
