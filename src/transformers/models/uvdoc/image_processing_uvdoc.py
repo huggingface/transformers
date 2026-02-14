@@ -14,7 +14,6 @@ from ...image_transforms import flip_channel_order, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
-    PILImageResampling,
     infer_channel_dimension_format,
     make_flat_list_of_images,
     to_numpy_array,
@@ -35,15 +34,6 @@ class UVDocImageProcessor(BaseImageProcessor):
     compatibility with PIL/numpy/torch image inputs.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the input images to the specified `size`. Disabling this is not recommended
-            as UVDoc expects fixed-size inputs for document rectification.
-        size (`Dict[str, int]`, *optional*, defaults to `{"height": 256, "width": 256}`):
-            Target size for resizing images, specified as a dictionary with "height" and "width" keys.
-            Adjust based on the UVDoc model's input requirements.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-            Resampling filter to use for resizing. BICUBIC is recommended for document images to preserve
-            text sharpness during resizing.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the pixel values from [0, 255] to [0, 1] using `rescale_factor`.
         rescale_factor (`Union[int, float]`, *optional*, defaults to `1/255`):
@@ -63,9 +53,6 @@ class UVDocImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -78,24 +65,16 @@ class UVDocImageProcessor(BaseImageProcessor):
         Sets default size if not provided and stores all preprocessing hyperparameters.
         """
         super().__init__(**kwargs)
-        size = size if size is not None else {"height": 256, "width": 256}
-
-        self.do_resize = do_resize
-        self.size = size
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
-        self.resample = resample
 
     @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
-        size: Optional[dict[str, int]] = None,
-        do_resize: Optional[bool] = None,
-        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[Union[int, float]] = None,
         do_normalize: Optional[bool] = None,
@@ -111,12 +90,6 @@ class UVDocImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Input images to process (can be PIL images, numpy arrays, torch tensors, or lists thereof).
-            size (`Dict[str, int]`, *optional*):
-                Override the target resize size (defaults to self.size).
-            do_resize (`bool`, *optional*):
-                Override the do_resize flag (defaults to self.do_resize).
-            resample (`PILImageResampling`, *optional*):
-                Override the resampling filter (defaults to self.resample).
             do_rescale (`bool`, *optional*):
                 Override the do_rescale flag (defaults to self.do_rescale).
             rescale_factor (`Union[int, float]`, *optional*):
@@ -140,9 +113,6 @@ class UVDocImageProcessor(BaseImageProcessor):
         Raises:
             ValueError: If input images are of invalid type (not PIL/numpy/torch).
         """
-        size = self.size if size is None else size
-        do_resize = self.do_resize if do_resize is None else do_resize
-        resample = self.resample if resample is None else resample
         do_rescale = self.do_rescale if do_rescale is None else do_rescale
         rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
         do_normalize = self.do_normalize if do_normalize is None else do_normalize
@@ -157,9 +127,6 @@ class UVDocImageProcessor(BaseImageProcessor):
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            size=size,
-            do_resize=do_resize,
-            resample=resample,
         )
 
         if not valid_images(images):
@@ -204,7 +171,7 @@ class UVDocImageProcessor(BaseImageProcessor):
         """
         scale = np.float32(scale) if isinstance(scale, (str, float)) else np.float32(255.0)
 
-        return [self.doctr(img, scale) for img in images]
+        return [self.doctr(image, scale) for image in images]
 
     def doctr(self, pred: Union[np.ndarray, tuple[np.ndarray, ...]], scale) -> np.ndarray:
         """
@@ -224,16 +191,16 @@ class UVDocImageProcessor(BaseImageProcessor):
             AssertionError: If input is not a numpy array.
         """
         if isinstance(pred, tuple):
-            im = pred[0].cpu().detach().numpy()
+            image = pred[0].cpu().detach().numpy()
         else:
-            im = pred.cpu().detach().numpy()
-        assert isinstance(im, np.ndarray), "Invalid input 'im' in DocTrPostProcess. Expected a numpy array."
-        im = im.squeeze()
-        im = im.transpose(1, 2, 0)
-        im *= scale
-        im = im[:, :, ::-1]
-        im = im.astype("uint8", copy=False)
-        return im
+            image = pred.cpu().detach().numpy()
+        assert isinstance(image, np.ndarray), "Invalid input 'image' in DocTrPostProcess. Expected a numpy array."
+        image = image.squeeze()
+        image = image.transpose(1, 2, 0)
+        image *= scale
+        image = image[:, :, ::-1]
+        image = image.astype("uint8", copy=False)
+        return image
 
 
 __all__ = ["UVDocImageProcessor"]

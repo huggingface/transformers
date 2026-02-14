@@ -44,7 +44,7 @@ print(result)
 
 ### Batched inference
 
-Here is how you can do it with PP-LCNet using [`Pipeline`] or the [`AutoModel`]:
+Here is how you can do it with UVDoc using [`Pipeline`] or the [`AutoModel`]:
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">

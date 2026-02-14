@@ -7,11 +7,9 @@
 from typing import Optional, Union
 
 import torch
-from torchvision.transforms.v2.functional import InterpolationMode
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...image_utils import PILImageResampling
 from ...utils.generic import TensorType
 
 
@@ -21,11 +19,8 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
     Optimized for speed with torch tensor operations, skipping numpy conversions for low-latency inference.
     """
 
-    resample = 2
     image_mean = [0, 0, 0]
     image_std = [1, 1, 1]
-    size = {"height": 256, "width": 256}
-    do_resize = True
     do_rescale = True
     do_normalize = True
 
@@ -36,16 +31,12 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list[torch.Tensor],
-        size: Optional[list[dict[str, int]]],
-        do_resize: bool,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]],
-        interpolation: Optional[InterpolationMode] = None,
-        resample: Optional[PILImageResampling] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -55,10 +46,6 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
         Args:
             images (`List[torch.Tensor]`):
                 List of input images (PyTorch tensors, [C, H, W] format).
-            size (`List[Dict[str, int]]`, *optional*):
-                Ignored (class-level size is used for fast processing).
-            do_resize (`bool`):
-                Whether to resize images (ignored in fast implementation).
             do_rescale (`bool`):
                 Whether to rescale pixel values from 0-255 to 0-1.
             rescale_factor (`float`):
@@ -71,10 +58,6 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
                 Override normalization std (defaults to class-level image_std).
             return_tensors (`Union[str, TensorType]`, *optional*):
                 Type of tensors to return (only "pt" is supported for fast processing).
-            interpolation (`InterpolationMode`, *optional*):
-                Ignored (class-level resample is used).
-            resample (`PILImageResampling`, *optional*):
-                Ignored (class-level resample is used).
 
         Returns:
             `BatchFeature`: BatchFeature containing processed "pixel_values" (PyTorch tensor, [B, C, H, W]).
@@ -112,7 +95,7 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
         else:
             scale = torch.tensor(255.0, device=images.device)
 
-        return [self.doctr(img, scale) for img in images]
+        return [self.doctr(image, scale) for image in images]
 
     def doctr(self, pred: Union[torch.Tensor, tuple[torch.Tensor, ...]], scale: torch.Tensor) -> torch.Tensor:
         """
@@ -132,19 +115,19 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
             AssertionError: If input is not a PyTorch tensor.
         """
         if isinstance(pred, tuple):
-            im = pred[0]
+            image = pred[0]
         else:
-            im = pred
+            image = pred
 
-        assert isinstance(im, torch.Tensor), "Invalid input 'im' in DocTrPostProcess. Expected a torch tensor."
+        assert isinstance(image, torch.Tensor), "Invalid input 'image' in DocTrPostProcess. Expected a torch tensor."
 
-        im = im.squeeze()
-        im = im.permute(1, 2, 0)
-        im = im * scale
-        im = im.flip(dims=[-1])
-        im = im.to(dtype=torch.uint8, non_blocking=True, copy=False)
+        image = image.squeeze()
+        image = image.permute(1, 2, 0)
+        image = image * scale
+        image = image.flip(dims=[-1])
+        image = image.to(dtype=torch.uint8, non_blocking=True, copy=False)
 
-        return im
+        return image
 
 
 __all__ = ["UVDocImageProcessorFast"]
