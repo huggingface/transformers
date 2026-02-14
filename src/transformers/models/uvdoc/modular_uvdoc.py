@@ -452,10 +452,10 @@ class UVDocResidualBlockWithDilation(nn.Module):
         super().__init__()
         self.downsample = downsample
 
-        if (stride != 1 or is_top):
-            stride1, padding, dilation = stride, kernel_size//2, 1
+        if stride != 1 or is_top:
+            stride1, padding, dilation = stride, kernel_size // 2, 1
         else:
-            stride1, padding, dilation = 1, 3*(kernel_size//2), 3
+            stride1, padding, dilation = 1, 3 * (kernel_size // 2), 3
 
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size, stride1, padding, dilation=dilation)
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size, 1, padding, dilation=dilation)
@@ -616,19 +616,21 @@ class UVDocPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
+
 class UVDocConvLayer(ResNetConvLayer):
     """
     Convolutional layer used in UVDoc model.
     Consists of a convolutional operation followed by batch normalization and ReLU activation.
     """
+
     def __init__(
-        self, 
-        in_channels: int, 
-        out_channels: int, 
-        kernel_size: int = 3, 
-        stride: int = 1, 
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        stride: int = 1,
         dilation: int = 3,
-        activation: str = "relu"
+        activation: str = "relu",
     ):
         super().__init__()
         self.convolution = nn.Conv2d(
@@ -642,6 +644,7 @@ class UVDocConvLayer(ResNetConvLayer):
         )
         self.normalization = nn.BatchNorm2d(out_channels)
         self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
+
 
 class UVDocModel(UVDocPreTrainedModel):
     """
@@ -710,7 +713,10 @@ class UVDocModel(UVDocPreTrainedModel):
                 return UVDocConvLayer(bridge_in_channels, bridge_in_channels, dilation=dilation_values)
             else:
                 return nn.Sequential(
-                    *[UVDocConvLayer(bridge_in_channels, bridge_in_channels, dilation=dilation) for dilation in dilation_values]
+                    *[
+                        UVDocConvLayer(bridge_in_channels, bridge_in_channels, dilation=dilation)
+                        for dilation in dilation_values
+                    ]
                 )
 
         self.bridge_1 = _build_bridge("bridge_1")
