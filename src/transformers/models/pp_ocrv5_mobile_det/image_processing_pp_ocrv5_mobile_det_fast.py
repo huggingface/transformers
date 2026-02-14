@@ -46,185 +46,209 @@ def convex_hull(points: np.ndarray) -> np.ndarray:
     if len(points) <= 1:
         return points
 
-    pivot_idx = np.lexsort((points[:, 0], points[:, 1]))[0]
-    pivot = points[pivot_idx]
+    pivot_index = np.lexsort((points[:, 0], points[:, 1]))[0]
+    pivot_point = points[pivot_index]
 
-    def polar_angle(p):
-        return np.arctan2(p[1] - pivot[1], p[0] - pivot[0])
+    def polar_angle(point):
+        return np.arctan2(point[1] - pivot_point[1], point[0] - pivot_point[0])
 
     sorted_points = sorted(points, key=polar_angle)
 
-    hull = []
-    for p in sorted_points:
-        while len(hull) >= 2:
-            a = hull[-2]
-            b = hull[-1]
-            cross = (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])
-            if cross <= 1e-8:
-                hull.pop()
+    convex_hull_points = []
+    for current_point in sorted_points:
+        while len(convex_hull_points) >= 2:
+            second_last_point = convex_hull_points[-2]
+            last_point = convex_hull_points[-1]
+            cross_product = (last_point[0] - second_last_point[0]) * (current_point[1] - second_last_point[1]) - (
+                last_point[1] - second_last_point[1]
+            ) * (current_point[0] - second_last_point[0])
+            if cross_product <= 1e-8:
+                convex_hull_points.pop()
             else:
                 break
-        hull.append(p)
+        convex_hull_points.append(current_point)
 
-    return np.array(hull, dtype=np.float64)
+    return np.array(convex_hull_points, dtype=np.float64)
 
 
 def min_area_rect(contour: np.ndarray) -> tuple[tuple[float, float], tuple[float, float], float]:
     contour = contour.reshape(-1, 2).astype(np.float64)
-    hull = convex_hull(contour)
-    n = len(hull)
+    convex_hull_points = convex_hull(contour)
+    number_of_hull_points = len(convex_hull_points)
 
-    if n == 1:
-        return (float(hull[0][0]), float(hull[0][1])), (0.0, 0.0), 0.0
-    if n == 2:
-        dx, dy = hull[1] - hull[0]
-        length = np.hypot(dx, dy)
-        center = ((hull[0][0] + hull[1][0]) / 2, (hull[0][1] + hull[1][1]) / 2)
-        angle = np.arctan2(dy, dx) * 180 / np.pi
-        angle = angle - 90 if angle >= 0 else angle
-        return (float(center[0]), float(center[1])), (float(length), 0.0), float(angle)
+    if number_of_hull_points == 1:
+        return (float(convex_hull_points[0][0]), float(convex_hull_points[0][1])), (0.0, 0.0), 0.0
+    if number_of_hull_points == 2:
+        delta_x, delta_y = convex_hull_points[1] - convex_hull_points[0]
+        edge_length = np.hypot(delta_x, delta_y)
+        center_point = (
+            (convex_hull_points[0][0] + convex_hull_points[1][0]) / 2,
+            (convex_hull_points[0][1] + convex_hull_points[1][1]) / 2,
+        )
+        rotation_angle = np.arctan2(delta_y, delta_x) * 180 / np.pi
+        rotation_angle = rotation_angle - 90 if rotation_angle >= 0 else rotation_angle
+        return (float(center_point[0]), float(center_point[1])), (float(edge_length), 0.0), float(rotation_angle)
 
-    min_area = float("inf")
-    best_rect = None
-    j = 1
+    minimum_area = float("inf")
+    best_rectangle = None
+    current_j_index = 1
 
-    for i in range(n):
-        p1, p2 = hull[i], hull[(i + 1) % n]
-        edge = p2 - p1
-        edge_len = np.hypot(edge[0], edge[1])
+    for current_i_index in range(number_of_hull_points):
+        point_one, point_two = (
+            convex_hull_points[current_i_index],
+            convex_hull_points[(current_i_index + 1) % number_of_hull_points],
+        )
+        edge_vector = point_two - point_one
+        edge_vector_length = np.hypot(edge_vector[0], edge_vector[1])
 
-        if edge_len < 1e-8:
+        if edge_vector_length < 1e-8:
             continue
 
-        edge_normal = np.array([-edge[1], edge[0]]) / edge_len
+        edge_normal_vector = np.array([-edge_vector[1], edge_vector[0]]) / edge_vector_length
 
         while True:
-            curr_dot = np.dot(hull[j] - p1, edge_normal)
-            next_dot = np.dot(hull[(j + 1) % n] - p1, edge_normal)
-            if next_dot > curr_dot + 1e-8:
-                j = (j + 1) % n
+            current_dot_product = np.dot(convex_hull_points[current_j_index] - point_one, edge_normal_vector)
+            next_dot_product = np.dot(
+                convex_hull_points[(current_j_index + 1) % number_of_hull_points] - point_one, edge_normal_vector
+            )
+            if next_dot_product > current_dot_product + 1e-8:
+                current_j_index = (current_j_index + 1) % number_of_hull_points
             else:
                 break
 
-        proj = np.dot(hull - p1, edge) / edge_len
-        min_proj, max_proj = np.min(proj), np.max(proj)
-        width = max_proj - min_proj
+        projection = np.dot(convex_hull_points - point_one, edge_vector) / edge_vector_length
+        minimum_projection, maximum_projection = np.min(projection), np.max(projection)
+        rectangle_width = maximum_projection - minimum_projection
 
-        proj_n = np.dot(hull - p1, edge_normal)
-        min_proj_n, max_proj_n = np.min(proj_n), np.max(proj_n)
-        height = max_proj_n - min_proj_n
+        normal_projection = np.dot(convex_hull_points - point_one, edge_normal_vector)
+        minimum_normal_projection, maximum_normal_projection = np.min(normal_projection), np.max(normal_projection)
+        rectangle_height = maximum_normal_projection - minimum_normal_projection
 
-        area = width * height
-        if area < min_area - 1e-8:
-            min_area = area
-            center_x = (
-                p1[0]
-                + edge[0] * (min_proj + max_proj) / (2 * edge_len)
-                + edge_normal[0] * (min_proj_n + max_proj_n) / 2
+        current_area = rectangle_width * rectangle_height
+        if current_area < minimum_area - 1e-8:
+            minimum_area = current_area
+            center_x_coordinate = (
+                point_one[0]
+                + edge_vector[0] * (minimum_projection + maximum_projection) / (2 * edge_vector_length)
+                + edge_normal_vector[0] * (minimum_normal_projection + maximum_normal_projection) / 2
             )
-            center_y = (
-                p1[1]
-                + edge[1] * (min_proj + max_proj) / (2 * edge_len)
-                + edge_normal[1] * (min_proj_n + max_proj_n) / 2
+            center_y_coordinate = (
+                point_one[1]
+                + edge_vector[1] * (minimum_projection + maximum_projection) / (2 * edge_vector_length)
+                + edge_normal_vector[1] * (minimum_normal_projection + maximum_normal_projection) / 2
             )
-            center = (float(center_x), float(center_y))
+            center_point = (float(center_x_coordinate), float(center_y_coordinate))
 
-            angle = np.arctan2(edge[1], edge[0]) * 180 / np.pi
-            if angle >= 90:
-                angle -= 180
-            elif angle >= 0:
-                angle -= 90
-            angle = float(angle)
+            rotation_angle = np.arctan2(edge_vector[1], edge_vector[0]) * 180 / np.pi
+            if rotation_angle >= 90:
+                rotation_angle -= 180
+            elif rotation_angle >= 0:
+                rotation_angle -= 90
+            rotation_angle = float(rotation_angle)
 
-            if width < height:
-                width, height = height, width
-                angle -= 90
+            if rectangle_width < rectangle_height:
+                rectangle_width, rectangle_height = rectangle_height, rectangle_width
+                rotation_angle -= 90
 
-            best_rect = (center, (float(width), float(height)), angle)
+            best_rectangle = (center_point, (float(rectangle_width), float(rectangle_height)), rotation_angle)
 
-    return best_rect if best_rect else ((0.0, 0.0), (0.0, 0.0), 0.0)
+    return best_rectangle if best_rectangle else ((0.0, 0.0), (0.0, 0.0), 0.0)
 
 
-def box_points(rect: tuple) -> np.ndarray:
-    center, size, angle = rect
-    cx, cy = center
-    width, height = size
-    angle_rad = angle * np.pi / 180.0
+def box_points(rectangle: tuple) -> np.ndarray:
+    center_point, rectangle_size, rotation_angle = rectangle
+    center_x, center_y = center_point
+    rectangle_width, rectangle_height = rectangle_size
+    rotation_angle_radians = rotation_angle * np.pi / 180.0
 
-    half_w = width / 2.0
-    half_h = height / 2.0
+    half_width = rectangle_width / 2.0
+    half_height = rectangle_height / 2.0
 
-    cos_a = np.cos(angle_rad)
-    sin_a = np.sin(angle_rad)
+    cosine_angle = np.cos(rotation_angle_radians)
+    sine_angle = np.sin(rotation_angle_radians)
 
-    pts = [
-        (cx - half_w * cos_a - half_h * sin_a, cy - half_w * sin_a + half_h * cos_a),
-        (cx + half_w * cos_a - half_h * sin_a, cy + half_w * sin_a + half_h * cos_a),
-        (cx + half_w * cos_a + half_h * sin_a, cy + half_w * sin_a - half_h * cos_a),
-        (cx - half_w * cos_a + half_h * sin_a, cy - half_w * sin_a - half_h * cos_a),
+    rectangle_vertices = [
+        (
+            center_x - half_width * cosine_angle - half_height * sine_angle,
+            center_y - half_width * sine_angle + half_height * cosine_angle,
+        ),
+        (
+            center_x + half_width * cosine_angle - half_height * sine_angle,
+            center_y + half_width * sine_angle + half_height * cosine_angle,
+        ),
+        (
+            center_x + half_width * cosine_angle + half_height * sine_angle,
+            center_y + half_width * sine_angle - half_height * cosine_angle,
+        ),
+        (
+            center_x - half_width * cosine_angle + half_height * sine_angle,
+            center_y - half_width * sine_angle - half_height * cosine_angle,
+        ),
     ]
-    return np.array(pts, dtype=np.float32)
+    return np.array(rectangle_vertices, dtype=np.float32)
 
 
-def masked_mean(roi: np.ndarray, mask: np.ndarray) -> float:
-    mask = mask.astype(np.uint8)
-    roi = roi.astype(np.float64)
+def masked_mean(region_of_interest: np.ndarray, mask_array: np.ndarray) -> float:
+    mask_array = mask_array.astype(np.uint8)
+    region_of_interest = region_of_interest.astype(np.float64)
 
-    valid_pixels = roi[mask == 1]
+    valid_pixel_values = region_of_interest[mask_array == 1]
 
-    if len(valid_pixels) == 0:
+    if len(valid_pixel_values) == 0:
         return 0.0
 
-    return float(np.mean(valid_pixels))
+    return float(np.mean(valid_pixel_values))
 
 
-def unclip(box: np.ndarray, unclip_ratio: float) -> np.ndarray:
+def unclip(bounding_box: np.ndarray, unclip_ratio: float) -> np.ndarray:
     """
     Expands (dilates) a detected text bounding box to recover the full text region.
     Args:
-        box (np.ndarray): Input contour of shape (N, 2), where N is the number of points.
+        bounding_box (np.ndarray): Input contour of shape (N, 2), where N is the number of points.
         unclip_ratio (float): Expansion ratio, typically greater than 1.0.
     Returns:
         np.ndarray: Expanded contour of shape (M, 2).
     """
-    box = np.array(box).reshape(-1, 2)
+    bounding_box = np.array(bounding_box).reshape(-1, 2)
 
-    area = polygon_area(box)
-    length = polygon_arc_length(box, True)
-    if length == 0:
-        return box
-    distance = area * unclip_ratio / length
+    polygon_area_value = polygon_area(bounding_box)
+    polygon_arc_length_value = polygon_arc_length(bounding_box, True)
+    if polygon_arc_length_value == 0:
+        return bounding_box
+    expansion_distance = polygon_area_value * unclip_ratio / polygon_arc_length_value
 
-    points = np.concatenate([box, box[0:1]], axis=0)
-    new_points = []
+    contour_points = np.concatenate([bounding_box, bounding_box[0:1]], axis=0)
+    expanded_contour_points = []
 
-    for i in range(len(box)):
-        p1 = points[i]
-        p0 = points[i - 1]
-        p2 = points[i + 1]
+    for current_index in range(len(bounding_box)):
+        current_point = contour_points[current_index]
+        previous_point = contour_points[current_index - 1]
+        next_point = contour_points[current_index + 1]
 
-        def get_normal(pa, pb):
-            direction = pb - pa
-            norm = np.linalg.norm(direction)
-            if norm == 0:
+        def get_normal_vector(point_a, point_b):
+            direction_vector = point_b - point_a
+            vector_norm = np.linalg.norm(direction_vector)
+            if vector_norm == 0:
                 return np.array([0, 0])
-            return np.array([direction[1], -direction[0]]) / norm
+            return np.array([direction_vector[1], -direction_vector[0]]) / vector_norm
 
-        v1 = get_normal(p0, p1)
-        v2 = get_normal(p1, p2)
-        combined_v = v1 + v2
-        cos_theta = np.dot(v1, v2)
+        normal_vector_one = get_normal_vector(previous_point, current_point)
+        normal_vector_two = get_normal_vector(current_point, next_point)
+        combined_normal_vector = normal_vector_one + normal_vector_two
+        cosine_theta_value = np.dot(normal_vector_one, normal_vector_two)
 
-        denom = 1 + cos_theta
-        if denom < 1e-6:
-            scale = distance
+        denominator_value = 1 + cosine_theta_value
+        if denominator_value < 1e-6:
+            scale_factor = expansion_distance
         else:
-            scale = distance * np.sqrt(2 / denom)
+            scale_factor = expansion_distance * np.sqrt(2 / denominator_value)
 
-        new_point = p1 + combined_v * (scale / (np.linalg.norm(combined_v) + 1e-6))
-        new_points.append(new_point)
+        new_contour_point = current_point + combined_normal_vector * (
+            scale_factor / (np.linalg.norm(combined_normal_vector) + 1e-6)
+        )
+        expanded_contour_points.append(new_contour_point)
 
-    return np.array(new_points, dtype=np.float32)
+    return np.array(expanded_contour_points, dtype=np.float32)
 
 
 def get_mini_boxes(contour: np.ndarray) -> tuple[list[list[float]], float]:

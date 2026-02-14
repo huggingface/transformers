@@ -571,38 +571,46 @@ class PPOCRV5MobileDetNeck(nn.Module):
                 )
             )
 
-    def forward(self, hidden_state):
+    def forward(self, feature_maps):
         """
         Forward pass of the neck network, fusing multi-scale backbone features.
 
         Args:
-            hidden_state (list[torch.Tensor]): List of multi-scale feature maps from the backbone (4 feature maps).
+            feature_maps (list[torch.Tensor]): List of multi-scale feature maps from the backbone (4 feature maps).
 
         Returns:
             torch.Tensor: Concatenated fused feature tensor of shape (B, C, H, W).
         """
-        c2, c3, c4, c5 = hidden_state
+        feature_map_c2, feature_map_c3, feature_map_c4, feature_map_c5 = feature_maps
 
-        in5 = self.ins_conv[3](c5)
-        in4 = self.ins_conv[2](c4)
-        in3 = self.ins_conv[1](c3)
-        in2 = self.ins_conv[0](c2)
+        input_feature_c5 = self.ins_conv[3](feature_map_c5)
+        input_feature_c4 = self.ins_conv[2](feature_map_c4)
+        input_feature_c3 = self.ins_conv[1](feature_map_c3)
+        input_feature_c2 = self.ins_conv[0](feature_map_c2)
 
-        out4 = in4 + F.interpolate(in5, scale_factor=2, mode=self.interpolate_mode)  # 1/16
-        out3 = in3 + F.interpolate(out4, scale_factor=2, mode=self.interpolate_mode)  # 1/8
-        out2 = in2 + F.interpolate(out3, scale_factor=2, mode=self.interpolate_mode)  # 1/4
+        output_feature_c4 = input_feature_c4 + F.interpolate(
+            input_feature_c5, scale_factor=2, mode=self.interpolate_mode
+        )  # 1/16
+        output_feature_c3 = input_feature_c3 + F.interpolate(
+            output_feature_c4, scale_factor=2, mode=self.interpolate_mode
+        )  # 1/8
+        output_feature_c2 = input_feature_c2 + F.interpolate(
+            output_feature_c3, scale_factor=2, mode=self.interpolate_mode
+        )  # 1/4
 
-        p5 = self.inp_conv[3](in5)
-        p4 = self.inp_conv[2](out4)
-        p3 = self.inp_conv[1](out3)
-        p2 = self.inp_conv[0](out2)
+        processed_feature_c5 = self.inp_conv[3](input_feature_c5)
+        processed_feature_c4 = self.inp_conv[2](output_feature_c4)
+        processed_feature_c3 = self.inp_conv[1](output_feature_c3)
+        processed_feature_c2 = self.inp_conv[0](output_feature_c2)
 
-        p5 = F.interpolate(p5, scale_factor=8, mode=self.interpolate_mode)
-        p4 = F.interpolate(p4, scale_factor=4, mode=self.interpolate_mode)
-        p3 = F.interpolate(p3, scale_factor=2, mode=self.interpolate_mode)
+        processed_feature_c5 = F.interpolate(processed_feature_c5, scale_factor=8, mode=self.interpolate_mode)
+        processed_feature_c4 = F.interpolate(processed_feature_c4, scale_factor=4, mode=self.interpolate_mode)
+        processed_feature_c3 = F.interpolate(processed_feature_c3, scale_factor=2, mode=self.interpolate_mode)
 
-        fuse = torch.cat([p5, p4, p3, p2], dim=1)
-        return fuse
+        fused_feature_map = torch.cat(
+            [processed_feature_c5, processed_feature_c4, processed_feature_c3, processed_feature_c2], dim=1
+        )
+        return fused_feature_map
 
 
 class PPOCRV5MobileDetHead(nn.Module):
