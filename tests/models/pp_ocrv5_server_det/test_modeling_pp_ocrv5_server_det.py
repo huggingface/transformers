@@ -17,6 +17,7 @@
 import inspect
 import unittest
 
+import requests
 from parameterized import parameterized
 
 from transformers import (
@@ -138,7 +139,6 @@ class PPOCRV5ServerDetModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
 
     def test_pp_ocrv5_server_det_object_detection(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
