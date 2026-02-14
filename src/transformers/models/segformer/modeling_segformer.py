@@ -23,6 +23,8 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput, SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.output_capturing import capture_outputs, can_return_tuple
+from ...utils import generic as modeling_utils
 from .configuration_segformer import SegformerConfig
 
 
