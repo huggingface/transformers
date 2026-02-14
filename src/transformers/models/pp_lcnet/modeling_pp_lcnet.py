@@ -319,7 +319,7 @@ class PPLCNetModel(PPLCNetPreTrainedModel):
             fc_in_channels = config.class_expand
         else:
             fc_in_channels = make_divisible(config.backbone_config["blocks6"][-1][2] * config.scale, config.divisor)
-        self.fc = nn.Linear(fc_in_channels, config.class_num)
+        self.fc = nn.Linear(fc_in_channels, config.num_labels)
         self.out_activation = nn.Softmax(dim=-1)
 
         self.post_init()

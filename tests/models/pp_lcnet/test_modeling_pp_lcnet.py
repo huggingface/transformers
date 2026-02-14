@@ -97,7 +97,7 @@ class PPLCNetModelTester:
             dropout_prob=0.2,
             class_expand=1280,
             use_last_conv=True,
-            act="hardswish",
+            hidden_act="hardswish",
             id2label=id2label,
         )
 

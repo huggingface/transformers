@@ -24,9 +24,6 @@ class PPLCNetConfig(PreTrainedConfig):
         scale (`float`, *optional*, defaults to 1.0):
             The scaling factor for the model's channel dimensions, used to adjust the model size and computational cost
             without changing the overall architecture (e.g., 0.25, 0.5, 1.0, 1.5).
-        class_num (`int`, *optional*, defaults to 4):
-            The number of output classes for the classification task. Typical values are 2 (binary classification) or
-            4 (document orientation classification: 0°, 90°, 180°, 270°).
         stride_list (`List[int]`, *optional*, defaults to `[2, 2, 2, 2, 2]`):
             The list of stride values for convolutional layers in the backbone network, controlling the downsampling
             rate of feature maps at each stage to capture multi-scale visual information.
@@ -67,7 +64,6 @@ class PPLCNetConfig(PreTrainedConfig):
     def __init__(
         self,
         scale=1.0,
-        class_num=4,
         stride_list=[2, 2, 2, 2, 2],
         reduction=4,
         dropout_prob=0.2,
@@ -81,7 +77,6 @@ class PPLCNetConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
         self.scale = scale
-        self.class_num = class_num
         self.stride_list = stride_list
         self.reduction = reduction
         self.dropout_prob = dropout_prob
