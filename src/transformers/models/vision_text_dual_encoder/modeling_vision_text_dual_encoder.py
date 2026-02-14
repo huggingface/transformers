@@ -168,6 +168,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         return vision_outputs
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -177,11 +178,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         return_loss: bool | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor] | CLIPOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CLIPOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
@@ -239,13 +237,9 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         text_outputs = self.text_model(
@@ -253,15 +247,13 @@ class VisionTextDualEncoderModel(PreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        image_embeds = vision_outputs[1]  # pooler_output
+        image_embeds = vision_outputs.pooler_output
         image_embeds = self.visual_projection(image_embeds)
 
-        text_embeds = text_outputs[1]  # pooler_output
+        text_embeds = text_outputs.pooler_output
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
@@ -276,10 +268,6 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         loss = None
         if return_loss:
             loss = clip_loss(logits_per_text)
-
-        if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
-            return ((loss,) + output) if loss is not None else output
 
         return CLIPOutput(
             loss=loss,
