@@ -326,7 +326,7 @@ def _build_checkpoint_conversion_mapping():
             # Encoder Layers Renaming
             WeightRenaming(
                 r"encoder.layers.(\d+).attn.out_proj.weight",
-                r"layers.\1.attention.o_proj.dense.weight",
+                r"layers.\1.attention.o_proj.weight",
             ),
             WeightRenaming(
                 r"encoder.layers.(\d+).mlp.fc11.weight",
@@ -339,7 +339,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"encoder.layers.(\d+).mlp.fc2.weight", r"layers.\1.intermediate.down_proj.weight"),
             WeightRenaming(
                 r"encoder.layers.(\d+).norm1",
-                r"layers.\1.attention.o_proj.LayerNorm",
+                r"layers.\1.norm1",
             ),
             WeightRenaming(
                 r"encoder.layers.(\d+).norm2",
