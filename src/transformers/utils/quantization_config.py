@@ -1949,12 +1949,12 @@ class FourOverSixConfig(QuantizationConfigMixin):
         weight_scale_rule (`str`, *optional*, defaults to `None`):
             Scaling rule to use when selecting a scale for blocks in weight tensors. If not
             provided, `scale_rule` is used.
-        exclude_layers (`list[str]`, *optional*, defaults to `["lm_head"]`):
-            The list of layers to exclude from quantization. By default, the `lm_head` is excluded.
-        layer_config_overrides (`dict[str, dict[str, Any]]`, *optional*, defaults to `None`):
-            A dictionary of layer-specific configuration overrides. Keys should be layer names, and
-            values should be dictionaries containing the quantization configuration for that layer.
-            This can be used to override the default configuration for specific layers.
+        module_config_overrides (`dict[str, dict[str, Any]]`, *optional*, defaults to `None`):
+            A dictionary of module-specific configuration overrides. Keys should be module names, and
+            values should be dictionaries containing the quantization configuration for that module.
+            This can be used to override the default configuration for specific modules.
+        modules_to_not_convert (`list[str]`, *optional*, defaults to `["lm_head"]`):
+            The list of modules to exclude from quantization. By default, the `lm_head` is excluded.
     """
 
     def __init__(
@@ -1969,8 +1969,8 @@ class FourOverSixConfig(QuantizationConfigMixin):
         scale_rule: str = "mse",
         weight_scale_2d: bool = False,
         weight_scale_rule: str | None = None,
-        exclude_layers: list[str] | None = ["lm_head"],
-        layer_config_overrides: dict[str, dict[str, Any]] | None = None,
+        module_config_overrides: dict[str, dict[str, Any]] | None = None,
+        modules_to_not_convert: list[str] | None = ["lm_head"],
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.FOUR_OVER_SIX
@@ -1985,5 +1985,5 @@ class FourOverSixConfig(QuantizationConfigMixin):
         self.scale_rule = scale_rule
         self.weight_scale_2d = weight_scale_2d
         self.weight_scale_rule = weight_scale_rule
-        self.exclude_layers = exclude_layers
-        self.layer_config_overrides = layer_config_overrides
+        self.module_config_overrides = module_config_overrides
+        self.modules_to_not_convert = modules_to_not_convert

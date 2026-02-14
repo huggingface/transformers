@@ -51,10 +51,10 @@ class FourOverSixHfQuantizer(HfQuantizer):
         param_name: str,
         **kwargs,
     ) -> bool:
-        from fouroversix import FourOverSixLinear
+        from fouroversix import QuantizedModule
 
-        module, name = get_module_from_name(model, param_name)
-        return isinstance(module, FourOverSixLinear) and name != "bias"
+        module, _ = get_module_from_name(model, param_name)
+        return QuantizedModule.is_quantized_module_type(type(module))
 
     def adjust_max_memory(
         self, max_memory: dict[str, int | str]
@@ -79,6 +79,12 @@ class FourOverSixHfQuantizer(HfQuantizer):
         )
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        from fouroversix import FourOverSixLinear
+
+        for _, module in model.named_modules():
+            if isinstance(module, FourOverSixLinear):
+                del module.weight
+
         return model
 
     def is_serializable(self):

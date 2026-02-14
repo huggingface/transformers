@@ -37,7 +37,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 We support many different quantization options which are commonly used during NVFP4 quantization, including the random Hadamard transform, 2D block scaling, transposed inputs, and stochastic rounding, as described in our [preprint](https://arxiv.org/abs/2512.02010).
 These may be used by setting the appropriate option in the `FourOverSixConfig` passed above.
-Individual layers can be given custom quantization options by setting `layer_config_overrides`, or excluded from quantization by setting `exclude_layers`, as shown below.
+Individual layers can be given custom quantization options by setting `module_config_overrides`, or excluded from quantization by setting `modules_to_not_convert`, as shown below.
 
 ## Training
 
@@ -52,7 +52,7 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="auto",
     quantization_config=FourOverSixConfig(
         keep_master_weights=True,
-        exclude_layers=[
+        modules_to_not_convert=[
             "lm_head",
             "model.layers.34.self_attn.q_proj",
             "model.layers.34.self_attn.k_proj",
