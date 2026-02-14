@@ -19,7 +19,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPoolingAndNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, can_return_tuple, capture_outputs, logging
 from .configuration_mobilenet_v1 import MobileNetV1Config
 
 
@@ -128,6 +128,7 @@ class MobileNetV1PreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     supports_gradient_checkpointing = False
     _no_split_modules = []
+    _can_record_outputs = {"hidden_states": MobileNetV1ConvLayer}
 
 
 @auto_docstring
@@ -186,31 +187,20 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPoolingAndNoAttention:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+    ) -> BaseModelOutputWithPoolingAndNoAttention:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.conv_stem(pixel_values)
 
-        all_hidden_states = () if output_hidden_states else None
-
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(hidden_states)
-
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
 
         last_hidden_state = hidden_states
 
@@ -219,13 +209,9 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
         else:
             pooled_output = None
 
-        if not return_dict:
-            return tuple(v for v in [last_hidden_state, pooled_output, all_hidden_states] if v is not None)
-
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=all_hidden_states,
         )
 
 
@@ -251,36 +237,29 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
         labels: torch.Tensor | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | ImageClassifierOutputWithNoAttention:
+    ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss). If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        outputs = self.mobilenet_v1(pixel_values, **kwargs)
 
-        outputs = self.mobilenet_v1(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-
-        pooled_output = outputs.pooler_output if return_dict else outputs[1]
+        pooled_output = outputs.pooler_output
 
         logits = self.classifier(self.dropout(pooled_output))
 
         loss = None
         if labels is not None:
             loss = self.loss_function(labels, logits, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(
             loss=loss,
