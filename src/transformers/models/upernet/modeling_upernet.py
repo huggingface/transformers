@@ -20,7 +20,7 @@ from torch.nn import CrossEntropyLoss
 from ...backbone_utils import load_backbone
 from ...modeling_outputs import SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring
+from ...utils import auto_docstring, can_return_tuple
 from .configuration_upernet import UperNetConfig
 
 
@@ -290,6 +290,7 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -297,9 +298,8 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         labels: torch.Tensor | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | SemanticSegmenterOutput:
+    ) -> SemanticSegmenterOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
@@ -330,7 +330,6 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -359,13 +358,6 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
             if auxiliary_logits is not None:
                 auxiliary_loss = loss_fct(auxiliary_logits, labels)
                 loss += self.config.auxiliary_loss_weight * auxiliary_loss
-
-        if not return_dict:
-            if output_hidden_states:
-                output = (logits,) + outputs[1:]
-            else:
-                output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return SemanticSegmenterOutput(
             loss=loss,
