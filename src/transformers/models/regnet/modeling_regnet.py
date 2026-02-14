@@ -21,7 +21,6 @@ from torch import Tensor, nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import (
-    BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
@@ -274,7 +273,6 @@ class RegNetPreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-# Copied from transformers.models.resnet.modeling_resnet.ResNetModel with RESNET->REGNET,ResNet->RegNet
 class RegNetModel(RegNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -310,7 +308,6 @@ class RegNetModel(RegNetPreTrainedModel):
     ImageNet.
     """
 )
-# Copied from transformers.models.resnet.modeling_resnet.ResNetForImageClassification with RESNET->REGNET,ResNet->RegNet,resnet->regnet
 class RegNetForImageClassification(RegNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
