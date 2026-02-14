@@ -22,10 +22,11 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import filter_out_non_signature_kwargs
+from ...utils import auto_docstring, filter_out_non_signature_kwargs
 from ...utils.generic import TensorType
 
 
+@auto_docstring(custom_intro="ImageProcessor for the PPLCNet model.")
 class PPLCNetImageProcessor(BaseImageProcessor):
     """
     Image processor for PP-LCNet models, handling all preprocessing steps required for image classification:
@@ -187,7 +188,7 @@ class PPLCNetImageProcessor(BaseImageProcessor):
                 if resize_short is not None:
                     size = self.get_image_size(image, target_short_edge=resize_short, size_divisor=size_divisor)
                 try:
-                    img = resize(
+                    image = resize(
                         image,
                         size=(size["height"], size["width"]),
                         resample=resample,
@@ -196,7 +197,7 @@ class PPLCNetImageProcessor(BaseImageProcessor):
                 except Exception as e:
                     print(size)
                     raise RuntimeError(f"Failed to resize image: {e}") from e
-                resize_imgs.append(img)
+                resize_imgs.append(image)
             images = resize_imgs
 
         if do_center_crop:
@@ -223,7 +224,7 @@ class PPLCNetImageProcessor(BaseImageProcessor):
 
     def get_image_size(
         self,
-        img: np.ndarray,
+        image: np.ndarray,
         target_short_edge: Union[int, None],
         size_divisor: Optional[int] = None,
     ) -> tuple[dict, np.ndarray]:
@@ -231,22 +232,22 @@ class PPLCNetImageProcessor(BaseImageProcessor):
         Calculate target image size while preserving aspect ratio (based on shorter edge) and aligning with size_divisor.
 
         Args:
-            img (np.ndarray): Input image array (shape [H, W, C] or [C, H, W]).
+            image (np.ndarray): Input image array (shape [H, W, C] or [C, H, W]).
             target_short_edge (Union[int, None]): Desired length for the shorter edge of the image.
             size_divisor (Optional[int]): Divisor to align image dimensions (for hardware optimization). Defaults to None.
 
         Returns:
-            Dict[str, int]: Target size {"height": resize_h, "width": resize_w} with preserved aspect ratio.
+            Dict[str, int]: Target size {"height": resized_height, "width": resized_width} with preserved aspect ratio.
         """
-        h, w = img.shape[:2]
-        scale = target_short_edge / min(h, w)
-        resize_h = round(h * scale)
-        resize_w = round(w * scale)
+        h, w = image.shape[:2]
+        resize_scale = target_short_edge / min(h, w)
+        resized_height = round(h * resize_scale)
+        resized_width = round(w * resize_scale)
         if self.size_divisor is not None:
-            resize_h = math.ceil(resize_h / size_divisor) * size_divisor
-            resize_h = math.ceil(resize_h / size_divisor) * size_divisor
+            resized_height = math.ceil(resized_height / size_divisor) * size_divisor
+            resized_width = math.ceil(resized_width / size_divisor) * size_divisor
 
-        return {"height": resize_h, "width": resize_w}
+        return {"height": resized_height, "width": resized_width}
 
 
 __all__ = ["PPLCNetImageProcessor"]

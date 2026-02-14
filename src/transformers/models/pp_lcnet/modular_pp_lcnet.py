@@ -5,7 +5,7 @@ from typing import Optional, Union
 import numpy as np
 import torch
 import torch.nn as nn
-from torchvision.transforms.v2.functional import InterpolationMode
+import torchvision.transforms.v2.functional as tvF
 
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -25,10 +25,15 @@ from ...image_utils import (
 )
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, filter_out_non_signature_kwargs
+from transformers.models.mobilenet_v2.modeling_mobilenet_v2 import make_divisible
+from ...utils import (
+    ModelOutput, 
+    auto_docstring,
+    filter_out_non_signature_kwargs,
+)
 from ...utils.generic import TensorType
 
-
+@auto_docstring(custom_intro="Configuration for the PPLCNet model.")
 class PPLCNetConfig(PreTrainedConfig):
     model_type = "pp_lcnet"
 
@@ -61,13 +66,16 @@ class PPLCNetConfig(PreTrainedConfig):
         use_last_conv (`bool`, *optional*, defaults to `True`):
             Whether to use the final convolutional layer in the classification head. Setting this to `True` helps
             extract more discriminative features for the classification task.
-        act (`str`, *optional*, defaults to `"hardswish"`):
+        hidden_act (`str`, *optional*, defaults to `"hardswish"`):
             The non-linear activation function used in the model's hidden layers. Supported functions include
             `"hardswish"`, `"relu"`, `"silu"`, and `"gelu"`. `"hardswish"` is preferred for lightweight and efficient
             inference on edge devices.
         backbone_config (`Union[dict, PreTrainedConfig]`, *optional*, defaults to `None`):
             The configuration of the backbone model. If `None`, the default backbone configuration for PP-LCNet
             will be used, which includes the standard block settings for feature extraction.
+        divisor (`int`, *optional*, defaults to 8):
+            The divisor used to ensure that various model parameters (e.g., channel dimensions, kernel sizes) are
+            multiples of this value, promoting efficient model implementation and resource utilization.
 
     Examples:
     ```python
@@ -82,15 +90,16 @@ class PPLCNetConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        scale: float = 1.0,
-        class_num: int = 4,
-        stride_list: list[int] = [2, 2, 2, 2, 2],
-        reduction: int = 4,
-        dropout_prob: float = 0.2,
-        class_expand: int = 1280,
-        use_last_conv: bool = True,
-        act: str = "hardswish",
-        backbone_config: dict | None = None,
+        scale=1.0,
+        class_num=4,
+        stride_list=[2, 2, 2, 2, 2],
+        reduction=4,
+        dropout_prob=0.2,
+        class_expand=1280,
+        use_last_convolution=True,
+        hidden_act="hardswish",
+        backbone_config=None,
+        divisor=8,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -101,11 +110,13 @@ class PPLCNetConfig(PreTrainedConfig):
         self.reduction = reduction
         self.dropout_prob = dropout_prob
         self.class_expand = class_expand
-        self.use_last_conv = use_last_conv
-        self.act = act
+        self.use_last_convolution = use_last_convolution
+        self.hidden_act = hidden_act
         self.backbone_config = backbone_config
+        self.divisor = divisor
 
 
+@auto_docstring(custom_intro="ImageProcessor for the PPLCNet model.")
 class PPLCNetImageProcessor(BaseImageProcessor):
     """
     Image processor for PP-LCNet models, handling all preprocessing steps required for image classification:
@@ -267,7 +278,7 @@ class PPLCNetImageProcessor(BaseImageProcessor):
                 if resize_short is not None:
                     size = self.get_image_size(image, target_short_edge=resize_short, size_divisor=size_divisor)
                 try:
-                    img = resize(
+                    image = resize(
                         image,
                         size=(size["height"], size["width"]),
                         resample=resample,
@@ -276,7 +287,7 @@ class PPLCNetImageProcessor(BaseImageProcessor):
                 except Exception as e:
                     print(size)
                     raise RuntimeError(f"Failed to resize image: {e}") from e
-                resize_imgs.append(img)
+                resize_imgs.append(image)
             images = resize_imgs
 
         if do_center_crop:
@@ -303,7 +314,7 @@ class PPLCNetImageProcessor(BaseImageProcessor):
 
     def get_image_size(
         self,
-        img: np.ndarray,
+        image: np.ndarray,
         target_short_edge: Union[int, None],
         size_divisor: Optional[int] = None,
     ) -> tuple[dict, np.ndarray]:
@@ -311,24 +322,25 @@ class PPLCNetImageProcessor(BaseImageProcessor):
         Calculate target image size while preserving aspect ratio (based on shorter edge) and aligning with size_divisor.
 
         Args:
-            img (np.ndarray): Input image array (shape [H, W, C] or [C, H, W]).
+            image (np.ndarray): Input image array (shape [H, W, C] or [C, H, W]).
             target_short_edge (Union[int, None]): Desired length for the shorter edge of the image.
             size_divisor (Optional[int]): Divisor to align image dimensions (for hardware optimization). Defaults to None.
 
         Returns:
-            Dict[str, int]: Target size {"height": resize_h, "width": resize_w} with preserved aspect ratio.
+            Dict[str, int]: Target size {"height": resized_height, "width": resized_width} with preserved aspect ratio.
         """
-        h, w = img.shape[:2]
-        scale = target_short_edge / min(h, w)
-        resize_h = round(h * scale)
-        resize_w = round(w * scale)
+        h, w = image.shape[:2]
+        resize_scale = target_short_edge / min(h, w)
+        resized_height = round(h * resize_scale)
+        resized_width = round(w * resize_scale)
         if self.size_divisor is not None:
-            resize_h = math.ceil(resize_h / size_divisor) * size_divisor
-            resize_h = math.ceil(resize_h / size_divisor) * size_divisor
+            resized_height = math.ceil(resized_height / size_divisor) * size_divisor
+            resized_width = math.ceil(resized_width / size_divisor) * size_divisor
 
-        return {"height": resize_h, "width": resize_w}
+        return {"height": resized_height, "width": resized_width}
 
 
+@auto_docstring(custom_intro="ImageProcessorFast for the PPLCNet model.")
 class PPLCNetImageProcessorFast(BaseImageProcessorFast):
     """
     Fast image processor for PP-LCNet models (PyTorch-optimized, inherits from `BaseImageProcessorFast`).
@@ -358,19 +370,18 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: list[torch.Tensor],
-        size: Optional[list[dict[str, int]]],
+        images: list["torch.Tensor"],
         do_resize: bool,
+        size: SizeDict,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
-        interpolation: Optional[InterpolationMode] = None,
-        resample: Optional[PILImageResampling] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None,
+        interpolation: Optional["tvF.InterpolationMode"],
         **kwargs,
     ) -> BatchFeature:
         """
@@ -405,8 +416,8 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
                         image, target_short_edge=self.resize_short, size_divisor=self.size_divisor
                     )
 
-                img = self.resize(image, size=size, interpolation=interpolation)
-                resize_imgs.append(img)
+                image = self.resize(image, size=size, interpolation=interpolation)
+                resize_imgs.append(image)
             images = resize_imgs
 
         crop_images = []
@@ -430,7 +441,7 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
 
     def get_image_size(
         self,
-        img: torch.Tensor,
+        image: torch.Tensor,
         target_short_edge: Union[int, None],
         size_divisor: Optional[int] = None,
     ) -> tuple[SizeDict, torch.Tensor]:
@@ -438,68 +449,36 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
         Calculate target image size for PyTorch tensors (preserve aspect ratio + align with size_divisor).
 
         Args:
-            img (torch.Tensor): Input PyTorch tensor (shape [C, H, W]).
+            image (torch.Tensor): Input PyTorch tensor (shape [C, H, W]).
             target_short_edge (Union[int, None]): Desired length for the shorter edge of the image.
             size_divisor (Optional[int]): Divisor to align image dimensions (for hardware optimization). Defaults to None.
 
         Returns:
-            SizeDict: Target size ({"height": resize_h, "width": resize_w}) with preserved aspect ratio.
+            SizeDict: Target size ({"height": resized_height, "width": resized_width}) with preserved aspect ratio.
         """
-        c, h, w = img.shape
-        scale = target_short_edge / min(h, w)
-        resize_h = round(h * scale)
-        resize_w = round(w * scale)
+        _, h, w = image.shape
+        resize_scale = target_short_edge / min(h, w)
+        resized_height = round(h * resize_scale)
+        resized_width = round(w * resize_scale)
         if self.size_divisor is not None:
-            resize_h = math.ceil(resize_h / size_divisor) * size_divisor
-            resize_h = math.ceil(resize_h / size_divisor) * size_divisor
+            resized_height = math.ceil(resized_height / size_divisor) * size_divisor
+            resized_width = math.ceil(resized_width / size_divisor) * size_divisor
 
-        return SizeDict(height=resize_h, width=resize_w)
-
-
-def make_divisible(v, divisor=8, min_value=None):
-    """
-    Ensure that the number of channels is divisible by the given divisor (for hardware optimization).
-
-    Args:
-        v (float): Original number of channels.
-        divisor (int, optional): Divisor for channel adjustment. Defaults to 8.
-        min_value (Optional[int]): Minimum number of channels after adjustment. Defaults to None.
-
-    Returns:
-        int: Adjusted number of channels that is divisible by the divisor.
-    """
-    if min_value is None:
-        min_value = divisor
-    new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
-    if new_v < 0.9 * v:
-        new_v += divisor
-    return new_v
+        return SizeDict(height=resized_height, width=resized_width)
 
 
-def _create_act(act):
-    """
-    Create the corresponding PyTorch activation module based on activation name.
-
-    Args:
-        act (str): Name of activation function. Supported values: "hardswish", "relu", "relu6".
-
-    Returns:
-        nn.Module: Instantiated PyTorch activation module.
-
-    Raises:
-        RuntimeError: If the input activation name is not supported.
-    """
-    if act == "hardswish":
+def _create_act(hidden_act):
+    if hidden_act == "hardswish":
         return nn.Hardswish()
-    elif act == "relu":
+    elif hidden_act == "relu":
         return nn.ReLU()
-    elif act == "relu6":
+    elif hidden_act == "relu6":
         return nn.ReLU6()
     else:
-        raise RuntimeError(f"The activation function is not supported: {act}")
+        raise RuntimeError(f"The activation function is not supported: {hidden_act}")
 
 
-class ConvBNLayer(nn.Module):
+class PPLCNetConvBNLayer(nn.Module):
     """
     Combined layer: Conv2d -> BatchNorm2d -> Activation
     A common basic component in lightweight models to reduce redundant code.
@@ -507,60 +486,56 @@ class ConvBNLayer(nn.Module):
 
     def __init__(
         self,
-        num_channels,
-        filter_size,
-        num_filters,
+        in_channels,
+        out_channels,
+        kernel_size,
         stride,
-        num_groups=1,
-        act="hardswish",
+        groups=1,
+        hidden_act="hardswish",
     ):
         """
-        Initialize the ConvBNLayer module.
+        Initialize the PPLCNetConvBNLayer module.
 
         Args:
-            num_channels (int): Number of channels of the input feature map.
-            filter_size (int): Size of the convolutional kernel (square kernel).
-            num_filters (int): Number of channels of the output feature map.
+            in_channels (int): Number of channels of the input feature map.
+            kernel_size (int): Size of the convolutional kernel (square kernel).
+            out_channels (int): Number of channels of the output feature map.
             stride (int): Stride of the convolution operation.
-            num_groups (int, optional): Number of groups for grouped convolution. Defaults to 1 (standard convolution).
-            act (str, optional): Name of activation function. Defaults to "hardswish".
+            groups (int, optional): Number of groups for grouped convolution. Defaults to 1 (standard convolution).
+            hidden_act (str, optional): Name of activation function. Defaults to "hardswish".
         """
         super().__init__()
 
-        self.conv = nn.Conv2d(
-            in_channels=num_channels,
-            out_channels=num_filters,
-            kernel_size=filter_size,
+        self.convolution = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
             stride=stride,
-            padding=(filter_size - 1) // 2,
-            groups=num_groups,
+            padding=(kernel_size - 1) // 2,
+            groups=groups,
             bias=False,
         )
 
-        nn.init.kaiming_normal_(self.conv.weight)
-        self.bn = nn.BatchNorm2d(
-            num_filters,
-            momentum=0.9,
-        )
-        self.act = _create_act(act)
+        self.normalization = nn.BatchNorm2d(out_channels)
+        self.activation = _create_act(hidden_act)
 
-    def forward(self, x):
+    def forward(self, hidden_state):
         """
         Forward propagation logic.
 
         Args:
-            x (FloatTensor): Input feature map with shape [B, C, H, W].
+            hidden_state (FloatTensor): Input feature map with shape [B, C, H, W].
 
         Returns:
-            FloatTensor: Output feature map with shape [B, num_filters, H', W'].
+            FloatTensor: Output feature map with shape [B, out_channels, H', W'].
         """
-        x = self.conv(x)
-        x = self.bn(x)
-        x = self.act(x)
-        return x
+        hidden_state = self.convolution(hidden_state)
+        hidden_state = self.normalization(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        return hidden_state
 
 
-class DepthwiseSeparable(nn.Module):
+class PPLCNetDepthwiseSeparable(nn.Module):
     """
     Depthwise Separable Convolution Layer: Depthwise Conv -> SE Module (optional) -> Pointwise Conv
     Core component of lightweight models (e.g., MobileNet, PP-LCNet) that significantly reduces
@@ -569,62 +544,62 @@ class DepthwiseSeparable(nn.Module):
 
     def __init__(
         self,
-        num_channels,
-        num_filters,
+        in_channels,
+        out_channels,
         stride,
         reduction: int,
-        dw_size=3,
-        use_se=False,
-        act="hardswish",
+        kernel_size=3,
+        use_squeeze_excitation=False,
+        hidden_act="hardswish",
     ):
         """
-        Initialize the DepthwiseSeparable module.
+        Initialize the PPLCNetDepthwiseSeparable module.
 
         Args:
-            num_channels (int): Number of channels of the input feature map.
-            num_filters (int): Number of channels of the output feature map.
+            in_channels (int): Number of channels of the input feature map.
+            out_channels (int): Number of channels of the output feature map.
             stride (int): Stride of the depthwise convolution.
             reduction (int): Reduction ratio for SE module.
-            dw_size (int, optional): Kernel size of depthwise convolution. Defaults to 3.
-            use_se (bool, optional): Whether to use SE module. Defaults to False.
-            act (str, optional): Name of activation function. Defaults to "hardswish".
+            depthwise_size (int, optional): Kernel size of depthwise convolution. Defaults to 3.
+            use_squeeze_excitation (bool, optional): Whether to use SE module. Defaults to False.
+            hidden_act (str, optional): Name of activation function. Defaults to "hardswish".
         """
         super().__init__()
-        self.use_se = use_se
-        self.dw_conv = ConvBNLayer(
-            num_channels=num_channels,
-            num_filters=num_channels,
-            filter_size=dw_size,
+        self.use_squeeze_excitation = use_squeeze_excitation
+        self.depthwise_convolution = PPLCNetConvBNLayer(
+            in_channels=in_channels,
+            out_channels=in_channels,
+            kernel_size=kernel_size,
             stride=stride,
-            num_groups=num_channels,
-            act=act,
+            groups=in_channels,
+            hidden_act=hidden_act,
         )
-        self.se = SEModule(num_channels, reduction) if use_se else nn.Identity()
-        self.pw_conv = ConvBNLayer(
-            num_channels=num_channels,
-            filter_size=1,
-            num_filters=num_filters,
+        self.squeeze_excitation_module = PPLCNetSEModule(in_channels, reduction) if use_squeeze_excitation else nn.Identity()
+        self.pointwise_convolution = PPLCNetConvBNLayer(
+            in_channels=in_channels,
+            kernel_size=1,
+            out_channels=out_channels,
             stride=1,
-            act=act,
+            hidden_act=hidden_act,
         )
 
-    def forward(self, x):
+    def forward(self, hidden_state):
         """
         Forward propagation logic.
 
         Args:
-            x (FloatTensor): Input feature map with shape [B, C, H, W].
+            hidden_state (FloatTensor): Input feature map with shape [B, C, H, W].
 
         Returns:
-            FloatTensor: Output feature map with shape [B, num_filters, H', W'].
+            FloatTensor: Output feature map with shape [B, out_channels, H', W'].
         """
-        x = self.dw_conv(x)
-        x = self.se(x)
-        x = self.pw_conv(x)
-        return x
+        hidden_state = self.depthwise_convolution(hidden_state)
+        hidden_state = self.squeeze_excitation_module(hidden_state)
+        hidden_state = self.pointwise_convolution(hidden_state)
+        return hidden_state
 
 
-class SEModule(nn.Module):
+class PPLCNetSEModule(nn.Module):
     """
     Squeeze-and-Excitation (SE) Module: Adaptive feature recalibration
     Enhances the model's ability to focus on important channels by learning channel-wise attention weights.
@@ -641,30 +616,30 @@ class SEModule(nn.Module):
         super().__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         conv_kwargs = {"kernel_size": 1, "stride": 1, "padding": 0, "bias": True}
-        self.conv1 = nn.Conv2d(in_channels=channel, out_channels=channel // reduction, **conv_kwargs)
-        self.conv2 = nn.Conv2d(in_channels=channel // reduction, out_channels=channel, **conv_kwargs)
-        self.relu = nn.ReLU()
+        self.convolution1 = nn.Conv2d(in_channels=channel, out_channels=channel // reduction, **conv_kwargs)
+        self.convolution2 = nn.Conv2d(in_channels=channel // reduction, out_channels=channel, **conv_kwargs)
+        self.activation1 = nn.ReLU()
 
-        self.hardsigmoid = nn.Hardsigmoid()
+        self.activation2 = nn.Hardsigmoid()
 
-    def forward(self, x):
+    def forward(self, hidden_state):
         """
         Forward propagation logic.
 
         Args:
-            x (FloatTensor): Input feature map with shape [B, C, H, W].
+            hidden_state (FloatTensor): Input feature map with shape [B, C, H, W].
 
         Returns:
             FloatTensor: Attention-weighted feature map with shape [B, C, H, W].
         """
-        identity = x
-        x = self.avg_pool(x)
-        x = self.conv1(x)
-        x = self.relu(x)
-        x = self.conv2(x)
-        x = self.hardsigmoid(x)
-        x = identity * x
-        return x
+        identity = hidden_state
+        hidden_state = self.avg_pool(hidden_state)
+        hidden_state = self.convolution1(hidden_state)
+        hidden_state = self.activation1(hidden_state)
+        hidden_state = self.convolution2(hidden_state)
+        hidden_state = self.activation2(hidden_state)
+        hidden_state = identity * hidden_state
+        return hidden_state
 
 
 @dataclass
@@ -694,7 +669,15 @@ class PPLCNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        if isinstance(module, PPLCNetConvBNLayer):
+            nn.init.kaiming_normal_(module.convolution.weight)
 
+
+@auto_docstring(custom_intro="The PPLCNet model.")
 class PPLCNetModel(PPLCNetPreTrainedModel):
     """
     PP-LCNet base model: lightweight CNN backbone for image classification tasks.
@@ -708,37 +691,40 @@ class PPLCNetModel(PPLCNetPreTrainedModel):
             config (PPLCNetConfig): Configuration class for PP-LCNet.
         """
         super().__init__(config)
-
-        assert isinstance(config.stride_list, (list, tuple)), (
-            f"stride_list should be in (list, tuple) but got {type(config.stride_list)}"
-        )
-        assert len(config.stride_list) == 5, f"stride_list length should be 5 but got {len(config.stride_list)}"
+        
+        if config.stride_list is None:
+            raise ValueError("stride_list cannot be None, please check your config.")
+        
+        if len(config.stride_list) != 5:
+            raise ValueError(
+                f"stride_list length should be 5 but got {len(config.stride_list)}, please check your config."
+            )
 
         self.dropout_prob = config.dropout_prob
 
         for i, stride in enumerate(config.stride_list[1:]):
             config.backbone_config[f"blocks{i + 3}"][0][3] = stride
-        self.conv1 = ConvBNLayer(
-            num_channels=3,
-            filter_size=3,
-            num_filters=make_divisible(16 * config.scale),
+        self.convolution = PPLCNetConvBNLayer(
+            in_channels=3,
+            kernel_size=3,
+            out_channels=make_divisible(16 * config.scale, config.divisor),
             stride=config.stride_list[0],
-            act=config.act,
+            hidden_act=config.hidden_act,
         )
 
         def _build_block(block_name):
             return nn.Sequential(
                 *[
-                    DepthwiseSeparable(
-                        num_channels=make_divisible(in_c * config.scale),
-                        num_filters=make_divisible(out_c * config.scale),
-                        dw_size=k,
-                        stride=s,
+                    PPLCNetDepthwiseSeparable(
+                        in_channels=make_divisible(in_channels * config.scale, config.divisor),
+                        out_channels=make_divisible(out_channels * config.scale, config.divisor),
+                        kernel_size=kernel_size,
+                        stride=stride,
                         reduction=config.reduction,
-                        use_se=se,
-                        act=config.act,
+                        use_squeeze_excitation=squeeze_excitation,
+                        hidden_act=config.hidden_act,
                     )
-                    for i, (k, in_c, out_c, s, se) in enumerate(config.backbone_config[block_name])
+                    for i, (kernel_size, in_channels, out_channels, stride, squeeze_excitation) in enumerate(config.backbone_config[block_name])
                 ]
             )
 
@@ -749,26 +735,26 @@ class PPLCNetModel(PPLCNetPreTrainedModel):
         self.blocks6 = _build_block("blocks6")
 
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        if config.use_last_conv:
-            self.last_conv = nn.Conv2d(
-                in_channels=make_divisible(config.backbone_config["blocks6"][-1][2] * config.scale),
+        if config.use_last_convolution:
+            self.last_convolution = nn.Conv2d(
+                in_channels=make_divisible(config.backbone_config["blocks6"][-1][2] * config.scale, config.divisor),
                 out_channels=config.class_expand,
                 kernel_size=1,
                 stride=1,
                 padding=0,
                 bias=False,
             )
-            self.act = _create_act(config.act)
+            self.activation = _create_act(config.hidden_act)
         else:
-            self.last_conv = None
+            self.last_convolution = None
         self.flatten = nn.Flatten(start_dim=1, end_dim=-1)
 
-        if config.use_last_conv:
+        if config.use_last_convolution:
             fc_in_channels = config.class_expand
         else:
-            fc_in_channels = make_divisible(config.backbone_config["blocks6"][-1][2] * config.scale)
+            fc_in_channels = make_divisible(config.backbone_config["blocks6"][-1][2] * config.scale, config.divisor)
         self.fc = nn.Linear(fc_in_channels, config.class_num)
-        self.out_act = nn.Softmax(dim=-1)
+        self.out_activation = nn.Softmax(dim=-1)
 
         self.post_init()
 
@@ -794,7 +780,7 @@ class PPLCNetModel(PPLCNetPreTrainedModel):
 
         if output_hidden_states:
             hidden_states = hidden_states + (hidden_state,)
-        hidden_state = self.conv1(hidden_state)
+        hidden_state = self.convolution(hidden_state)
         if output_hidden_states:
             hidden_states = hidden_states + (hidden_state,)
         hidden_state = self.blocks2(hidden_state)
@@ -815,14 +801,14 @@ class PPLCNetModel(PPLCNetPreTrainedModel):
         last_hidden_state = hidden_states
 
         hidden_state = self.avg_pool(hidden_state)
-        if self.last_conv is not None:
-            hidden_state = self.last_conv(hidden_state)
-            hidden_state = self.act(hidden_state)
+        if self.last_convolution is not None:
+            hidden_state = self.last_convolution(hidden_state)
+            hidden_state = self.activation(hidden_state)
             hidden_state = hidden_state * (1 - self.dropout_prob)  # dropout
         hidden_state = self.flatten(hidden_state)
         hidden_state = self.fc(hidden_state)
 
-        hidden_state = self.out_act(hidden_state)
+        hidden_state = self.out_activation(hidden_state)
 
         if not return_dict:
             output = (last_hidden_state,)
@@ -853,6 +839,7 @@ class PPLCNetForImageClassificationOutput(BaseModelOutputWithNoAttention):
     shape: Optional[torch.FloatTensor] = None
 
 
+@auto_docstring(custom_intro="ImageClassification for the PPLCNet model.")
 class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
     """
     PP-LCNet model for image classification tasks.

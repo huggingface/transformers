@@ -6,8 +6,10 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 
 
+@auto_docstring(custom_intro="Configuration for the PPLCNet model.")
 class PPLCNetConfig(PreTrainedConfig):
     model_type = "pp_lcnet"
 
@@ -40,13 +42,16 @@ class PPLCNetConfig(PreTrainedConfig):
         use_last_conv (`bool`, *optional*, defaults to `True`):
             Whether to use the final convolutional layer in the classification head. Setting this to `True` helps
             extract more discriminative features for the classification task.
-        act (`str`, *optional*, defaults to `"hardswish"`):
+        hidden_act (`str`, *optional*, defaults to `"hardswish"`):
             The non-linear activation function used in the model's hidden layers. Supported functions include
             `"hardswish"`, `"relu"`, `"silu"`, and `"gelu"`. `"hardswish"` is preferred for lightweight and efficient
             inference on edge devices.
         backbone_config (`Union[dict, PreTrainedConfig]`, *optional*, defaults to `None`):
             The configuration of the backbone model. If `None`, the default backbone configuration for PP-LCNet
             will be used, which includes the standard block settings for feature extraction.
+        divisor (`int`, *optional*, defaults to 8):
+            The divisor used to ensure that various model parameters (e.g., channel dimensions, kernel sizes) are
+            multiples of this value, promoting efficient model implementation and resource utilization.
 
     Examples:
     ```python
@@ -61,15 +66,16 @@ class PPLCNetConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        scale: float = 1.0,
-        class_num: int = 4,
-        stride_list: list[int] = [2, 2, 2, 2, 2],
-        reduction: int = 4,
-        dropout_prob: float = 0.2,
-        class_expand: int = 1280,
-        use_last_conv: bool = True,
-        act: str = "hardswish",
-        backbone_config: dict | None = None,
+        scale=1.0,
+        class_num=4,
+        stride_list=[2, 2, 2, 2, 2],
+        reduction=4,
+        dropout_prob=0.2,
+        class_expand=1280,
+        use_last_convolution=True,
+        hidden_act="hardswish",
+        backbone_config=None,
+        divisor=8,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -80,9 +86,10 @@ class PPLCNetConfig(PreTrainedConfig):
         self.reduction = reduction
         self.dropout_prob = dropout_prob
         self.class_expand = class_expand
-        self.use_last_conv = use_last_conv
-        self.act = act
+        self.use_last_convolution = use_last_convolution
+        self.hidden_act = hidden_act
         self.backbone_config = backbone_config
+        self.divisor = divisor
 
 
 __all__ = ["PPLCNetConfig"]
