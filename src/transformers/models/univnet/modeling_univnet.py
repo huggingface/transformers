@@ -20,7 +20,7 @@ from torch import nn
 
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from .configuration_univnet import UnivNetConfig
 
 
@@ -467,6 +467,7 @@ class UnivNetModel(PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -474,9 +475,8 @@ class UnivNetModel(PreTrainedModel):
         noise_sequence: torch.FloatTensor | None = None,
         padding_mask: torch.FloatTensor | None = None,
         generator: torch.Generator | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor] | UnivNetModelOutput:
+    ) -> UnivNetModelOutput:
         r"""
         noise_sequence (`torch.FloatTensor`, *optional*):
             Tensor containing a noise sequence of standard Gaussian noise. Can be batched and of shape `(batch_size,
@@ -516,8 +516,6 @@ class UnivNetModel(PreTrainedModel):
          [1, 140288]
          ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         # Resolve batch sizes for noise_sequence and spectrogram
         spectrogram_batched = input_features.dim() == 3
         if not spectrogram_batched:
@@ -581,10 +579,6 @@ class UnivNetModel(PreTrainedModel):
         if padding_mask is not None:
             # Padding is always contiguous and added on the right
             waveform_lengths = torch.sum(padding_mask, dim=1)
-
-        if not return_dict:
-            outputs = (waveform, waveform_lengths)
-            return outputs
 
         return UnivNetModelOutput(
             waveforms=waveform,
