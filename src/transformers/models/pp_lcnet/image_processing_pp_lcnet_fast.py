@@ -8,14 +8,16 @@ import math
 from typing import Optional, Union
 
 import torch
-from torchvision.transforms.v2.functional import InterpolationMode
+import torchvision.transforms.v2.functional as tvF
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...image_utils import PILImageResampling, SizeDict
+from ...image_utils import SizeDict
+from ...utils import auto_docstring
 from ...utils.generic import TensorType
 
 
+@auto_docstring(custom_intro="ImageProcessorFast for the PPLCNet model.")
 class PPLCNetImageProcessorFast(BaseImageProcessorFast):
     """
     Fast image processor for PP-LCNet models (PyTorch-optimized, inherits from `BaseImageProcessorFast`).
@@ -45,19 +47,18 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: list[torch.Tensor],
-        size: Optional[list[dict[str, int]]],
+        images: list["torch.Tensor"],
         do_resize: bool,
+        size: SizeDict,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
-        interpolation: Optional[InterpolationMode] = None,
-        resample: Optional[PILImageResampling] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None,
+        interpolation: Optional["tvF.InterpolationMode"],
         **kwargs,
     ) -> BatchFeature:
         """
@@ -92,8 +93,8 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
                         image, target_short_edge=self.resize_short, size_divisor=self.size_divisor
                     )
 
-                img = self.resize(image, size=size, interpolation=interpolation)
-                resize_imgs.append(img)
+                image = self.resize(image, size=size, interpolation=interpolation)
+                resize_imgs.append(image)
             images = resize_imgs
 
         crop_images = []
@@ -117,7 +118,7 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
 
     def get_image_size(
         self,
-        img: torch.Tensor,
+        image: torch.Tensor,
         target_short_edge: Union[int, None],
         size_divisor: Optional[int] = None,
     ) -> tuple[SizeDict, torch.Tensor]:
@@ -125,22 +126,22 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
         Calculate target image size for PyTorch tensors (preserve aspect ratio + align with size_divisor).
 
         Args:
-            img (torch.Tensor): Input PyTorch tensor (shape [C, H, W]).
+            image (torch.Tensor): Input PyTorch tensor (shape [C, H, W]).
             target_short_edge (Union[int, None]): Desired length for the shorter edge of the image.
             size_divisor (Optional[int]): Divisor to align image dimensions (for hardware optimization). Defaults to None.
 
         Returns:
-            SizeDict: Target size ({"height": resize_h, "width": resize_w}) with preserved aspect ratio.
+            SizeDict: Target size ({"height": resized_height, "width": resized_width}) with preserved aspect ratio.
         """
-        c, h, w = img.shape
-        scale = target_short_edge / min(h, w)
-        resize_h = round(h * scale)
-        resize_w = round(w * scale)
+        _, h, w = image.shape
+        resize_scale = target_short_edge / min(h, w)
+        resized_height = round(h * resize_scale)
+        resized_width = round(w * resize_scale)
         if self.size_divisor is not None:
-            resize_h = math.ceil(resize_h / size_divisor) * size_divisor
-            resize_h = math.ceil(resize_h / size_divisor) * size_divisor
+            resized_height = math.ceil(resized_height / size_divisor) * size_divisor
+            resized_width = math.ceil(resized_width / size_divisor) * size_divisor
 
-        return SizeDict(height=resize_h, width=resize_w)
+        return SizeDict(height=resized_height, width=resized_width)
 
 
 __all__ = ["PPLCNetImageProcessorFast"]
