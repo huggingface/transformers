@@ -14,13 +14,13 @@
 
 
 import torch
-from torch import Tensor, nn
+from torch import nn
 
 from ... import initialization as init
 from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_timm_available, requires_backends
+from ...utils import can_return_tuple, is_timm_available, requires_backends
 from .configuration_timm_backbone import TimmBackboneConfig
 
 
@@ -116,15 +116,14 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
 
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> BackboneOutput | tuple[Tensor, ...]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    ) -> BackboneOutput:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -145,12 +144,6 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
 
         feature_maps = tuple(feature_maps)
         hidden_states = tuple(hidden_states) if hidden_states is not None else None
-
-        if not return_dict:
-            output = (feature_maps,)
-            if output_hidden_states:
-                output = output + (hidden_states,)
-            return output
 
         return BackboneOutput(feature_maps=feature_maps, hidden_states=hidden_states, attentions=None)
 
