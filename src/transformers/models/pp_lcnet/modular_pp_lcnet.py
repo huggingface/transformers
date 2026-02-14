@@ -7,6 +7,8 @@ import torch
 import torch.nn as nn
 import torchvision.transforms.v2.functional as tvF
 
+from transformers.models.mobilenet_v2.modeling_mobilenet_v2 import make_divisible
+
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import BaseImageProcessor
@@ -25,13 +27,13 @@ from ...image_utils import (
 )
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from transformers.models.mobilenet_v2.modeling_mobilenet_v2 import make_divisible
 from ...utils import (
-    ModelOutput, 
+    ModelOutput,
     auto_docstring,
     filter_out_non_signature_kwargs,
 )
 from ...utils.generic import TensorType
+
 
 @auto_docstring(custom_intro="Configuration for the PPLCNet model.")
 class PPLCNetConfig(PreTrainedConfig):
@@ -574,7 +576,9 @@ class PPLCNetDepthwiseSeparable(nn.Module):
             groups=in_channels,
             hidden_act=hidden_act,
         )
-        self.squeeze_excitation_module = PPLCNetSEModule(in_channels, reduction) if use_squeeze_excitation else nn.Identity()
+        self.squeeze_excitation_module = (
+            PPLCNetSEModule(in_channels, reduction) if use_squeeze_excitation else nn.Identity()
+        )
         self.pointwise_convolution = PPLCNetConvBNLayer(
             in_channels=in_channels,
             kernel_size=1,
@@ -691,10 +695,10 @@ class PPLCNetModel(PPLCNetPreTrainedModel):
             config (PPLCNetConfig): Configuration class for PP-LCNet.
         """
         super().__init__(config)
-        
+
         if config.stride_list is None:
             raise ValueError("stride_list cannot be None, please check your config.")
-        
+
         if len(config.stride_list) != 5:
             raise ValueError(
                 f"stride_list length should be 5 but got {len(config.stride_list)}, please check your config."
@@ -724,7 +728,9 @@ class PPLCNetModel(PPLCNetPreTrainedModel):
                         use_squeeze_excitation=squeeze_excitation,
                         hidden_act=config.hidden_act,
                     )
-                    for i, (kernel_size, in_channels, out_channels, stride, squeeze_excitation) in enumerate(config.backbone_config[block_name])
+                    for i, (kernel_size, in_channels, out_channels, stride, squeeze_excitation) in enumerate(
+                        config.backbone_config[block_name]
+                    )
                 ]
             )
 
