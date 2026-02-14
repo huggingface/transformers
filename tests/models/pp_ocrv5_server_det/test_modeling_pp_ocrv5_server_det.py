@@ -69,12 +69,6 @@ class PPOCRV5ServerDetModelTester:
         return config, pixel_values
 
     def get_config(self) -> PPOCRV5ServerDetConfig:
-        backbone_config = {
-            "stage1": [48, 48, 128, 1, False, False, 3, 6, 2],
-            "stage2": [128, 96, 512, 1, True, False, 3, 6, 2],
-            "stage3": [512, 192, 1024, 3, True, True, 5, 6, 2],
-            "stage4": [1024, 384, 2048, 1, True, True, 5, 6, 2],
-        }
         intraclblock_config = {
             "reduce_channel": [1, 1, 0],
             "return_channel": [1, 1, 0],
@@ -88,13 +82,11 @@ class PPOCRV5ServerDetModelTester:
             "c_layer_5x5": [[5, 5], [1, 1], [2, 2]],
             "c_layer_3x3": [[3, 3], [1, 1], [1, 1]],
         }
-        self.backbone_config = backbone_config
 
         config = PPOCRV5ServerDetConfig(
             interpolate_mode="nearest",
             stem_channels=[3, 32, 48],
-            backbone_config=backbone_config,
-            use_lab=False,
+            use_learnable_affine_block=False,
             use_last_conv=True,
             class_expand=2048,
             dropout_prob=0.0,
@@ -109,7 +101,6 @@ class PPOCRV5ServerDetModelTester:
             scale_factor=2,
             hidden_act="relu",
             kernel_list=[3, 2, 2],
-            fix_nan=False,
         )
 
         return config
@@ -148,7 +139,7 @@ class PPOCRV5ServerDetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # @unittest.skip(reason="PPOCRV5ServerDet does not use inputs_embeds")
+
     def test_pp_ocrv5_server_det_object_detection(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_pp_ocrv5_server_det_object_detection(*config_and_inputs)
@@ -239,27 +230,27 @@ class PPOCRV5ServerDetModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertEqual(
                 hidden_states[1].shape[1],
-                self.model_tester.backbone_config["stage1"][0],
+                config.stage_in_channels[0],
             )
 
             self.assertEqual(
                 hidden_states[2].shape[1],
-                self.model_tester.backbone_config["stage1"][1],
+                config.stage_mid_channels[0],
             )
 
             self.assertEqual(
                 hidden_states[3].shape[1],
-                self.model_tester.backbone_config["stage2"][0],
+                config.stage_in_channels[1],
             )
 
             self.assertEqual(
                 hidden_states[4].shape[1],
-                self.model_tester.backbone_config["stage3"][0],
+                config.stage_in_channels[2],
             )
 
             self.assertEqual(
                 hidden_states[5].shape[1],
-                self.model_tester.backbone_config["stage4"][0],
+                config.stage_in_channels[3],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -279,13 +270,16 @@ class PPOCRV5ServerDetModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        model_path = "/workspace/model_weight_torch/PP-OCRv5_server_det"
+        model_path = "PaddlePaddle/PP-OCRV5_server_det_safetensors"
         self.model = PPOCRV5ServerDetForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
             PPOCRV5ServerDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
-        path = "/workspace/PaddleX/paddlex/inference/models/text_detection/modeling/general_ocr_001.png"
-        self.image = Image.open(path)
+        self.image = Image.open(
+            requests.get(
+                "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True
+            ).raw
+        ).convert("RGB")
 
     def test_inference_object_detection_head(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)
