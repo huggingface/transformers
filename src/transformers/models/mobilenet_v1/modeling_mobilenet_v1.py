@@ -19,7 +19,8 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPoolingAndNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, capture_outputs, logging
+from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.output_capturing import capture_outputs
 from .configuration_mobilenet_v1 import MobileNetV1Config
 
 
