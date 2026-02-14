@@ -17,7 +17,9 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
+    @capture_outputs
+    @can_return_tuple
+
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
