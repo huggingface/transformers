@@ -590,6 +590,21 @@ class Trainer:
             by this function will be reflected in the predictions received by `compute_metrics`.
 
             Note that the labels (second parameter) will be `None` if the dataset does not have them.
+        data_producer ([`DataProducer`], *optional*):
+            A producer that generates fresh training datasets on the fly (e.g. for online RL). When set,
+            the Trainer uses an online training loop: before each rollout the producer's
+            [`~DataProducer.produce`] method is called with the current model to create a new dataset.
+            Requires `max_steps` (and optionally `max_rollouts`) to be set in [`TrainingArguments`]
+            because the total number of training samples is not known in advance.
+            Mutually exclusive with `train_dataset`.
+        eval_data_producer ([`DataProducer`], *optional*):
+            A producer that generates fresh evaluation datasets. Used as a fallback when no
+            `eval_dataset` is provided to [`~Trainer.evaluate`]. The producer's
+            [`~DataProducer.produce`] method is called each time evaluation runs.
+        test_data_producer ([`DataProducer`], *optional*):
+            A producer that generates fresh test datasets. Used as a fallback when no
+            `test_dataset` is provided to [`~Trainer.predict`]. The producer's
+            [`~DataProducer.produce`] method is called each time prediction runs.
 
     Important attributes:
 
