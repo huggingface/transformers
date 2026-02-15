@@ -34,8 +34,10 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     auto_docstring,
+    can_return_tuple,
     logging,
 )
+from ...utils.output_capturing import capture_outputs
 from .configuration_nystromformer import NystromformerConfig
 
 
@@ -159,7 +161,7 @@ class NystromformerSelfAttention(nn.Module):
             )
         return value
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+    def forward(self, hidden_states, attention_mask=None):
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
             self.query(hidden_states)
@@ -227,9 +229,7 @@ class NystromformerSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
+        return (context_layer, attention_probs)
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput
@@ -253,11 +253,10 @@ class NystromformerAttention(nn.Module):
         self.self = NystromformerSelfAttention(config)
         self.output = NystromformerSelfOutput(config)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
-        self_outputs = self.self(hidden_states, attention_mask, output_attentions)
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+    def forward(self, hidden_states, attention_mask=None):
+        self_output, _ = self.self(hidden_states, attention_mask)
+        attention_output = self.output(self_output, hidden_states)
+        return attention_output
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Nystromformer
@@ -301,18 +300,14 @@ class NystromformerLayer(GradientCheckpointingLayer):
         self.intermediate = NystromformerIntermediate(config)
         self.output = NystromformerOutput(config)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
-        self_attention_outputs = self.attention(hidden_states, attention_mask, output_attentions=output_attentions)
-        attention_output = self_attention_outputs[0]
-
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+    def forward(self, hidden_states, attention_mask=None):
+        attention_output = self.attention(hidden_states, attention_mask)
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
-        outputs = (layer_output,) + outputs
 
-        return outputs
+        return layer_output
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
@@ -331,33 +326,11 @@ class NystromformerEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-    ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
+    ) -> torch.Tensor:
         for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+            hidden_states = layer_module(hidden_states, attention_mask)
 
-            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
-
-            hidden_states = layer_outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->Nystromformer
@@ -412,6 +385,11 @@ class NystromformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "nystromformer"
     supports_gradient_checkpointing = True
 
+    _can_record_outputs = {
+        "hidden_states": NystromformerLayer,
+        "attentions": NystromformerSelfAttention,
+    }
+
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, NystromformerEmbeddings):
@@ -437,6 +415,7 @@ class NystromformerModel(NystromformerPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -445,17 +424,8 @@ class NystromformerModel(NystromformerPreTrainedModel):
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPastAndCrossAttentions:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -490,24 +460,12 @@ class NystromformerModel(NystromformerPreTrainedModel):
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
-        encoder_outputs = self.encoder(
+        hidden_states = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        sequence_output = encoder_outputs[0]
 
-        if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
-
-        return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=sequence_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
-        )
+        return BaseModelOutputWithPastAndCrossAttentions(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -533,6 +491,7 @@ class NystromformerForMaskedLM(NystromformerPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -542,9 +501,6 @@ class NystromformerForMaskedLM(NystromformerPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | MaskedLMOutput:
         r"""
@@ -553,17 +509,13 @@ class NystromformerForMaskedLM(NystromformerPreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.nystromformer(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -573,10 +525,6 @@ class NystromformerForMaskedLM(NystromformerPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -623,6 +571,7 @@ class NystromformerForSequenceClassification(NystromformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -632,9 +581,6 @@ class NystromformerForSequenceClassification(NystromformerPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
         r"""
@@ -643,17 +589,13 @@ class NystromformerForSequenceClassification(NystromformerPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.nystromformer(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -681,9 +623,6 @@ class NystromformerForSequenceClassification(NystromformerPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
@@ -705,6 +644,7 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -714,9 +654,6 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | MultipleChoiceModelOutput:
         r"""
@@ -749,7 +686,6 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -768,9 +704,7 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_state = outputs[0]  # (bs * num_choices, seq_len, dim)
@@ -785,10 +719,6 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
-
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
             loss=loss,
@@ -811,6 +741,7 @@ class NystromformerForTokenClassification(NystromformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -820,26 +751,19 @@ class NystromformerForTokenClassification(NystromformerPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.nystromformer(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -851,10 +775,6 @@ class NystromformerForTokenClassification(NystromformerPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -878,6 +798,7 @@ class NystromformerForQuestionAnswering(NystromformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -888,22 +809,15 @@ class NystromformerForQuestionAnswering(NystromformerPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | QuestionAnsweringModelOutput:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.nystromformer(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -929,10 +843,6 @@ class NystromformerForQuestionAnswering(NystromformerPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[1:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,
