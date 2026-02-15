@@ -616,7 +616,6 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
             **kwargs,
         )
         audio_hidden_states = audio_outputs.last_hidden_state
-        # TODO: it is never enforced that intermediate_size * 4
         audio_hidden_states = audio_hidden_states.reshape(
             audio_hidden_states.shape[0], -1, self.config.audio_config.hidden_size * self.config.downsample_factor
         )
