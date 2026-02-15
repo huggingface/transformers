@@ -484,12 +484,10 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @property
-    def _can_record_outputs(self):
-        return {
-            "hidden_states": "SegformerForImageClassification",
-            "attentions": "SegformerForImageClassification",
-        }
+    _can_record_outputs = {
+        "hidden_states": "SegformerForImageClassification",
+        "attentions": "SegformerForImageClassification",
+    }
 
     @capture_outputs
     @can_return_tuple
