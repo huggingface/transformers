@@ -22,12 +22,11 @@ from safetensors.torch import load_file
 
 from transformers import (
     MistralCommonBackend,
-    VoxtralConfig,
-    VoxtralForConditionalGeneration,
-    VoxtralProcessor,
-    WhisperFeatureExtractor,
+    VoxtralRealtimeConfig,
+    VoxtralRealtimeFeatureExtractor,
+    VoxtralRealtimeForConditionalGeneration,
+    VoxtralRealtimeProcessor,
 )
-from transformers.models.whisper.modeling_whisper import sinusoids
 from transformers.utils.hub import cached_file
 
 
@@ -44,25 +43,27 @@ STATE_DICT_MAPPING = {
     r"^layers.(\d+).feed_forward.w2.weight":                                            r"language_model.model.layers.\1.mlp.down_proj.weight",
     r"^layers.(\d+).feed_forward.w3.weight":                                            r"language_model.model.layers.\1.mlp.up_proj.weight",
 
-    r"mm_whisper_embeddings.tok_embeddings.weight":                                     r"language_model.model.embed_tokens.weight",
+    r"mm_streams_embeddings.embedding_module.tok_embeddings.weight":                    r"language_model.model.embed_tokens.weight",
+    r"^layers.(\d+).ada_rms_norm_t_cond.0.weight":                                      r"language_model.model.layers.\1.ada_rms_norm.linear1.weight",
+    r"^layers.(\d+).ada_rms_norm_t_cond.2.weight":                                      r"language_model.model.layers.\1.ada_rms_norm.linear2.weight",
 
-    # audio model keys
-    r"mm_whisper_embeddings.whisper_encoder\.conv_layers\.0\.(weight|bias)": r"audio_tower.conv1.\1",
-    r"mm_whisper_embeddings.whisper_encoder\.conv_layers\.1\.(weight|bias)": r"audio_tower.conv2.\1",
+    # Audio model keys
+    r"mm_streams_embeddings\.embedding_module\.whisper_encoder\.conv_layers\.0\.conv\.(weight|bias)": r"audio_tower.embedder.conv1.\1",
+    r"mm_streams_embeddings\.embedding_module\.whisper_encoder\.conv_layers\.1\.conv\.(weight|bias)": r"audio_tower.embedder.conv2.\1",
 
-    r"mm_whisper_embeddings.whisper_encoder\.transformer\.norm\.(weight|bias)": r"audio_tower.layer_norm.\1",
+    r"mm_streams_embeddings\.embedding_module\.whisper_encoder\.transformer\.norm\.(weight|bias)": r"audio_tower.norm.\1",
+    r"mm_streams_embeddings\.embedding_module\.whisper_encoder\.transformer\.layers\.(\d+)\.attention\.w([qkv])\.(weight|bias)": r"audio_tower.layers.\1.self_attn.\2_proj.\3",
+    r"mm_streams_embeddings\.embedding_module\.whisper_encoder\.transformer\.layers\.(\d+)\.attention\.wo\.(weight|bias)": r"audio_tower.layers.\1.self_attn.o_proj.\2",
+    r"mm_streams_embeddings\.embedding_module\.whisper_encoder\.transformer\.layers\.(\d+)\.attention_norm\.(weight|bias)": r"audio_tower.layers.\1.self_attn_layer_norm.\2",
 
-    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.attention\.w([qkv])\.(weight|bias)": r"audio_tower.layers.\1.self_attn.\2_proj.\3",
-    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.attention\.wo\.(weight|bias)": r"audio_tower.layers.\1.self_attn.out_proj.\2",
-    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.attention_norm\.(weight|bias)": r"audio_tower.layers.\1.self_attn_layer_norm.\2",
+    r"mm_streams_embeddings\.embedding_module\.whisper_encoder\.transformer\.layers\.(\d+)\.feed_forward\.w1\.(weight|bias)": r"audio_tower.layers.\1.mlp.gate_proj.\2",
+    r"mm_streams_embeddings\.embedding_module\.whisper_encoder\.transformer\.layers\.(\d+)\.feed_forward\.w2\.(weight|bias)": r"audio_tower.layers.\1.mlp.down_proj.\2",
+    r"mm_streams_embeddings\.embedding_module\.whisper_encoder\.transformer\.layers\.(\d+)\.feed_forward\.w3\.(weight|bias)": r"audio_tower.layers.\1.mlp.up_proj.\2",
 
-    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.feed_forward\.w1\.(weight|bias)": r"audio_tower.layers.\1.fc1.\2",
-    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.feed_forward\.w2\.(weight|bias)": r"audio_tower.layers.\1.fc2.\2",
+    r"mm_streams_embeddings\.embedding_module\.whisper_encoder\.transformer\.layers\.(\d+)\.ffn_norm\.(weight|bias)": r"audio_tower.layers.\1.final_layer_norm.\2",
 
-    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.ffn_norm\.(weight|bias)": r"audio_tower.layers.\1.final_layer_norm.\2",
-
-    r"mm_whisper_embeddings.audio_language_projection\.0\.weight":               r"multi_modal_projector.linear_1.weight",
-    r"mm_whisper_embeddings.audio_language_projection\.2\.weight":               r"multi_modal_projector.linear_2.weight",
+    r"mm_streams_embeddings\.embedding_module\.audio_language_projection\.0\.weight":               r"multi_modal_projector.linear_1.weight",
+    r"mm_streams_embeddings\.embedding_module\.audio_language_projection\.2\.weight":               r"multi_modal_projector.linear_2.weight",
 }
 # fmt: on
 
@@ -108,14 +109,14 @@ def convert_config(original_config: dict, max_position_embeddings: int = 131072)
     similar_audio_keys_to_keep = [
         "head_dim",
         "vocab_size",
+        "rope_theta",
     ]
     new_audio_config_kwargs = {k: original_audio_config[v] for k, v in audio_key_mapping.items()}
     new_audio_config_kwargs.update({k: v for k, v in original_audio_config.items() if k in similar_audio_keys_to_keep})
 
-    new_config = VoxtralConfig(
+    new_config = VoxtralRealtimeConfig(
         audio_config=new_audio_config_kwargs,
         text_config=new_text_config_kwargs,
-        audio_token_id=24,
         projector_hidden_act="gelu",
     )
 
@@ -133,11 +134,18 @@ def map_old_key_to_new(old_key):
     raise ValueError(f"Key: {old_key} could not be mapped (check the mapping).")
 
 
-def permute_for_rope(tensor, n_heads, dim1, dim2):
+def permute_for_rope(tensor, n_heads, dim1, dim2=None):
     """Permute the weights for the ROPE formulation."""
-    tensor = tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
-    tensor = tensor.transpose(1, 2)
-    tensor = tensor.reshape(dim1, dim2)
+    if dim2 is None:
+        # Handle bias case where tensor is 1D with shape (dim1,)
+        tensor = tensor.view(n_heads, dim1 // n_heads // 2, 2)
+        tensor = tensor.transpose(1, 2)
+        tensor = tensor.reshape(dim1)
+    else:
+        # Handle weight case where tensor is 2D with shape (dim1, dim2)
+        tensor = tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
+        tensor = tensor.transpose(1, 2)
+        tensor = tensor.reshape(dim1, dim2)
     return tensor
 
 
@@ -145,28 +153,65 @@ def convert_state_dict(original_state_dict, config):
     """Convert a state dict file, when a single `nn.Module` is never sharded in different files (usual case)."""
     new_dict = {}
 
-    num_attention_heads = config.num_attention_heads
-    hidden_size = config.hidden_size
-    head_dim = config.head_dim
-    num_key_value_heads = config.num_key_value_heads
-    key_value_dim = head_dim * num_key_value_heads
-    query_dim = head_dim * num_attention_heads
-
     for old_key, tensor in original_state_dict.items():
         new_key = map_old_key_to_new(old_key)
 
-        if "audio_tower" not in new_key:
-            if "q_proj" in new_key:
-                tensor = tensor.view(num_attention_heads, head_dim, hidden_size).reshape(query_dim, hidden_size)
-                tensor = permute_for_rope(tensor, num_attention_heads, query_dim, hidden_size)
-            elif "k_proj" in new_key:
-                tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(key_value_dim, hidden_size)
-                tensor = permute_for_rope(tensor, num_key_value_heads, key_value_dim, hidden_size)
-            elif "v_proj" in new_key:
-                tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(key_value_dim, hidden_size)
+        if "audio_tower" in new_key:
+            num_attention_heads = config.audio_config.num_attention_heads
+            hidden_size = config.audio_config.hidden_size
+            head_dim = config.audio_config.head_dim
+            num_key_value_heads = config.audio_config.num_key_value_heads
+            key_value_dim = head_dim * num_key_value_heads
+            query_dim = head_dim * num_attention_heads
+
+            tensor = _permute_projection_weights(
+                tensor, new_key, num_attention_heads, num_key_value_heads, 
+                head_dim, hidden_size, query_dim, key_value_dim
+            )
+
+        elif "language_model" in new_key:
+            num_attention_heads = config.text_config.num_attention_heads
+            hidden_size = config.text_config.hidden_size
+            head_dim = config.text_config.head_dim
+            num_key_value_heads = config.text_config.num_key_value_heads
+            key_value_dim = head_dim * num_key_value_heads
+            query_dim = head_dim * num_attention_heads
+
+            tensor = _permute_projection_weights(
+                tensor, new_key, num_attention_heads, num_key_value_heads,
+                head_dim, hidden_size, query_dim, key_value_dim
+            )
 
         new_dict[new_key] = tensor
     return new_dict
+
+
+def _permute_projection_weights(
+    tensor, key, num_attention_heads, num_key_value_heads,
+    head_dim, hidden_size, query_dim, key_value_dim
+):
+    """Permute projection weights for q_proj, k_proj, and v_proj."""
+    if "q_proj" in key:
+        if "weight" in key:
+            tensor = tensor.view(num_attention_heads, head_dim, hidden_size).reshape(query_dim, hidden_size)
+            tensor = permute_for_rope(tensor, num_attention_heads, query_dim, hidden_size)
+        elif "bias" in key:
+            tensor = tensor.view(num_attention_heads, head_dim).reshape(query_dim)
+            tensor = permute_for_rope(tensor, num_attention_heads, query_dim)
+    elif "k_proj" in key:
+        if "weight" in key:
+            tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(key_value_dim, hidden_size)
+            tensor = permute_for_rope(tensor, num_key_value_heads, key_value_dim, hidden_size)
+        elif "bias" in key:
+            tensor = tensor.view(num_key_value_heads, head_dim).reshape(key_value_dim)
+            tensor = permute_for_rope(tensor, num_key_value_heads, key_value_dim)
+    elif "v_proj" in key:
+        if "weight" in key:
+            tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(key_value_dim, hidden_size)
+        elif "bias" in key:
+            tensor = tensor.view(num_key_value_heads, head_dim).reshape(key_value_dim)
+    
+    return tensor
 
 
 def write_model(
@@ -187,7 +232,6 @@ def write_model(
         original_config = json.load(f)
 
     config = convert_config(original_config)
-    model = VoxtralForConditionalGeneration(config)
 
     # ---------------
     # convert weights
@@ -197,23 +241,21 @@ def write_model(
     print(f"Fetching all parameters from the checkpoint at {model_path}...")
     state_dict = load_file(model_path)
     print("Converting model...")
-    converted_state_dict = convert_state_dict(state_dict, config.text_config)
+    converted_state_dict = convert_state_dict(state_dict, config)
 
-    # we need to add embed positions as they are not in the state dict
-    with torch.no_grad(), torch.device("cuda"):
-        # TODO: @eustlb, we are here creating on GPU
-        # vllm initializes on device, while we save in state dict
-        embed_positions_weight = sinusoids(config.audio_config.max_source_positions, config.audio_config.hidden_size)
-    converted_state_dict["audio_tower.embed_positions.weight"] = embed_positions_weight.cpu()
+    converted_state_dict["language_model.lm_head.weight"] = converted_state_dict[
+        "language_model.model.embed_tokens.weight"
+    ].clone()
 
     # -------------------------
     # load the weights and save
     # -------------------------
 
-    print("Loading the checkpoint in a Voxtral model.")
+    print("Loading the checkpoint in a VoxtralRealtime model.")
     with torch.device("meta"):
-        model = VoxtralForConditionalGeneration(config)
+        model = VoxtralRealtimeForConditionalGeneration(config)
     model.load_state_dict(converted_state_dict, strict=True, assign=True)
+    model.tie_weights()
     print("Checkpoint loaded successfully.")
     del model.config._name_or_path
 
@@ -227,17 +269,17 @@ def write_model(
     # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    VoxtralForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
+    VoxtralRealtimeForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
 
-def write_processor(input_path_or_repo: str, feature_extractor_path_or_repo: str, output_dir: str):
+def write_processor(input_path_or_repo: str, output_dir: str):
     tokenizer = MistralCommonBackend.from_pretrained(input_path_or_repo)
-    feature_extractor = WhisperFeatureExtractor.from_pretrained(feature_extractor_path_or_repo)
+    feature_extractor = VoxtralRealtimeFeatureExtractor()
 
     print("Creating the processor...")
     # Create the processor and save it
-    processor = VoxtralProcessor(
+    processor = VoxtralRealtimeProcessor(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer,
     )
@@ -246,12 +288,12 @@ def write_processor(input_path_or_repo: str, feature_extractor_path_or_repo: str
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Convert Voxtral weights to Hugging Face format")
+    parser = argparse.ArgumentParser(description="Convert VoxtralRealtime weights to Hugging Face format")
     parser.add_argument(
         "--input_path_or_repo",
         type=str,
         required=True,
-        help="Path or repo containing Csm weights",
+        help="Path or repo containing the original weights",
     )
     parser.add_argument(
         "--model_name",
@@ -264,12 +306,6 @@ def main():
         type=str,
         required=True,
         help="Name of the config in input_path_or_repo",
-    )
-    parser.add_argument(
-        "--feature_extractor_path_or_repo",
-        type=str,
-        required=True,
-        help="Path or repo containing the feature extractor",
     )
     parser.add_argument(
         "--output_dir",
@@ -286,7 +322,6 @@ def main():
 
     write_processor(
         args.input_path_or_repo,
-        args.feature_extractor_path_or_repo,
         args.output_dir,
     )
 
