@@ -31,10 +31,8 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.output_capturing import capture_outputs
 from .configuration_squeezebert import SqueezeBertConfig
 
 
@@ -208,7 +206,7 @@ class SqueezeBertSelfAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x
 
-    def forward(self, hidden_states, attention_mask, output_attentions):
+    def forward(self, hidden_states, attention_mask, **kwargs):
         """
         expects hidden_states in [N, C, W] data layout.
 
@@ -238,10 +236,7 @@ class SqueezeBertSelfAttention(nn.Module):
         context_layer = self.matmul_qkv(attention_probs, value_layer)
         context_layer = self.transpose_output(context_layer)
 
-        result = {"context_layer": context_layer}
-        if output_attentions:
-            result["attention_score"] = attention_score
-        return result
+        return context_layer, attention_score
 
 
 class SqueezeBertModule(nn.Module):
@@ -271,19 +266,15 @@ class SqueezeBertModule(nn.Module):
             cin=c2, cout=c3, groups=config.output_groups, dropout_prob=config.hidden_dropout_prob
         )
 
-    def forward(self, hidden_states, attention_mask, output_attentions):
-        att = self.attention(hidden_states, attention_mask, output_attentions)
-        attention_output = att["context_layer"]
+    def forward(self, hidden_states, attention_mask, **kwargs):
+        hidden_states_ncw = hidden_states.permute(0, 2, 1)
 
-        post_attention_output = self.post_attention(attention_output, hidden_states)
+        attention_output, _ = self.attention(hidden_states_ncw, attention_mask, **kwargs)
+        post_attention_output = self.post_attention(attention_output, hidden_states_ncw)
         intermediate_output = self.intermediate(post_attention_output)
         layer_output = self.output(intermediate_output, post_attention_output)
 
-        output_dict = {"feature_map": layer_output}
-        if output_attentions:
-            output_dict["attention_score"] = att["attention_score"]
-
-        return output_dict
+        return layer_output.permute(0, 2, 1)
 
 
 class SqueezeBertEncoder(nn.Module):
@@ -302,40 +293,12 @@ class SqueezeBertEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        **kwargs,
     ):
-        # [batch_size, sequence_length, hidden_size] --> [batch_size, hidden_size, sequence_length]
-        hidden_states = hidden_states.permute(0, 2, 1)
-
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
         for layer in self.layers:
-            if output_hidden_states:
-                hidden_states = hidden_states.permute(0, 2, 1)
-                all_hidden_states += (hidden_states,)
-                hidden_states = hidden_states.permute(0, 2, 1)
+            hidden_states = layer(hidden_states, attention_mask, **kwargs)
 
-            layer_output = layer.forward(hidden_states, attention_mask, output_attentions)
-
-            hidden_states = layer_output["feature_map"]
-
-            if output_attentions:
-                all_attentions += (layer_output["attention_score"],)
-
-        # [batch_size, hidden_size, sequence_length] --> [batch_size, sequence_length, hidden_size]
-        hidden_states = hidden_states.permute(0, 2, 1)
-
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class SqueezeBertPooler(nn.Module):
@@ -404,6 +367,11 @@ class SqueezeBertPreTrainedModel(PreTrainedModel):
     config: SqueezeBertConfig
     base_model_prefix = "transformer"
 
+    _can_record_outputs = {
+        "hidden_states": SqueezeBertModule,
+        "attentions": SqueezeBertSelfAttention,
+    }
+
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -432,6 +400,7 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings.word_embeddings = new_embeddings
 
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -440,17 +409,8 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
         token_type_ids: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+    ) -> BaseModelOutputWithPooling:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -476,21 +436,14 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,
             attention_mask=extended_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
-        sequence_output = encoder_outputs[0]
+        sequence_output = encoder_outputs.last_hidden_state
         pooled_output = self.pooler(sequence_output)
-
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -517,6 +470,7 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -526,18 +480,14 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | MaskedLMOutput:
+    ) -> MaskedLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.transformer(
             input_ids,
@@ -545,22 +495,17 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
+            **kwargs,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
         prediction_scores = self.cls(sequence_output)
 
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -589,6 +534,7 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -598,18 +544,14 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | SequenceClassifierOutput:
+    ) -> SequenceClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.transformer(
             input_ids,
@@ -617,13 +559,11 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
+            **kwargs,
         )
 
-        pooled_output = outputs[1]
-
+        pooled_output = outputs.pooler_output
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
 
@@ -650,10 +590,6 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
 
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
@@ -674,6 +610,7 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -683,11 +620,8 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | MultipleChoiceModelOutput:
+    ) -> MultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -718,7 +652,6 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
             num_choices-1]` where *num_choices* is the size of the second dimension of the input tensors. (see
             *input_ids* above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -737,13 +670,11 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
+            **kwargs,
         )
 
-        pooled_output = outputs[1]
-
+        pooled_output = outputs.pooler_output
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
@@ -752,10 +683,6 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
-
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
             loss=loss,
@@ -778,6 +705,7 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -787,30 +715,23 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | TokenClassifierOutput:
+    ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
+            **kwargs,
         )
 
-        sequence_output = outputs[0]
-
+        sequence_output = outputs.last_hidden_state
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
 
@@ -818,10 +739,6 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -843,6 +760,7 @@ class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -853,26 +771,19 @@ class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.Tensor | None = None,
         end_positions: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | QuestionAnsweringModelOutput:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+    ) -> QuestionAnsweringModelOutput:
         outputs = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
+            **kwargs,
         )
 
-        sequence_output = outputs[0]
-
+        sequence_output = outputs.last_hidden_state
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1).contiguous()
@@ -894,10 +805,6 @@ class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,
