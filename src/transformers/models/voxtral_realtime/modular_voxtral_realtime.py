@@ -174,6 +174,21 @@ class VoxtralRealtimeEncoderOutput(BaseModelOutputWithPast):
     padding_cache: VoxtralRealtimeConv1dPaddingCache | None = None
 
 
+@dataclass
+class VoxtralRealtimeCausalLMOutputWithPast(CausalLMOutputWithPast):
+    r"""
+    Args:
+        encoder_past_key_values (`Cache`, *optional*):
+            Pre-computed hidden-states (key and value in the self-attention blocks) for the audio encoder
+            that can be used to speed up sequential decoding.
+        padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
+            Cache for padding in convolutional layers to maintain state across streaming chunks.
+    """
+
+    encoder_past_key_values: Cache | None = None
+    padding_cache: VoxtralRealtimeConv1dPaddingCache | None = None
+
+
 class VoxtralRealtimeRotaryEmbedding(LlamaRotaryEmbedding): ...
 
 
@@ -591,6 +606,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         padding_cache: VoxtralRealtimeConv1dPaddingCache | None = None,
         encoder_inputs_embeds: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -613,8 +629,8 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
             past_key_values=past_key_values,
             padding_cache=padding_cache,
             return_dict=True,
-            use_cache=True,
-            use_padding_cache=True,
+            use_cache=use_cache,
+            use_padding_cache=use_cache,
             **kwargs,
         )
         audio_hidden_states = audio_outputs.last_hidden_state
@@ -645,7 +661,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         logits_to_keep: int | torch.Tensor = 0,
         num_delay_tokens: int | torch.Tensor = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> VoxtralRealtimeCausalLMOutputWithPast:
         r"""
         encoder_past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and value in the self-attention blocks) for the encoder that can be used to speed up sequential decoding.
@@ -692,6 +708,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
                 encoder_inputs_embeds=encoder_inputs_embeds,
                 past_key_values=encoder_past_key_values,
                 padding_cache=padding_cache,
+                use_cache=use_cache,
                 return_dict=True,
             )
             inputs_embeds += audio_outputs.pooler_output.to(inputs_embeds.device)
@@ -713,7 +730,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         t_cond = self.time_embedding(time_tensor)
         t_cond = t_cond[None, ...]  # broadcastable to batch size
 
-        outputs: BaseModelOutputWithPast = self.language_model(
+        outputs: CausalLMOutputWithPast = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -725,9 +742,15 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
             t_cond=t_cond,
             **kwargs,
         )
-        outputs["encoder_past_key_values"] = audio_outputs.past_key_values
-        outputs["padding_cache"] = audio_outputs.padding_cache
-        return outputs
+        return VoxtralRealtimeCausalLMOutputWithPast(
+            loss=outputs.loss,
+            logits=outputs.logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            encoder_past_key_values=audio_outputs.past_key_values if use_cache else None,
+            padding_cache=audio_outputs.padding_cache if use_cache else None,
+        )
 
     def prepare_inputs_for_generation(
         self,

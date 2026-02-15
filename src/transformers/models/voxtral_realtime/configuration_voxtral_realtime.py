@@ -19,6 +19,15 @@ from ..mistral.configuration_mistral import MistralConfig
 
 
 class VoxtralRealtimeTextConfig(MistralConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`VoxtralRealtimeText`]. It is used to instantiate a
+    Voxtral Realtime text decoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the text decoder of the Voxtral Realtime
+    architecture.
+
+    e.g. [mistralai/Voxtral-Mini-4B-Realtime-2602](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602)
+    """
+
     model_type = "voxtral_realtime_text"
 
 
@@ -29,7 +38,7 @@ class VoxtralRealtimeEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin)
     configuration with the defaults will yield a similar configuration to that of the audio encoder of the Voxtral Realtime
     architecture.
 
-    e.g. [mistralai/Voxtral-Mini-3B-2507](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507)
+    e.g. [mistralai/Voxtral-Mini-4B-Realtime-2602](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602)
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
