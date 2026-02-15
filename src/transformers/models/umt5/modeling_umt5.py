@@ -1161,6 +1161,7 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
 
     model_type = "umt5"
     # config_class = UMT5Config
+    _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
     _tied_weights_keys = {
         "encoder.embed_tokens.weight": "shared.weight",
     }
