@@ -299,6 +299,122 @@ class Lfm2TensorProcessor(TensorProcessor):
         return GGUFTensor(weights, name, {})
 
 
+class Qwen3NextTensorProcessor(Qwen2MoeTensorProcessor):
+    """Handles Qwen3-Next GGUF tensors including DeltaNet (linear attention) layers.
+
+    Key transformations:
+    - attn_qkv + attn_gate → in_proj_qkvz (reverse split + reshuffle)
+    - ssm_a → A_log (reverse: log(-weights))
+    - ssm_conv1d → conv1d (unsqueeze middle dim)
+    - norm weights → subtract 1 (except ssm_norm)
+    - dt_bias → dt_proj.bias (rename for gguf-py mapping compatibility)
+    """
+
+    HF_QKVZ_PATTERN = re.compile(r"model\.layers\.(?P<bid>\d+)\.linear_attn\._qkvz_merged")
+    HF_DT_BIAS_PATTERN = re.compile(r"model\.layers\.(?P<bid>\d+)\.linear_attn\.dt_bias")
+    GGUF_QKVZ_PATTERN = re.compile(r"blk\.(?P<bid>\d+)\.(?P<part>attn_qkv|attn_gate)\.weight$")
+
+    def __init__(self, config=None):
+        super().__init__(config=config)
+
+    def preprocess_name(self, hf_name: str) -> str:
+        hf_name = super().preprocess_name(hf_name)
+        # Rename in_proj_qkvz so gguf-py name_map won't resolve it to ssm_in
+        # (the GGUF file splits it into attn_qkv + attn_gate instead)
+        if "linear_attn.in_proj_qkvz" in hf_name:
+            hf_name = hf_name.replace("linear_attn.in_proj_qkvz", "linear_attn._qkvz_merged")
+        return hf_name
+
+    def perform_fallback_tensor_mapping(
+        self, gguf_to_hf_name_map: dict[str, str], suffix: str, qual_name: str, hf_name: str
+    ):
+        super().perform_fallback_tensor_mapping(gguf_to_hf_name_map, suffix, qual_name, hf_name)
+
+        # Map attn_qkv + attn_gate → in_proj_qkvz (two-to-one mapping)
+        if m := re.fullmatch(self.HF_QKVZ_PATTERN, hf_name.removesuffix(suffix)):
+            real_hf_name = hf_name.replace("_qkvz_merged", "in_proj_qkvz")
+            full_hf_name = qual_name + real_hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.attn_qkv{suffix}"] = full_hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.attn_gate{suffix}"] = full_hf_name
+
+        # Map dt_bias → ssm_dt.bias (gguf-py maps dt_proj → ssm_dt)
+        if m := re.fullmatch(self.HF_DT_BIAS_PATTERN, hf_name):
+            gguf_to_hf_name_map[f"blk.{m['bid']}.ssm_dt.bias"] = qual_name + hf_name
+
+    def process(self, weights, name: str, **kwargs):
+        # Handle attn_qkv + attn_gate → in_proj_qkvz reverse merge
+        if m := re.fullmatch(self.GGUF_QKVZ_PATTERN, name):
+            tensor_key_mapping = kwargs.get("tensor_key_mapping")
+            parsed_parameters = kwargs.get("parsed_parameters")
+            if tensor_key_mapping:
+                self._set_qkvz_tensor(weights, parsed_parameters, tensor_key_mapping[name], m["part"])
+                return GGUFTensor(weights, None, {})
+
+        # ssm_conv1d: GGUF [conv_dim, kernel] → HF [conv_dim, 1, kernel]
+        if "ssm_conv1d" in name:
+            weights = np.expand_dims(weights, axis=1)
+            return GGUFTensor(weights, name, {})
+
+        # ssm_a: GGUF stores -exp(A_log), reverse: log(-weights)
+        if "ssm_a" in name:
+            weights = np.log(-weights)
+            return GGUFTensor(weights, name, {})
+
+        # Norm weights: GGUF stores weight+1, reverse: weight-1
+        # Exception: ssm_norm (linear_attn.norm) was NOT +1'd during conversion
+        if "norm" in name and "ssm_norm" not in name:
+            weights = weights - 1
+
+        # Delegate to parent for MoE expert weights and shared_expert_gate
+        return super().process(weights, name, **kwargs)
+
+    def _set_qkvz_tensor(self, weights: np.ndarray, parsed_parameters: dict[str, dict], hf_name: str, part: str):
+        """Reverse the in_proj_qkvz → attn_qkv + attn_gate split performed during GGUF conversion.
+
+        The GGUF conversion splits the interleaved [q,k,v,z] per-group layout into two tensors:
+          attn_qkv = [q_all, k_all, v_all] (contiguous per component)
+          attn_gate = z_all
+        This method collects both parts and reconstructs the original interleaved layout.
+        """
+        torch_weights = torch.from_numpy(np.copy(weights))
+
+        # Store intermediate tensors until both parts arrive
+        intermediates = parsed_parameters.setdefault("_qkvz_intermediates", {})
+        parts = intermediates.setdefault(hf_name, {})
+        parts[part] = torch_weights
+
+        if "attn_qkv" not in parts or "attn_gate" not in parts:
+            return  # Wait for the other part
+
+        # Both parts available — reconstruct in_proj_qkvz
+        qkv_tensor = parts["attn_qkv"]
+        gate_tensor = parts["attn_gate"]
+
+        head_k_dim = self.config.get("linear_key_head_dim", 128)
+        head_v_dim = self.config.get("linear_value_head_dim") or (
+            self.config.get("_ssm_inner_size", 4096) // self.config.get("linear_num_value_heads", 32)
+        )
+        num_k_heads = self.config.get("linear_num_key_heads", 16)
+        num_v_heads = self.config.get("linear_num_value_heads", 32)
+        hidden_size = self.config.get("hidden_size", 2048)
+
+        key_dim = head_k_dim * num_k_heads
+        vk_ratio = num_v_heads // num_k_heads
+
+        # Split attn_qkv [key_dim*2 + value_dim, hidden] into q, k, v
+        q_all = qkv_tensor[:key_dim].T.reshape(hidden_size, num_k_heads, head_k_dim)
+        k_all = qkv_tensor[key_dim : key_dim * 2].T.reshape(hidden_size, num_k_heads, head_k_dim)
+        v_all = qkv_tensor[key_dim * 2 :].T.reshape(hidden_size, num_k_heads, vk_ratio * head_v_dim)
+        z_all = gate_tensor.T.reshape(hidden_size, num_k_heads, vk_ratio * head_v_dim)
+
+        # Reconstruct interleaved [q, k, v, z] per group
+        grouped = torch.cat([q_all, k_all, v_all, z_all], dim=-1)  # [hidden, num_k_heads, group_size]
+        result = grouped.reshape(hidden_size, -1).T.contiguous()  # [total_size, hidden]
+
+        parsed_parameters["tensors"][hf_name] = result
+        del intermediates[hf_name]
+
+
 TENSOR_PROCESSORS = {
     "llama": LlamaTensorProcessor,
     "qwen2moe": Qwen2MoeTensorProcessor,
@@ -312,6 +428,7 @@ TENSOR_PROCESSORS = {
     "gemma2": Gemma2TensorProcessor,
     "gemma3": Gemma2TensorProcessor,
     "lfm2": Lfm2TensorProcessor,
+    "qwen3next": Qwen3NextTensorProcessor,
 }
 
 
@@ -356,6 +473,8 @@ def get_gguf_hf_weights_map(
         model_type = "qwen2moe"
     elif model_type == "qwen3_moe":
         model_type = "qwen3moe"
+    elif model_type == "qwen3_next":
+        model_type = "qwen3next"
     elif model_type == "gemma3_text":
         model_type = "gemma3"
     elif model_type == "umt5":
@@ -462,6 +581,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         updated_architecture = "qwen2_moe"
     elif "qwen3moe" in architecture:
         updated_architecture = "qwen3_moe"
+    elif "qwen3next" in architecture:
+        updated_architecture = "qwen3_next"
 
     # For stablelm architecture, we need to set qkv_bias and use_parallel_residual from tensors
     # If `qkv_bias=True`, qkv_proj with bias will be present in the tensors
@@ -537,6 +658,26 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         parsed_parameters["config"]["full_attn_idxs"] = [
             i for i, num_kv_heads in enumerate(gguf_num_key_value_heads) if num_kv_heads > 0
         ]
+
+    if parsed_parameters["config"].get("model_type") == "qwen3_next":
+        # Compute linear_value_head_dim from ssm.inner_size / linear_num_value_heads
+        ssm_inner_size = parsed_parameters["config"].pop("_ssm_inner_size", None)
+        num_v_heads = parsed_parameters["config"].get("linear_num_value_heads")
+        if ssm_inner_size is not None and num_v_heads:
+            parsed_parameters["config"]["linear_value_head_dim"] = ssm_inner_size // num_v_heads
+
+        # Compute partial_rotary_factor and rope_parameters from GGUF rope fields
+        rope_dim_count = parsed_parameters["config"].pop("_rope_dimension_count", None)
+        rope_freq_base = parsed_parameters["config"].pop("_rope_freq_base", None)
+        head_dim = parsed_parameters["config"].get("head_dim")
+        partial_rotary_factor = 0.25  # default for Qwen3-Next
+        if rope_dim_count is not None and head_dim:
+            partial_rotary_factor = rope_dim_count / head_dim
+        parsed_parameters["config"]["rope_parameters"] = {
+            "rope_type": "default",
+            "rope_theta": rope_freq_base or 5000000.0,
+            "partial_rotary_factor": partial_rotary_factor,
+        }
 
     # retrieve config vocab_size from tokenizer
     # Please refer to https://github.com/huggingface/transformers/issues/32526 for more details

@@ -1129,3 +1129,107 @@ class GgufModelTests(unittest.TestCase):
 
         EXPECTED_TEXT = "Hello Atari 2600! es un videoj"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_qwen3_next_config_mapping(self):
+        """Test that Qwen3-Next GGUF config mapping is correctly applied."""
+        from transformers.integrations.ggml import (
+            GGUF_CONFIG_DEFAULTS_MAPPING,
+            GGUF_CONFIG_MAPPING,
+            GGUF_TO_FAST_CONVERTERS,
+            GGUFQwen2Converter,
+        )
+
+        self.assertIn("qwen3_next", GGUF_CONFIG_MAPPING)
+
+        mapping = GGUF_CONFIG_MAPPING["qwen3_next"]
+
+        expected_mappings = {
+            "context_length": "max_position_embeddings",
+            "block_count": "num_hidden_layers",
+            "feed_forward_length": "intermediate_size",
+            "embedding_length": "hidden_size",
+            "attention.head_count": "num_attention_heads",
+            "attention.head_count_kv": "num_key_value_heads",
+            "attention.key_length": "head_dim",
+            "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+            "vocab_size": "vocab_size",
+            "expert_count": "num_experts",
+            "expert_used_count": "num_experts_per_tok",
+            "expert_feed_forward_length": "moe_intermediate_size",
+            "expert_shared_feed_forward_length": "shared_expert_intermediate_size",
+            "ssm.conv_kernel": "linear_conv_kernel_dim",
+            "ssm.state_size": "linear_key_head_dim",
+            "ssm.group_count": "linear_num_key_heads",
+            "ssm.time_step_rank": "linear_num_value_heads",
+            "ssm.inner_size": "_ssm_inner_size",
+            "rope.dimension_count": "_rope_dimension_count",
+            "rope.freq_base": "_rope_freq_base",
+        }
+
+        for gguf_key, transformers_key in expected_mappings.items():
+            self.assertEqual(mapping[gguf_key], transformers_key)
+
+        self.assertIsNone(mapping["attention.value_length"])
+
+        # Check defaults
+        self.assertIn("qwen3_next", GGUF_CONFIG_DEFAULTS_MAPPING)
+        self.assertTrue(GGUF_CONFIG_DEFAULTS_MAPPING["qwen3_next"]["norm_topk_prob"])
+
+        # Check tokenizer converter
+        self.assertIn("qwen3_next", GGUF_TO_FAST_CONVERTERS)
+        self.assertEqual(GGUF_TO_FAST_CONVERTERS["qwen3_next"], GGUFQwen2Converter)
+
+    def test_qwen3_next_tensor_processor(self):
+        """Test that Qwen3-Next tensor processor is registered and handles key transforms."""
+        from transformers.modeling_gguf_pytorch_utils import TENSOR_PROCESSORS, Qwen3NextTensorProcessor
+
+        self.assertIn("qwen3next", TENSOR_PROCESSORS)
+        self.assertEqual(TENSOR_PROCESSORS["qwen3next"], Qwen3NextTensorProcessor)
+
+        # Test tensor transforms with synthetic data
+        import numpy as np
+
+        config = {
+            "hidden_size": 64,
+            "linear_key_head_dim": 16,
+            "linear_num_key_heads": 2,
+            "linear_num_value_heads": 4,
+            "linear_value_head_dim": 16,
+            "_ssm_inner_size": 64,
+        }
+        processor = Qwen3NextTensorProcessor(config=config)
+
+        # ssm_conv1d: [dim, kernel] -> [dim, 1, kernel]
+        conv_weights = np.random.randn(32, 4).astype(np.float32)
+        result = processor.process(weights=conv_weights, name="blk.0.ssm_conv1d.weight")
+        self.assertEqual(result.weights.shape, (32, 1, 4))
+
+        # ssm_a: log(-weights)
+        a_weights = np.array([-2.0, -3.0, -1.5], dtype=np.float32)
+        result = processor.process(weights=a_weights, name="blk.0.ssm_a")
+        np.testing.assert_allclose(result.weights, np.log(np.array([2.0, 3.0, 1.5])), rtol=1e-6)
+
+        # norm -1 (attn_norm, post_attention_norm, output_norm, q_norm, k_norm)
+        norm_weights = np.array([2.0, 1.5, 1.0], dtype=np.float32)
+        for name in ["blk.0.attn_norm.weight", "blk.0.post_attention_norm.weight", "output_norm.weight"]:
+            result = processor.process(weights=norm_weights.copy(), name=name)
+            np.testing.assert_array_equal(result.weights, np.array([1.0, 0.5, 0.0]))
+
+        # ssm_norm: NOT modified
+        result = processor.process(weights=norm_weights.copy(), name="blk.0.ssm_norm.weight")
+        np.testing.assert_array_equal(result.weights, norm_weights)
+
+    @unittest.skip(reason="Qwen3-Next is 80B params, requires >160GB memory")
+    def test_qwen3_next_q4_k_xl(self):
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+        model = AutoModelForCausalLM.from_pretrained(
+            "Qwen/Qwen3-Coder-Next-GGUF",
+            gguf_file="Qwen3-Coder-Next-UD-Q4_K_XL.gguf",
+            device_map="auto",
+            dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+        # Expected text to be determined when model can be loaded on suitable hardware
+        self.assertIsNotNone(tokenizer.decode(out[0], skip_special_tokens=True))
