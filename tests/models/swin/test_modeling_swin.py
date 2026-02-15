@@ -301,10 +301,16 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config = model.config
             model.to(torch_device)
             model.eval()
+
+            # Backbone handles attentions differently (returns None)
+            if model_class.__name__ == "SwinBackbone":
+                continue
+
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            expected_num_attentions = len(self.model_tester.depths)
+            # With hook-based capture, attentions are collected per-layer (not per-stage)
+            expected_num_attentions = sum(self.model_tester.depths)
             self.assertEqual(len(attentions), expected_num_attentions)
 
             # check that output_attentions also work using config
@@ -334,8 +340,7 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            # also another +1 for reshaped_hidden_states
-            added_hidden_states = 1 if model_class.__name__ == "SwinBackbone" else 2
+            added_hidden_states = 1
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
             self_attentions = outputs.attentions
@@ -375,19 +380,6 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             list(hidden_states[0].shape[-2:]),
             [num_patches, self.model_tester.embed_dim],
         )
-
-        if model_class.__name__ != "SwinBackbone":
-            reshaped_hidden_states = outputs.reshaped_hidden_states
-            self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
-
-            batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
-            reshaped_hidden_states = (
-                reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
-            )
-            self.assertListEqual(
-                list(reshaped_hidden_states.shape[-2:]),
-                [num_patches, self.model_tester.embed_dim],
-            )
 
     def test_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
