@@ -99,6 +99,9 @@ class TextGenerationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
+        # Decoder-only models require left-padding for correct batched generation.
+        if self.tokenizer is not None and self.tokenizer.padding_side == "right":
+            self.tokenizer.padding_side = "left"
         if "prefix" not in self._preprocess_params:
             # This is very specific. The logic is quite complex and needs to be done
             # as a "default".
