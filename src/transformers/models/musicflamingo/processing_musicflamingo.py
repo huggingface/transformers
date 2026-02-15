@@ -53,9 +53,6 @@ class MusicFlamingoProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-MAX_AUDIO_LEN = 20 * 60  # 20 minutes
-
-
 class MusicFlamingoProcessor(ProcessorMixin):
     r"""
     Constructs an MusicFlamingo processor which wraps an MusicFlamingo feature extractor and an MusicFlamingo
@@ -89,7 +86,7 @@ class MusicFlamingoProcessor(ProcessorMixin):
         audio_bos_token="<|sound_bos|>",
         audio_eos_token="<|sound_eos|>",
         default_transcription_prompt="Transcribe the input speech.",
-        max_audio_len=MAX_AUDIO_LEN,
+        max_audio_len=1200,
     ):
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
@@ -108,9 +105,9 @@ class MusicFlamingoProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, list[TextInput]],
-        audio: Optional[AudioInput] = None,
-        output_labels: Optional[bool] = False,
+        text: TextInput | list[TextInput],
+        audio: AudioInput | None = None,
+        output_labels: bool | None = False,
         **kwargs: Unpack[MusicFlamingoProcessorKwargs],
     ) -> BatchFeature:
         r"""

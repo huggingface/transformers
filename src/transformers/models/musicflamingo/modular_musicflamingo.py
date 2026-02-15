@@ -46,9 +46,6 @@ logger = logging.get_logger(__name__)
 class MusicFlamingoProcessorKwargs(AudioFlamingo3ProcessorKwargs): ...
 
 
-MAX_AUDIO_LEN = 20 * 60  # 20 minutes
-
-
 class MusicFlamingoProcessor(AudioFlamingo3Processor):
     def __init__(
         self,
@@ -59,7 +56,7 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
         audio_bos_token="<|sound_bos|>",
         audio_eos_token="<|sound_eos|>",
         default_transcription_prompt="Transcribe the input speech.",
-        max_audio_len=MAX_AUDIO_LEN,
+        max_audio_len=1200,
     ):
         super().__init__(
             feature_extractor,
@@ -392,8 +389,7 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         input_features_mask: torch.Tensor,
         audio_times: torch.Tensor | None = None,
     ) -> torch.FloatTensor:
-        # Encode audio with dtype conversion and audio_times
-        input_features = input_features.to(dtype=self.audio_tower.conv1.weight.dtype)
+        # Encode audio with audio_times
         encoder_output = self.audio_tower(
             input_features, input_features_mask=input_features_mask, audio_times=audio_times
         )
