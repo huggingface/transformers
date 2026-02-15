@@ -1092,6 +1092,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
             logger.warning_once(
                 f"`num_delay_tokens` was not provided. "
                 f"Falling back to `config.default_num_delay_tokens={num_delay_tokens}`. "
+                f"Consider preparing inputs with [`~VoxtralRealtimeProcessor.__call__`] which automatically sets this parameter."
             )
 
         time_tensor = torch.full(

@@ -35,7 +35,7 @@ from datasets import load_dataset
 repo_id = "mistralai/Voxtral-Mini-4B-Realtime-2602"
 
 processor = AutoProcessor.from_pretrained(repo_id)
-model = VoxtralRealtimeForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map="auto")
+model = VoxtralRealtimeForConditionalGeneration.from_pretrained(repo_id, device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 audio = ds[0]["audio"]["array"]
@@ -61,10 +61,10 @@ from datasets import load_dataset
 repo_id = "mistralai/Voxtral-Mini-4B-Realtime-2602"
 
 processor = AutoProcessor.from_pretrained(repo_id)
-model = VoxtralRealtimeForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map="auto")
+model = VoxtralRealtimeForConditionalGeneration.from_pretrained(repo_id, device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-audio = [el["audio"]["array"] for el in ds[:2]]
+audio = [ds[i]["audio"]["array"] for i in range(2)]
 
 inputs = processor(audio, return_tensors="pt")
 inputs = inputs.to(model.device, dtype=model.dtype)

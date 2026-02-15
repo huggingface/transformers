@@ -165,8 +165,14 @@ def convert_state_dict(original_state_dict, config):
             query_dim = head_dim * num_attention_heads
 
             tensor = _permute_projection_weights(
-                tensor, new_key, num_attention_heads, num_key_value_heads, 
-                head_dim, hidden_size, query_dim, key_value_dim
+                tensor,
+                new_key,
+                num_attention_heads,
+                num_key_value_heads,
+                head_dim,
+                hidden_size,
+                query_dim,
+                key_value_dim,
             )
 
         elif "language_model" in new_key:
@@ -178,8 +184,14 @@ def convert_state_dict(original_state_dict, config):
             query_dim = head_dim * num_attention_heads
 
             tensor = _permute_projection_weights(
-                tensor, new_key, num_attention_heads, num_key_value_heads,
-                head_dim, hidden_size, query_dim, key_value_dim
+                tensor,
+                new_key,
+                num_attention_heads,
+                num_key_value_heads,
+                head_dim,
+                hidden_size,
+                query_dim,
+                key_value_dim,
             )
 
         new_dict[new_key] = tensor
@@ -187,8 +199,7 @@ def convert_state_dict(original_state_dict, config):
 
 
 def _permute_projection_weights(
-    tensor, key, num_attention_heads, num_key_value_heads,
-    head_dim, hidden_size, query_dim, key_value_dim
+    tensor, key, num_attention_heads, num_key_value_heads, head_dim, hidden_size, query_dim, key_value_dim
 ):
     """Permute projection weights for q_proj, k_proj, and v_proj."""
     if "q_proj" in key:
@@ -210,7 +221,7 @@ def _permute_projection_weights(
             tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(key_value_dim, hidden_size)
         elif "bias" in key:
             tensor = tensor.view(num_key_value_heads, head_dim).reshape(key_value_dim)
-    
+
     return tensor
 
 

@@ -569,7 +569,9 @@ class VoxtralRealtimeTimeEmbedding(nn.Module):
 class VoxtralRealtimeMultiModalProjector(VoxtralMultiModalProjector):
     def __init__(self, config):
         super().__init__(config)
-        self.linear_1 = nn.Linear(config.audio_config.hidden_size * config.downsample_factor, config.text_config.hidden_size, bias=False)
+        self.linear_1 = nn.Linear(
+            config.audio_config.hidden_size * config.downsample_factor, config.text_config.hidden_size, bias=False
+        )
 
 
 class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, GenerationMixin):
@@ -598,7 +600,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
             `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
             `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
             and conversion into a tensor of type `torch.FloatTensor`. See [`~VoxtralRealtimeFeatureExtractor.__call__`]
-        
+
         padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
             Cache for padding in convolutional layers to maintain state across streaming chunks.
 
@@ -699,6 +701,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
             logger.warning_once(
                 f"`num_delay_tokens` was not provided. "
                 f"Falling back to `config.default_num_delay_tokens={num_delay_tokens}`. "
+                f"Consider preparing inputs with [`~VoxtralRealtimeProcessor.__call__`] which automatically sets this parameter."
             )
 
         time_tensor = torch.full(
