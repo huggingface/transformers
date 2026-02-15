@@ -66,6 +66,9 @@ class VoxtralRealtimeEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin)
             The epsilon used by the RMS normalization layers.
         rope_parameters (`Union[RopeParameters, dict]`, *optional*):
             The parameters for the rotary position embeddings.
+        num_key_value_heads (`int`, *optional*):
+            Number of key-value heads for grouped-query attention. Defaults to `num_attention_heads`
+            (i.e. multi-head attention).
         sliding_window (`int`, *optional*, defaults to 750):
             The sliding window size for local attention.
         head_dim (`int`, *optional*, defaults to 64):

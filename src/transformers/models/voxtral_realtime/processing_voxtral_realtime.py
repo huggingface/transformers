@@ -135,6 +135,31 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
         is_first_audio_chunk: bool | None = True,
         **kwargs: Unpack[VoxtralRealtimeProcessorKwargs],
     ):
+        r"""
+        Main method to prepare audio input for the Voxtral Realtime model. This method encodes the audio into
+        a transcription request using `mistral_common`, tokenizes the resulting text, and extracts mel spectrogram
+        features using the feature extractor. Supports both streaming and non-streaming modes.
+
+        Args:
+            audio (`AudioInput`, *optional*):
+                Input audio or batch of audios as NumPy arrays or PyTorch tensors.
+            is_streaming (`bool`, *optional*, defaults to `False`):
+                Whether to process audio in streaming mode. When `True`, audio can be passed in chunks
+                using `is_first_audio_chunk` to distinguish the first chunk from subsequent ones.
+            is_first_audio_chunk (`bool`, *optional*, defaults to `True`):
+                Whether the current audio is the first chunk in a streaming session. When `True`, the audio
+                is encoded into a full transcription request with tokenized text. When `False`, only audio
+                features are extracted (text encoding is skipped). Must be `True` when `is_streaming=False`.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to the model. Returned when `is_first_audio_chunk=True`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
+              Returned when `is_first_audio_chunk=True`.
+            - **input_features** -- Mel spectrogram features extracted from the audio input.
+            - **num_delay_tokens** -- The number of delay tokens used for streaming.
+        """
         output_kwargs = self._merge_kwargs(VoxtralRealtimeProcessorKwargs, **kwargs)
 
         if not is_streaming and not is_first_audio_chunk:
