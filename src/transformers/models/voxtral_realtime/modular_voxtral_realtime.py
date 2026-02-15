@@ -44,7 +44,7 @@ from ...models.voxtral.modeling_voxtral import (
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
-from ...utils.generic import check_model_inputs
+from ...utils.output_capturing import capture_outputs
 from .configuration_voxtral_realtime import VoxtralRealtimeEncoderConfig
 
 
@@ -340,7 +340,8 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_features: torch.FloatTensor | None = None,
@@ -378,7 +379,7 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
         mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
         causal_mask = mask_function(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -607,8 +608,8 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
             t_cond=t_cond,
             **kwargs,
         )
-        outputs.encoder_past_key_values = audio_outputs.past_key_values
-        outputs.padding_cache = audio_outputs.padding_cache
+        outputs["encoder_past_key_values"] = audio_outputs.past_key_values
+        outputs["padding_cache"] = audio_outputs.padding_cache
         return outputs
 
     def prepare_inputs_for_generation(
