@@ -41,27 +41,27 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoption id="Pipeline">
 
 ```python
-import torch  
-from transformers import pipeline  
+import torch
+from transformers import pipeline
 
-pipeline = pipeline(  
-    task="image-text-to-text",  
-    model="llava-hf/llava-v1.6-mistral-7b-hf",  
-    device=0,  
-    dtype=torch.bfloat16  
-)  
-messages = [  
-    {  
-        "role": "user",  
-        "content": [  
-            {  
-                "type": "image",  
-                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",  
-            },  
-            { "type": "text", "text": "Describe this image."},  
-        ]  
-    }  
-]  
+pipeline = pipeline(
+    task="image-text-to-text",
+    model="llava-hf/llava-v1.6-mistral-7b-hf",
+    device=0,
+    dtype=torch.bfloat16
+)
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+            },
+            { "type": "text", "text": "Describe this image."},
+        ]
+    }
+]
 pipeline(text=messages, max_new_tokens=20, return_full_text=False)
 ```
 
@@ -113,10 +113,10 @@ import requests
 from PIL import Image
 from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
 
-quant_config = BitsAndBytesConfig(  
-    load_in_4bit=True,  
-    bnb_4bit_compute_dtype=torch.float16,  
-    bnb_4bit_quant_type="nf4"  
+quant_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.float16,
+    bnb_4bit_quant_type="nf4"
 )
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
@@ -198,9 +198,9 @@ print(processor.decode(output[0], skip_special_tokens=True))
 [[autodoc]] LlavaNextImageProcessor
     - preprocess
 
-## LlavaNextImageProcessorFast
+## LlavaNextImageProcessorPil
 
-[[autodoc]] LlavaNextImageProcessorFast
+[[autodoc]] LlavaNextImageProcessorPil
     - preprocess
 
 ## LlavaNextProcessor

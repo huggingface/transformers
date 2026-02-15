@@ -1178,10 +1178,6 @@ class ClassDocstring:
     The {model_name} Model for causal language modeling.
     """
 
-    ImageProcessor = r"""
-    Constructs a {model_name} image processor.
-    """
-
     Backbone = r"""
     The {model_name} backbone.
     """
@@ -1390,15 +1386,7 @@ def get_model_name(obj):
         return None
     if path.split(os.path.sep)[-3] != "models":
         return None
-    file_name = path.split(os.path.sep)[-1]
-    for file_type in AUTODOC_FILES:
-        start = file_type.split("*")[0]
-        end = file_type.split("*")[-1] if "*" in file_type else ""
-        if file_name.startswith(start) and file_name.endswith(end):
-            model_name_lowercase = file_name[len(start) : -len(end)]
-            return model_name_lowercase
-    print(f"[ERROR] Something went wrong trying to find the model name in the path: {path}")
-    return "model"
+    return path.split(os.path.sep)[-2]
 
 
 def generate_processor_intro(cls) -> str:
@@ -1503,6 +1491,8 @@ def format_args_docstring(docstring: str, model_name: str) -> str:
     placeholders_dict = get_placeholders_dict(placeholders, model_name)
     # replace the placeholders in the docstring with the values from the placeholders_dict
     for placeholder, value in placeholders_dict.items():
+        if isinstance(value, dict) and placeholder == "image_processor_class":
+            value = value.get("torchvision", value.get("pil", None))
         if placeholder is not None:
             docstring = docstring.replace(f"{{{placeholder}}}", value)
     return docstring
@@ -1864,7 +1854,8 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
     if not unroll_kwargs and parent_class is not None:
         # Check if the function has a parent class with unroll kwargs
         unroll_kwargs = any(
-            unroll_kwargs_class in parent_class.__name__ for unroll_kwargs_class in UNROLL_KWARGS_CLASSES
+            any(unroll_kwargs_class in base.__name__ for base in parent_class.__mro__)
+            for unroll_kwargs_class in UNROLL_KWARGS_CLASSES
         )
     if unroll_kwargs:
         # get all unpackable "kwargs" parameters
@@ -2325,6 +2316,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
 
     is_dataclass = False
     is_processor = False
+    is_image_processor = False
     docstring_init = ""
     docstring_args = ""
     if "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
@@ -2353,6 +2345,15 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             checkpoint=checkpoint,
             source_args_dict=get_args_doc_from_source(ModelOutputArgs),
         ).__doc__
+    elif "BaseImageProcessor" in (x.__name__ for x in cls.__mro__):
+        is_image_processor = True
+        docstring_init = auto_method_docstring(
+            cls.__init__,
+            parent_class=cls,
+            custom_args=custom_args,
+            checkpoint=checkpoint,
+            source_args_dict=get_args_doc_from_source(ImageProcessorArgs),
+        ).__doc__
     indent_level = get_indent_level(cls)
     model_name_lowercase = get_model_name(cls)
     model_name_title = " ".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
@@ -2363,12 +2364,12 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         model_name_lowercase = model_name_lowercase.replace("_", "-")
 
     name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})$", cls.__name__)
-    if name == [] and custom_intro is None and not is_dataclass and not is_processor:
+    if name == [] and custom_intro is None and not is_dataclass and not is_processor and not is_image_processor:
         raise ValueError(
             f"`{cls.__name__}` is not registered in the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}.\n"
             "Add a `custom_intro` to the decorator if you want to use `auto_docstring` on a class not registered in the auto doc."
         )
-    if name != [] or custom_intro is not None or is_dataclass or is_processor:
+    if name != [] or custom_intro is not None or is_dataclass or is_processor or is_image_processor:
         name = name[0] if name else None
         if custom_intro is not None:
             pre_block = equalize_indent(custom_intro, indent_level)
@@ -2377,6 +2378,11 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         elif is_processor:
             # Generate processor intro dynamically
             pre_block = generate_processor_intro(cls)
+            if pre_block:
+                pre_block = equalize_indent(pre_block, indent_level)
+                pre_block = format_args_docstring(pre_block, model_name_lowercase)
+        elif is_image_processor:
+            pre_block = r"Constructs a {image_processor_class} image processor."
             if pre_block:
                 pre_block = equalize_indent(pre_block, indent_level)
                 pre_block = format_args_docstring(pre_block, model_name_lowercase)

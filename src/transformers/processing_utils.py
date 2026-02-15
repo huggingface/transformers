@@ -268,10 +268,6 @@ class ImagesKwargs(TypedDict, total=False):
         image_seq_length (`int`, *optional*):
             The number of image tokens to be used for each image in the input.
             Added for backward compatibility but this should be set as a processor attribute in future models.
-        backend (`str`, *optional*):
-            The backend to use for processing. Acceptable values are:
-            - `'torchvision'`: Use torchvision backend.
-            - `'pil'`: Use PIL backend.
     """
 
     do_convert_rgb: bool | None
@@ -293,7 +289,6 @@ class ImagesKwargs(TypedDict, total=False):
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
     disable_grouping: bool | None
     image_seq_length: int | None
-    backend: str | None
 
 
 class VideosKwargs(TypedDict, total=False):

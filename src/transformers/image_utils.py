@@ -15,7 +15,7 @@
 import base64
 import os
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from io import BytesIO
 from typing import Any, Union
 
@@ -969,3 +969,19 @@ class SizeDict:
         if hasattr(self, key):
             return getattr(self, key)
         raise KeyError(f"Key {key} not found in SizeDict.")
+
+    def __iter__(self):
+        # Yield only non-None (key, value) pairs so dict(self) excludes missing values.
+        for f in fields(self):
+            val = getattr(self, f.name)
+            if val is not None:
+                yield f.name, val
+
+    def __eq__(self, other):
+        if isinstance(other, dict):
+            return dict(self) == other
+        if isinstance(other, SizeDict):
+            return tuple(getattr(self, f.name) for f in fields(self)) == tuple(
+                getattr(other, f.name) for f in fields(self)
+            )
+        return NotImplemented

@@ -17,6 +17,7 @@ import json
 import os
 import pathlib
 import subprocess
+import sys
 import tempfile
 import warnings
 from copy import deepcopy
@@ -28,7 +29,10 @@ import pytest
 
 from transformers import AutoImageProcessor, BatchFeature
 from transformers.image_utils import AnnotationFormat
-from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
+from transformers.models.auto.image_processing_auto import (
+    IMAGE_PROCESSOR_MAPPING_NAMES,
+    get_image_processor_class_from_name,
+)
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_torch,
@@ -147,15 +151,19 @@ def prepare_video_inputs(
 
 class ImageProcessingTestMixin:
     test_cast_dtype = None
-    image_processing_class = None
-    image_processors_backends_list = None
 
     def setUp(self):
-        self.image_processors_backends_list = [
-            backend_name
-            for backend_name in self.image_processing_class._backend_classes.keys()
-            if self.image_processing_class._backend_availability_checks[backend_name]()
-        ]
+        # Infer model_name from test folder (parent of this test file)
+
+        test_file_path = pathlib.Path(sys.modules[self.__class__.__module__].__file__).resolve()
+        model_name = test_file_path.parent.name
+        print("model_name: ", model_name)
+        image_processing_classes_names = IMAGE_PROCESSOR_MAPPING_NAMES[model_name]
+        print("image_processing_classes_names: ", image_processing_classes_names)
+        self.image_processing_classes = {
+            backend_name: get_image_processor_class_from_name(class_name)
+            for backend_name, class_name in image_processing_classes_names.items()
+        }
 
     def _assert_tensors_equivalence(self, tensor1, tensor2, atol=1e-1, rtol=1e-3, mean_atol=5e-3):
         """Assert that two tensors are equivalent within specified tolerances."""
@@ -165,7 +173,7 @@ class ImageProcessingTestMixin:
     @require_vision
     @require_torch
     def test_backends_equivalence(self):
-        if len(self.image_processors_backends_list) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = Image.open(
@@ -176,8 +184,8 @@ class ImageProcessingTestMixin:
 
         # Create processors for each backend
         encodings = {}
-        for backend_name in self.image_processors_backends_list:
-            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
         # Compare all backends to the first one (reference backend)
@@ -190,15 +198,17 @@ class ImageProcessingTestMixin:
     @require_vision
     @require_torch
     def test_slow_fast_equivalence_batched(self):
-        if len(self.image_processors_backends_list) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         # Create processors for each backend
         encodings = {}
-        for backend_name in self.image_processors_backends_list:
-            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            print(f"backend_name: {backend_name}")
+            print(f"image_processor_dict: {image_processing_class}")
+            image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 
         # Compare all backends to the first one (reference backend)
@@ -209,37 +219,37 @@ class ImageProcessingTestMixin:
             self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].pixel_values)
 
     def test_image_processor_to_json_string(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
             obj = json.loads(image_processor.to_json_string())
             for key, value in self.image_processor_dict.items():
                 self.assertEqual(obj[key], value)
 
     def test_image_processor_to_json_file(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processor_first = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor_first = image_processing_class(**self.image_processor_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 json_file_path = os.path.join(tmpdirname, "image_processor.json")
                 image_processor_first.to_json_file(json_file_path)
-                image_processor_second = self.image_processing_class.from_json_file(json_file_path)
+                image_processor_second = image_processing_class.from_json_file(json_file_path)
 
             self.assertEqual(image_processor_second.to_dict(), image_processor_first.to_dict())
 
     def test_image_processor_from_and_save_pretrained(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processor_first = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor_first = image_processing_class(**self.image_processor_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 saved_file = image_processor_first.save_pretrained(tmpdirname)[0]
                 check_json_file_has_correct_format(saved_file)
-                image_processor_second = self.image_processing_class.from_pretrained(tmpdirname)
+                image_processor_second = image_processing_class.from_pretrained(tmpdirname)
 
             self.assertEqual(image_processor_second.to_dict(), image_processor_first.to_dict())
 
     def test_image_processor_save_load_with_autoimageprocessor(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processor_first = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor_first = image_processing_class(**self.image_processor_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 saved_file = image_processor_first.save_pretrained(tmpdirname)[0]
@@ -251,15 +261,15 @@ class ImageProcessingTestMixin:
 
     def test_save_load_backends(self):
         "Test that we can load image processors with different backends from each other."
-        if len(self.image_processors_backends_list) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest("Skipping backend save/load test as there are less than 2 backends")
 
         image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
-        backend_names = self.image_processors_backends_list
+        backend_names = list(self.image_processing_classes.keys())
 
         # Test cross-loading between all backend pairs
         for backend1 in backend_names:
-            processor1 = self.image_processing_class(backend=backend1, **image_processor_dict)
+            processor1 = self.image_processing_classes[backend1](**image_processor_dict)
 
             for backend2 in backend_names:
                 if backend1 == backend2:
@@ -268,7 +278,7 @@ class ImageProcessingTestMixin:
                 # Load backend2 processor from backend1 saved one
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     processor1.save_pretrained(tmpdirname)
-                    processor2 = self.image_processing_class.from_pretrained(tmpdirname, backend=backend2)
+                    processor2 = self.image_processing_classes[backend2].from_pretrained(tmpdirname)
 
                 # Compare dictionaries (allowing for backend-specific differences)
                 dict1 = processor1.to_dict()
@@ -294,15 +304,15 @@ class ImageProcessingTestMixin:
 
     def test_save_load_backends_auto(self):
         "Test that we can load image processors with different backends from each other using AutoImageProcessor."
-        if len(self.image_processors_backends_list) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest("Skipping backend save/load test as there are less than 2 backends")
 
         image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
-        backend_names = self.image_processors_backends_list
+        backend_names = list(self.image_processing_classes.keys())
 
         # Test cross-loading between all backend pairs using AutoImageProcessor
         for backend1 in backend_names:
-            processor1 = self.image_processing_class(backend=backend1, **image_processor_dict)
+            processor1 = self.image_processing_classes[backend1](**image_processor_dict)
 
             for backend2 in backend_names:
                 if backend1 == backend2:
@@ -336,17 +346,17 @@ class ImageProcessingTestMixin:
                 )
 
     def test_init_without_params(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processor = self.image_processing_class(backend=backend_name)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class()
             self.assertIsNotNone(image_processor)
 
     @require_torch
     @require_vision
     def test_cast_dtype_device(self):
-        for backend_name in self.image_processors_backends_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             if self.test_cast_dtype is not None:
                 # Initialize image_processor
-                image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+                image_processor = image_processing_class(**self.image_processor_dict)
 
                 # create random PyTorch tensors
                 image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
@@ -377,9 +387,9 @@ class ImageProcessingTestMixin:
                 self.assertEqual(encoding.input_ids.dtype, torch.long)
 
     def test_call_pil(self):
-        for backend_name in self.image_processors_backends_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # Initialize image_processing
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
@@ -398,9 +408,9 @@ class ImageProcessingTestMixin:
             )
 
     def test_call_numpy(self):
-        for backend_name in self.image_processors_backends_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # Initialize image_processing
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
@@ -419,9 +429,9 @@ class ImageProcessingTestMixin:
             )
 
     def test_call_pytorch(self):
-        for backend_name in self.image_processors_backends_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # Initialize image_processing
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
@@ -442,10 +452,10 @@ class ImageProcessingTestMixin:
             )
 
     def test_call_numpy_4_channels(self):
-        for backend_name in self.image_processors_backends_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # Test that can process images which have an arbitrary number of channels
             # Initialize image_processing
-            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            image_processor = image_processing_class(**self.image_processor_dict)
 
             # create random numpy tensors
             self.image_processor_tester.num_channels = 4
@@ -478,8 +488,8 @@ class ImageProcessingTestMixin:
     def test_image_processor_preprocess_arguments(self):
         is_tested = False
 
-        for backend_name in self.image_processors_backends_list:
-            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
 
             # validation done by _valid_processor_keys attribute
             if hasattr(image_processor, "_valid_processor_keys") and hasattr(image_processor, "preprocess"):
@@ -514,10 +524,10 @@ class ImageProcessingTestMixin:
 
     def test_override_instance_attributes_does_not_affect_other_instances(self):
         # Test with all available backends
-        for backend_name in self.image_processors_backends_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             with self.subTest(backend=backend_name):
-                image_processor_1 = self.image_processing_class(backend=backend_name)
-                image_processor_2 = self.image_processing_class(backend=backend_name)
+                image_processor_1 = image_processing_class()
+                image_processor_2 = image_processing_class()
                 if not (hasattr(image_processor_1, "size") and isinstance(image_processor_1.size, dict)) or not (
                     hasattr(image_processor_1, "image_mean") and isinstance(image_processor_1.image_mean, list)
                 ):
@@ -552,12 +562,12 @@ class ImageProcessingTestMixin:
     @pytest.mark.torch_compile_test
     def test_can_compile_torchvision_backend(self):
         # Test compilation with torchvision backend (equivalent to fast processor)
-        if "torchvision" not in self.image_processors_backends_list:
+        if "torchvision" not in self.image_processing_classes:
             self.skipTest("Skipping compilation test as torchvision backend is not available")
 
         torch.compiler.reset()
         input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)
-        image_processor = self.image_processing_class(backend="torchvision", **self.image_processor_dict)
+        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
         output_eager = image_processor(input_image, device=torch_device, return_tensors="pt")
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")
@@ -573,9 +583,9 @@ class ImageProcessingTestMixin:
         and ping @yonigozlan for help.
         """
         # Check if torchvision backend is available
-        if "torchvision" in self.image_processors_backends_list:
+        if "torchvision" in self.image_processing_classes:
             return
-        if self.image_processing_class is None:
+        if not self.image_processing_classes:
             self.skipTest("No image processing class defined")
 
         def _is_old_model_by_commit_date(model_type, date_cutoff=(2025, 9, 1)):
@@ -607,15 +617,8 @@ class ImageProcessingTestMixin:
                 # If any error occurs, skip the test
                 return None
 
-        image_processor_name = self.image_processing_class.__name__
-        model_type = None
-        for mapping_model_type, (slow_class, _) in IMAGE_PROCESSOR_MAPPING_NAMES.items():
-            if slow_class == image_processor_name:
-                model_type = mapping_model_type
-                break
-
-        if model_type is None:
-            self.skipTest(f"Could not find model type for {image_processor_name} in IMAGE_PROCESSOR_MAPPING_NAMES")
+        test_file_path = pathlib.Path(sys.modules[self.__class__.__module__].__file__).resolve()
+        model_type = test_file_path.parent.name
         # Check if this is a new model (added after 2024-01-01) based on git history
         is_old_model = _is_old_model_by_commit_date(model_type)
         if is_old_model is None:
@@ -623,20 +626,20 @@ class ImageProcessingTestMixin:
         # New models must support torchvision backend
         self.assertTrue(
             is_old_model,
-            f"Model '{model_type}' (processor: {image_processor_name}) was added after the cutoff date and must support "
+            f"Model '{model_type}' was added after the cutoff date and must support "
             f"the torchvision backend. Please ensure torchvision backend is available.",
         )
 
     def test_fast_image_processor_explicit_none_preserved(self):
         """Test that explicitly setting an attribute to None is preserved through save/load."""
         # Test with torchvision backend (equivalent to fast processor)
-        if "torchvision" not in self.image_processors_backends_list:
+        if "torchvision" not in self.image_processing_classes:
             self.skipTest("Skipping test as torchvision backend is not available")
 
         # Find an attribute with a non-None class default to test explicit None override
         test_attr = None
         for attr in ["do_resize", "do_rescale", "do_normalize"]:
-            if getattr(self.image_processing_class, attr, None) is not None:
+            if getattr(self.image_processing_classes["torchvision"], attr, None) is not None:
                 test_attr = attr
                 break
 
@@ -646,7 +649,7 @@ class ImageProcessingTestMixin:
         # Create processor with explicit None (override the attribute)
         kwargs = self.image_processor_dict.copy()
         kwargs[test_attr] = None
-        image_processor = self.image_processing_class(backend="torchvision", **kwargs)
+        image_processor = self.image_processing_classes["torchvision"](**kwargs)
 
         # Verify it's in to_dict() as None (not filtered out)
         self.assertIn(test_attr, image_processor.to_dict())
@@ -655,7 +658,7 @@ class ImageProcessingTestMixin:
         # Verify explicit None survives save/load cycle
         with tempfile.TemporaryDirectory() as tmpdirname:
             image_processor.save_pretrained(tmpdirname)
-            reloaded = self.image_processing_class.from_pretrained(tmpdirname, backend="torchvision")
+            reloaded = self.image_processing_classes["torchvision"].from_pretrained(tmpdirname)
 
         self.assertIsNone(getattr(reloaded, test_attr), f"Explicit None for {test_attr} was lost after reload")
 
@@ -714,11 +717,11 @@ class AnnotationFormatTestMixin:
         for annotation_format, params in test_cases:
             with self.subTest(annotation_format):
                 image_processor_params = {**image_processor_dict, **{"format": annotation_format}}
-                image_processor_first = self.image_processing_class(**image_processor_params)
+                image_processor_first = self.image_processing_classes["torchvision"](**image_processor_params)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     image_processor_first.save_pretrained(tmpdirname)
-                    image_processor_second = self.image_processing_class.from_pretrained(tmpdirname)
+                    image_processor_second = self.image_processing_classes["torchvision"].from_pretrained(tmpdirname)
 
                 # check the 'format' key exists and that the dicts of the
                 # first and second processors are equal

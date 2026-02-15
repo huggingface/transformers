@@ -14,11 +14,12 @@
 
 from collections.abc import Iterable
 from functools import lru_cache
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
 from .image_processing_base import BatchFeature
+from .image_processing_utils import BaseImageProcessor
 from .image_transforms import (
     center_crop as np_center_crop,
 )
@@ -49,6 +50,7 @@ from .image_utils import (
     get_max_height_width,
     infer_channel_dimension_format,
 )
+from .processing_utils import ImagesKwargs, Unpack
 from .utils import (
     TensorType,
     is_torch_available,
@@ -77,55 +79,28 @@ else:
 logger = logging.get_logger(__name__)
 
 
-class ImageProcessingBackend:
-    """
-    Abstract base class for image processing backends.
-
-    All backend implementations must inherit from this class and implement
-    the required methods. Backends encapsulate backend-specific processing logic
-    while maintaining a consistent interface.
-
-    Backends are self-contained and do not hold references to processors to avoid
-    circular dependencies. If custom preprocessing logic is needed, processors should
-    override `_preprocess()` directly rather than relying on backend methods calling
-    processor methods.
-    """
-
-    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
-        """Convert an image to RGB format."""
-        return convert_to_rgb(image)
-
-    def process_image(self, *args, **kwargs):
-        """Process a single image for preprocessing."""
-        raise NotImplementedError
-
-    def pad(self, *args, **kwargs):
-        """Pad images to specified size."""
-        raise NotImplementedError
-
-    def resize(self, *args, **kwargs):
-        """Resize an image."""
-        raise NotImplementedError
-
-    def rescale(self, *args, **kwargs):
-        """Rescale an image by a scale factor."""
-        raise NotImplementedError
-
-    def normalize(self, *args, **kwargs):
-        """Normalize an image."""
-        raise NotImplementedError
-
-    def center_crop(self, *args, **kwargs):
-        """Center crop an image."""
-        raise NotImplementedError
-
-    def preprocess(self, *args, **kwargs) -> BatchFeature:
-        """Main preprocessing pipeline."""
-        raise NotImplementedError
-
-
-class TorchVisionBackend(ImageProcessingBackend):
+class TorchVisionBackend(BaseImageProcessor):
     """TorchVision backend for GPU-accelerated batched image processing."""
+
+    @property
+    def is_fast(self) -> bool:
+        """
+        `bool`: Whether or not this image processor is using the fast (TorchVision) backend.
+        The `is_fast` property is deprecated and will be removed in v5.3 of Transformers.
+        Use the `backend` attribute instead (e.g., `processor.backend == "torchvision"`).
+        """
+        logger.warning_once(
+            "The `is_fast` property is deprecated and will be removed in v5.3 of Transformers. "
+            "Use the `backend` attribute instead (e.g., `processor.backend == 'torchvision'`)."
+        )
+        return True
+
+    @property
+    def backend(self) -> str:
+        """
+        `str`: The backend used by this image processor.
+        """
+        return "torchvision"
 
     def process_image(
         self,
@@ -133,6 +108,7 @@ class TorchVisionBackend(ImageProcessingBackend):
         do_convert_rgb: bool | None = None,
         input_data_format: str | ChannelDimension | None = None,
         device: Optional["torch.device"] = None,
+        **kwargs: Unpack[ImagesKwargs],
     ) -> "torch.Tensor":
         """Process a single image for torchvision backend."""
         image_type = get_image_type(image)
@@ -160,6 +136,10 @@ class TorchVisionBackend(ImageProcessingBackend):
             image = image.to(device)
 
         return image
+
+    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
+        """Convert an image to RGB format."""
+        return convert_to_rgb(image)
 
     def pad(
         self,
@@ -364,7 +344,7 @@ class TorchVisionBackend(ImageProcessingBackend):
         crop_left = int((image_width - crop_width) / 2.0)
         return tvF.crop(image, crop_top, crop_left, crop_height, crop_width)
 
-    def preprocess(
+    def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
@@ -412,15 +392,35 @@ class TorchVisionBackend(ImageProcessingBackend):
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
-class PilBackend(ImageProcessingBackend):
+class PilBackend(BaseImageProcessor):
     """PIL/NumPy backend for portable CPU-only image processing."""
+
+    @property
+    def is_fast(self) -> bool:
+        """
+        `bool`: Whether or not this image processor is using the fast (TorchVision) backend.
+        The `is_fast` property is deprecated and will be removed in v5.3 of Transformers.
+        Use the `backend` attribute instead (e.g., `processor.backend == "torchvision"`).
+        """
+        logger.warning_once(
+            "The `is_fast` property is deprecated and will be removed in v5.3 of Transformers. "
+            "Use the `backend` attribute instead (e.g., `processor.backend == 'torchvision'`)."
+        )
+        return False
+
+    @property
+    def backend(self) -> str:
+        """
+        `str`: The backend used by this image processor.
+        """
+        return "pil"
 
     def process_image(
         self,
         image: ImageInput,
         do_convert_rgb: bool | None = None,
         input_data_format: str | ChannelDimension | None = None,
-        device: Optional["torch.device"] = None,
+        **kwargs: Unpack[ImagesKwargs],
     ) -> np.ndarray:
         """Process a single image for PIL backend."""
         image_type = get_image_type(image)
@@ -448,6 +448,10 @@ class PilBackend(ImageProcessingBackend):
 
         return image
 
+    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
+        """Convert an image to RGB format."""
+        return convert_to_rgb(image)
+
     def pad(
         self,
         images: list[np.ndarray],
@@ -455,8 +459,6 @@ class PilBackend(ImageProcessingBackend):
         fill_value: int | None = 0,
         padding_mode: str | None = "constant",
         return_mask: bool = False,
-        disable_grouping: bool | None = False,
-        is_nested: bool | None = False,
         **kwargs,
     ) -> tuple[list[np.ndarray], list[np.ndarray]] | list[np.ndarray]:
         """Pad images to specified size using NumPy."""
@@ -506,7 +508,6 @@ class PilBackend(ImageProcessingBackend):
         image: np.ndarray,
         size: SizeDict,
         resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None = None,
-        antialias: bool = True,
         **kwargs,
     ) -> np.ndarray:
         """Resize an image using PIL/NumPy."""
@@ -598,7 +599,7 @@ class PilBackend(ImageProcessingBackend):
             input_data_format=ChannelDimension.FIRST,
         )
 
-    def preprocess(
+    def _preprocess(
         self,
         images: list[np.ndarray],
         do_resize: bool,
@@ -613,7 +614,6 @@ class PilBackend(ImageProcessingBackend):
         image_std: float | list[float] | None,
         do_pad: bool | None,
         pad_size: SizeDict | None,
-        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
@@ -634,3 +634,10 @@ class PilBackend(ImageProcessingBackend):
             processed_images = self.pad(processed_images, pad_size=pad_size)
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
+    def to_dict(self) -> dict[str, Any]:
+        processor_dict = super().to_dict()
+        # Remove the "Pil" suffix from the image processor type
+        if processor_dict.get("image_processor_type", "").endswith("Pil"):
+            processor_dict["image_processor_type"] = processor_dict["image_processor_type"][:-3]
+        return processor_dict

@@ -495,6 +495,8 @@ def getattribute_from_module(module, attr):
         return None
     if isinstance(attr, tuple):
         return tuple(getattribute_from_module(module, a) for a in attr)
+    if isinstance(attr, dict):
+        return {k: getattribute_from_module(module, v) for k, v in attr.items()}
     if hasattr(module, attr):
         return getattr(module, attr)
     # Some of the mappings have entries model_type -> object of another model type. In that case we try to grab the
@@ -566,6 +568,8 @@ class _LazyAutoMapping(OrderedDict[type[PreTrainedConfig], _LazyAutoMappingValue
     def __getitem__(self, key: type[PreTrainedConfig]) -> _LazyAutoMappingValue:
         if key in self._extra_content:
             return self._extra_content[key]
+        print("self._reverse_config_mapping: ", self._reverse_config_mapping)
+        print("key: ", key)
         model_type = self._reverse_config_mapping[key.__name__]
         if model_type in self._model_mapping:
             model_name = self._model_mapping[model_type]
