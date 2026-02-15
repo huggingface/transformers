@@ -32,12 +32,15 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     logging,
 )
 from ...utils.generic import is_flash_attention_requested
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_gpt_bigcode import GPTBigCodeConfig
 
 
@@ -167,10 +170,9 @@ class GPTBigCodeAttention(nn.Module):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         use_cache: bool | None = False,
-        output_attentions: bool | None = False,
         cache_position: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None] | tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor, ...]]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
 
         if layer_past is not None:
@@ -288,23 +290,19 @@ class GPTBigCodeBlock(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         use_cache: bool | None = False,
-        output_attentions: bool | None = False,
         cache_position: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor] | tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
-        attn_outputs = self.attn(
+        attn_output, _ = self.attn(
             hidden_states,
             layer_past=layer_past,
             attention_mask=attention_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
             cache_position=cache_position,
             **kwargs,
         )
-        attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
-        outputs = attn_outputs[1:]
         # residual connection
         hidden_states = attn_output + residual
 
@@ -317,25 +315,22 @@ class GPTBigCodeBlock(GradientCheckpointingLayer):
                 )
             residual = hidden_states
             hidden_states = self.ln_cross_attn(hidden_states)
-            cross_attn_outputs = self.crossattention(
+            cross_attn_output, _ = self.crossattention(
                 hidden_states,
                 attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
-                output_attentions=output_attentions,
                 cache_position=cache_position,
                 **kwargs,
             )
-            attn_output = cross_attn_outputs[0]
             # residual connection
-            hidden_states = residual + attn_output
-            outputs = outputs + cross_attn_outputs[1:]  # add cross attentions if we output attention weights
+            hidden_states = residual + cross_attn_output
 
         residual = hidden_states
         hidden_states = self.ln_2(hidden_states)
         feed_forward_hidden_states = self.mlp(hidden_states)
         hidden_states = residual + feed_forward_hidden_states
-        return (hidden_states,) + outputs
+        return hidden_states
 
 
 @auto_docstring
@@ -347,6 +342,11 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
+    _can_record_outputs = {
+        "hidden_states": GPTBigCodeBlock,
+        "attentions": OutputRecorder(GPTBigCodeAttention, index=1),
+        "cross_attentions": OutputRecorder(GPTBigCodeAttention, index=1),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -398,6 +398,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         self.wte = new_embeddings
 
     @can_return_tuple
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -410,11 +411,8 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         cache_position: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
         input_ids (`torch.Tensor` of shape `(batch_size, input_ids_length)`):
@@ -430,12 +428,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -508,44 +501,25 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         hidden_states = self.drop(hidden_states)
         output_shape = input_shape + (hidden_states.size(-1),)
 
-        all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
-        all_hidden_states = () if output_hidden_states else None
         for i, block in enumerate(self.h):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            outputs = block(
+            hidden_states = block(
                 hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 layer_past=past_key_values,  # as keyword argument so it can be removed by GradientCheckpointingLayer
                 attention_mask=causal_mask,
                 encoder_attention_mask=encoder_attention_mask,
                 use_cache=use_cache,
-                output_attentions=output_attentions,
                 cache_position=cache_position,
                 **kwargs,
             )
 
-            hidden_states = outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (outputs[2],)
-
         hidden_states = self.ln_f(hidden_states)
 
         hidden_states = hidden_states.view(output_shape)
-        # Add last hidden state
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
 
