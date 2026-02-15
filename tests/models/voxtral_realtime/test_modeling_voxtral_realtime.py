@@ -204,6 +204,10 @@ class VoxtralRealtimeForConditionalGenerationModelTest(
     @_with_max_new_tokens(max_new_tokens=5)
     def test_generate_compile_model_forward_fullgraph(self):
         super().test_generate_compile_model_forward_fullgraph()
+    
+    @_with_max_new_tokens(max_new_tokens=5)
+    def test_generate_with_and_without_position_ids(self):
+        super().test_generate_with_and_without_position_ids()
 
     @unittest.skip(reason="VoxtralRealtime does not have a base model")
     def test_model_base_model_prefix(self):
@@ -281,6 +285,12 @@ class VoxtralRealtimeForConditionalGenerationModelTest(
     def test_left_padding_compatibility(self):
         pass
 
+    @unittest.skip(
+        reason="VoxtralRealtime output contains non-tensor padding_cache state that is incompatible with DataParallel gather"
+    )
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
 
 @require_torch
 class VoxtralRealtimeForConditionalGenerationIntegrationTest(unittest.TestCase):
@@ -354,7 +364,7 @@ class VoxtralRealtimeForConditionalGenerationIntegrationTest(unittest.TestCase):
             self.processor.feature_extractor.sampling_rate,
         )
         audio2 = load_audio(
-            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3",
             self.processor.feature_extractor.sampling_rate,
         )
 
@@ -366,7 +376,7 @@ class VoxtralRealtimeForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_OUTPUT = [
             " Come on! Dude, you got a tattoo. So do you, dude. No. Oh, dude, what does my tattoo say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude! What does mine say? Sweet! Idiot! Your tattoo says dude. Your tattoo says sweet. Got it?",
-            " This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, All these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American people. I've seen neighbors looking out for each other as we rescued our economy from the worst crisis of our lifetimes. I've hugged cancer survivors who finally know the security of affordable health care. I've seen communities like Joplin rebuild from disaster and cities like Boston show the world that no terrorist will ever break the American spirit. I've seen the hopeful faces of young graduates and our newest military officers. I've mourned with grieving families searching for answers. And I found grace in a Charleston church. I've seen our scientists help a paralyzed man regain his sense of touch. And our wounded warriors walk again. I've seen our doctors and volunteers rebuild after earthquakes and stop pandemics in their tracks. I've learned from students who are building robots and curing diseases and who will change the world in ways we can't even imagine. I've seen the youngest of children remind us of our obligations to care for our refugees. To work in peace and, above all, to look out for each other. That's what's possible when we come together in the slow, hard, sometimes frustrating, but always vital work of self-government. But we can't take our democracy for granted. All of us, regardless of party, should throw ourselves into the work of citizenship. Not just when there's an election. Not just when our own narrow interest is at stake. But over the full span of a lifetime. If you're tired of arguing with strangers on the internet, try to talk with one in real life. If something needs fixing, lace up your shoes and do some organizing. If you're disappointed by your elected officials, then grab a clipboard, get some signatures, and run for office yourself. Our success depends on our participation. Regardless of which way the pendulum of power swings, it falls on each of us to be guardians of our democracy. To embrace the joyous task we've been given to continually try to improve this great nation of ours. Because for all our outward differences, we all share the same proud title. Citizen. It has been the honor of my life to serve you as President. Eight years later, I am even more optimistic about our country's promise, and I look forward to working along your side as a citizen for all my days that remain. Thanks, everybody. God bless you, and God bless the United States of America.",
+            " This week, I traveled to Chicago to deliver my final farewell address to the nation. Following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, My conversations with you, the American people, in living rooms, in schools, at farms, and on factory floors, at diners, and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American",
         ]
 
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)

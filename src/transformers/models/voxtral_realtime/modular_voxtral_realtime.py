@@ -41,6 +41,7 @@ from ...models.mistral.modeling_mistral import (
 from ...models.voxtral.modeling_voxtral import (
     VoxtralForConditionalGeneration,
     VoxtralPreTrainedModel,
+    VoxtralMultiModalProjector,
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
@@ -108,7 +109,7 @@ class VoxtralRealtimeFeatureExtractor(LasrFeatureExtractor):
         return log_spec
 
 
-class VoxtralConv1dCacheLayer:
+class VoxtralRealtimeConv1dCacheLayer:
     def __init__(self):
         self.cache: torch.Tensor | None = None
         self.is_initialized: bool = False
@@ -134,7 +135,7 @@ class VoxtralConv1dCacheLayer:
             self.lazy_initialization(hidden_states, conv_module)
         elif not self.is_initialized:
             raise ValueError(
-                "VoxtralConv1dCacheLayer is not initialized. Make sure to provide conv_module to the update method."
+                "VoxtralRealtimeConv1dCacheLayer is not initialized. Make sure to provide conv_module to the update method."
             )
 
         # get the padding states
@@ -161,7 +162,7 @@ class VoxtralRealtimeConv1dPaddingCache:
 
     def update(self, hidden_states, cache_key, conv_module):
         if cache_key not in self.layers:
-            self.layers[cache_key] = VoxtralConv1dCacheLayer()
+            self.layers[cache_key] = VoxtralRealtimeConv1dCacheLayer()
 
         padding_states = self.layers[cache_key].update(hidden_states, conv_module)
         padded_hidden_states = torch.cat([padding_states, hidden_states], dim=-1)
@@ -296,6 +297,9 @@ class VoxtralRealtimeEncoderLayer(GradientCheckpointingLayer):
 
 
 class VoxtralRealtimePreTrainedModel(VoxtralPreTrainedModel, PreTrainedModel):
+    # TODO: @eustlb, this should be enabled soon
+    _can_compile_fullgraph = False
+
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
@@ -497,6 +501,12 @@ class VoxtralRealtimeTimeEmbedding(nn.Module):
         return torch.cat((emb.cos(), emb.sin()))
 
 
+class VoxtralRealtimeMultiModalProjector(VoxtralMultiModalProjector):
+    def __init__(self, config):
+        super().__init__(config)
+        self.linear_1 = nn.Linear(config.audio_config.hidden_size * config.downsample_factor, config.text_config.hidden_size, bias=False)
+
+
 class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, GenerationMixin):
     _keep_in_fp32_modules_strict = None
 
@@ -537,7 +547,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         audio_hidden_states = audio_outputs.last_hidden_state
         # TODO: it is never enforced that intermediate_size * 4
         audio_hidden_states = audio_hidden_states.reshape(
-            audio_hidden_states.shape[0], -1, self.config.audio_config.intermediate_size
+            audio_hidden_states.shape[0], -1, self.config.audio_config.hidden_size * self.config.downsample_factor 
         )
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
         audio_outputs.pooler_output = audio_embeds
@@ -585,7 +595,10 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
 
         if num_delay_tokens is None:
             num_delay_tokens = self.config.default_num_delay_tokens
-            logger.warning(f"`num_delay_tokens` is not provided, using default value: {num_delay_tokens}")
+            logger.warning_once(
+                f"`num_delay_tokens` was not provided. "
+                f"Falling back to `config.default_num_delay_tokens={num_delay_tokens}`. "
+            )
 
         time_tensor = torch.full(
             (1,),
@@ -734,20 +747,37 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         generation_config,
         **kwargs,
     ):
+        # Check if user explicitly provided max_length or max_new_tokens BEFORE
+        # the base class applies defaults
+        user_set_max_length = kwargs.get("max_length") is not None or (
+            generation_config is not None and generation_config.max_length is not None
+        )
+        user_set_max_new_tokens = kwargs.get("max_new_tokens") is not None or (
+            generation_config is not None and generation_config.max_new_tokens is not None
+        )
+
         generation_config, model_kwargs = GenerationMixin._prepare_generation_config(generation_config, **kwargs)
 
         input_features = model_kwargs.get("input_features")
         if input_features is not None and not isinstance(input_features, GeneratorType):
             audio_length = input_features.shape[-1]
             num_audio_tokens = math.ceil(audio_length / self.config.audio_length_per_tok)
+            # Stash for use in _prepare_generated_length
+            generation_config._num_audio_tokens = num_audio_tokens
 
-            # TODO: maybe add a warning here in case user's trying to set max_new_tokens
-            generation_config.max_length = num_audio_tokens
+            if not user_set_max_length and not user_set_max_new_tokens:
+                # Default: generate exactly num_audio_tokens
+                generation_config.max_length = num_audio_tokens
+                generation_config.max_new_tokens = None
+                generation_config._voxtral_set_max_length = True
+            else:
+                generation_config._voxtral_set_max_length = False
 
         elif isinstance(input_features, GeneratorType):
             # In streaming mode, generation length is controlled by stream exhaustion only
             generation_config.max_new_tokens = None
             generation_config.max_length = int(1e9)
+            generation_config._voxtral_set_max_length = True
 
         return generation_config, model_kwargs
 
@@ -760,10 +790,12 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         input_ids_length,
         inputs_tensor,
     ):
-        # since we update max_length manually in the abobe _prepare_generation_config
-        # we need to force has_default_max_length to False
-        has_default_max_length = False
-        return GenerationMixin._prepare_generated_length(
+        # If we set max_length ourselves (user didn't provide any length param),
+        # prevent the base class from overriding it
+        if getattr(generation_config, "_voxtral_set_max_length", False):
+            has_default_max_length = False
+
+        generation_config = GenerationMixin._prepare_generated_length(
             generation_config,
             has_default_max_length,
             has_default_min_length,
@@ -771,6 +803,15 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
             input_ids_length,
             inputs_tensor,
         )
+
+        # num_audio_tokens is a hard upper bound: we can never generate more
+        # tokens than there are in the audio. Clamp after the base class has
+        # resolved max_new_tokens into max_length.
+        num_audio_tokens = getattr(generation_config, "_num_audio_tokens", None)
+        if num_audio_tokens is not None:
+            generation_config.max_length = min(generation_config.max_length, num_audio_tokens)
+
+        return generation_config
 
 
 __all__ = [

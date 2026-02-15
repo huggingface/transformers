@@ -30,17 +30,15 @@ For transcribing complete audio files, use the processor and model directly. The
 ```python
 import torch
 from transformers import VoxtralRealtimeForConditionalGeneration, AutoProcessor
-from transformers.audio_utils import load_audio
+from datasets import load_dataset
 
 repo_id = "mistralai/Voxtral-Mini-4B-Realtime-2602"
 
 processor = AutoProcessor.from_pretrained(repo_id)
 model = VoxtralRealtimeForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map="auto")
 
-audio = load_audio(
-    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dude_where_is_my_car.wav",
-    processor.feature_extractor.sampling_rate,
-)
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+audio = ds[0]["audio"]["array"]
 
 inputs = processor(audio, return_tensors="pt")
 inputs = inputs.to(model.device, dtype=model.dtype)
@@ -58,23 +56,17 @@ Multiple audio samples can be transcribed in a single forward pass:
 ```python
 import torch
 from transformers import VoxtralRealtimeForConditionalGeneration, AutoProcessor
-from transformers.audio_utils import load_audio
+from datasets import load_dataset
 
 repo_id = "mistralai/Voxtral-Mini-4B-Realtime-2602"
 
 processor = AutoProcessor.from_pretrained(repo_id)
 model = VoxtralRealtimeForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map="auto")
 
-audio1 = load_audio(
-    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dude_where_is_my_car.wav",
-    processor.feature_extractor.sampling_rate,
-)
-audio2 = load_audio(
-    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
-    processor.feature_extractor.sampling_rate,
-)
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+audio = [el["audio"]["array"] for el in ds[:2]]
 
-inputs = processor([audio1, audio2], return_tensors="pt")
+inputs = processor(audio, return_tensors="pt")
 inputs = inputs.to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs)
@@ -86,7 +78,7 @@ for decoded_output in decoded_outputs:
 
 ### Streaming Transcription
 > [!NOTE]
-> The streaming API for the processor is experimental and may change in future versions.
+> This is an experimental feature and the API is subject to change.
 
 For real-time transcription, audio is split into chunks following:
 
