@@ -274,9 +274,9 @@ except ImportError:
 
 
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
-    "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d"},
-    "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "revision": "v0.0.4"},
-    "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "revision": "v0.0.4"},
+    "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d", "version": 1},
+    "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
+    "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
@@ -395,7 +395,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
-def get_kernel(kernel_name: str, revision: str | None = None, version: str | None = None) -> ModuleType:
+def get_kernel(kernel_name: str, revision: str | None = None, version: int | str | None = None) -> ModuleType:
     from .. import __version__
 
     user_agent = {"framework": "transformers", "version": __version__, "repo_id": kernel_name}
@@ -404,7 +404,7 @@ def get_kernel(kernel_name: str, revision: str | None = None, version: str | Non
         if pkg_version.parse(kernels_version) >= pkg_version.parse("0.10.4"):
             return get_kernel_hub(kernel_name, revision=revision, version=version, user_agent=user_agent)
         else:
-            return get_kernel_hub(kernel_name, revision=revision)
+            return get_kernel_hub(kernel_name, revision=revision, version=version)
     else:
         raise ImportError("kernels is not installed, please install it with `pip install kernels`")
 
