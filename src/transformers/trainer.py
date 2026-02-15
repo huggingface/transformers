@@ -694,7 +694,7 @@ class Trainer:
                 "Samplers cannot be used with IterableDataset as they require indexed access to the dataset."
             )
 
-    def build_accelerator_args(self, **kwargs) -> dict[str, Any]:
+    def _build_accelerator_args(self, **kwargs) -> dict[str, Any]:
         """Helper method to build accelerator-specific keyword arguments."""
         args = {
             "mixed_precision": self.args.mixed_precision,
@@ -786,7 +786,7 @@ class Trainer:
 
             fsdp_plugin = FullyShardedDataParallelPlugin(**self.args.fsdp_plugin_args)
 
-        args = self.build_accelerator_args(
+        args = self._build_accelerator_args(
             dataloader_config=dataloader_config,
             fsdp_plugin=fsdp_plugin,
             gradient_accumulation_plugin=gradient_accumulation_plugin,
