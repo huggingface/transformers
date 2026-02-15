@@ -374,7 +374,7 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
+        r"""
         padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
             Cache for padding in convolutional layers to maintain state across streaming chunks.
         use_padding_cache (`bool`, *optional*):
