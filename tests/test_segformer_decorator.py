@@ -3,7 +3,8 @@
 import torch
 import torch.nn as nn
 
-from transformers.utils import can_return_tuple, capture_outputs
+from transformers.utils.generic import can_return_tuple
+from transformers.utils.output_capturing import capture_outputs
 
 
 # Create a minimal model to test

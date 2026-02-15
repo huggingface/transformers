@@ -23,7 +23,8 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput, SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.output_capturing import can_return_tuple, capture_outputs
+from ...utils.generic import can_return_tuple
+from ...utils.output_capturing import capture_outputs
 from .configuration_segformer import SegformerConfig
 
 
@@ -411,11 +412,10 @@ class SegformerPreTrainedModel(PreTrainedModel):
     config: SegformerConfig
     base_model_prefix = "segformer"
     main_input_name = "pixel_values"
-    input_modalities = ("image",)    @property
+    input_modalities = ("image",) @ property
+
     def _can_record_outputs(self) -> dict[str, str]:
         return {"hidden_states": "SegformerEncoder", "attentions": "SegformerEncoder"}
-
-
 
 
 @auto_docstring
