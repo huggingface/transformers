@@ -204,7 +204,7 @@ class VoxtralRealtimeForConditionalGenerationModelTest(
     @_with_max_new_tokens(max_new_tokens=5)
     def test_generate_compile_model_forward_fullgraph(self):
         super().test_generate_compile_model_forward_fullgraph()
-    
+
     @_with_max_new_tokens(max_new_tokens=5)
     def test_generate_with_and_without_position_ids(self):
         super().test_generate_with_and_without_position_ids()

@@ -205,7 +205,7 @@ class VoxtralRealtimeCausalConv1d(nn.Conv1d):
     def forward(
         self,
         x: torch.Tensor,
-        padding_cache: torch.Tensor | None = None,
+        padding_cache: VoxtralRealtimeConv1dPaddingCache | None = None,
     ) -> torch.Tensor:
         if padding_cache is not None:
             x = padding_cache.update(x, self.cache_key, self)
@@ -529,6 +529,12 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        """
+        padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
+            Cache for padding in convolutional layers to maintain state across streaming chunks.
+        use_padding_cache (`bool`, *optional*):
+            Whether to use the padding cache.
+        """
         if (input_features is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_features or inputs_embeds")
 
@@ -857,8 +863,8 @@ class VoxtralRealtimeTextForCausalLM(VoxtralRealtimeTextPreTrainedModel, Generat
         ```python
         >>> from transformers import AutoTokenizer, VoxtralRealtimeTextForCausalLM
 
-        >>> model = VoxtralRealtimeTextForCausalLM.from_pretrained("meta-voxtral_realtime_text/VoxtralRealtimeText-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-voxtral_realtime_text/VoxtralRealtimeText-2-7b-hf")
+        >>> model = VoxtralRealtimeTextForCausalLM.from_pretrained("mistralai/Voxtral-Mini-4B-Realtime-2602")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Voxtral-Mini-4B-Realtime-2602")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -973,7 +979,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
     def get_audio_features(
         self,
         input_features: torch.FloatTensor = None,
-        padding_cache: torch.FloatTensor | None = None,
+        padding_cache: VoxtralRealtimeConv1dPaddingCache | None = None,
         encoder_inputs_embeds: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -984,7 +990,13 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
             obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
             `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
             `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-            and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+            and conversion into a tensor of type `torch.FloatTensor`. See [`~VoxtralRealtimeFeatureExtractor.__call__`]
+
+        padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
+            Cache for padding in convolutional layers to maintain state across streaming chunks.
+
+        encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
+            Optionally, instead of passing `input_features` you can choose to directly pass an embedded representation for the encoder.
         """
         audio_outputs = self.audio_tower(
             input_features=input_features,
@@ -1016,7 +1028,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         encoder_past_key_values: Cache | None = None,
-        padding_cache: torch.FloatTensor | None = None,
+        padding_cache: VoxtralRealtimeConv1dPaddingCache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         encoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
@@ -1027,37 +1039,35 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
+        encoder_past_key_values (`Cache`, *optional*):
+            Pre-computed hidden-states (key and value in the self-attention blocks) for the encoder that can be used to speed up sequential decoding.
+        padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
+            Cache for padding in convolutional layers to maintain state across streaming chunks.
+        encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
+            Optionally, instead of passing `input_features` you can choose to directly pass an embedded representation for the encoder.
+        num_delay_tokens (`int` or `torch.Tensor`, *optional*):
+            Number of delay tokens used when preparing inputs, see [`~VoxtralRealtimeProcessor`] for more details.
+
         Example:
 
         ```python
-        >>> from transformers import VoxtralRealtimeForConditionalGeneration, AutoProcessor
         >>> import torch
+        >>> from transformers import VoxtralRealtimeForConditionalGeneration, AutoProcessor
+        >>> from datasets import load_dataset
 
-        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-        >>> repo_id = "mistralai/VoxtralRealtime-Mini-3B-2507"
+        >>> repo_id = "mistralai/Voxtral-Mini-4B-Realtime-2602"
 
         >>> processor = AutoProcessor.from_pretrained(repo_id)
-        >>> model = VoxtralRealtimeForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map=device)
+        >>> model = VoxtralRealtimeForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map="auto")
 
-        >>> conversation = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "audio",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dude_where_is_my_car.wav",
-                    },
-                    {"type": "text", "text": "What can you tell me about this audio?"},
-                ],
-            }
-        ]
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> audio = ds[0]["audio"]["array"]
 
-        >>> inputs = processor.apply_chat_template(conversation)
-        >>> inputs = inputs.to(device, dtype=torch.bfloat16)
+        >>> inputs = processor(audio, return_tensors="pt")
+        >>> inputs = inputs.to(model.device, dtype=model.dtype)
 
-        >>> outputs = model.generate(**inputs, max_new_tokens=30)
-        >>> processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
-        ["This audio is a humorous conversation between two friends, likely in English, where one of them is trying to figure out what the other's tattoo says."]
+        >>> outputs = model.generate(**inputs)
+        >>> processor.batch_decode(outputs, skip_special_tokens=True)
         ```"""
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")

@@ -40,8 +40,8 @@ from ...models.mistral.modeling_mistral import (
 )
 from ...models.voxtral.modeling_voxtral import (
     VoxtralForConditionalGeneration,
-    VoxtralPreTrainedModel,
     VoxtralMultiModalProjector,
+    VoxtralPreTrainedModel,
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
@@ -199,7 +199,7 @@ class VoxtralRealtimeCausalConv1d(nn.Conv1d):
     def forward(
         self,
         x: torch.Tensor,
-        padding_cache: torch.Tensor | None = None,
+        padding_cache: VoxtralRealtimeConv1dPaddingCache | None = None,
     ) -> torch.Tensor:
         if padding_cache is not None:
             x = padding_cache.update(x, self.cache_key, self)
@@ -359,6 +359,12 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        """
+        padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
+            Cache for padding in convolutional layers to maintain state across streaming chunks.
+        use_padding_cache (`bool`, *optional*):
+            Whether to use the padding cache.
+        """
         if (input_features is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_features or inputs_embeds")
 
@@ -482,7 +488,66 @@ class VoxtralRealtimeTextModel(MistralModel):
         self.rotary_emb = VoxtralRealtimeRotaryEmbedding(config=config)
 
 
-class VoxtralRealtimeTextForCausalLM(MistralForCausalLM): ...
+class VoxtralRealtimeTextForCausalLM(MistralForCausalLM):
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithPast:
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, VoxtralRealtimeTextForCausalLM
+
+        >>> model = VoxtralRealtimeTextForCausalLM.from_pretrained("mistralai/Voxtral-Mini-4B-Realtime-2602")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Voxtral-Mini-4B-Realtime-2602")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
+        outputs: BaseModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 class VoxtralRealtimeTimeEmbedding(nn.Module):
@@ -521,7 +586,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
     def get_audio_features(
         self,
         input_features: torch.FloatTensor = None,
-        padding_cache: torch.FloatTensor | None = None,
+        padding_cache: VoxtralRealtimeConv1dPaddingCache | None = None,
         encoder_inputs_embeds: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -532,7 +597,13 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
             obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
             `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
             `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-            and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+            and conversion into a tensor of type `torch.FloatTensor`. See [`~VoxtralRealtimeFeatureExtractor.__call__`]
+        
+        padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
+            Cache for padding in convolutional layers to maintain state across streaming chunks.
+
+        encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
+            Optionally, instead of passing `input_features` you can choose to directly pass an embedded representation for the encoder.
         """
         audio_outputs = self.audio_tower(
             input_features=input_features,
@@ -547,7 +618,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         audio_hidden_states = audio_outputs.last_hidden_state
         # TODO: it is never enforced that intermediate_size * 4
         audio_hidden_states = audio_hidden_states.reshape(
-            audio_hidden_states.shape[0], -1, self.config.audio_config.hidden_size * self.config.downsample_factor 
+            audio_hidden_states.shape[0], -1, self.config.audio_config.hidden_size * self.config.downsample_factor
         )
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
         audio_outputs.pooler_output = audio_embeds
@@ -564,7 +635,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         encoder_past_key_values: Cache | None = None,
-        padding_cache: torch.FloatTensor | None = None,
+        padding_cache: VoxtralRealtimeConv1dPaddingCache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         encoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
@@ -574,6 +645,37 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
         num_delay_tokens: int | torch.Tensor = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
+        r"""
+        encoder_past_key_values (`Cache`, *optional*):
+            Pre-computed hidden-states (key and value in the self-attention blocks) for the encoder that can be used to speed up sequential decoding.
+        padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
+            Cache for padding in convolutional layers to maintain state across streaming chunks.
+        encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
+            Optionally, instead of passing `input_features` you can choose to directly pass an embedded representation for the encoder.
+        num_delay_tokens (`int` or `torch.Tensor`, *optional*):
+            Number of delay tokens used when preparing inputs, see [`~VoxtralRealtimeProcessor`] for more details.
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import VoxtralRealtimeForConditionalGeneration, AutoProcessor
+        >>> from datasets import load_dataset
+
+        >>> repo_id = "mistralai/Voxtral-Mini-4B-Realtime-2602"
+
+        >>> processor = AutoProcessor.from_pretrained(repo_id)
+        >>> model = VoxtralRealtimeForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map="auto")
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> audio = ds[0]["audio"]["array"]
+
+        >>> inputs = processor(audio, return_tensors="pt")
+        >>> inputs = inputs.to(model.device, dtype=model.dtype)
+
+        >>> outputs = model.generate(**inputs)
+        >>> processor.batch_decode(outputs, skip_special_tokens=True)
+        ```"""
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
