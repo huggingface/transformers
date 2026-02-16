@@ -266,7 +266,7 @@ class Transpose(ConversionOps):
             return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
         # In this case, check the sentinel before transposing
         else:
-            sentinel_size = kwargs["expected_param_shape"][self.sentinel_dim]
+            sentinel_size = kwargs["model"].get_parameter(kwargs["full_layer_name"]).shape[self.sentinel_dim]
             # The sentinel check is True: do NOT transpose
             if tensor.shape[self.sentinel_dim] == sentinel_size:
                 return {target_pattern: tensor}
