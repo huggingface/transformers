@@ -25,7 +25,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndNoAttention,
@@ -771,7 +770,7 @@ class AlignTextEncoder(nn.Module):
         output_hidden_states: bool | None = False,
         return_dict: bool | None = True,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | BaseModelOutput:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithPooling:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -793,7 +792,7 @@ class AlignTextEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        return BaseModelOutput(
+        return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
