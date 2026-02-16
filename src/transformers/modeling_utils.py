@@ -1732,7 +1732,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if not is_grouped_mm_available():
             raise ImportError(
-                "PyTorch Grouped MM requirements in Transformers are not met. Please install torch>=2.10.0."
+                "PyTorch Grouped MM requirements in Transformers are not met. Please install torch>=2.9.0."
             )
 
         # If no error raised by this point, we can return `True`
