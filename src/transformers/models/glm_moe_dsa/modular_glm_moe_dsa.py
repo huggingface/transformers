@@ -605,7 +605,6 @@ class GlmMoeDsaAttention(nn.Module):
         return attn_output, attn_weights
 
 
-
 class GlmMoeDsaDecoderLayer(Glm4MoeLiteDecoderLayer):
     pass
 
