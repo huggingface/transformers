@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 from collections.abc import Callable
 from functools import wraps
 
@@ -159,14 +158,14 @@ def batched_mm_experts_forward(
 
 # For compatibility with torch.compile
 @torch.library.custom_op("transformers::naive_grouped_mm", mutates_args=())
-def _naive_grouped_mm(
+def _grouped_mm_fallback(
     input: torch.Tensor,
     weight: torch.Tensor,
     offs: torch.Tensor,
 ) -> torch.Tensor:
     """
-    Naive implementation of grouped matrix multiplication using explicit for loops.
-    Used as a fallback when neither torch.nn.functional.grouped_mm nor torch._grouped_mm is available.
+    Naive implementation of grouped matrix multiplication that can be used as a fallback when torch.nn.functional.grouped_mm
+    or torch._grouped_mm are not available or not compatible with torch.compile.
 
     Args:
         input (`torch.Tensor`):
@@ -187,13 +186,40 @@ def _naive_grouped_mm(
 
 # For compatibility with torch.compile
 @torch.library.register_fake("transformers::naive_grouped_mm")
-def _naive_grouped_mm_fake(
+def _grouped_mm_fallback_fake(
     input: torch.Tensor,
     weight: torch.Tensor,
     offs: torch.Tensor,
 ) -> torch.Tensor:
     """Fake implementation of naive grouped mm for compilability purposes."""
     return torch.empty(input.size(0), weight.size(2), device=input.device, dtype=input.dtype)
+
+
+def _can_use_grouped_mm(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    offs: torch.Tensor,
+) -> bool:
+    """
+    Check if torch.nn.functional.grouped_mm or torch._grouped_mm can be used based on availability and compatibility with torch.compile.
+
+    Args:
+        input (`torch.Tensor`):
+            Input tensor of shape (S, input_dim).
+        weight (`torch.Tensor`):
+            Weight tensor of shape (num_experts, output_dim, input_dim).
+        offs (`torch.Tensor`):
+            Offsets tensor indicating the boundaries of each group in the input tensor.
+    Returns:
+        `bool`: True if grouped_mm can be used, False otherwise.
+    """
+    if torch.compiler.is_compiling() and weight.dtype != torch.bfloat16:
+        # torch.grouped_mm is not supported in torch.compile with dtypes other than bfloat16
+        return False
+    elif hasattr(torch.nn.functional, "grouped_mm") or hasattr(torch, "_grouped_mm"):
+        return True
+    else:
+        return False
 
 
 def _grouped_mm(
@@ -213,17 +239,17 @@ def _grouped_mm(
     Returns:
         `torch.Tensor`: Output tensor of shape (S, output_dim).
     """
-    # torch.nn.functional.grouped_mm is not autocast-enabled, so if autocast is enabled we might end up with input tensors in fp32 (e.g. LayerNorm output) and weight tensors in fp16/bf16
-    # In that case we need to cast the input to the weight dtype to avoid dtype mismatch errors.
-    # See: https://github.com/pytorch/pytorch/issues/174763
-    if os.getenv("USE_GROUPED_MM_FALLBACK") == "1":
-        return _naive_grouped_mm(input, weight, offs)
-    elif hasattr(torch.nn.functional, "grouped_mm"):
-        return torch.nn.functional.grouped_mm(input.to(weight.dtype), weight, offs=offs)
-    elif hasattr(torch, "_grouped_mm"):
-        return torch._grouped_mm(input.to(weight.dtype), weight, offs=offs)
-    else:
-        return _naive_grouped_mm(input, weight, offs)
+
+    if _can_use_grouped_mm(input, weight, offs):
+        # torch.nn.functional.grouped_mm is not autocast-enabled, so if autocast is enabled we might end up with input tensors in fp32 (e.g. LayerNorm output) and weight tensors in fp16/bf16
+        # In that case we need to cast the input to the weight dtype to avoid dtype mismatch errors.
+        # See: https://github.com/pytorch/pytorch/issues/174763
+        if hasattr(torch.nn.functional, "grouped_mm"):
+            return torch.nn.functional.grouped_mm(input.to(weight.dtype), weight, offs=offs)
+        elif hasattr(torch, "_grouped_mm"):
+            return torch._grouped_mm(input.to(weight.dtype), weight, offs=offs)
+
+    return _grouped_mm_fallback(input, weight, offs)
 
 
 def _grouped_linear(
