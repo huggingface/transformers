@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
@@ -69,7 +70,7 @@ class FourOverSixHfQuantizer(HfQuantizer):
         device_map,
         **kwargs,
     ):
-        from fouroversix import quantize_model
+        from fouroversix import FourOverSixLinear, quantize_model
 
         from ..integrations.fouroversix import adapt_fouroversix_config
 
@@ -78,13 +79,15 @@ class FourOverSixHfQuantizer(HfQuantizer):
             adapt_fouroversix_config(self.quantization_config),
         )
 
+        # If the model has already been quantized, we need to delete the weight tensor here so that
+        # it's not expected when parameters are loaded from the checkpoint.
+        if self.pre_quantized:
+            for _, module in model.named_modules():
+                if isinstance(module, FourOverSixLinear):
+                    for parameter_name in module.high_precision_parameter_names:
+                        delattr(module, parameter_name)
+
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        from fouroversix import FourOverSixLinear
-
-        for _, module in model.named_modules():
-            if isinstance(module, FourOverSixLinear):
-                del module.weight
-
         return model
 
     def is_serializable(self):
@@ -100,15 +103,15 @@ class FourOverSixHfQuantizer(HfQuantizer):
         return FourOverSixQuantize(self)
 
     def get_weight_conversions(self):
-        from ..integrations.fouroversix import FourOverSixDeserialize
+        # from ..integrations.fouroversix import FourOverSixDeserialize
 
-        if self.pre_quantized:
-            return [
-                WeightConverter(
-                    source_patterns=["quantized_weight_values"],
-                    target_patterns="quantized_weight_values",
-                    operations=[FourOverSixDeserialize(self)],
-                )
-            ]
+        # if self.pre_quantized:
+        #     return [
+        #         WeightConverter(
+        #             source_patterns=["quantized_weight_values"],
+        #             target_patterns="quantized_weight_values",
+        #             operations=[FourOverSixDeserialize(self)],
+        #         )
+        #     ]
 
         return []

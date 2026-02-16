@@ -59,7 +59,7 @@ class FourOverSixConfigTest(unittest.TestCase):
 @require_fouroversix
 @require_accelerate
 class FourOverSixBaseTest(unittest.TestCase):
-    model_name = "unsloth/Llama-3.2-1B"
+    model_name = "unsloth/Llama-3.2-3B"
 
     input_text = "1 2 3 4"
     max_new_tokens = 4
@@ -145,17 +145,13 @@ class FourOverSixBaseTest(unittest.TestCase):
         )
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
-        # print(quantized_model.model.layers[0].self_attn.q_proj)
-        # print(quantized_model.model.layers[0].self_attn.q_proj._quantized_weight)
-        # print(quantized_model.hf_device_map)
-
         output = quantized_model.generate(
             **input_ids, max_new_tokens=self.max_new_tokens
         )
-        # self.assertEqual(
-        #     self.tokenizer.decode(output[0], skip_special_tokens=True),
-        #     self.EXPECTED_OUTPUT,
-        # )
+        self.assertEqual(
+            self.tokenizer.decode(output[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUT,
+        )
 
     @require_torch_multi_accelerator
     def test_save_pretrained_multi_accelerator(self):
@@ -167,7 +163,7 @@ class FourOverSixBaseTest(unittest.TestCase):
 
             model = AutoModelForCausalLM.from_pretrained(
                 tmpdirname,
-                device_map="auto",
+                device_map="sequential",
                 max_memory={0: "1GB", 1: "10GB"},
             )
             self.assertTrue(set(model.hf_device_map.values()) == {0, 1})

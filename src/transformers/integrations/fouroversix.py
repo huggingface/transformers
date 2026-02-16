@@ -38,27 +38,13 @@ class FourOverSixQuantize(ConversionOps):
         missing_keys.discard(target_keys)
         quantized_params = module.get_quantized_parameters(value)
 
+        for parameter_name in module.high_precision_parameter_names:
+            delattr(module, parameter_name)
+
         return {
             f"{module_name}.{quantized_key}": quantized_params[quantized_key]
             for quantized_key in quantized_params
         }
-
-
-class FourOverSixDeserialize(ConversionOps):
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
-
-    def convert(
-        self,
-        input_dict: dict[str, torch.Tensor],
-        model: torch.nn.Module | None = None,
-        full_layer_name: str | None = None,
-        missing_keys: list[str] | None = None,
-        **kwargs,
-    ) -> dict[str, torch.Tensor]:
-        module_name = full_layer_name.rsplit(".", 1)[0]
-        missing_keys.discard(f"{module_name}.weight")
-        return {full_layer_name: input_dict["quantized_weight_values"][0].data}
 
 
 class FourOverSixDequantize(ConversionOps):
