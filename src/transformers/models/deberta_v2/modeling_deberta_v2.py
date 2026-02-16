@@ -656,7 +656,7 @@ class DebertaV2Encoder(nn.Module):
                 query_states=query_states,
                 relative_pos=relative_pos,
                 rel_embeddings=rel_embeddings,
-                output_attentions=output_attentions,  # Pass it through!
+                output_attentions=output_attentions,
             )
 
             if i == 0 and self.conv is not None:
@@ -759,7 +759,6 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
         sequence_output = encoder_outputs.last_hidden_state
 
         if self.z_steps > 1:
-            # Get the second-to-last hidden state if available
             if encoder_outputs.hidden_states and len(encoder_outputs.hidden_states) >= 2:
                 hidden_states = encoder_outputs.hidden_states[-2]
             else:
@@ -778,7 +777,7 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
                     query_states=query_states,
                     relative_pos=rel_pos,
                     rel_embeddings=rel_embeddings,
-                    output_attentions=kwargs.get("output_attentions", False),  # Pass it here too!
+                    output_attentions=kwargs.get("output_attentions", False),
                 )
 
             sequence_output = query_states
