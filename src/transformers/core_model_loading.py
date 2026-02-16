@@ -249,10 +249,10 @@ class Transpose(ConversionOps):
     Transposes the given tensor along dim0 and dim1.
     """
 
-    def __init__(self, dim0: int = 0, dim1: int = 1, sentinel_dim: int | None = None):
+    def __init__(self, dim0: int = 0, dim1: int = 1, sentinel: bool = False):
         self.dim0 = dim0
         self.dim1 = dim1
-        self.sentinel_dim = sentinel_dim
+        self.sentinel = sentinel
 
     @torch.no_grad
     def convert(
@@ -262,13 +262,14 @@ class Transpose(ConversionOps):
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         # In this case, always transpose
-        if self.sentinel_dim is None:
+        if not self.sentinel:
             return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
-        # In this case, check the sentinel before transposing
+        # In this case, check the shapes before transposing
         else:
-            sentinel_size = kwargs["model"].get_parameter(kwargs["full_layer_name"]).shape[self.sentinel_dim]
-            # The sentinel check is True: do NOT transpose
-            if tensor.shape[self.sentinel_dim] == sentinel_size:
+            # NOTE: this rely on the first param name, so cannot be used for many-to-one operation
+            expected_shape = kwargs["model"].get_parameter(kwargs["full_layer_name"]).shape
+            # The shapes are the same: do NOT transpose
+            if tensor.shape == expected_shape:
                 return {target_pattern: tensor}
             else:
                 return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
@@ -290,7 +291,7 @@ class Transpose(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return Transpose(dim0=self.dim1, dim1=self.dim0, sentinel_dim=self.sentinel_dim)
+        return Transpose(dim0=self.dim1, dim1=self.dim0, sentinel=self.sentinel)
 
 
 class PermuteForRope(ConversionOps):
