@@ -277,9 +277,9 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         # Opt-out: use_associative_scan=False → compiled sequential loop
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, dtype=torch.float16, use_associative_scan=False
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16, use_associative_scan=False).to(
+            torch_device
+        )
         model.eval()
         model.forward = torch.compile(model.forward)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False, use_cache=False)
@@ -289,9 +289,9 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         torch.cuda.empty_cache()
 
         # Opt-in: use_associative_scan=True → compiled associative scan
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, dtype=torch.float16, use_associative_scan=True
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16, use_associative_scan=True).to(
+            torch_device
+        )
         model.eval()
         model.forward = torch.compile(model.forward)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False, use_cache=False)
