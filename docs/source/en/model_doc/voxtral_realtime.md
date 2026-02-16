@@ -159,6 +159,10 @@ This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb)
 
 [[autodoc]] VoxtralRealtimeEncoderConfig
 
+## VoxtralRealtimeTextConfig
+
+[[autodoc]] VoxtralRealtimeTextConfig
+
 ## VoxtralRealtimeFeatureExtractor
 
 [[autodoc]] VoxtralRealtimeFeatureExtractor

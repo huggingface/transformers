@@ -54,15 +54,11 @@ class VoxtralRealtimeEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin)
                 Number of hidden layers in the Transformer encoder.
             num_attention_heads (`int`, *optional*, defaults to 32):
                 Number of attention heads for each attention layer in the Transformer encoder.
-            scale_embedding (`bool`, *optional*, defaults to `False`):
-                Scale embeddings by dividing by sqrt(hidden_size) if True.
             activation_function (`str`, *optional*, defaults to `"gelu"`):
                 The non-linear activation function (function or string) in the encoder and pooler.
             num_mel_bins (`int`, *optional*, defaults to 128):
                 Number of mel features used per input features. Should correspond to the value used in the
                 `VoxtralRealtimeProcessor` class.
-            max_source_positions (`int`, *optional*, defaults to 1500):
-                The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
             initializer_range (`float`, *optional*, defaults to 0.02):
                 The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
             attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -110,10 +106,8 @@ class VoxtralRealtimeEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin)
         intermediate_size=5120,
         num_hidden_layers=32,
         num_attention_heads=32,
-        scale_embedding=False,
         activation_function="gelu",
         num_mel_bins=128,
-        max_source_positions=1500,
         initializer_range=0.02,
         attention_dropout=0.0,
         hidden_act="silu",
@@ -130,10 +124,8 @@ class VoxtralRealtimeEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin)
         self.num_hidden_layers = num_hidden_layers
 
         self.num_attention_heads = num_attention_heads
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(hidden_size) if True
         self.activation_function = activation_function
         self.num_mel_bins = num_mel_bins
-        self.max_source_positions = max_source_positions
         self.initializer_range = initializer_range
         self.num_key_value_heads = num_attention_heads
         self.rms_norm_eps = rms_norm_eps

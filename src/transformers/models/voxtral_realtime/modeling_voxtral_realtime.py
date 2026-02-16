@@ -42,7 +42,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto import AutoModel, AutoModelForCausalLM
+from ..auto import AutoModel
 from .configuration_voxtral_realtime import (
     VoxtralRealtimeConfig,
     VoxtralRealtimeEncoderConfig,
@@ -963,7 +963,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size
         self.audio_tower = AutoModel.from_config(config.audio_config)
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        self.language_model = VoxtralRealtimeTextForCausalLM(config.text_config)
         self.multi_modal_projector = VoxtralRealtimeMultiModalProjector(config)
         self.time_embedding = VoxtralRealtimeTimeEmbedding(config.text_config.hidden_size)
 
@@ -1333,4 +1333,4 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         return generation_config
 
 
-__all__ = ["VoxtralRealtimeForConditionalGeneration", "VoxtralRealtimeEncoder", "VoxtralRealtimeTextForCausalLM"]
+__all__ = ["VoxtralRealtimeForConditionalGeneration", "VoxtralRealtimeEncoder", "VoxtralRealtimePreTrainedModel"]

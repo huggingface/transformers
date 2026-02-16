@@ -595,6 +595,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
 
     def __init__(self, config):
         super().__init__(config)
+        self.language_model = VoxtralRealtimeTextForCausalLM(config.text_config)
         self.time_embedding = VoxtralRealtimeTimeEmbedding(config.text_config.hidden_size)
 
     @can_return_tuple
@@ -945,6 +946,6 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
 __all__ = [
     "VoxtralRealtimeForConditionalGeneration",
     "VoxtralRealtimeEncoder",
-    "VoxtralRealtimeTextForCausalLM",
     "VoxtralRealtimeFeatureExtractor",
+    "VoxtralRealtimePreTrainedModel",
 ]
