@@ -131,6 +131,7 @@ class FalconMambaConfig(PreTrainedConfig):
         rescale_prenorm_residual=False,
         use_cache=True,
         use_falcon_mambapy=False,
+        use_falcon_associative_scan=True,
         mixer_rms_eps=1e-6,
         tie_word_embeddings=True,
         **kwargs,
@@ -165,6 +166,7 @@ class FalconMambaConfig(PreTrainedConfig):
         self.residual_in_fp32 = residual_in_fp32
         self.use_cache = use_cache
         self.use_falcon_mambapy = use_falcon_mambapy
+        self.use_associative_scan = use_falcon_associative_scan
         self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
