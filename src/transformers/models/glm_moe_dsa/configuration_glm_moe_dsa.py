@@ -34,80 +34,79 @@ class GlmMoeDsaConfig(PreTrainedConfig):
 
 
     Args:
-            vocab_size (`int`, *optional*, defaults to 154880):
-                Vocabulary size of the model. Defines the number of different tokens that can be represented by the
-                `inputs_ids` passed when calling [`GlmMoeDsaModel`].
-            hidden_size (`int`, *optional*, defaults to 6144):
-                Dimension of the hidden representations.
-            intermediate_size (`int`, *optional*, defaults to 12288):
-                Dimension of the dense MLP representations.
-            moe_intermediate_size (`int`, *optional*, defaults to 2048):
-                Dimension of the MoE expert representations.
-            num_hidden_layers (`int`, *optional*, defaults to 78):
-                Number of hidden layers in the Transformer decoder.
-            num_attention_heads (`int`, *optional*, defaults to 64):
-                Number of attention heads for each attention layer in the Transformer decoder.
-            num_key_value_heads (`int`, *optional*, defaults to 64):
-                Number of key-value heads for Grouped Query Attention. If equal to `num_attention_heads`, uses MHA.
-            n_shared_experts (`int`, *optional*, defaults to 1):
-                Number of shared experts in MoE layers.
-            n_routed_experts (`int`, *optional*, defaults to 256):
-                Number of routed experts in MoE layers.
-            routed_scaling_factor (`float`, *optional*, defaults to 2.5):
-                Scaling factor for routed experts.
-            kv_lora_rank (`int`, *optional*, defaults to 512):
-                Rank of the LoRA matrices for key and value projections (MLA).
-            q_lora_rank (`int`, *optional*, defaults to 2048):
-                Rank of the LoRA matrices for query projections (MLA).
-            qk_rope_head_dim (`int`, *optional*, defaults to 64):
-                Dimension of the query/key heads that use rotary position embeddings.
-            qk_nope_head_dim (`int`, *optional*, defaults to 192):
-                Dimension of the query/key heads that don't use rotary position embeddings.
-            v_head_dim (`int`, *optional*, defaults to 256):
-                Dimension of the value heads.
-            n_group (`int`, *optional*, defaults to 1):
-                Number of groups for routed experts.
-            topk_group (`int`, *optional*, defaults to 1):
-                Number of selected groups for each token.
-            num_experts_per_tok (`int`, *optional*, defaults to 8):
-                Number of experts selected per token.
-            norm_topk_prob (`bool`, *optional*, defaults to `True`):
-                Whether to normalize the weights of the routed experts.
-            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-                The non-linear activation function in the decoder.
-            max_position_embeddings (`int`, *optional*, defaults to 202752):
-                The maximum sequence length that this model might ever be used with.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-                The epsilon used by the rms normalization layers.
-            use_cache (`bool`, *optional*, defaults to `True`):
-                Whether or not the model should return the last key/values attentions.
-            pad_token_id (`int`, *optional*):
-                Padding token id.
-            bos_token_id (`int`, *optional*, defaults to 0):
-                Beginning of stream token id.
-            eos_token_id (`int`, *optional*, defaults to 1):
-                End of stream token id.
-            tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-                Whether to tie weight embeddings.
-            rope_parameters (`RopeParameters`, *optional*):
-                Configuration parameters for the RoPE embeddings, including `rope_theta` and optional scaling parameters.
-            rope_interleave (`bool`, *optional*, defaults to `True`):
-                Whether to interleave the rotary position embeddings.
-            mlp_layer_types (`list`, *optional*):
-                MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to 3 dense + rest sparse.
-            attention_bias (`bool`, *optional*, defaults to `False`):
-                Whether to use a bias in the query, key, value and output projection layers during self-attention.
-            attention_dropout (`float`, *optional*, defaults to 0.0):
-                The dropout ratio for the attention probabilities.
-            index_topk (`int`, *optional*, defaults to 2048):
-                Number of top tokens selected by the indexer for sparse attention.
-            index_head_dim (`int`, *optional*, defaults to 128):
-                Head dimension for the indexer projections (DSA).
-            index_n_heads (`int | None`, *optional*, defaults to 32): <fill_docstring>
-            indexer_rope_interleave (`bool`, *optional*, defaults to `True`):
-                Whether the indexer uses interleaved rotary position embeddings.
+        vocab_size (`int`, *optional*, defaults to 154880):
+            Vocabulary size of the model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`GlmMoeDsaModel`].
+        hidden_size (`int`, *optional*, defaults to 6144):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 12288):
+            Dimension of the dense MLP representations.
+        moe_intermediate_size (`int`, *optional*, defaults to 2048):
+            Dimension of the MoE expert representations.
+        num_hidden_layers (`int`, *optional*, defaults to 78):
+            Number of hidden layers in the Transformer decoder.
+        num_attention_heads (`int`, *optional*, defaults to 64):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        num_key_value_heads (`int`, *optional*, defaults to 64):
+            Number of key-value heads for Grouped Query Attention. If equal to `num_attention_heads`, uses MHA.
+        n_shared_experts (`int`, *optional*, defaults to 1):
+            Number of shared experts in MoE layers.
+        n_routed_experts (`int`, *optional*, defaults to 256):
+            Number of routed experts in MoE layers.
+        routed_scaling_factor (`float`, *optional*, defaults to 2.5):
+            Scaling factor for routed experts.
+        kv_lora_rank (`int`, *optional*, defaults to 512):
+            Rank of the LoRA matrices for key and value projections (MLA).
+        q_lora_rank (`int`, *optional*, defaults to 2048):
+            Rank of the LoRA matrices for query projections (MLA).
+        qk_rope_head_dim (`int`, *optional*, defaults to 64):
+            Dimension of the query/key heads that use rotary position embeddings.
+        qk_nope_head_dim (`int`, *optional*, defaults to 192):
+            Dimension of the query/key heads that don't use rotary position embeddings.
+        v_head_dim (`int`, *optional*, defaults to 256):
+            Dimension of the value heads.
+        n_group (`int`, *optional*, defaults to 1):
+            Number of groups for routed experts.
+        topk_group (`int`, *optional*, defaults to 1):
+            Number of selected groups for each token.
+        num_experts_per_tok (`int`, *optional*, defaults to 8):
+            Number of experts selected per token.
+        norm_topk_prob (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the weights of the routed experts.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function in the decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 202752):
+            The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the rms normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 0):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 1):
+            End of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Configuration parameters for the RoPE embeddings, including `rope_theta` and optional scaling parameters.
+        rope_interleave (`bool`, *optional*, defaults to `True`):
+            Whether to interleave the rotary position embeddings.
+        mlp_layer_types (`list`, *optional*):
+            MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to 3 dense + rest sparse.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        index_topk (`int`, *optional*, defaults to 2048):
+            Number of top tokens selected by the indexer for sparse attention.
+        index_head_dim (`int`, *optional*, defaults to 128):
+            Head dimension for the indexer projections (DSA).
+        indexer_rope_interleave (`bool`, *optional*, defaults to `True`):
+            Whether the indexer uses interleaved rotary position embeddings.
 
     ```python
     >>> from transformers import GlmMoeDsaConfig, GlmMoeDsaModel
