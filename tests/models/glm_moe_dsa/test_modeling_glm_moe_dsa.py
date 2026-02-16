@@ -137,7 +137,6 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip("DSA indexer mask shape mismatch with assisted decoding")
     @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
