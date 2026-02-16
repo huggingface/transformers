@@ -215,7 +215,15 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
         self.model_tester = CLIPVisionModelTester(self)
         self.config_tester = ConfigTester(self, config_class=CLIPVisionConfig, has_text_modality=False, hidden_size=37)
 
+    def test_batching_equivalence(self):
+        assert 3 == 4
+
+    def test_foo(self):
+        assert 1 == 3
+        self.config_tester.run_common_tests()
+
     def test_config(self):
+        assert 1 == 2
         self.config_tester.run_common_tests()
 
     @unittest.skip(reason="CLIP does not use inputs_embeds")
@@ -398,6 +406,9 @@ class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
         self.model_tester = CLIPTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=CLIPTextConfig, hidden_size=37)
 
+    def test_batching_equivalence(self):
+        raise ValueError("test test!!!")
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -525,6 +536,9 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.config_tester = ConfigTester(
             self, config_class=CLIPConfig, has_text_modality=False, common_properties=common_properties
         )
+
+    def test_batching_equivalence(self):
+        raise ValueError("test test!!!")
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
