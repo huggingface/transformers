@@ -235,6 +235,8 @@
     title: SpQR
   - local: quantization/vptq
     title: VPTQ
+  - local: quantization/sinq
+    title: SINQ
   - local: quantization/contribute
     title: Contribute
   title: Quantization
@@ -1281,6 +1283,8 @@
         title: VisualBERT
       - local: model_doc/voxtral
         title: Voxtral
+      - local: model_doc/voxtral_realtime
+        title: VoxtralRealtime
       - local: model_doc/xclip
         title: X-CLIP
       title: Multimodal models
