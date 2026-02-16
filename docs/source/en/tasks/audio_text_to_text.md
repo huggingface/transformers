@@ -217,7 +217,7 @@ Load the Audio Flamingo model. We use `bfloat16` precision and `device_map="auto
 ```
 
 > [!TIP]
-> This LoRA configuration targets the language model's attention and feed-forward layers, which is sufficient for fine-tuning on audio captioning tasks while saving on compute. The audio encoder remains frozen and uses its pretrained weights.
+> [LoRA](https://huggingface.co/docs/peft/main/conceptual_guides/lora) significantly reduces memory usage and training time by only updating a small number of adapter parameters instead of the full model. This configuration targets the language model's attention and feed-forward layers while keeping the audio encoder frozen, making it possible to fine-tune on a single GPU.
 
 
 ### Setup training
