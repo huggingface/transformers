@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+import numpy as np
+
 from ...configuration_utils import PretrainedConfig
 
 
@@ -99,6 +101,10 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         self.downsampling_ratios = downsampling_ratios
         self.depths = depths
         self.vae_std = vae_std
+
+    @property
+    def hop_length(self):
+        return int(np.prod(self.downsampling_ratios))
 
     @property
     def upsampling_ratios(self):
