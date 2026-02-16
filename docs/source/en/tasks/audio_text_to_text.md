@@ -52,13 +52,20 @@ decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:],
 print(decoded_outputs)
 ```
 
+```
+["The transcription of the audio is 'summer follows spring the days grow longer and the nights are warm'."]
+```
+
 This guide will show you how to:
 
 1. Fine-tune [Audio Flamingo 3](https://huggingface.co/nvidia/audio-flamingo-3-hf) on the [AudioCaps](https://huggingface.co/datasets/OpenSound/AudioCaps) dataset for audio captioning using LoRA.
 2. Use your fine-tuned model for inference.
 
 > [!TIP]
+<<<<<<< HEAD
 
+=======
+>>>>>>> 015c027072 (nit)
 > To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/audio-text-to-text).
 
 
@@ -72,7 +79,6 @@ We encourage you to login to your Hugging Face account so you can upload and sha
 
 ```py
 >>> from huggingface_hub import notebook_login
-
 >>> notebook_login()
 ```
 
@@ -182,7 +188,6 @@ Load the Audio Flamingo model. We use `bfloat16` precision and `device_map="auto
 ```py
 >>> from transformers import AudioFlamingo3ForConditionalGeneration
 >>> import torch
-
 >>> model = AudioFlamingo3ForConditionalGeneration.from_pretrained(
 ...     "nvidia/audio-flamingo-3-hf",
 ...     torch_dtype=torch.bfloat16,
@@ -215,7 +220,6 @@ Load the Audio Flamingo model. We use `bfloat16` precision and `device_map="auto
 ...     bias="none",
 ...     task_type="CAUSAL_LM",
 ... )
-
 >>> model = get_peft_model(model, lora_config)
 >>> model.print_trainable_parameters()
 ```
@@ -264,7 +268,6 @@ Pass the training arguments to [`Trainer`] along with the model, datasets, and d
 ...     eval_dataset=eval_dataset,
 ...     data_collator=data_collator,
 ... )
-
 >>> trainer.train()
 ```
 
@@ -279,7 +282,7 @@ Once training is completed, you can optionally share your model to the Hub:
 
 ```py
 >>> # Uncomment to push to Hub
->>> # trainer.push_to_hub()
+>>> trainer.push_to_hub()
 ```
 
 ## Inference
@@ -292,7 +295,6 @@ Load the fine-tuned model and processor:
 >>> from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 >>> from peft import PeftModel
 >>> import torch
-
 >>> base_model = AudioFlamingo3ForConditionalGeneration.from_pretrained(
 ...     "nvidia/audio-flamingo-3-hf",
 ...     torch_dtype=torch.bfloat16,
@@ -338,7 +340,6 @@ Generate a response:
 ```py
 >>> with torch.no_grad():
 ...     output_ids = model.generate(**inputs, max_new_tokens=100)
-
 >>> # Decode only the generated tokens
 >>> input_len = inputs["input_ids"].shape[1]
 >>> response = processor.tokenizer.decode(output_ids[0][input_len:], skip_special_tokens=True)
@@ -354,13 +355,11 @@ You can also use the [`Pipeline`] API for quick inference. First, merge the LoRA
 
 >>> # Merge LoRA adapter for pipeline use
 >>> merged_model = model.merge_and_unload()
-
 >>> pipe = pipeline(
 ...     "audio-text-to-text",
 ...     model=merged_model,
 ...     processor=processor,
 ... )
-
 >>> result = pipe(
 ...     sample["audio"]["array"],
 ...     generate_kwargs={"max_new_tokens": 100},
