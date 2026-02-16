@@ -190,4 +190,3 @@ class SinqTest(unittest.TestCase):
             self.assertGreater(len(decoded), len(self.input_text))
 
             del loaded_model
-
