@@ -86,7 +86,7 @@ class SinqHfQuantizer(HfQuantizer):
 
         if not torch.cuda.is_available():
             logger.warning(
-                "No CUDA is available. Quantization and inference run on CPU. Please note that this will significantly slow down inference speed and increase quantization time."
+                "No CUDA device is available. Quantization and inference will run on the CPU. Please note that this will significantly slow down inference speed and increase quantization time."
             )
 
         device_map = kwargs.get("device_map")
