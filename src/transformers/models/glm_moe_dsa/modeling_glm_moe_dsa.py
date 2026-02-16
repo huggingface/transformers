@@ -391,7 +391,7 @@ class GlmMoeDsaAttention(nn.Module):
         indexer_mask = (
             attention_mask[:, 0, :, :]
             if attention_mask is not None and attention_mask.dim() == 4
-            else attention_mask.unsqueeze(1)
+            else attention_mask.unsqueeze(1) if attention_mask is not None else None
         )
         topk_indices = self.indexer(
             hidden_states,

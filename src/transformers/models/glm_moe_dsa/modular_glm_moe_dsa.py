@@ -543,11 +543,11 @@ class GlmMoeDsaAttention(nn.Module):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # ===== Indexer (DSA sparse mask) =====
-        # attention_mask is [B, 1, S, T] (4D) but indexer works with [B, S, T] (3D)
+        # attention_mask is [B, 1, S, T] (4D) for eager and (2D) otherwise but indexer works with [B, S, T] (3D)
         indexer_mask = (
             attention_mask[:, 0, :, :]
             if attention_mask is not None and attention_mask.dim() == 4
-            else attention_mask.unsqueeze(1)
+            else attention_mask.unsqueeze(1) if attention_mask is not None else None
         )
         topk_indices = self.indexer(
             hidden_states,
