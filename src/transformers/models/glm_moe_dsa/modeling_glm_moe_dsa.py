@@ -391,7 +391,9 @@ class GlmMoeDsaAttention(nn.Module):
         indexer_mask = (
             attention_mask[:, 0, :, :]
             if attention_mask is not None and attention_mask.dim() == 4
-            else attention_mask.unsqueeze(1) if attention_mask is not None else None
+            else attention_mask.unsqueeze(1)
+            if attention_mask is not None
+            else None
         )
         topk_indices = self.indexer(
             hidden_states,
@@ -477,7 +479,7 @@ class GlmMoeDsaTopkRouter(nn.Module):
         self.norm_topk_prob = config.norm_topk_prob
 
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros((self.n_routed_experts), dtype=torch.float32))
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
@@ -655,9 +657,6 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        # Skip normal_ initialization for FP8 quantized weights which don't support it
-        if isinstance(module, nn.Linear) and hasattr(module, "weight") and module.weight.dtype == torch.float8_e4m3fn:
-            return
         super()._init_weights(module)
         if isinstance(module, GlmMoeDsaTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
