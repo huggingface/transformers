@@ -295,7 +295,7 @@ class VoxtralRealtimeForConditionalGenerationModelTest(
 @require_torch
 class VoxtralRealtimeForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint_name = "/raid/eustache/Voxtral-Mini-4B-Realtime-2602-hf"
+        self.checkpoint_name = "mistralai/Voxtral-Mini-4B-Realtime-2602"
         self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
 
     def tearDown(self):
