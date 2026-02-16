@@ -156,6 +156,39 @@ def batched_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
+def grouped_mm(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    offs: torch.Tensor | None = None,
+    bias: torch.Tensor | None = None,
+):
+    """Grouped matrix multiplication dispatcher that uses torch.nn.functional.grouped_mm if available, else falls back to torch._grouped_mm.
+    Args:
+        input (`torch.Tensor`):
+            Input tensor of shape (S, input_dim).
+        weight (`torch.Tensor`):
+            Weight tensor of shape (num_experts, output_dim, input_dim).
+        bias (`torch.Tensor`, *optional*):
+            Bias tensor of shape (num_experts, output_dim). Default is `None`.
+        offs (`torch.Tensor`, *optional*):
+            Offsets tensor indicating the boundaries of each group in the input tensor.
+    Returns:
+        `torch.Tensor`: Output tensor of shape (S, output_dim).
+    Raises:
+        ImportError: If neither `torch.nn.functional.grouped_mm` nor `torch._grouped_mm` is available, indicating that the PyTorch version is incompatible.
+    """
+
+    if hasattr(torch.nn.functional, "grouped_mm"):
+        return torch.nn.functional.grouped_mm(input, weight, bias=bias, offs=offs)
+    elif hasattr(torch, "_grouped_mm"):
+        return torch._grouped_mm(input, weight, bias=bias, offs=offs)
+    else:
+        raise ImportError(
+            "Neither torch.nn.functional.grouped_mm nor torch._grouped_mm is available. "
+            "Please make sure you are using a PyTorch version that includes grouped_mm (2.9+)."
+        )
+
+
 def _grouped_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -185,10 +218,10 @@ def _grouped_linear(
     with torch.amp.autocast(device_type=input.device.type, enabled=False):
         if is_transposed:
             # (S, input_dim) @ grouped (num_experts, input_dim, output_dim) -> (S, output_dim)
-            out = torch.nn.functional.grouped_mm(input, weight, offs=offs)
+            out = grouped_mm(input, weight.transpose(-2, -1), bias=bias, offs=offs)
         else:
             # (S, input_dim) @ grouped (num_experts, output_dim, input_dim).T -> (S, output_dim)
-            out = torch.nn.functional.grouped_mm(input, weight.transpose(-2, -1), offs=offs)
+            out = grouped_mm(input, weight, bias=bias, offs=offs)
 
     if bias is not None:
         # We should be able to pass bias to the grouped_mm call, but it's not yet supported.
@@ -203,12 +236,6 @@ def grouped_mm_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    if not hasattr(torch.nn.functional, "grouped_mm"):
-        raise ImportError(
-            "torch.nn.functional.grouped_mm is not available. "
-            "Please make sure you are using a PyTorch version that includes it (2.10+)."
-        )
-
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
