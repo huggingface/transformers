@@ -227,7 +227,7 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # background color length should match channel length
             if image_inputs[0].shape[0] == image_inputs[0].shape[1]:
                 # This avoids a source of test flakiness - if the image is already square
-                # no padding is done and background length is not chacked.
+                # no padding is done and background colour is not checked.
                 return
 
             with self.assertRaises(ValueError):
