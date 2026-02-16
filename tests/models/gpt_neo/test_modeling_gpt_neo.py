@@ -458,7 +458,7 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         attention_mask = attention_mask[:, None, None, :]
         attention_mask = (1.0 - attention_mask) * -10000.0
 
-        attn_probs = layer(hidden_states, attention_mask=attention_mask, output_attentions=True)[-1]
+        attn_probs = layer(hidden_states, attention_mask=attention_mask)[-1]
 
         # the last 2 tokens are masked, and should have 0 attn_probs
         self.assertTrue(torch.all(attn_probs[:, :, -mask_tokens:, -mask_tokens:] == 0))

@@ -39,6 +39,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_gpt_neo import GPTNeoConfig
 
@@ -398,6 +399,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
