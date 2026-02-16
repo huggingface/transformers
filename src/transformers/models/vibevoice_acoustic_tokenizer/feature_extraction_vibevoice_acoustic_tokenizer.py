@@ -25,7 +25,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-@requires(backends=("vision",))
+@requires(backends=("torch",))
 class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a VibeVoiceAcousticTokenizer feature extractor.
