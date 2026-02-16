@@ -547,7 +547,9 @@ class GlmMoeDsaAttention(nn.Module):
         indexer_mask = (
             attention_mask[:, 0, :, :]
             if attention_mask is not None and attention_mask.dim() == 4
-            else attention_mask.unsqueeze(1) if attention_mask is not None else None
+            else attention_mask.unsqueeze(1)
+            if attention_mask is not None
+            else None
         )
         topk_indices = self.indexer(
             hidden_states,
@@ -618,13 +620,6 @@ class GlmMoeDsaPreTrainedModel(Glm4MoePreTrainedModel):
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        # Skip normal_ initialization for FP8 quantized weights which don't support it
-        if isinstance(module, nn.Linear) and hasattr(module, "weight") and module.weight.dtype == torch.float8_e4m3fn:
-            return
-        super()._init_weights(module)
 
 
 class GlmMoeDsaModel(Glm4MoeModel):

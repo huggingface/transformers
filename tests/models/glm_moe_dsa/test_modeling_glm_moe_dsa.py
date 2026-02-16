@@ -16,6 +16,7 @@
 import unittest
 
 import torch
+from parameterized import parameterized
 
 from transformers import (
     AutoModelForCausalLM,
@@ -31,12 +32,13 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     slow,
 )
-from parameterized import parameterized
-from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
 )
+
+
 if is_torch_available():
     from transformers import GlmMoeDsaForCausalLM, GlmMoeDsaModel
 
@@ -103,15 +105,21 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip("Not sure MoE can pass this + indexer outputs are not deterministic wrt padding")
-    def test_left_padding_compatibility(self,):
+    def test_left_padding_compatibility(
+        self,
+    ):
         pass
 
     @unittest.skip("Not sure MoE can pass this + indexer outputs are not deterministic wrt padding")
-    def test_sdpa_padding_matches_padding_free_with_position_ids(self,):
+    def test_sdpa_padding_matches_padding_free_with_position_ids(
+        self,
+    ):
         pass
 
     @unittest.skip("Not sure MoE can pass this + indexer outputs are not deterministic wrt padding")
-    def test_training_overfit(self,):
+    def test_training_overfit(
+        self,
+    ):
         pass
 
     @require_torch_accelerator
