@@ -110,6 +110,11 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
         num_channels = images.shape[1]
         batch_size = images.shape[0]
 
+        if height == width:
+            return images
+
+        max_dim = max(height, width)
+
         # Ensure background_color is the correct shape
         if isinstance(background_color, int):
             background_color = [background_color]
@@ -117,11 +122,6 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
             raise ValueError(
                 f"background_color must have no more than {num_channels} elements to match the number of channels"
             )
-
-        if height == width:
-            return images
-
-        max_dim = max(height, width)
 
         padded_images = torch.zeros(
             (batch_size, num_channels, max_dim, max_dim), dtype=images.dtype, device=images.device
