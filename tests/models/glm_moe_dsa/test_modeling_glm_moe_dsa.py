@@ -31,10 +31,12 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     slow,
 )
-
+from parameterized import parameterized
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
-
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+)
 if is_torch_available():
     from transformers import GlmMoeDsaForCausalLM, GlmMoeDsaModel
 
@@ -95,16 +97,9 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
             config.mlp_layer_types, ["dense", "dense", "dense", "sparse", "sparse", "sparse", "sparse", "sparse"]
         )
 
-    @unittest.skip("Atol to update for this model, in a rush")
-    def _test_eager_matches_sdpa_inference(        self,
-        name,
-        dtype,
-        padding_side,
-        use_attention_mask,
-        output_attentions,
-        enable_kernels,
-        atols=None,
-        rtols=None):
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip("Won't fix: Blip2 + T5 backbone needs custom input preparation for this test")
+    def test_eager_matches_sdpa_inference(self, *args):
         pass
 
     @unittest.skip("Not sure MoE can pass this + indexer outputs are not deterministic wrt padding")
