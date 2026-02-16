@@ -84,7 +84,6 @@ Start by loading the [AudioCaps](https://huggingface.co/datasets/OpenSound/Audio
 
 ```py
 >>> from datasets import load_dataset, Audio
-
 >>> dataset = load_dataset("OpenSound/AudioCaps", split="train", streaming=True)
 ```
 
@@ -122,7 +121,6 @@ Load the Audio Flamingo processor to handle both audio and text inputs:
 
 ```py
 >>> from transformers import AutoProcessor
-
 >>> processor = AutoProcessor.from_pretrained("nvidia/audio-flamingo-3-hf")
 ```
 
@@ -196,7 +194,6 @@ Load the Audio Flamingo model. We use `bfloat16` precision and `device_map="auto
 
 ```py
 >>> from peft import LoraConfig, get_peft_model
-
 >>> lora_config = LoraConfig(
 ...     r=16,  # LoRA rank
 ...     lora_alpha=32,  # LoRA scaling factor
@@ -229,7 +226,6 @@ Define training hyperparameters in [`TrainingArguments`]. Note that we use `max_
 
 ```py
 >>> from transformers import TrainingArguments, Trainer
-
 >>> training_args = TrainingArguments(
 ...     output_dir="audio-flamingo-3-hf-lora-finetuned",
 ...     per_device_train_batch_size=4,
@@ -301,7 +297,6 @@ Load an audio sample for inference:
 
 ```py
 >>> from datasets import load_dataset, Audio
-
 >>> dataset = load_dataset("OpenSound/AudioCaps", split="test", streaming=True)
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
 >>> sample = next(iter(dataset))
@@ -319,7 +314,6 @@ Prepare the input with a conversation format:
 ...         ],
 ...     }
 ... ]
-
 >>> inputs = processor.apply_chat_template(
 ...     messages,
 ...     tokenize=True,
@@ -345,7 +339,6 @@ You can also use the [`Pipeline`] API for quick inference. First, merge the LoRA
 
 ```py
 >>> from transformers import pipeline
-
 >>> # Merge LoRA adapter for pipeline use
 >>> merged_model = model.merge_and_unload()
 >>> pipe = pipeline(
