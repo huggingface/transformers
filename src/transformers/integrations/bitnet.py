@@ -386,7 +386,7 @@ class BitNetDeserialize:
                 input_dict[key] = value[0]
         key_weight = "weight"
         weight = input_dict.pop(key_weight)
-        from .bitsandbytes import get_module_from_name
+        from ..quantizers.quantizers_utils import get_module_from_name
 
         needs_unpacking = False
         target_dtype = weight.dtype
