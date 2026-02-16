@@ -156,7 +156,7 @@ def batched_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
-def grouped_mm(
+def _grouped_mm(
     input: torch.Tensor,
     weight: torch.Tensor,
     offs: torch.Tensor | None = None,
@@ -218,10 +218,10 @@ def _grouped_linear(
     with torch.amp.autocast(device_type=input.device.type, enabled=False):
         if is_transposed:
             # (S, input_dim) @ grouped (num_experts, input_dim, output_dim) -> (S, output_dim)
-            out = grouped_mm(input, weight, offs=offs)
+            out = _grouped_mm(input, weight, offs=offs)
         else:
             # (S, input_dim) @ grouped (num_experts, output_dim, input_dim).T -> (S, output_dim)
-            out = grouped_mm(input, weight.transpose(-2, -1), offs=offs)
+            out = _grouped_mm(input, weight.transpose(-2, -1), offs=offs)
 
     if bias is not None:
         # We should be able to pass bias to the grouped_mm call, but it's not yet supported.
