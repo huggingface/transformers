@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from collections.abc import Callable
 from functools import wraps
 
@@ -156,44 +157,80 @@ def batched_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
-def _grouped_mm(
+# For compatibility with torch.compile
+@torch.library.custom_op("transformers::naive_grouped_mm", mutates_args=())
+def _naive_grouped_mm(
     input: torch.Tensor,
     weight: torch.Tensor,
-    offs: torch.Tensor | None = None,
+    offs: torch.Tensor,
 ) -> torch.Tensor:
-    """Grouped matrix multiplication dispatcher that uses torch.nn.functional.grouped_mm if available, else falls back to torch._grouped_mm.
+    """
+    Naive implementation of grouped matrix multiplication using explicit for loops.
+    Used as a fallback when neither torch.nn.functional.grouped_mm nor torch._grouped_mm is available.
+
     Args:
         input (`torch.Tensor`):
             Input tensor of shape (S, input_dim).
         weight (`torch.Tensor`):
             Weight tensor of shape (num_experts, output_dim, input_dim).
-        offs (`torch.Tensor`, *optional*):
+        offs (`torch.Tensor`):
             Offsets tensor indicating the boundaries of each group in the input tensor.
     Returns:
         `torch.Tensor`: Output tensor of shape (S, output_dim).
-    Raises:
-        ImportError: If neither `torch.nn.functional.grouped_mm` nor `torch._grouped_mm` is available, indicating that the PyTorch version is incompatible.
     """
+    output = torch.zeros(input.size(0), weight.size(2), device=input.device, dtype=input.dtype)
+    for i in range(weight.size(0)):
+        start, end = offs[i - 1], offs[i]
+        output[start:end] = torch.matmul(input[start:end], weight[i])
+    return output
 
+
+# For compatibility with torch.compile
+@torch.library.register_fake("transformers::naive_grouped_mm")
+def _naive_grouped_mm_fake(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    offs: torch.Tensor,
+) -> torch.Tensor:
+    """Fake implementation of naive grouped mm for compilability purposes."""
+    return torch.empty(input.size(0), weight.size(2), device=input.device, dtype=input.dtype)
+
+
+def _grouped_mm(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    offs: torch.Tensor,
+) -> torch.Tensor:
+    """Grouped matrix multiplication dispatcher that uses torch.nn.functional.grouped_mm if available, else falls back to torch._grouped_mm.
+
+    Args:
+        input (`torch.Tensor`):
+            Input tensor of shape (S, input_dim).
+        weight (`torch.Tensor`):
+            Weight tensor of shape (num_experts, output_dim, input_dim).
+        offs (`torch.Tensor`):
+            Offsets tensor indicating the boundaries of each group in the input tensor.
+    Returns:
+        `torch.Tensor`: Output tensor of shape (S, output_dim).
+    """
     # torch.nn.functional.grouped_mm is not autocast-enabled, so if autocast is enabled we might end up with input tensors in fp32 (e.g. LayerNorm output) and weight tensors in fp16/bf16
     # In that case we need to cast the input to the weight dtype to avoid dtype mismatch errors.
     # See: https://github.com/pytorch/pytorch/issues/174763
-    if hasattr(torch.nn.functional, "grouped_mm"):
+    if os.getenv("USE_GROUPED_MM_FALLBACK") == "1":
+        return _naive_grouped_mm(input, weight, offs)
+    elif hasattr(torch.nn.functional, "grouped_mm"):
         return torch.nn.functional.grouped_mm(input.to(weight.dtype), weight, offs=offs)
     elif hasattr(torch, "_grouped_mm"):
         return torch._grouped_mm(input.to(weight.dtype), weight, offs=offs)
     else:
-        raise ImportError(
-            "Neither torch.nn.functional.grouped_mm nor torch._grouped_mm is available. "
-            "Please make sure you are using a PyTorch version that includes grouped_mm (2.9+)."
-        )
+        return _naive_grouped_mm(input, weight, offs)
 
 
 def _grouped_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
+    offs: torch.Tensor,
     bias: torch.Tensor | None = None,
-    offs: torch.Tensor | None = None,
     is_transposed: bool = False,
 ) -> torch.Tensor:
     """Grouped linear layer supporting optional bias and transposed weights.
@@ -204,10 +241,10 @@ def _grouped_linear(
         weight (`torch.Tensor`):
             Weight tensor of shape (num_experts, output_dim, input_dim) if transposed is `False`,
             else of shape (num_experts, input_dim, output_dim).
+        offs (`torch.Tensor`):
+            Offsets tensor indicating the boundaries of each group in the input tensor.
         bias (`torch.Tensor`, *optional*):
             Bias tensor of shape (num_experts, output_dim). Default is `None`.
-        offs (`torch.Tensor`, *optional*):
-            Offsets tensor indicating the boundaries of each group in the input tensor.
         is_transposed (`bool`, *optional*, defaults to `False`):
             Whether the weight tensor is transposed.
     Returns:
