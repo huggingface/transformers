@@ -175,14 +175,12 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         eos_token_id: int | None = 1,
         tie_word_embeddings: bool | None = False,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        rope_interleave: bool | None = True,
         mlp_layer_types=None,
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
         index_topk: int | None = 2048,
         index_head_dim: int | None = 128,
         index_n_heads: int | None = 32,
-        indexer_rope_interleave: bool | None = True,
         **kwargs,
     ):
         # Model dimensions
@@ -223,7 +221,6 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         self.index_topk = index_topk
         self.index_head_dim = index_head_dim
         self.index_n_heads = index_n_heads
-        self.indexer_rope_interleave = indexer_rope_interleave
 
         # General config
         self.hidden_act = hidden_act
@@ -233,7 +230,6 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
-        self.rope_interleave = rope_interleave
 
         super().__init__(
             pad_token_id=pad_token_id,
