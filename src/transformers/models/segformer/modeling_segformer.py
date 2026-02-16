@@ -505,7 +505,6 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.segformer(
             pixel_values,
@@ -531,10 +530,6 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         loss = None
         if labels is not None:
             loss = self.loss_function(labels, logits, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return SegFormerImageClassifierOutput(
             loss=loss,
