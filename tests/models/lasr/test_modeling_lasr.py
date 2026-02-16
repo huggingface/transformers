@@ -54,6 +54,7 @@ class LasrEncoderModelTester:
         subsampling_conv_channels=32,
         subsampling_conv_kernel_size=5,
         subsampling_conv_stride=2,
+        layerdrop=0.0,
     ):
         # testing suite parameters
         self.parent = parent
@@ -71,6 +72,7 @@ class LasrEncoderModelTester:
         self.subsampling_conv_channels = subsampling_conv_channels
         self.subsampling_conv_kernel_size = subsampling_conv_kernel_size
         self.subsampling_conv_stride = subsampling_conv_stride
+        self.layerdrop = layerdrop
 
         self.num_mel_bins = num_mel_bins
 
@@ -108,6 +110,7 @@ class LasrEncoderModelTester:
             subsampling_conv_kernel_size=self.subsampling_conv_kernel_size,
             subsampling_conv_stride=self.subsampling_conv_stride,
             num_mel_bins=self.num_mel_bins,
+            layerdrop=self.layerdrop,
         )
 
     def create_and_check_model(self, config, input_features, attention_mask):
