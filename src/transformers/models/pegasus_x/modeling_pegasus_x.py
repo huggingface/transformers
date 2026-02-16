@@ -37,6 +37,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_pegasus_x import PegasusXConfig
 
 
@@ -97,21 +98,22 @@ class PegasusXSinusoidalPositionalEmbedding(nn.Module):
         self.embed_dim = embed_dim
         self.max_scale = max_scale
 
+    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     @torch.no_grad()
     def forward(
-        self, input_embeds: torch.Tensor, past_key_values_length: int = 0, position_ids: torch.Tensor | None = None
+        self, inputs_embeds: torch.Tensor, past_key_values_length: int = 0, position_ids: torch.Tensor | None = None
     ) -> torch.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        batch_size, seq_len = input_embeds.shape[:2]
+        batch_size, seq_len = inputs_embeds.shape[:2]
         if position_ids is None:
             position_ids = torch.arange(
-                past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=input_embeds.device
+                past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=inputs_embeds.device
             )[:, None]
 
-        pe = torch.zeros((seq_len, self.embed_dim), device=input_embeds.device, dtype=input_embeds.dtype)
+        pe = torch.zeros((seq_len, self.embed_dim), device=inputs_embeds.device, dtype=inputs_embeds.dtype)
         half_d_feature = self.embed_dim // 2
         div_term = torch.exp(
-            torch.arange(half_d_feature, device=input_embeds.device, dtype=torch.int64).type_as(input_embeds)
+            torch.arange(half_d_feature, device=inputs_embeds.device, dtype=torch.int64).type_as(inputs_embeds)
             * -(np.log(float(self.max_scale)) / (half_d_feature - 1))
         )
         pe[:, :half_d_feature] = torch.sin(position_ids * div_term)
@@ -1098,14 +1100,14 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=self_attn_cache,
         )
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
         )
