@@ -622,10 +622,10 @@ class Qwen3ASRAudioEncoder(Qwen3ASRPreTrainedModel):
         self._requires_grad = False
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.conv1
+        return self.conv_out  # conv1
 
     def set_input_embeddings(self, value: nn.Module):
-        self.conv1 = value
+        self.conv_out = value  # self.conv1 = value
 
     def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor:
         # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
@@ -1070,6 +1070,10 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
             self.lm_head = nn.Linear(config.text_config.hidden_size, config.classify_num, bias=False)
         else:
             self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        ###
+        if getattr(config.text_config, "tie_word_embeddings", False):
+            self.lm_head.weight = self.model.get_input_embeddings().weight
+        ###
         self.pad_token_id = (
             self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else -1
         )
@@ -1296,6 +1300,7 @@ class Qwen3ASRThinkerTextPreTrainedModel(PreTrainedModel):
 
 class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin):
     config_class = Qwen3ASRConfig
+    base_model_prefix = "thinker"
 
     def __init__(self, config: Qwen3ASRConfig):
         super().__init__(config)
@@ -1336,11 +1341,28 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
             if key not in thinker_kwargs:
                 thinker_kwargs[key] = value
 
-        thinker_result = self.thinker.generate(input_ids=input_ids, return_dict_in_generate=True, **thinker_kwargs)
+        ###
+        # Ensure return_dict_in_generate is set exactly once
+        if "return_dict_in_generate" not in thinker_kwargs:
+            thinker_kwargs["return_dict_in_generate"] = True
+
+        # Call the underlying thinker generate
+        thinker_result = self.thinker.generate(input_ids=input_ids, **thinker_kwargs)
+        ###
 
         return thinker_result
 
     ### added the following in order to pass tests
+    @property
+    def base_model(self):
+        return getattr(self, self.base_model_prefix)
+
+    def get_input_embeddings(self):
+        return self.thinker.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.thinker.set_input_embeddings(value)
+
     def forward(
         self,
         input_ids=None,

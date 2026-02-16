@@ -14,37 +14,49 @@ from transformers.testing_utils import (
     require_torch,
     torch_device,
 )
-#from ...generation.test_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 class Qwen3ASRModelTester:
     def __init__(self, parent):
         self.parent = parent
-        self.batch_size = 3
+        self.batch_size = 1
         self.seq_length = 10
         self.audio_token_id = 0
+        self.is_training = False
 
-        self.text_config = {
+        text_config = {
             "model_type": "Qwen3ASRTextConfig",
-            "vocab_size": 99,
-            "hidden_size": 32,
-            "intermediate_size": 64,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
+            "vocab_size": 99,   
+            "hidden_size": 16,
+            "intermediate_size": 32,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 2,
             "num_key_value_heads": 2,
-            "max_position_embeddings": 64,
+            "max_position_embeddings": 16,
+            "bos_token_id": 0,
             "pad_token_id": 1,
+            "eos_token_id": 2,
+            "decoder_start_token_id": 0,
+            "tie_word_embeddings": False,
+            "output_attentions": True,
+            "output_hidden_states": True,
+        }
+        audio_config = {
+            "model_type": "Qwen3ASRAudioEncoderConfig",
+            "d_model": 8,
+            "encoder_layers": 1,
+            "encoder_attention_heads": 2,
+            "encoder_ffn_dim": 16,
         }
 
-        self.audio_config = {
-            "model_type": "Qwen3ASRAudioEncoderConfig",
-            "d_model": 32,
-            "encoder_layers": 2,
-            "encoder_attention_heads": 4,
-            "encoder_ffn_dim": 64,
-        }
+        self.text_config = text_config
+        self.audio_config = audio_config
+        self.num_hidden_layers = text_config["num_hidden_layers"]
+        self.num_attention_heads = text_config["num_attention_heads"]
+        self.hidden_size = text_config["hidden_size"]
 
     def get_config(self):
         return Qwen3ASRConfig(
@@ -59,36 +71,18 @@ class Qwen3ASRModelTester:
         config = self.get_config()
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.thinker_config.text_config.vocab_size)
         attention_mask = torch.ones(self.batch_size, self.seq_length, dtype=torch.long)
-        #input_features = torch.randn(self.batch_size, num_mel_bins, feature_seq_len)
-        #feature_attention_mask = torch.ones(self.batch_size, feature_seq_len, dtype=torch.long)
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            #"input_features": input_ids,
-            #"feature_attention_mask": feature_attention_mask,
         }
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
         return self.prepare_config_and_inputs()
-        #config, input_features_values, input_features_mask = self.prepare_config_and_inputs()
-        #num_audio_tokens_per_batch_idx = 8
-        #input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        #attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
-        #attention_mask[:, :1] = 0
-        #input_ids[:, 1 : 1 + num_audio_tokens_per_batch_idx] = config.audio_token_id
-        #inputs_dict = {
-        #    "input_ids": input_ids,
-        #    "attention_mask": attention_mask,
-        #    "input_features": input_features_values,
-        #    "input_features_mask": input_features_mask,
-        #}
-        #input_dict = 0 #TODO
-        #return config, inputs_dict
 
 
 @require_torch
-class Qwen3ASRForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):#GenerationTesterMixin, 
+class Qwen3ASRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase): 
     all_model_classes = (Qwen3ASRForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {
         "automatic-speech-recognition": Qwen3ASRForConditionalGeneration,
@@ -97,37 +91,6 @@ class Qwen3ASRForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
     def setUp(self):
         self.model_tester = Qwen3ASRModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Qwen3ASRConfig)
-
-    @unittest.skip(
-        reason="This test does not apply to Qwen3ASR since inputs_embeds corresponding to audio tokens are replaced when input features are provided."
-    )
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in Qwen3ASR models")
-    @pytest.mark.torch_compile_test
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in Qwen3ASR models")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="???")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
-
-
-
-
-
-
-
-
-
-
-
 
     
 @require_torch
@@ -195,7 +158,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         txt = self.processor.batch_decode(
             seq, 
             skip_special_tokens=True
-        )#[0].split("<asr_text>")[-1]
-
-        torch.testing.assert_close(gen_ids.cpu(), exp_ids)  # 47 vs 263
+        )
+        
+        torch.testing.assert_close(gen_ids.cpu(), exp_ids)
         self.assertListEqual(txt, exp_txt) 

@@ -88,6 +88,7 @@ class Qwen3ASRAudioEncoderConfig(PretrainedConfig):
         n_window_infer=400,
         conv_chunksize=500,
         downsample_hidden_size=480,
+        attn_implementation=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -110,6 +111,7 @@ class Qwen3ASRAudioEncoderConfig(PretrainedConfig):
         self.n_window_infer = n_window_infer
         self.conv_chunksize = conv_chunksize
         self.downsample_hidden_size = downsample_hidden_size
+        self._attn_implementation = attn_implementation
 
 
 class Qwen3ASRTextConfig(PretrainedConfig):
@@ -235,6 +237,7 @@ class Qwen3ASRTextConfig(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
+        attn_implementation=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -258,6 +261,7 @@ class Qwen3ASRTextConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self._attn_implementation = attn_implementation
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
@@ -323,6 +327,7 @@ class Qwen3ASRThinkerConfig(PretrainedConfig):
         audio_start_token_id=151647,
         user_token_id=872,
         initializer_range=0.02,
+        attn_implementation=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -342,6 +347,7 @@ class Qwen3ASRThinkerConfig(PretrainedConfig):
             text_config = Qwen3ASRTextConfig()
         self.text_config = text_config
         self.audio_token_id = audio_token_id
+        self._attn_implementation = attn_implementation
 
 
 class Qwen3ASRConfig(PretrainedConfig):
@@ -387,6 +393,7 @@ class Qwen3ASRConfig(PretrainedConfig):
         self,
         thinker_config=None,
         support_languages=None,
+        attn_implementation=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -395,6 +402,7 @@ class Qwen3ASRConfig(PretrainedConfig):
 
         self.thinker_config = Qwen3ASRThinkerConfig(**thinker_config)
         self.support_languages = support_languages
+        self._attn_implementation = attn_implementation
 
     def get_text_config(self, decoder=False) -> "PretrainedConfig":
         """
@@ -409,6 +417,25 @@ class Qwen3ASRConfig(PretrainedConfig):
         # except for Qwen yet. This has to be generalized if more deeply nested configs are
         # added. NOTE: currently method used only by vLLM
         return self.thinker_config.get_text_config()
+
+    ###
+    @property
+    def num_attention_heads(self):
+        return self.thinker_config.text_config.num_attention_heads
+
+    @property
+    def hidden_size(self):
+        return self.thinker_config.text_config.hidden_size
+
+    @property
+    def vocab_size(self):
+        return self.thinker_config.text_config.vocab_size
+
+    @vocab_size.setter
+    def vocab_size(self, value):
+        self.thinker_config.text_config.vocab_size = value
+
+    ###
 
 
 __all__ = ["Qwen3ASRAudioEncoderConfig", "Qwen3ASRThinkerConfig", "Qwen3ASRConfig"]
