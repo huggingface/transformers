@@ -632,9 +632,9 @@ class DebertaV2Encoder(nn.Module):
         self,
         hidden_states,
         attention_mask,
+        output_attentions=False,
         query_states=None,
         relative_pos=None,
-        output_attentions=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         if attention_mask.dim() <= 2:
