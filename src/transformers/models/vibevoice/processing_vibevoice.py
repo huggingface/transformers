@@ -34,16 +34,9 @@ if is_soundfile_available():
 
 class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-            "add_special_tokens": False,
-            "return_tensors": "pt"
-            
-        },
+        "text_kwargs": {"padding": True, "padding_side": "left", "add_special_tokens": False, "return_tensors": "pt"},
         "audio_kwargs": {
             "sampling_rate": 24000,
-            "padding": True,    # TODO remove like in ASR model
             "pad_to_multiple_of": 3200,  # acoustic_tokenizer.hop_length
         },
         "common_kwargs": {"return_attention_mask": True},
@@ -124,7 +117,12 @@ class VibeVoiceProcessor(ProcessorMixin):
               `return_attention_mask=True`).
             - **input_values** -- List of audio values to be fed to the model. Returned when `audio` is not `None`.
             - **padding_mask** -- List of indices specifying which audio frames should be attended to by the model.
-            - **labels** -- Labels for training language model. Returned when `output_labels=True`.
+              Returned when `audio` is not `None`.
+            - **labels** -- Labels for language model training. Only padding tokens are masked with -100. Audio
+              tokens (bos, diffusion, eos) are kept as targets so the LM learns when and how much audio to generate.
+              Returned when `output_labels=True`.
+            - **acoustic_loss_mask** -- Boolean mask for positions where diffusion loss is computed. True at audio
+              diffusion token positions. Returned when `output_labels=True`.
         """
         output_kwargs = self._merge_kwargs(
             VibeVoiceProcessorKwargs,
@@ -178,14 +176,14 @@ class VibeVoiceProcessor(ProcessorMixin):
         encoding = self.tokenizer(text, **text_kwargs)
         data.update(encoding)
         if output_labels:
-            # TODO (ebezzam) for the diffusion loss, input_ids and masks need to be extended,
-            # and `acoustic_loss_mask` created
             labels = data["input_ids"].clone()
-            labels[labels == self.audio_bos_token_id] = -100
-            labels[labels == self.audio_eos_token_id] = -100
-            labels[labels == self.audio_diffusion_token_id] = -100
             labels[labels == self.tokenizer.pad_token_id] = -100
             data["labels"] = labels
+            # For diffusion loss
+            acoustic_loss_mask = torch.zeros_like(data["input_ids"], dtype=torch.bool)
+            if audio is not None:
+                acoustic_loss_mask[data["input_ids"] == self.audio_diffusion_token_id] = True
+            data["acoustic_loss_mask"] = acoustic_loss_mask
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 

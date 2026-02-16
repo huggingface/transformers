@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-08-26 and added to Hugging Face Transformers on 2025-12-09.*
+*This model was released on 2025-08-26 and added to Hugging Face Transformers on 2026-02-16.*
 
 # VibeVoice
 
@@ -79,6 +79,7 @@ model = VibeVoiceForConditionalGeneration.from_pretrained(model_id)
 
 ```python
 import os
+import diffusers
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
 
 
@@ -101,7 +102,11 @@ inputs = processor.apply_chat_template(
 ).to(model.device, model.dtype)
 
 # Generate!
-audio = model.generate(**inputs)
+noise_scheduler = diffusers.DPMSolverMultistepScheduler(
+    beta_schedule="squaredcos_cap_v2",
+    prediction_type="v_prediction",
+)
+audio = model.generate(**inputs, noise_scheduler=noise_scheduler)
 
 # Save to file
 fn = f"{os.path.basename(model_id)}_tts.wav"
@@ -117,6 +122,7 @@ A url (`url`), local path (`path`), or loaded audio array (`audio`) can be provi
 
 ```python
 import os
+import diffusers
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
 
 
@@ -138,7 +144,7 @@ chat_template = [
             {"type": "text", "text": text},
             {
                 "type": "audio",
-                "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+                "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
             },
         ],
     }
@@ -151,7 +157,11 @@ inputs = processor.apply_chat_template(
 ).to(model.device, model.dtype)
 
 # Generate!
-audio = model.generate(**inputs)
+noise_scheduler = diffusers.DPMSolverMultistepScheduler(
+    beta_schedule="squaredcos_cap_v2",
+    prediction_type="v_prediction",
+)
+audio = model.generate(**inputs, noise_scheduler=noise_scheduler)
 
 # Save to file
 fn = f"{os.path.basename(model_id)}_tts_clone.wav"
@@ -168,8 +178,10 @@ The example below also used the `monitor_progress` option to track the generatio
 ```python
 import os
 import time
+import diffusers
 import torch
 from tqdm import tqdm
+
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
 
 
@@ -189,7 +201,7 @@ chat_template = [
             },
             {
                 "type": "audio",
-                "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+                "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
             },
         ],
     },
@@ -202,7 +214,7 @@ chat_template = [
             },
             {
                 "type": "audio",
-                "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
+                "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
             },
         ],
     },
@@ -232,14 +244,15 @@ model = VibeVoiceForConditionalGeneration.from_pretrained(model_id, device_map="
 sampling_rate = processor.feature_extractor.sampling_rate
 
 # prepare inputs
-inputs = processor.apply_chat_template(
-    chat_template, 
-    tokenize=True, 
-    return_dict=True, 
-    sampling_rate=sampling_rate
-).to(model.device, model.dtype)
+inputs = processor.apply_chat_template(chat_template, tokenize=True, return_dict=True, sampling_rate=sampling_rate).to(
+    model.device, model.dtype
+)
 
 # Generate audio with a callback to track progress
+noise_scheduler = diffusers.DPMSolverMultistepScheduler(
+    beta_schedule="squaredcos_cap_v2",
+    prediction_type="v_prediction",
+)
 start_time = time.time()
 completed_samples = set()
 with tqdm(desc="Generating") as pbar:
@@ -262,6 +275,7 @@ with tqdm(desc="Generating") as pbar:
         **inputs,
         max_new_tokens=max_new_tokens,
         monitor_progress=monitor_progress,
+        noise_scheduler=noise_scheduler,
     )
 generation_time = time.time() - start_time
 print(f"Generation time: {generation_time:.2f} seconds")
@@ -279,8 +293,10 @@ For batch processing, a list of conversations can be passed to `processor.apply_
 ```python
 import os
 import time
+import diffusers
 import torch
 from tqdm import tqdm
+
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
 
 
@@ -300,7 +316,7 @@ chat_template = [
                 },
                 {
                     "type": "audio",
-                    "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
                 },
             ],
         },
@@ -313,7 +329,7 @@ chat_template = [
                 },
                 {
                     "type": "audio",
-                    "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
+                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
                 },
             ],
         },
@@ -346,7 +362,7 @@ chat_template = [
                 },
                 {
                     "type": "audio",
-                    "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
                 },
             ],
         },
@@ -356,7 +372,7 @@ chat_template = [
                 {"type": "text", "text": "Hi Alice, it's great to be here. I'm Carter."},
                 {
                     "type": "audio",
-                    "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Carter_man.wav",
+                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Carter_man.wav",
                 },
             ],
         },
@@ -366,7 +382,7 @@ chat_template = [
                 {"type": "text", "text": "Hello, uh, I'm Frank. Good to be on."},
                 {
                     "type": "audio",
-                    "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
+                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
                 },
             ],
         },
@@ -376,7 +392,7 @@ chat_template = [
                 {"type": "text", "text": "And I'm Maya. Thanks for having me."},
                 {
                     "type": "audio",
-                    "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Maya_woman.wav",
+                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Maya_woman.wav",
                 },
             ],
         },
@@ -397,6 +413,10 @@ inputs = processor.apply_chat_template(
 ).to(model.device, model.dtype)
 
 # Generate audio with a callback to track progress
+noise_scheduler = diffusers.DPMSolverMultistepScheduler(
+    beta_schedule="squaredcos_cap_v2",
+    prediction_type="v_prediction",
+)
 start_time = time.time()
 completed_samples = set()
 with tqdm(desc="Generating") as pbar:
@@ -419,6 +439,7 @@ with tqdm(desc="Generating") as pbar:
         **inputs,
         max_new_tokens=max_new_tokens,
         monitor_progress=monitor_progress,
+        noise_scheduler=noise_scheduler,
     )
 generation_time = time.time() - start_time
 print(f"Generation time: {generation_time:.2f} seconds")
@@ -435,6 +456,7 @@ VibeVoice can also be loaded as a pipeline:
 
 ```python
 import os
+import diffusers
 import soundfile as sf
 from transformers import pipeline, set_seed
 
@@ -444,8 +466,12 @@ model_id = "bezzam/VibeVoice-1.5B"
 text = "Hello, nice to meet you. How are you?"
 set_seed(42)  # for deterministic results
 
-# Load pipeline
-pipe = pipeline("text-to-speech", model=model_id)
+# Load pipeline with noise scheduler
+noise_scheduler = diffusers.DPMSolverMultistepScheduler(
+    beta_schedule="squaredcos_cap_v2",
+    prediction_type="v_prediction",
+)
+pipe = pipeline("text-to-speech", model=model_id, noise_scheduler=noise_scheduler)
 
 # Generate!
 chat_template = [
@@ -455,12 +481,12 @@ chat_template = [
             {"type": "text", "text": text},
             {
                 "type": "audio",
-                "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+                "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
             },
         ],
     }
 ]
-generate_kwargs = {"cfg_scale": 1.5}
+generate_kwargs = {"guidance_scale": 1.5}
 output = pipe(chat_template, generate_kwargs=generate_kwargs)
 
 # Save to file
@@ -468,6 +494,176 @@ fn = f"{os.path.basename(model_id)}_pipeline.wav"
 sf.write(fn, output["audio"], output["sampling_rate"])
 print(f"Saved output to {fn}")
 ```
+
+### Training
+
+VibeVoice can be trained with the loss outputted by the model.
+
+```python
+import diffusers
+from transformers import AutoProcessor, VibeVoiceForConditionalGeneration
+
+
+model_id = "bezzam/VibeVoice-1.5B"
+# model_id = "bezzam/VibeVoice-7B"
+
+# Load model and processor
+processor = AutoProcessor.from_pretrained(model_id)
+model = VibeVoiceForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model.train()
+
+# Prepare batch of 2
+chat_template = [
+    [
+        {
+            "role": "0",
+            "content": [
+                {"type": "text", "text": "VibeVoice is this novel framework designed for generating expressive, long-form, multi-speaker, conversational audio."},
+                {
+                    "type": "audio",
+                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
+                },
+            ],
+        }
+    ],
+    # NOTE: multiple speakers not supported yet
+    [
+        {
+            "role": "0",
+            "content": [
+                {"type": "text", "text": "Hello everyone and welcome to the VibeVoice podcast. I'm your host, Alex, and today we're getting into one of the biggest debates in all of sports: who's the greatest basketball player of all time? I'm so excited to have Sam here to talk about it with me. Thanks so much for having me, Alex. And you're absolutely right. This question always brings out some seriously strong feelings. Okay, so let's get right into it. For me, it has to be Michael Jordan. Six trips to the finals, six championships. That kind of perfection is just incredible. Oh man, the first thing that always pops into my head is that shot against the Cleveland Cavaliers back in '89. Jordan just rises, hangs in the air forever, and just sinks it."},
+                {
+                    "type": "audio",
+                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/example_output/VibeVoice-1.5B_output.wav",
+                },
+            ],
+        }
+    ],
+]
+
+# Set `output_labels=True` for training
+inputs = processor.apply_chat_template(
+    chat_template,
+    tokenize=True,
+    return_dict=True,
+    output_labels=True,
+    sampling_rate=processor.feature_extractor.sampling_rate,
+).to(model.device, model.dtype)
+
+# Forward pass
+noise_scheduler = diffusers.DPMSolverMultistepScheduler(
+    beta_schedule="squaredcos_cap_v2", prediction_type="v_prediction",
+)
+outputs = model(**inputs, noise_scheduler=noise_scheduler)
+
+# Compute losses
+lm_loss = outputs.loss
+diffusion_loss = outputs.diffusion_loss
+total_loss = lm_loss + diffusion_loss
+
+print(f"LM loss: {lm_loss.item():.4f}")
+print(f"Diffusion loss: {diffusion_loss.item():.4f}")
+print(f"Total loss: {total_loss.item():.4f}")
+
+# Backward pass
+total_loss.backward()
+```
+
+### Torch compile
+
+The model can be compiled for faster inference/training.
+```python
+"""
+Torch Compile Inference Benchmark for VibeVoice 1.5Bv2
+"""
+
+import time
+import torch
+import diffusers
+from transformers import AutoProcessor, VibeVoiceForConditionalGeneration
+from transformers.audio_utils import load_audio
+
+model_id = "bezzam/VibeVoice-1.5B"
+# model_id = "bezzam/VibeVoice-7B"
+
+num_warmup = 5
+num_runs = 10
+
+torch.set_float32_matmul_precision("high")
+
+# Load processor + model
+processor = AutoProcessor.from_pretrained(model_id)
+model = VibeVoiceForConditionalGeneration.from_pretrained(
+    model_id, torch_dtype=torch.bfloat16,
+).to("cuda")
+
+# Prepare static inputs
+chat_template = [
+    [
+        {
+            "role": "0",
+            "content": [
+                {"type": "text", "text": "VibeVoice is a novel framework for generating expressive audio."},
+                {"type": "audio", "path": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav"},
+            ],
+        }
+    ],
+] * 4  # batch size 4
+inputs = processor.apply_chat_template(
+    chat_template,
+    tokenize=True,
+    return_dict=True,
+    sampling_rate=processor.feature_extractor.sampling_rate,
+).to("cuda", torch.bfloat16)
+
+noise_scheduler = diffusers.DPMSolverMultistepScheduler(
+    beta_schedule="squaredcos_cap_v2",
+    prediction_type="v_prediction",
+)
+
+# Benchmark without compile
+print("Warming up without compile...")
+with torch.no_grad():
+    for _ in range(num_warmup):
+        _ = model(**inputs, noise_scheduler=noise_scheduler)
+torch.cuda.synchronize()
+
+print("\n=== Benchmarking without torch.compile ===")
+torch.cuda.synchronize()
+start = time.time()
+with torch.no_grad():
+    for _ in range(num_runs):
+        _ = model(**inputs, noise_scheduler=noise_scheduler)
+torch.cuda.synchronize()
+
+no_compile_time = (time.time() - start) / num_runs
+print(f"Average inference time without compile: {no_compile_time:.4f}s")
+
+# Compile the model
+print("\nApplying torch.compile...")
+model = torch.compile(model)
+
+print("Warming up compiled model...")
+with torch.no_grad():
+    for _ in range(num_warmup):
+        _ = model(**inputs, noise_scheduler=noise_scheduler)
+torch.cuda.synchronize()
+
+print("\n=== Benchmarking with torch.compile ===")
+torch.cuda.synchronize()
+start = time.time()
+with torch.no_grad():
+    for _ in range(num_runs):
+        _ = model(**inputs, noise_scheduler=noise_scheduler)
+torch.cuda.synchronize()
+
+compile_time = (time.time() - start) / num_runs
+print(f"Average inference time with compile: {compile_time:.4f}s")
+
+speedup = no_compile_time / compile_time
+print(f"\n✓ Speedup: {speedup:.2f}x faster")
+```
+
 
 ## VibeVoiceConfig
 

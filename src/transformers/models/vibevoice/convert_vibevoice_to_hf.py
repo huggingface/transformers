@@ -83,7 +83,7 @@ def map_old_key_to_new(old_key: str) -> str:
             if "TOKENIZER_TYPE" in replacement:
                 tokenizer_type = "semantic" if "semantic_tokenizer" in new_key else "acoustic"
                 replacement = replacement.replace("TOKENIZER_TYPE", tokenizer_type)
-            
+
             # Handle index shifts for conv_layers (downsample_layers/upsample_layers indexed from 1)
             if "PLACEHOLDER" in replacement and match.groups():
                 layer_idx = int(match.group(1))
@@ -111,7 +111,7 @@ def convert_state_dict(original_state_dict: dict[str, Any]) -> dict[str, Any]:
 def process_tokenizer_config(config_dict: dict[str, Any], keys_to_remove: list[str]) -> dict[str, Any]:
     if "encoder_depths" in config_dict and isinstance(config_dict["encoder_depths"], str):
         config_dict["encoder_depths"] = list(map(int, config_dict["encoder_depths"].split("-")))
-    
+
     # Rename keys
     if "layernorm_eps" in config_dict:
         config_dict["rms_norm_eps"] = config_dict.pop("layernorm_eps")
@@ -123,15 +123,17 @@ def process_tokenizer_config(config_dict: dict[str, Any], keys_to_remove: list[s
         config_dict["depths"] = config_dict.pop("encoder_depths")
     if "vae_dim" in config_dict:
         config_dict["hidden_size"] = config_dict.pop("vae_dim")
-    
+
     # Remove unwanted keys
     for key in keys_to_remove:
         config_dict.pop(key, None)
-    
+
     return config_dict
 
 
-def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None, max_shard_size="2GB"):
+def convert_checkpoint(
+    checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None, max_shard_size="2GB"
+):
     if bfloat16:
         dtype = torch.bfloat16
     else:
@@ -324,6 +326,11 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         vibevoice_model.generation_config.max_length = 40500
     vibevoice_model.generation_config.do_sample = False
     vibevoice_model.generation_config.guidance_scale = 1.3
+    vibevoice_model.generation_config.noise_scheduler_class = "DPMSolverMultistepScheduler"
+    vibevoice_model.generation_config.noise_scheduler_config = {
+        "beta_schedule": "squaredcos_cap_v2",
+        "prediction_type": "v_prediction",
+    }
 
     logger.info(f"Saving model to {output_dir}")
     vibevoice_model.save_pretrained(output_dir, max_shard_size=max_shard_size)

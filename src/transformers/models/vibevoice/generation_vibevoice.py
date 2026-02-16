@@ -79,15 +79,15 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             contains the maximum generation steps for batch item `i`. No return value is expected.
         - `num_diffusion_steps`: Number of diffusion steps to use during generation of each audio chunk.
         """
-        # Call the base class method to load from default generation_config.json
+
         generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
 
         # Extract VibeVoice noise scheduler
         noise_scheduler = model_kwargs.pop("noise_scheduler", kwargs.pop("noise_scheduler", None))
         if noise_scheduler is None:
             raise ValueError(
-                "VibeVoice generation requires a `noise_scheduler` to be provided, "
-                "e.g., `diffusers.DPMSolverMultistepScheduler`."
+                "VibeVoice generation requires a `noise_scheduler` to be provided, e.g., "
+                "`diffusers.DPMSolverMultistepScheduler(beta_schedule='squaredcos_cap_v2', prediction_type='v_prediction')`."
             )
         if not (
             hasattr(noise_scheduler, "set_timesteps")
@@ -196,9 +196,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         negative_generation_config, negative_model_kwargs = self._prepare_generation_config(
             generation_config, **negative_kwargs
         )
-        _, _, negative_model_kwargs = self._prepare_model_inputs(
-            None, model_kwargs=negative_model_kwargs
-        )
+        _, _, negative_model_kwargs = self._prepare_model_inputs(None, model_kwargs=negative_model_kwargs)
         self._prepare_special_tokens(negative_generation_config, True, device=input_ids.device)
         negative_input_ids = negative_kwargs["input_ids"]
 
@@ -314,8 +312,12 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 if negative_model_kwargs.get("past_key_values") is not None:
                     for layer in negative_model_kwargs["past_key_values"].layers:
                         if layer.keys is not None and layer.values is not None:
-                            layer.keys[diffusion_start_idx, :, -1, :] = layer.keys[diffusion_start_idx, :, 0, :].clone()
-                            layer.values[diffusion_start_idx, :, -1, :] = layer.values[diffusion_start_idx, :, 0, :].clone()
+                            layer.keys[diffusion_start_idx, :, -1, :] = layer.keys[
+                                diffusion_start_idx, :, 0, :
+                            ].clone()
+                            layer.values[diffusion_start_idx, :, -1, :] = layer.values[
+                                diffusion_start_idx, :, 0, :
+                            ].clone()
 
             diffusion_mask = unfinished_sequences.bool() & (next_tokens == self.config.audio_diffusion_token_id)
             diffusion_idx = diffusion_mask.nonzero(as_tuple=True)[0].cpu()

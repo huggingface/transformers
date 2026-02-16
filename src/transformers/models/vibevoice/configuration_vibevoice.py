@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
+
 from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -99,6 +101,10 @@ class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
         self.downsampling_ratios = downsampling_ratios
         self.depths = depths
 
+    @property
+    def hop_length(self):
+        return int(np.prod(self.downsampling_ratios))
+
 
 class VibeVoiceConfig(PretrainedConfig):
     r"""
@@ -136,6 +142,8 @@ class VibeVoiceConfig(PretrainedConfig):
             The activation function used by the diffusion head.
         frequency_embedding_size (`int`, *optional*, defaults to 256):
             The size of the frequency embedding.
+        num_diffusion_steps (`int`, *optional*, defaults to 10):
+            The number of diffusion steps to use during inference.
 
     ```python
     >>> from transformers import VibeVoiceForConditionalGeneration, VibeVoiceConfig
@@ -185,8 +193,6 @@ class VibeVoiceConfig(PretrainedConfig):
         rms_norm_eps=1e-5,
         hidden_act="silu",
         frequency_embedding_size=256,
-        noise_scheduler_class="DPMSolverMultistepScheduler",
-        noise_scheduler_config=None,
         num_diffusion_steps=10,
         **kwargs,
     ):
@@ -229,21 +235,13 @@ class VibeVoiceConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.hidden_act = hidden_act
         self.frequency_embedding_size = frequency_embedding_size
-
         self.num_diffusion_steps = num_diffusion_steps
-        self.noise_scheduler_class = noise_scheduler_class
-        if noise_scheduler_config is None:
-            noise_scheduler_config = {
-                "beta_schedule": "squaredcos_cap_v2",
-                "prediction_type": "v_prediction",
-            }
-        self.noise_scheduler_config = noise_scheduler_config
 
         # NOTE (ebezzam) to use LlamaMLP via modular
         self.mlp_bias = False
         self.intermediate_size = intermediate_size
 
-        kwargs.pop("tie_word_embeddings", None)  # remove if present to take priority from text_config
+        kwargs.pop("tie_word_embeddings", None)  # remove if present, to take priority from text_config
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,

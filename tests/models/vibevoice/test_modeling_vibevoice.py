@@ -373,8 +373,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
 
 class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        # self.model_checkpoint = "bezzam/VibeVoice-1.5B"
-        self.model_checkpoint = "bezzam/VibeVoice-1.5Bv2"
+        self.model_checkpoint = "bezzam/VibeVoice-1.5B"
         self.sampling_rate = 24000
 
     def tearDown(self):
@@ -427,6 +426,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Generate audio
         from diffusers import DPMSolverMultistepScheduler
+
         noise_scheduler = DPMSolverMultistepScheduler(
             beta_schedule="squaredcos_cap_v2", prediction_type="v_prediction"
         )
@@ -500,6 +500,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Generate audio
         from diffusers import DPMSolverMultistepScheduler
+
         noise_scheduler = DPMSolverMultistepScheduler(
             beta_schedule="squaredcos_cap_v2", prediction_type="v_prediction"
         )

@@ -22,7 +22,6 @@ import math
 from dataclasses import dataclass
 from typing import Optional
 
-import numpy as np
 import torch
 import torch.nn as nn
 
@@ -38,27 +37,19 @@ from .generation_vibevoice import VibeVoiceGenerationMixin
 
 
 @dataclass
-@auto_docstring(
-    custom_intro="""
-    VibeVoice base model outputs.
-    """
-)
+@auto_docstring(custom_intro="""Base class for VibeVoice outputs, with hidden states and attentions.""")
 class VibeVoiceBaseModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    audio_features (`torch.FloatTensor` of shape `(batch_size * seq_length, hidden_size)`):
-        Audio features extracted from the input audio waveform.
+    audio_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
+        Extracted audio features that can be used for conditioning the language model.
     """
 
     audio_features: torch.FloatTensor | None = None
 
 
 @dataclass
-@auto_docstring(
-    custom_intro="""
-    VibeVoice causal language model outputs.
-    """
-)
-class VibeVoiceCausalLMOutputWithPast(VibeVoiceBaseModelOutputWithPast):
+@auto_docstring(custom_intro="""VibeVoice causal language model outputs.""")
+class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -66,11 +57,14 @@ class VibeVoiceCausalLMOutputWithPast(VibeVoiceBaseModelOutputWithPast):
         Diffusion head loss (for acoustic token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    audio_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
+        Extracted audio features that can be used for conditioning the language model.
     """
 
     loss: torch.FloatTensor | None = None
     diffusion_loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
+    audio_features: torch.FloatTensor | None = None
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -403,18 +397,14 @@ class VibeVoicePreTrainedModel(PreTrainedModel):
     config: VibeVoiceConfig
     base_model_prefix = "model"
     main_input_name = "input_ids"
-    _no_split_modules = None
+    _no_split_modules = ["VibeVoiceConvNext1dLayer", "VibeVoiceDiffusionHead"]
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True
-    # TODO (ebezzam) check below
     _supports_cache_class = True
-    _supports_flash_attn_2 = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -619,16 +609,19 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
             `torch.FloatTensor`:
                 The audio embeddings.
         """
-        # adjust padding mask according to tokenizer compression
-        hop_length = np.prod(self.acoustic_tokenizer.config.downsampling_ratios)
-        num_audio_tokens = torch.ceil(padding_mask.sum(dim=-1) / hop_length).to(torch.int64)
-        padding_mask = torch.arange(max(num_audio_tokens)) < num_audio_tokens[:, None].cpu()
 
         with torch.no_grad():
             acoustic_latents = self.acoustic_tokenizer.encode(input_values, sample=True).latents
         acoustic_features = (
             acoustic_latents + latent_bias_factor.to(acoustic_latents.device)
         ) * latent_scaling_factor.to(acoustic_latents.device)
+
+        # adjust padding mask according to tokenizer compression
+        num_audio_tokens = torch.ceil(padding_mask.sum(dim=-1) / self.config.acoustic_tokenizer_config.hop_length).to(
+            torch.int64
+        )
+        padding_mask = torch.arange(max(num_audio_tokens)) < num_audio_tokens[:, None].cpu()
+
         return self.acoustic_connector(acoustic_features)[padding_mask], acoustic_features[padding_mask]
 
     def forward(
@@ -650,7 +643,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
                 input_values, padding_mask, latent_scaling_factor, latent_bias_factor
             )
 
-            # replace text-audio token placeholders with audio embeddings
+            # Replace text-audio token placeholders with audio embeddings
             audio_token_mask = (input_ids == self.config.audio_diffusion_token_id).unsqueeze(-1)
             inputs_embeds = inputs_embeds.masked_scatter(
                 audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
@@ -689,6 +682,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         padding_mask: torch.BoolTensor | None = None,
         acoustic_loss_mask: torch.BoolTensor | None = None,
         noise_scheduler: object | None = None,
+        ddpm_batch_multiplier: int = 4,
         **kwargs,
     ) -> tuple | VibeVoiceCausalLMOutputWithPast:
         r"""
@@ -700,6 +694,9 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             Mask to compute diffusion loss only on specific acoustic tokens.
         noise_scheduler (*optional*):
             Noise scheduler which is needed use for computing noise targets for the diffusion loss.
+        ddpm_batch_multiplier (`int`, *optional*, defaults to 4):
+            Number of noise samples to generate per audio token for diffusion loss computation, which can help
+            stabilize training.
         """
 
         outputs = self.model(
@@ -722,7 +719,48 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
 
         diffusion_loss = None
         if acoustic_loss_mask is not None and outputs.audio_features is not None:
-            raise NotImplementedError("Diffusion loss computation is not yet implemented.")
+            if noise_scheduler is None:
+                raise ValueError(
+                    "`noise_scheduler` from `diffusers.DPMSolverMultistepScheduler` must be provided for diffusion"
+                    "loss computation."
+                )
+
+            audio_features = outputs.audio_features
+            condition_features = hidden_states[acoustic_loss_mask.cpu()].to(audio_features.device)
+            audio_len, latent_size = audio_features.shape
+            audio_features_repeated = audio_features.repeat_interleave(ddpm_batch_multiplier, dim=0)
+            condition_features_repeated = condition_features.repeat_interleave(ddpm_batch_multiplier, dim=0)
+
+            # Random noise and timesteps for diffusion training
+            noise = torch.randn(
+                (audio_len * ddpm_batch_multiplier, latent_size),
+                device=audio_features.device,
+                dtype=audio_features.dtype,
+            )
+            timesteps = torch.multinomial(
+                torch.ones(self.config.num_diffusion_steps),
+                audio_len * ddpm_batch_multiplier,
+                replacement=True,
+            ).to(audio_features.device)
+            noisy_audio_features = noise_scheduler.add_noise(audio_features_repeated, noise, timesteps)
+
+            # Predict noise/velocity using diffusion head
+            model_output = self.model.diffusion_head(
+                noisy_audio_features, timesteps.type_as(audio_features), condition_features_repeated
+            )
+
+            # Compute target (v_prediction parameterization)
+            alpha_t = noise_scheduler.alpha_t.to(device=audio_features.device, dtype=audio_features.dtype)
+            sigma_t = noise_scheduler.sigma_t.to(device=audio_features.device, dtype=audio_features.dtype)
+            alpha_t = alpha_t[timesteps].flatten().unsqueeze(-1)
+            sigma_t = sigma_t[timesteps].flatten().unsqueeze(-1)
+            target = (alpha_t * noise - sigma_t * audio_features_repeated).to(model_output.device)
+
+            diffusion_loss = torch.nn.functional.mse_loss(model_output.float(), target.float(), reduction="sum")
+            if latent_size > 0 and ddpm_batch_multiplier > 0 and audio_len > 0:
+                diffusion_loss = diffusion_loss / (latent_size * ddpm_batch_multiplier * audio_len)
+            else:
+                diffusion_loss = torch.tensor(0.0, device=diffusion_loss.device)
 
         return VibeVoiceCausalLMOutputWithPast(loss=loss, diffusion_loss=diffusion_loss, logits=logits, **outputs)
 
