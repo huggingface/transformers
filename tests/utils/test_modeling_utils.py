@@ -125,19 +125,12 @@ if is_torch_available():
         T5ForConditionalGeneration,
     )
     from transformers.conversion_mapping import MergeModulelist, WeightConverter, get_model_conversion_mapping
-    from transformers.modeling_attn_mask_utils import (
-        AttentionMaskConverter,
-        _create_4d_causal_attention_mask,
-        _prepare_4d_attention_mask,
-        _prepare_4d_causal_attention_mask,
-    )
     from transformers.modeling_utils import (
         FLASH_ATTN_KERNEL_FALLBACK,
         _find_disjoint,
         _find_identical,
         get_total_byte_count,
     )
-    from transformers.pytorch_utils import isin_mps_friendly
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -337,32 +330,6 @@ if is_torch_available():
 
         def forward(self, x):
             return self.head(self.language_model(self.vision_model(x)))
-
-    class Prepare4dCausalAttentionMaskModel(nn.Module):
-        def forward(self, inputs_embeds):
-            batch_size, seq_length, _ = inputs_embeds.shape
-            past_key_values_length = 4
-            attention_mask = _prepare_4d_causal_attention_mask(
-                None, (batch_size, seq_length), inputs_embeds, past_key_values_length
-            )
-            return attention_mask
-
-    class Create4dCausalAttentionMaskModel(nn.Module):
-        def forward(self, inputs_embeds):
-            batch_size, seq_length, _ = inputs_embeds.shape
-            past_key_values_length = 4
-            attention_mask = _create_4d_causal_attention_mask(
-                (batch_size, seq_length),
-                dtype=inputs_embeds.dtype,
-                device=inputs_embeds.device,
-                past_key_values_length=past_key_values_length,
-            )
-            return attention_mask
-
-    class Prepare4dAttentionMaskModel(nn.Module):
-        def forward(self, mask, inputs_embeds):
-            attention_mask = _prepare_4d_attention_mask(mask, dtype=inputs_embeds.dtype)
-            return attention_mask
 
     class TestOffline(unittest.TestCase):
         def test_offline(self):
@@ -569,7 +536,10 @@ class ModelUtilsTest(TestCasePlus):
         with LoggingLevel(logging.WARNING):
             with CaptureLogger(logger) as cl:
                 BertModel.from_pretrained(TINY_T5)
-        self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
+        self.assertTrue(
+            "You are using a model of type `t5` to instantiate a model of type `bert`. "
+            "This may be expected if you are loading a checkpoint that shares a subset" in cl.out
+        )
 
     @require_accelerate
     def test_model_from_pretrained_with_none_quantization_config(self):
@@ -1811,27 +1781,6 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIn("LayerNorm.beta", missing_keys)
         self.assertIn("LayerNorm.bias", unexpected_keys)
 
-    def test_isin_mps_friendly(self):
-        """tests that our custom `isin_mps_friendly` matches `torch.isin`"""
-        random_ids = torch.randint(0, 100, (100,))
-        # We can match against an integer
-        random_test_integer = torch.randint(0, 100, (1,)).item()
-        self.assertTrue(
-            torch.equal(
-                torch.isin(random_ids, random_test_integer), isin_mps_friendly(random_ids, random_test_integer)
-            )
-        )
-        # We can match against an 0D tensor
-        random_test_tensor = torch.randint(0, 100, (1,)).squeeze()
-        self.assertTrue(
-            torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
-        )
-        # We can match against an 1D tensor (with many items)
-        random_test_tensor = torch.randint(0, 100, (10,))
-        self.assertTrue(
-            torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
-        )
-
     def test_can_generate(self):
         """Tests the behavior of `PreTrainedModel.can_generate` method."""
         logger = logging.get_logger("transformers.modeling_utils")
@@ -2326,6 +2275,81 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model._keep_in_fp32_modules, {"linear", "head"})  # language model + composite model
         self.assertEqual(model._keep_in_fp32_modules_strict, {"simple"})  # vision model
 
+    @parameterized.expand([("sdpa",), ("flash_attention_2",)])
+    def test_decoder_only_model_can_be_used_as_encoder(self, attn_implementation: str):
+        """Test that most well-behaved decoder models can be used as encoders through the `is_causal` kwarg/config.
+        Note that it's enough to test it on Llama, as the entry points are all through general code
+        (masking_utils.py + `capture_outputs` decorator). This makes it easier as the model need to use both the
+        mask API from masking_utils.py and the decorator as mentionned above, and we don't know what models follow that
+        standard exactly (so we cannot make it easily a common model test)."""
+        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+            self.skipTest("FA2 not available")
+
+        from transformers import LlamaConfig, LlamaModel
+        from transformers.masking_utils import create_bidirectional_mask
+
+        config = LlamaConfig(
+            num_hidden_layers=2,
+            hidden_size=32,
+            intermediate_size=64,
+            vocab_size=100,
+            attn_implementation=attn_implementation,
+        )
+        model = LlamaModel(copy.deepcopy(config)).to(device=torch_device, dtype=torch.bfloat16)
+
+        # Create inputs, making sure we use padding to verify that mask creation accounts for it correctly
+        input_ids = torch.randint(5, 95, (2, 17), device=torch_device)
+        attention_mask = torch.ones_like(input_ids, device=torch_device)
+        attention_mask[1, 0:3] = 0
+
+        # The original `create_causal_mask` used in modeling_llama forward more kwargs than `create_bidirectional_mask`,
+        # so we need this one instead to absorb them
+        def create_bidirectional_mask_with_kwargs(
+            config,
+            inputs_embeds,
+            attention_mask,
+            encoder_hidden_states=None,
+            or_mask_function=None,
+            and_mask_function=None,
+            **kwargs,
+        ):
+            return create_bidirectional_mask(
+                config, inputs_embeds, attention_mask, encoder_hidden_states, or_mask_function, and_mask_function
+            )
+
+        # Explicitly monkey patch the mask creation function + forward the is_causal kwarg to get the expected result
+        # from the model behaving as encoder instead of decoder
+        with patch(
+            "transformers.models.llama.modeling_llama.create_causal_mask", new=create_bidirectional_mask_with_kwargs
+        ):
+            reference = model(input_ids, attention_mask=attention_mask, is_causal=False).last_hidden_state
+            without_kwarg = model(input_ids, attention_mask=attention_mask).last_hidden_state
+
+        # Here, since we have padding, the mask created should never be None. Since the mask is never None, the sdpa
+        # backend will always use `is_causal=False`, so both should be strictly equivalent
+        if attn_implementation == "sdpa":
+            torch.testing.assert_close(reference, without_kwarg)
+        # But FA2 relies solely on the `is_causal` kwarg to decide how to dispatch, as it will use varlen since we
+        # have padding, so both won't be equivalent at all
+        else:
+            # Everything should be different (we only test the maximum of the diff to avoid flakyness)
+            self.assertTrue(torch.abs(reference - without_kwarg).max() >= 1e-1)
+
+        # Now if we simply forward the kwarg with the usual mask function, it should still work the exact same
+        with_kwarg_only = model(input_ids, attention_mask=attention_mask, is_causal=False).last_hidden_state
+        torch.testing.assert_close(reference, with_kwarg_only)
+
+        # Now, if we use the usual forward, the model should behave normally as a decoder, and output should be
+        # completely different
+        as_decoder = model(input_ids, attention_mask=attention_mask).last_hidden_state
+        # Everything should be different (we only test the maximum of the diff to avoid flakyness)
+        self.assertTrue(torch.abs(reference - as_decoder).max() >= 1e-1)
+
+        # It should also work with it in the config
+        model.config.is_causal = False
+        with_config_only = model(input_ids, attention_mask=attention_mask).last_hidden_state
+        torch.testing.assert_close(reference, with_config_only)
+
 
 @slow
 @require_torch
@@ -2724,295 +2748,6 @@ The commit description supports markdown synthax see:
 
             loaded_model_card = ModelCard.load(tmp_repo.repo_id)
             self.assertEqual(loaded_model_card.data.tags, new_tags)
-
-
-@require_torch
-class AttentionMaskTester(unittest.TestCase):
-    def check_non_causal(self, bsz, q_len, kv_len, mask_2d, mask_4d):
-        mask_indices = (mask_2d != 1)[:, None].broadcast_to((bsz, q_len, kv_len))
-        mask_4d_values = mask_4d[:, 0][mask_indices]
-        is_inf = mask_4d_values == -float("inf")
-        is_min = mask_4d_values == torch.finfo(mask_4d.dtype).min
-        assert torch.logical_or(is_inf, is_min).all()
-
-    def check_to_4d(self, mask_converter, q_len, kv_len, additional_mask=None, bsz=3):
-        mask_2d = torch.ones((bsz, kv_len), device=torch_device, dtype=torch.long)
-
-        if additional_mask is not None:
-            for bsz_idx, seq_idx in additional_mask:
-                mask_2d[bsz_idx, seq_idx] = 0
-
-        mask_4d = mask_converter.to_4d(mask_2d, query_length=q_len, key_value_length=kv_len, dtype=torch.float32)
-
-        assert mask_4d.shape == (bsz, 1, q_len, kv_len)
-
-        # make sure there are no overflows
-        assert mask_4d.min() != float("-inf")
-
-        context = mask_converter.sliding_window
-        if mask_converter.is_causal and context is None:
-            # k * (k+1) / 2 tokens are masked in triangualar masks
-            num_tokens_masked = bsz * (q_len * (q_len - 1) // 2)
-
-            if 0 not in mask_2d:
-                assert (mask_4d != 0).sum().item() == num_tokens_masked
-            if 0 in mask_2d:
-                # at least causal mask + maybe more
-                assert (mask_4d != 0).sum().item() >= num_tokens_masked
-                self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
-        elif not mask_converter.is_causal and context is None:
-            if 0 not in mask_2d:
-                assert (mask_4d != 0).sum().item() == 0
-            if 0 in mask_2d:
-                self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
-        elif mask_converter.is_causal and context is not None:
-            # k * (k+1) / 2 tokens are masked in triangualar masks
-            num_tokens_masked = (q_len * (q_len - 1) // 2) + self.compute_num_context_mask(kv_len, context, q_len)
-            num_tokens_masked = bsz * num_tokens_masked
-
-            if 0 not in mask_2d:
-                assert (mask_4d != 0).sum().item() == num_tokens_masked
-            if 0 in mask_2d:
-                # at least causal mask + maybe more
-                assert (mask_4d != 0).sum().item() >= num_tokens_masked
-                self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
-
-    def check_to_causal(self, mask_converter, q_len, kv_len, bsz=3):
-        mask_4d = mask_converter.to_causal_4d(
-            bsz, query_length=q_len, key_value_length=kv_len, device=torch_device, dtype=torch.float32
-        )
-
-        if q_len == 1 and mask_converter.sliding_window is None:
-            # no causal mask if q_len is 1
-            assert mask_4d is None
-            return
-
-        context = mask_converter.sliding_window
-        if mask_converter.is_causal and context is None:
-            # k * (k+1) / 2 tokens are masked in triangualar masks
-            num_tokens_masked = bsz * (q_len * (q_len - 1) // 2)
-
-            assert (mask_4d != 0).sum().item() == num_tokens_masked
-        elif not mask_converter.is_causal and context is None:
-            assert (mask_4d != 0).sum().item() == 0
-        elif mask_converter.is_causal and context is not None:
-            # k * (k+1) / 2 tokens are masked in triangualar masks
-            num_tokens_masked = (q_len * (q_len - 1) // 2) + self.compute_num_context_mask(kv_len, context, q_len)
-            num_tokens_masked = bsz * num_tokens_masked
-
-            assert (mask_4d != 0).sum().item() == num_tokens_masked
-
-    def compute_num_context_mask(self, kv_len, context, q_len):
-        # This function computes the # of attention tokens that are added for
-        # the sliding window
-        c_mask_len = kv_len - context - 1
-        num_mask_triangle = c_mask_len * (c_mask_len + 1) // 2
-        cut_mask_len = max(c_mask_len - q_len, 0)
-        num_cut_mask = cut_mask_len * (cut_mask_len + 1) // 2
-        return num_mask_triangle - num_cut_mask
-
-    def test_2d_to_4d_causal(self):
-        mask_converter = AttentionMaskConverter(is_causal=True)
-
-        # auto-regressive use case
-        self.check_to_4d(mask_converter, q_len=1, kv_len=7)
-        # special auto-regressive case
-        self.check_to_4d(mask_converter, q_len=3, kv_len=7)
-        # non auto-regressive case
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7)
-
-        # same with extra attention masks
-        self.check_to_4d(mask_converter, q_len=1, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-        self.check_to_4d(mask_converter, q_len=3, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-
-        # check that the mask does not overflow on causal masked tokens
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 0), (1, 0), (1, 1)])
-
-    def test_2d_to_4d(self):
-        mask_converter = AttentionMaskConverter(is_causal=False)
-
-        # non auto-regressive case
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7)
-
-        # same with extra attention masks
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-
-    def test_2d_to_4d_causal_sliding(self):
-        mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=5)
-
-        # auto-regressive use case
-        self.check_to_4d(mask_converter, q_len=1, kv_len=7)
-        # special auto-regressive case
-        self.check_to_4d(mask_converter, q_len=3, kv_len=7)
-        # non auto-regressive case
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7)
-
-        # same with extra attention masks
-        self.check_to_4d(mask_converter, q_len=1, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-        self.check_to_4d(mask_converter, q_len=3, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-
-    def test_causal_mask(self):
-        mask_converter = AttentionMaskConverter(is_causal=True)
-
-        # auto-regressive use case
-        self.check_to_causal(mask_converter, q_len=1, kv_len=7)
-        # special auto-regressive case
-        self.check_to_causal(mask_converter, q_len=3, kv_len=7)
-        # non auto-regressive case
-        self.check_to_causal(mask_converter, q_len=7, kv_len=7)
-
-    def test_causal_mask_sliding(self):
-        mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=3)
-
-        # auto-regressive use case
-        self.check_to_causal(mask_converter, q_len=1, kv_len=7)
-        # special auto-regressive case
-        self.check_to_causal(mask_converter, q_len=3, kv_len=7)
-        # non auto-regressive case
-        self.check_to_causal(mask_converter, q_len=7, kv_len=7)
-
-    @pytest.mark.torch_compile_test
-    def test_torch_compile_fullgraph(self):
-        model = Prepare4dCausalAttentionMaskModel()
-
-        inputs_embeds = torch.rand([1, 3, 32])
-        res_non_compiled = model(inputs_embeds)
-
-        compiled_model = torch.compile(model, fullgraph=True)
-
-        res_compiled = compiled_model(inputs_embeds)
-
-        self.assertTrue(torch.equal(res_non_compiled, res_compiled))
-
-        model = Create4dCausalAttentionMaskModel()
-
-        inputs_embeds = torch.rand(2, 4, 16)
-        res_non_compiled = model(inputs_embeds)
-
-        compiled_model = torch.compile(model, fullgraph=True)
-        res_compiled = compiled_model(inputs_embeds)
-
-        self.assertTrue(torch.equal(res_non_compiled, res_compiled))
-
-        model = Prepare4dAttentionMaskModel()
-
-        mask = torch.ones(2, 4)
-        mask[0, :2] = 0
-        inputs_embeds = torch.rand(2, 4, 16)
-
-        res_non_compiled = model(mask, inputs_embeds)
-
-        compiled_model = torch.compile(model, fullgraph=True)
-        res_compiled = compiled_model(mask, inputs_embeds)
-
-        self.assertTrue(torch.equal(res_non_compiled, res_compiled))
-
-    @require_torch
-    @slow
-    def test_unmask_unattended_left_padding(self):
-        attention_mask = torch.Tensor([[0, 0, 1], [1, 1, 1], [0, 1, 1]]).to(torch.int64)
-
-        expanded_mask = torch.Tensor(
-            [
-                [[[0, 0, 0], [0, 0, 0], [0, 0, 1]]],
-                [[[1, 0, 0], [1, 1, 0], [1, 1, 1]]],
-                [[[0, 0, 0], [0, 1, 0], [0, 1, 1]]],
-            ]
-        ).to(torch.int64)
-
-        reference_output = torch.Tensor(
-            [
-                [[[1, 1, 1], [1, 1, 1], [0, 0, 1]]],
-                [[[1, 0, 0], [1, 1, 0], [1, 1, 1]]],
-                [[[1, 1, 1], [0, 1, 0], [0, 1, 1]]],
-            ]
-        ).to(torch.int64)
-
-        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=1)
-
-        self.assertTrue(torch.equal(result, reference_output))
-
-        attention_mask = torch.Tensor([[0, 0, 1, 1, 1], [1, 1, 1, 1, 1], [0, 1, 1, 1, 1]]).to(torch.int64)
-
-        attn_mask_converter = AttentionMaskConverter(is_causal=True)
-        past_key_values_length = 0
-        key_value_length = attention_mask.shape[-1] + past_key_values_length
-
-        expanded_mask = attn_mask_converter.to_4d(
-            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
-        )
-
-        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
-        min_inf = torch.finfo(torch.float32).min
-        reference_output = torch.Tensor(
-            [
-                [
-                    [
-                        [0, 0, 0, 0, 0],
-                        [0, 0, 0, 0, 0],
-                        [min_inf, min_inf, 0, min_inf, min_inf],
-                        [min_inf, min_inf, 0, 0, min_inf],
-                        [min_inf, min_inf, 0, 0, 0],
-                    ]
-                ],
-                [
-                    [
-                        [0, min_inf, min_inf, min_inf, min_inf],
-                        [0, 0, min_inf, min_inf, min_inf],
-                        [0, 0, 0, min_inf, min_inf],
-                        [0, 0, 0, 0, min_inf],
-                        [0, 0, 0, 0, 0],
-                    ]
-                ],
-                [
-                    [
-                        [0, 0, 0, 0, 0],
-                        [min_inf, 0, min_inf, min_inf, min_inf],
-                        [min_inf, 0, 0, min_inf, min_inf],
-                        [min_inf, 0, 0, 0, min_inf],
-                        [min_inf, 0, 0, 0, 0],
-                    ]
-                ],
-            ]
-        )
-
-        self.assertTrue(torch.equal(reference_output, result))
-
-    @require_torch
-    @slow
-    def test_unmask_unattended_right_padding(self):
-        attention_mask = torch.Tensor([[1, 1, 1, 0], [1, 1, 1, 1], [1, 1, 0, 0]]).to(torch.int64)
-
-        attn_mask_converter = AttentionMaskConverter(is_causal=True)
-        past_key_values_length = 0
-        key_value_length = attention_mask.shape[-1] + past_key_values_length
-
-        expanded_mask = attn_mask_converter.to_4d(
-            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
-        )
-
-        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
-
-        self.assertTrue(torch.equal(expanded_mask, result))
-
-    @require_torch
-    @slow
-    def test_unmask_unattended_random_mask(self):
-        attention_mask = torch.Tensor([[1, 0, 1, 0], [1, 0, 1, 1], [1, 1, 0, 1]]).to(torch.int64)
-
-        attn_mask_converter = AttentionMaskConverter(is_causal=True)
-        past_key_values_length = 0
-        key_value_length = attention_mask.shape[-1] + past_key_values_length
-
-        expanded_mask = attn_mask_converter.to_4d(
-            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
-        )
-
-        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
-
-        self.assertTrue(torch.equal(expanded_mask, result))
 
 
 @require_torch

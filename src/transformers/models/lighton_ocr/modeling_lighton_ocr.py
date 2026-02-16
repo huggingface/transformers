@@ -29,14 +29,13 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_lighton_ocr import LightOnOcrConfig
 
 
 @use_kernel_forward_from_hub("RMSNorm")
 class LightOnOcrRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         LightOnOcrRMSNorm is equivalent to T5LayerNorm
         """
@@ -44,7 +43,7 @@ class LightOnOcrRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -334,7 +333,7 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes, **kwargs)
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -452,7 +451,7 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
 
         if is_first_iteration or not kwargs.get("use_cache", True):
             # Pixel values are used only in the first iteration if available
-            # In subsquent iterations, they are already merged with text and cached
+            # In subsequent iterations, they are already merged with text and cached
             # NOTE: first iteration doesn't have to be prefill, it can be the first
             # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values

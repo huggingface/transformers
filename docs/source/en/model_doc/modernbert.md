@@ -93,6 +93,9 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 ModernBERT supports padding-free inference and training. For example, you can leverage the [`DataCollatorWithFlattening`] to prepare your inputs:
 
+> [!TIP]
+> Padding-free inference and training requires `flash_attention_2` as the attention implementation. Since ModernBERT no longer defaults to FlashAttention2, you must explicitly set `attn_implementation="flash_attention_2"` when loading the model for padding-free usage.
+
 ```python
 import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer, DataCollatorWithFlattening

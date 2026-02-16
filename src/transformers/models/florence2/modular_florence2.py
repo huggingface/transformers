@@ -32,7 +32,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..bart.modeling_bart import eager_attention_forward, shift_tokens_right
 from ..beit.modeling_beit import BeitDropPath
@@ -442,7 +443,7 @@ class Florence2Processor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            num_image_tokens = [self.image_seq_length] * len(image_sizes)
+            num_image_tokens = [self.num_image_tokens] * len(image_sizes)
             num_image_patches = [1] * len(image_sizes)
 
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
@@ -1403,7 +1404,8 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:

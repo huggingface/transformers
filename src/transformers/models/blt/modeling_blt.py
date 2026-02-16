@@ -38,7 +38,9 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_blt import (
     BltConfig,
     BltGlobalTransformerConfig,
@@ -66,7 +68,7 @@ class BltMLP(nn.Module):
 
 
 class BltRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         BltRMSNorm is equivalent to T5LayerNorm
         """
@@ -74,7 +76,7 @@ class BltRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -250,8 +252,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -437,8 +438,8 @@ class BltPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = False
     _supports_attention_backend = False
     _can_record_outputs = {
-        "hidden_states": OutputRecorder(BltTransformerLayer, index=0, layer_name="local_decoder"),
-        "attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_decoder"),
+        "hidden_states": OutputRecorder(BltTransformerLayer, index=0),
+        "attentions": OutputRecorder(BltSelfAttention, index=1),
     }
 
     @torch.no_grad()
@@ -741,7 +742,6 @@ class BltLocalDecoder(BltPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -817,21 +817,22 @@ class BltGlobalTransformer(BltPreTrainedModel):
 
         self.post_init()
 
+    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def forward(
         self,
-        input_embeds: torch.Tensor,
+        inputs_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        batch_size, seq_len, _ = input_embeds.shape
-        hidden_states = self.token_embedding_projection(input_embeds)
+        batch_size, seq_len, _ = inputs_embeds.shape
+        hidden_states = self.token_embedding_projection(inputs_embeds)
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
         if position_ids is None:
             position_ids = (
-                torch.arange(input_embeds.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0).expand(batch_size, -1)
             )
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
         for i, layer in enumerate(self.layers):
@@ -930,7 +931,7 @@ class BltPatcher(BltPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -943,7 +944,7 @@ class BltPatcher(BltPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -1213,7 +1214,8 @@ class BltModel(BltPreTrainedModel):
             self.patcher = None
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1229,8 +1231,15 @@ class BltModel(BltPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+        if use_cache:
+            if past_key_values is None:
+                past_key_values = EncoderDecoderCache(
+                    DynamicCache(config=self.config), DynamicCache(config=self.config)
+                )
+            elif not isinstance(past_key_values, EncoderDecoderCache):
+                # BLT uses an encoder-decoder cache even though it is not en encoder-decoder model. Create a cross-cache
+                # if not yet created by the user
+                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache(config=self.config))
 
         # Extract input embeddings as early as possible
         if inputs_embeds is not None:
@@ -1277,7 +1286,7 @@ class BltModel(BltPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=encoder_embeds,
+            inputs_embeds=encoder_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values.self_attention_cache if past_key_values is not None else None,
@@ -1308,7 +1317,7 @@ class BltModel(BltPreTrainedModel):
         global_position_ids = global_cache_position.unsqueeze(0)
         global_causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=encoder_cross_states,
+            inputs_embeds=encoder_cross_states,
             attention_mask=None,
             cache_position=global_cache_position,
             past_key_values=None,
@@ -1316,7 +1325,7 @@ class BltModel(BltPreTrainedModel):
         )
 
         global_hidden_states = self.global_transformer(
-            input_embeds=encoder_cross_states,
+            inputs_embeds=encoder_cross_states,
             attention_mask=global_causal_mask,
             position_ids=global_position_ids,
             **kwargs,
@@ -1377,7 +1386,7 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"model.local_encoder.embed_tokens.weight": "lm_head.weight"}
 
     def __init__(self, config: BltConfig):
-        super().__init__(config.get_text_config())
+        super().__init__(config)
         self.text_config = config.get_text_config()
         self.vocab_size = config.vocab_size
         self.model = BltModel(config)
@@ -1433,8 +1442,8 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, BltForCausalLM
 
-        >>> model = BltForCausalLM.from_pretrained("Llama-3.2-11B-Vision")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Llama-3.2-11B-Vision")
+        >>> model = BltForCausalLM.from_pretrained("itazap/blt-1b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-hf")
 
         >>> prompt = "If I had to write a haiku, it would be:"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

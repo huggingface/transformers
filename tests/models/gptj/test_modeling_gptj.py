@@ -464,7 +464,7 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @slow
     def test_model_from_pretrained(self):
         model_name = "EleutherAI/gpt-j-6B"
-        model = GPTJModel.from_pretrained(model_name, revision="float16", dtype=torch.float16)
+        model = GPTJModel.from_pretrained(model_name, use_safetensors=False, revision="float16", dtype=torch.float16)
         self.assertIsNotNone(model)
 
 

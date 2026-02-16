@@ -43,7 +43,8 @@ from ...utils import (
     torch_compilable_check,
     torch_int,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_janus import JanusConfig, JanusVisionConfig, JanusVQVAEConfig
 
@@ -255,8 +256,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -452,7 +452,8 @@ class JanusVisionModel(JanusPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -885,7 +886,8 @@ class JanusVQVAE(JanusPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def encode(self, pixel_values: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]) -> JanusVQVAEModelOutput:
         hidden_states = self.encoder(pixel_values)
         conv_hidden_states = self.quant_conv(hidden_states)
@@ -1186,7 +1188,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         )
 
         # Pixel values are used only in the first iteration if available
-        # In subsquent iterations, they are already merged with text and cached
+        # In subsequent iterations, they are already merged with text and cached
         # NOTE: first iteration doesn't have to be prefill, it can be the first
         # iteration with a question and cached system prompt (continue generate from cache)
         if is_first_iteration or not kwargs.get("use_cache", True):
@@ -1314,7 +1316,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         if model_kwargs.get("past_key_values", None) is None:
             # Prepare cache if not provided.
-            model_kwargs["past_key_values"] = self._get_cache(
+            model_kwargs["past_key_values"] = self._prepare_static_cache(
                 cache_implementation=generation_config.cache_implementation or "static",
                 # batch_size should account for both conditional/unconditional input; hence multiplied by 2.
                 batch_size=batch_size * 2,

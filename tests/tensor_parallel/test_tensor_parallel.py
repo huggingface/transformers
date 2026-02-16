@@ -254,7 +254,7 @@ def _test_model_dense_forward_impl(rank, mode, dtype=torch.float32):
     """Implementation for comparing TP and non-TP model outputs."""
     model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 
-    set_seed(0)
+    set_seed(42)
 
     atol, rtol = (1e-5, 1e-5)
 
@@ -304,7 +304,7 @@ def _test_model_dense_backward_pass_impl(rank, dtype=torch.float32):
     """Implementation for comparing TP and non-TP model backward passes."""
     model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 
-    set_seed(0)
+    set_seed(42)
 
     # Set tolerance based on dtype
     atol, rtol = (1e-5, 1e-5)
@@ -319,7 +319,7 @@ def _test_model_dense_backward_pass_impl(rank, dtype=torch.float32):
     model.train()
 
     batch_size, seq_length = 2, 1024
-    set_seed(0)
+    set_seed(42)
     input_ids = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
     labels = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
 
@@ -369,7 +369,7 @@ def _test_model_dense_forward_compile_impl(rank, mode, dtype=torch.float32):
     """Implementation for comparing TP and non-TP model outputs with torch.compile."""
     model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 
-    set_seed(0)
+    set_seed(42)
 
     # Set tolerance based on dtype
     atol, rtol = (1e-5, 1e-5)
@@ -418,7 +418,7 @@ def _test_model_dense_backward_compile_impl(rank, dtype=torch.float32):
     """Implementation for comparing TP and non-TP model backward passes with torch.compile."""
     model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 
-    set_seed(0)
+    set_seed(42)
 
     # Set tolerance based on dtype
     atol, rtol = (1e-5, 1e-5)
@@ -437,7 +437,7 @@ def _test_model_dense_backward_compile_impl(rank, dtype=torch.float32):
     model_tp.forward = torch.compile(model_tp.forward)
 
     batch_size, seq_length = 2, 1024
-    set_seed(0)
+    set_seed(42)
     input_ids = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
     labels = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
 
@@ -565,7 +565,7 @@ def _test_model_moe_forward_impl(rank, mode, dtype=torch.float32):
     """Implementation for comparing TP and non-TP MoE model outputs."""
     model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
 
-    set_seed(0)
+    set_seed(42)
 
     # Set tolerance based on dtype
     atol, rtol = (1e-5, 1e-5)
@@ -612,7 +612,7 @@ def _test_model_moe_backward_pass_impl(rank, dtype=torch.float32):
     """Implementation for comparing TP and non-TP MoE model backward passes."""
     model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
 
-    set_seed(0)
+    set_seed(42)
 
     atol, rtol = (1e-5, 1e-5)
 
@@ -675,7 +675,7 @@ def _test_model_moe_forward_compile_impl(rank, mode, dtype=torch.float32, expert
     """Implementation for comparing TP and non-TP MoE model outputs with torch.compile."""
     model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
 
-    set_seed(0)
+    set_seed(42)
 
     if dtype == torch.bfloat16:
         atol, rtol = (5e-3, 5e-3)
@@ -728,7 +728,7 @@ def _test_model_moe_backward_compile_impl(rank, dtype=torch.float32, experts_imp
     """Implementation for comparing TP and non-TP MoE model backward passes with torch.compile."""
     model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
 
-    set_seed(0)
+    set_seed(42)
 
     # bfloat16 has lower precision
     if dtype == torch.bfloat16:

@@ -13,7 +13,6 @@
 # limitations under the License.
 """PyTorch Siglip model."""
 
-import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -21,11 +20,10 @@ from typing import Any
 import numpy as np
 import torch
 from torch import nn
-from torch.nn.init import _calculate_fan_in_and_fan_out
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -37,38 +35,9 @@ from ...utils import (
     can_return_tuple,
     torch_int,
 )
-from ...utils.generic import check_model_inputs, is_flash_attention_requested
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
-
-
-def variance_scaling_(tensor, mode="fan_in", distribution="normal"):
-    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
-    if mode == "fan_in":
-        denom = fan_in
-    elif mode == "fan_out":
-        denom = fan_out
-    elif mode == "fan_avg":
-        denom = (fan_in + fan_out) / 2
-
-    variance = 1.0 / denom
-
-    if distribution == "truncated_normal":
-        init.trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
-    elif distribution == "normal":
-        init.normal_(tensor, std=math.sqrt(variance))
-    elif distribution == "uniform":
-        bound = math.sqrt(3 * variance)
-        init.uniform_(tensor, -bound, bound)
-    else:
-        raise ValueError(f"invalid distribution {distribution}")
-
-
-def lecun_normal_(tensor):
-    variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
-
-
-def default_flax_embed_init(tensor):
-    variance_scaling_(tensor, mode="fan_in", distribution="normal")
 
 
 @dataclass
@@ -431,7 +400,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
             if hasattr(module, "position_ids"):
                 init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, nn.Embedding):
-            default_flax_embed_init(module.weight)
+            init.default_flax_embed_init_(module.weight)
         elif isinstance(module, SiglipAttention):
             init.xavier_uniform_(module.q_proj.weight)
             init.xavier_uniform_(module.k_proj.weight)
@@ -459,7 +428,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
                 std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
             )
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            lecun_normal_(module.weight)
+            init.lecun_normal_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
@@ -536,13 +505,11 @@ class SiglipTextTransformer(SiglipPreTrainedModel):
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
         # note: SigLIP's text model does not use a causal mask, unlike the original CLIP model.
-        # expand attention_mask
-        uses_flash_attention = is_flash_attention_requested(self.config)
-        if uses_flash_attention:
-            attention_mask = None
-        elif attention_mask is not None and not uses_flash_attention:
-            # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
@@ -584,7 +551,8 @@ class SiglipTextModel(SiglipPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -705,7 +673,8 @@ class SiglipVisionModel(SiglipPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -849,7 +818,7 @@ class SiglipModel(SiglipPreTrainedModel):
             **kwargs,
         )
 
-    # NOTE: SiglipModel uses Pretrained backbones, so we don't need to add `check_model_inputs` here
+    # NOTE: SiglipModel uses Pretrained backbones, so we don't need to add `capture_outputs` here
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -976,7 +945,8 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.vision_model.embeddings.patch_embedding = value
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

@@ -30,10 +30,10 @@ from ...utils import (
     TensorType,
     TransformersKwargs,
     auto_docstring,
-    is_timm_available,
     logging,
 )
-from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..deformable_detr.modeling_deformable_detr import inverse_sigmoid
 from ..detr.image_processing_detr_fast import DetrImageProcessorFast
 from ..detr.modeling_detr import (
@@ -57,10 +57,6 @@ from ..detr.modeling_detr import (
     eager_attention_forward,
 )
 from .configuration_conditional_detr import ConditionalDetrConfig
-
-
-if is_timm_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -602,7 +598,8 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         inputs_embeds=None,

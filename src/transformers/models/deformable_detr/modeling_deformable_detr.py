@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import contextlib
 import math
 import warnings
 from collections.abc import Callable
@@ -30,27 +29,17 @@ from torch import Tensor
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import load_backbone
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import compile_compatible_method_lru_cache, meshgrid
-from ...utils import (
-    ModelOutput,
-    TransformersKwargs,
-    auto_docstring,
-    is_timm_available,
-    requires_backends,
-    torch_compilable_check,
-)
-from ...utils.backbone_utils import load_backbone
-from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
+from ...pytorch_utils import compile_compatible_method_lru_cache
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deformable_detr import DeformableDetrConfig
-
-
-if is_timm_available():
-    from timm import create_model
 
 
 @dataclass
@@ -309,54 +298,25 @@ class DeformableDetrConvEncoder(nn.Module):
 
         self.config = config
 
-        # For backwards compatibility we have to use the timm library directly instead of the AutoBackbone API
-        if config.use_timm_backbone:
-            # We default to values which were previously hard-coded. This enables configurability from the config
-            # using backbone arguments, while keeping the default behavior the same.
-            requires_backends(self, ["timm"])
-            kwargs = getattr(config, "backbone_kwargs", {})
-            kwargs = {} if kwargs is None else kwargs.copy()
-            out_indices = kwargs.pop("out_indices", (2, 3, 4) if config.num_feature_levels > 1 else (4,))
-            num_channels = kwargs.pop("in_chans", config.num_channels)
-            if config.dilation:
-                kwargs["output_stride"] = kwargs.get("output_stride", 16)
-
-            # When loading pretrained weights, temporarily exit meta device
-            is_meta = torch.empty(0).device.type == "meta"
-            device_ctx = (
-                torch.device("cpu") if (config.use_pretrained_backbone and is_meta) else contextlib.nullcontext()
-            )
-            with device_ctx:
-                backbone = create_model(
-                    config.backbone,
-                    pretrained=config.use_pretrained_backbone,
-                    features_only=True,
-                    out_indices=out_indices,
-                    in_chans=num_channels,
-                    **kwargs,
-                )
-        else:
-            backbone = load_backbone(config)
+        backbone = load_backbone(config)
+        self.intermediate_channel_sizes = backbone.channels
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
+
+        # We used to load with timm library directly instead of the AutoBackbone API
+        # so we need to unwrap the `backbone._backbone` module to load weights without mismatch
+        is_timm_model = False
+        if hasattr(backbone, "_backbone"):
+            backbone = backbone._backbone
+            is_timm_model = True
         self.model = backbone
-        self.intermediate_channel_sizes = (
-            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
-        )
 
-        backbone_model_type = None
-        if config.backbone is not None:
-            backbone_model_type = config.backbone
-        elif config.backbone_config is not None:
-            backbone_model_type = config.backbone_config.model_type
-        else:
-            raise ValueError("Either `backbone` or `backbone_config` should be provided in the config")
-
+        backbone_model_type = config.backbone_config.model_type
         if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
-                if config.use_timm_backbone:
+                if is_timm_model:
                     if "layer2" not in name and "layer3" not in name and "layer4" not in name:
                         parameter.requires_grad_(False)
                 else:
@@ -365,7 +325,9 @@ class DeformableDetrConvEncoder(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
+        features = self.model(pixel_values)
+        if isinstance(features, dict):
+            features = features.feature_maps
 
         out = []
         for feature_map in features:
@@ -477,7 +439,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -934,7 +895,8 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         inputs_embeds=None,
@@ -1001,7 +963,7 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         """
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes_list):
-            ref_y, ref_x = meshgrid(
+            ref_y, ref_x = torch.meshgrid(
                 torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
                 torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
                 indexing="ij",
@@ -1059,7 +1021,8 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         inputs_embeds=None,
@@ -1300,7 +1263,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
-            grid_y, grid_x = meshgrid(
+            grid_y, grid_x = torch.meshgrid(
                 torch.linspace(
                     0,
                     height - 1,

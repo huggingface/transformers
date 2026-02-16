@@ -7,6 +7,7 @@ import torch
 from .configuration_utils import PreTrainedConfig
 from .utils import (
     is_hqq_available,
+    is_optimum_quanto_available,
     is_quanto_greater,
     is_torch_greater_or_equal,
     is_torchdynamo_compiling,
@@ -584,7 +585,12 @@ class QuantoQuantizedLayer(QuantizedLayer):
         )
 
         # We need to import quanto here to avoid circular imports due to optimum/quanto/models/transformers_models.py
-        if is_quanto_greater("0.2.5", accept_dev=True):
+        if not is_optimum_quanto_available():
+            raise ImportError(
+                "You need to install optimum-quanto in order to use KV cache quantization with optimum-quanto "
+                "backend. Please install it via  with `pip install optimum-quanto`"
+            )
+        elif is_quanto_greater("0.2.5", accept_dev=True):
             from optimum.quanto import MaxOptimizer, qint2, qint4
         else:
             raise ImportError(
@@ -634,7 +640,10 @@ class HQQQuantizedLayer(QuantizedLayer):
         )
 
         if not is_hqq_available():
-            raise ImportError("You need to install `hqq` to use `HQQQuantizedLayer`")
+            raise ImportError(
+                "You need to install `HQQ` in order to use KV cache quantization with HQQ backend. "
+                "Please install it via  with `pip install hqq`"
+            )
 
         if self.nbits not in [1, 2, 3, 4, 8]:
             raise ValueError(
@@ -869,7 +878,7 @@ class Cache:
 
     @property
     def is_compileable(self) -> bool:
-        """Return whether the cache is compileable"""
+        """Return whether the cache is compilable"""
         # For DynamicCache dispatching the layers lazily (otherwise, all([]) is True)
         if len(self.layers) == 0:
             return False
@@ -1252,20 +1261,6 @@ class EncoderDecoderCache(Cache):
         """
         self.check_dynamic_cache(self.crop.__name__)
         self.self_attention_cache.crop(maximum_length)
-
-    def batch_split(self, full_batch_size: int, split_size: int) -> "list[EncoderDecoderCache]":
-        """
-        Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
-        `_split_model_inputs()` in `generation.utils`
-        """
-        self.check_dynamic_cache(self.batch_split.__name__)
-        self_attention_cache = self.self_attention_cache.batch_split(full_batch_size, split_size)
-        cross_attention_cache = self.cross_attention_cache.batch_split(full_batch_size, split_size)
-
-        out = []
-        for self_attn, cross_attn in zip(self_attention_cache, cross_attention_cache):
-            out.append(EncoderDecoderCache(self_attn, cross_attn))
-        return out
 
     def batch_repeat_interleave(self, repeats: int):
         """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search (on the Hub)."""
