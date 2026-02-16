@@ -391,8 +391,9 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
     def test_init_zero3_moe_weight_conversion(self):
         # test that weight conversions (MoE expert fusion) work correctly under zero3
-        import deepspeed
         import tempfile
+
+        import deepspeed
 
         from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM
 
