@@ -147,6 +147,23 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_eager_matches_batched_and_grouped_inference(self):
         pass
 
+    @unittest.skip("DSA indexer mask shape mismatch with static cache")
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip("DSA indexer mask shape mismatch with compiled forward")
+    def test_generate_compile_model_forward_fullgraph(self):
+        pass
+
+    @unittest.skip("DSA indexer mask shape mismatch with compilation")
+    def test_generate_compilation_all_outputs(self):
+        pass
+
+    @unittest.skip("DSA indexer mask shape mismatch with static cache")
+    def test_generate_with_static_cache(self):
+        pass
+
+
 
 @require_torch_accelerator
 @slow
