@@ -412,8 +412,9 @@ class SegformerPreTrainedModel(PreTrainedModel):
     config: SegformerConfig
     base_model_prefix = "segformer"
     main_input_name = "pixel_values"
-    input_modalities = ("image",) @ property
+    input_modalities = ("image",)
 
+    @property
     def _can_record_outputs(self) -> dict[str, str]:
         return {"hidden_states": "SegformerEncoder", "attentions": "SegformerEncoder"}
 
@@ -469,8 +470,6 @@ class SegformerModel(SegformerPreTrainedModel):
     states) e.g. for ImageNet.
     """
 )
-@can_return_tuple
-@capture_outputs
 class SegformerForImageClassification(SegformerPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": "SegformerForImageClassification",
@@ -489,8 +488,8 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @capture_outputs
     @can_return_tuple
+    @capture_outputs
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
