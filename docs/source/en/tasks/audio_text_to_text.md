@@ -62,10 +62,6 @@ This guide will show you how to:
 2. Use your fine-tuned model for inference.
 
 > [!TIP]
-<<<<<<< HEAD
-
-=======
->>>>>>> 015c027072 (nit)
 > To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/audio-text-to-text).
 
 
@@ -179,7 +175,6 @@ Instantiate the data collator:
 ## Train
 
 > [!TIP]
-
 > If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training)!
 
 
@@ -225,8 +220,7 @@ Load the Audio Flamingo model. We use `bfloat16` precision and `device_map="auto
 ```
 
 > [!TIP]
-
-This LoRA configuration targets the language model's attention and feed-forward layers, which is sufficient for fine-tuning on audio captioning tasks. The audio encoder remains frozen and uses its pretrained weights.
+> This LoRA configuration targets the language model's attention and feed-forward layers, which is sufficient for fine-tuning on audio captioning tasks while saving on compute. The audio encoder remains frozen and uses its pretrained weights.
 
 
 ### Setup training
@@ -278,10 +272,9 @@ Save the LoRA adapter and processor:
 >>> processor.save_pretrained("audio-flamingo-3-hf-lora-finetuned")
 ```
 
-Once training is completed, you can optionally share your model to the Hub:
+Once training is completed, share your model to the Hub:
 
 ```py
->>> # Uncomment to push to Hub
 >>> trainer.push_to_hub()
 ```
 
@@ -368,8 +361,7 @@ You can also use the [`Pipeline`] API for quick inference. First, merge the LoRA
 ```
 
 > [!TIP]
-
-For more advanced use cases like multi-turn conversations with audio, you can structure your messages with alternating user and assistant roles, similar to [image-text-to-text](./image_text_to_text) models.
+> For more advanced use cases like multi-turn conversations with audio, you can structure your messages with alternating user and assistant roles, similar to [image-text-to-text](./image_text_to_text) models.
 
 
 ## Further Reading
