@@ -291,9 +291,7 @@ class Transpose(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        # Note: we never use check_dims in reverse mode, as otherwise the shapes will always match and we never
-        # transpose back to original format
-        return Transpose(dim0=self.dim1, dim1=self.dim0, check_dims=False)
+        return Transpose(dim0=self.dim1, dim1=self.dim0, check_dims=self.check_dims)
 
 
 class PermuteForRope(ConversionOps):
