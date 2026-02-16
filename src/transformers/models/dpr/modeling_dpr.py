@@ -23,6 +23,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
     auto_docstring,
+    can_return_tuple,
     logging,
 )
 from ..bert.modeling_bert import BertModel
@@ -118,6 +119,7 @@ class DPREncoder(DPRPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: Tensor,
@@ -126,7 +128,6 @@ class DPREncoder(DPRPreTrainedModel):
         inputs_embeds: Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        return_dict: bool = False,
         **kwargs,
     ) -> BaseModelOutputWithPooling | tuple[Tensor, ...]:
         outputs = self.bert_model(
@@ -136,16 +137,12 @@ class DPREncoder(DPRPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
         sequence_output = outputs[0]
         pooled_output = sequence_output[:, 0, :]
 
         if self.projection_dim > 0:
             pooled_output = self.encode_proj(pooled_output)
-
-        if not return_dict:
-            return (sequence_output, pooled_output) + outputs[2:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -172,6 +169,7 @@ class DPRSpanPredictor(DPRPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: Tensor,
@@ -179,7 +177,6 @@ class DPRSpanPredictor(DPRPreTrainedModel):
         inputs_embeds: Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        return_dict: bool = False,
         **kwargs,
     ) -> DPRReaderOutput | tuple[Tensor, ...]:
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
@@ -191,7 +188,6 @@ class DPRSpanPredictor(DPRPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
         sequence_output = outputs[0]
 
@@ -206,9 +202,6 @@ class DPRSpanPredictor(DPRPreTrainedModel):
         start_logits = start_logits.view(n_passages, sequence_length)
         end_logits = end_logits.view(n_passages, sequence_length)
         relevance_logits = relevance_logits.view(n_passages)
-
-        if not return_dict:
-            return (start_logits, end_logits, relevance_logits) + outputs[2:]
 
         return DPRReaderOutput(
             start_logits=start_logits,
@@ -272,6 +265,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -281,7 +275,6 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         inputs_embeds: Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> DPRContextEncoderOutput | tuple[Tensor, ...]:
         r"""
@@ -326,7 +319,6 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -355,11 +347,8 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        if not return_dict:
-            return outputs[1:]
         return DPRContextEncoderOutput(
             pooler_output=outputs.pooler_output, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
@@ -378,6 +367,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -387,7 +377,6 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         inputs_embeds: Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> DPRQuestionEncoderOutput | tuple[Tensor, ...]:
         r"""
@@ -432,7 +421,6 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -462,11 +450,8 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        if not return_dict:
-            return outputs[1:]
         return DPRQuestionEncoderOutput(
             pooler_output=outputs.pooler_output, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
@@ -485,6 +470,7 @@ class DPRReader(DPRPretrainedReader):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -493,7 +479,6 @@ class DPRReader(DPRPretrainedReader):
         inputs_embeds: Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> DPRReaderOutput | tuple[Tensor, ...]:
         r"""
@@ -538,7 +523,6 @@ class DPRReader(DPRPretrainedReader):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -561,7 +545,6 @@ class DPRReader(DPRPretrainedReader):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
 
