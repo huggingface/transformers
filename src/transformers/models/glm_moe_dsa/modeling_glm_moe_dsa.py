@@ -388,7 +388,7 @@ class GlmMoeDsaAttention(nn.Module):
 
         # ===== Indexer (DSA sparse mask) =====
         # attention_mask is [B, 1, S, T] (4D) but indexer works with [B, S, T] (3D)
-        indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
+        indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None and attention_mask.dim() == 4 else attention_mask.unsqueeze(1)
         topk_indices = self.indexer(
             hidden_states,
             q_resid,
@@ -407,17 +407,16 @@ class GlmMoeDsaAttention(nn.Module):
         )
         index_mask.scatter_(-1, topk_indices, 0.0)  # [B, S, T]
         index_mask = index_mask.unsqueeze(1)  # [B, 1, S, T]
-        if attention_mask is not None:
-            causal_mask = attention_mask[:, :, :, :total_len]
+        if attention_mask is not None and attention_mask.dim() == 4:
+            causal_mask = attention_mask[..., :total_len]
             combined_mask = index_mask + causal_mask
         else:
-            combined_mask = index_mask
+            combined_mask = attention_mask.masked_fill(index_mask == float("-inf"), float("-inf")) if attention_mask is not None else index_mask
 
         # Flash attention head_dim padding (qk_head_dim != v_head_dim)
         if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
 
-        # ===== Attention via standard interface =====
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
@@ -430,13 +429,13 @@ class GlmMoeDsaAttention(nn.Module):
             combined_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            indices=topk_indices, # flash_mla_with_kvcache
             **kwargs,
         )
 
         if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
             attn_output = attn_output[:, :, :, : self.v_head_dim]
 
-        # ===== Output projection =====
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
@@ -629,9 +628,9 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["GlmMoeDsaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
+    _supports_flash_attn = False # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
-    _supports_flex_attn = True
+    _supports_flex_attn = False
     _can_compile_fullgraph = (
         is_grouped_mm_available()
     )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
