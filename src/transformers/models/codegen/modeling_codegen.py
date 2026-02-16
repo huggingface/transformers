@@ -28,8 +28,10 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
+    can_return_tuple,
     logging,
 )
+from ...utils.output_capturing import capture_outputs
 from .configuration_codegen import CodeGenConfig
 
 
@@ -141,13 +143,8 @@ class CodeGenAttention(nn.Module):
         attention_mask: torch.FloatTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         use_cache: bool | None = False,
-        output_attentions: bool | None = False,
         cache_position: torch.LongTensor | None = None,
-    ) -> (
-        tuple[torch.Tensor, tuple[torch.Tensor]]
-        | tuple[torch.Tensor, tuple[torch.Tensor], tuple[torch.Tensor, ...]]
-        | None
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         qkv = self.qkv_proj(hidden_states)
         # TODO(enijkamp): factor out number of logical TPU-v4 cores or make forward pass agnostic
         mp_num = 4
@@ -245,9 +242,9 @@ class CodeGenBlock(GradientCheckpointingLayer):
         attention_mask: torch.FloatTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         use_cache: bool | None = False,
-        output_attentions: bool | None = False,
         cache_position: torch.LongTensor | None = None,
-    ) -> tuple[torch.Tensor] | tuple[torch.Tensor, tuple[torch.FloatTensor, ...]] | None:
+        **kwargs,
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
         attn_outputs, attn_weights = self.attn(
@@ -256,13 +253,12 @@ class CodeGenBlock(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             use_cache=use_cache,
-            output_attentions=output_attentions,
             cache_position=cache_position,
         )
         feed_forward_hidden_states = self.mlp(hidden_states)
         hidden_states = attn_outputs + feed_forward_hidden_states + residual
 
-        return hidden_states, attn_weights
+        return hidden_states
 
 
 @auto_docstring
@@ -273,6 +269,10 @@ class CodeGenPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["CodeGenBlock"]
     _skip_keys_device_placement = "past_key_values"
     _can_compile_fullgraph = True
+    _can_record_outputs = {
+        "hidden_states": CodeGenBlock,
+        "attentions": CodeGenAttention,
+    }
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -304,6 +304,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -314,34 +315,19 @@ class CodeGenModel(CodeGenPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         cache_position: torch.LongTensor | None = None,
-        **kwargs,  # NOOP kwargs, for now
-    ) -> tuple | BaseModelOutputWithPast:
+        **kwargs,
+    ) -> BaseModelOutputWithPast:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_dim)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
@@ -374,45 +360,23 @@ class CodeGenModel(CodeGenPreTrainedModel):
             hidden_states = hidden_states + token_type_embeds
 
         hidden_states = self.drop(hidden_states)
-        output_shape = (-1, seq_length, hidden_states.size(-1))
 
-        all_self_attentions = () if output_attentions else None
-        all_hidden_states = () if output_hidden_states else None
-        for i, block in enumerate(self.h):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            outputs = block(
+        for block in self.h:
+            hidden_states = block(
                 hidden_states,
                 layer_past=past_key_values,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 use_cache=use_cache,
-                output_attentions=output_attentions,
                 cache_position=cache_position,
+                **kwargs,
             )
-
-            hidden_states = outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[1],)
 
         hidden_states = self.ln_f(hidden_states)
-
-        hidden_states = hidden_states.view(output_shape)
-        # Add last hidden state
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v for v in [hidden_states, past_key_values, all_hidden_states, all_self_attentions] if v is not None
-            )
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
 
 
@@ -432,6 +396,7 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -443,13 +408,10 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> CausalLMOutputWithPast:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_dim)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
@@ -460,9 +422,7 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
+        outputs: BaseModelOutputWithPast = self.transformer(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
@@ -470,13 +430,11 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
-        hidden_states = transformer_outputs[0]
+        hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
@@ -485,16 +443,12 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        if not return_dict:
-            output = (logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=transformer_outputs.past_key_values,
-            hidden_states=transformer_outputs.hidden_states,
-            attentions=transformer_outputs.attentions,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
