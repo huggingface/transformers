@@ -291,7 +291,9 @@ class Transpose(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return Transpose(dim0=self.dim1, dim1=self.dim0, sentinel=self.sentinel)
+        # Note: we never use the sentinel in reverse mode, as otherwise the shapes will always match and we never
+        # transpose back to original format
+        return Transpose(dim0=self.dim1, dim1=self.dim0, sentinel=False)
 
 
 class PermuteForRope(ConversionOps):
