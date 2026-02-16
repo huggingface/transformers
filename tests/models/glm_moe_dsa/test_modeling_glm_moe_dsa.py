@@ -15,7 +15,17 @@
 
 import unittest
 
-from transformers import Cache, GlmMoeDsaConfig, is_torch_available
+import torch
+
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    Cache,
+    FineGrainedFP8Config,
+    GlmMoeDsaConfig,
+    is_torch_available,
+    set_seed,
+)
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -89,4 +99,43 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 @slow
 class GlmMoeDsaIntegrationTest(unittest.TestCase):
-    pass
+    @unittest.skip("Test requires 2 nodes")
+    def test_glm_moe_dsa_fp8_inference(self):
+        # TORCH_DISTRIBUTED_DEBUG=DETAIL python -m torch.distributed.run --nnodes=2 --nproc_per_node=8 --node_rank=0 --master_addr=ip-26-0-169-86 --master_port=29500
+        set_seed(0)  # different ranks need the same seed
+        model_id = "zai-org/GLM-5-FP8"
+
+        quantization_config = FineGrainedFP8Config(
+            modules_to_not_convert=[
+                "model.layers.*.mlp.gate$",
+                "model.layers.*.self_attn.indexer.weights_proj$",
+                "lm_head",
+            ],
+            weight_block_size=(128, 128),
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            quantization_config=quantization_config,
+            tp_plan="auto",
+            attn_implementation="eager",
+        )
+
+        prompt = ["Hi, introduce yourself", "The capital of France is known for"]
+        inputs = tokenizer(prompt, return_tensors="pt", padding=True).to(model.device)
+
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=16,
+            )
+
+        output = tokenizer.decode(outputs, skip_special_tokens=False)
+        self.assertqual(
+            output,
+            [
+                "<|endoftext|><|endoftext|><|endoftext|>Hi, introduce yourself!\nI'm a 18 years old boy from Italy and I'm a student",
+                "The capital of France is known for its rich history, culture, and the city of the of the of the of",
+            ],
+        )
