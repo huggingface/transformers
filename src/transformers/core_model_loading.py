@@ -249,9 +249,10 @@ class Transpose(ConversionOps):
     Transposes the given tensor along dim0 and dim1.
     """
 
-    def __init__(self, dim0: int = 0, dim1: int = 1):
+    def __init__(self, dim0: int = 0, dim1: int = 1, sentinel_dim: int | None = None):
         self.dim0 = dim0
         self.dim1 = dim1
+        self.sentinel_dim = sentinel_dim
 
     @torch.no_grad
     def convert(
@@ -260,7 +261,17 @@ class Transpose(ConversionOps):
         target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
+        # In this case, always transpose
+        if self.sentinel_dim is None:
+            return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
+        # In this case, check the sentinel before transposing
+        else:
+            sentinel_size = kwargs["expected_param_shape"][self.sentinel_dim]
+            # The sentinel check is True: do NOT transpose
+            if tensor.shape[self.sentinel_dim] == sentinel_size:
+                return {target_pattern: tensor}
+            else:
+                return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
 
     def get_target_pattern(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
@@ -279,7 +290,7 @@ class Transpose(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return Transpose(dim0=self.dim1, dim1=self.dim0)
+        return Transpose(dim0=self.dim1, dim1=self.dim0, sentinel_dim=self.sentinel_dim)
 
 
 class PermuteForRope(ConversionOps):
