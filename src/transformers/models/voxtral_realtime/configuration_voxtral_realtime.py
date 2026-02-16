@@ -44,23 +44,44 @@ class VoxtralRealtimeEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin)
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-            vocab_size (`<fill_type>`, *optional*, defaults to 131072): <fill_docstring>
-            hidden_size (`<fill_type>`, *optional*, defaults to 1280): <fill_docstring>
-            intermediate_size (`<fill_type>`, *optional*, defaults to 5120): <fill_docstring>
-            num_hidden_layers (`<fill_type>`, *optional*, defaults to 32): <fill_docstring>
-            num_attention_heads (`<fill_type>`, *optional*, defaults to 32): <fill_docstring>
-            scale_embedding (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-            activation_function (`<fill_type>`, *optional*, defaults to `"gelu"`): <fill_docstring>
-            num_mel_bins (`<fill_type>`, *optional*, defaults to 128): <fill_docstring>
-            max_source_positions (`<fill_type>`, *optional*, defaults to 1500): <fill_docstring>
-            initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
-            attention_dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
-            hidden_act (`<fill_type>`, *optional*, defaults to `"silu"`): <fill_docstring>
-            max_position_embeddings (`<fill_type>`, *optional*, defaults to 1500): <fill_docstring>
-            rms_norm_eps (`<fill_type>`, *optional*, defaults to 1e-05): <fill_docstring>
-            rope_parameters (`transformers.modeling_rope_utils.RopeParameters | dict[str, transformers.modeling_rope_utils.RopeParameters] | None`, *optional*): <fill_docstring>
-            sliding_window (`<fill_type>`, *optional*, defaults to 750): <fill_docstring>
-            head_dim (`<fill_type>`, *optional*, defaults to 64): <fill_docstring>
+        vocab_size (`int`, *optional*, defaults to 131072):
+            Vocabulary size of the model.
+        hidden_size (`int`, *optional*, defaults to 1280):
+            Dimensionality of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 5120):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 32):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 32):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        scale_embedding (`bool`, *optional*, defaults to `False`):
+            Scale embeddings by dividing by sqrt(hidden_size) if True.
+        activation_function (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler.
+        num_mel_bins (`int`, *optional*, defaults to 128):
+            Number of mel features used per input features. Should correspond to the value used in the
+            `VoxtralRealtimeProcessor` class.
+        max_source_positions (`int`, *optional*, defaults to 1500):
+            The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        hidden_act (`str`, *optional*, defaults to `"silu"`):
+            The activation function used in the MLP layers.
+        max_position_embeddings (`int`, *optional*, defaults to 1500):
+            The maximum sequence length that this model might ever be used with.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the RMS normalization layers.
+        rope_parameters (`Union[RopeParameters, dict]`, *optional*):
+            The parameters for the rotary position embeddings.
+        num_key_value_heads (`int`, *optional*):
+            Number of key-value heads for grouped-query attention. Defaults to `num_attention_heads`
+            (i.e. multi-head attention).
+        sliding_window (`int`, *optional*, defaults to 750):
+            The sliding window size for local attention.
+        head_dim (`int`, *optional*, defaults to 64):
+            The dimension of each attention head.
 
     ```python
     >>> from transformers import VoxtralRealtimeEncoderConfig, VoxtralRealtimeEncoder
