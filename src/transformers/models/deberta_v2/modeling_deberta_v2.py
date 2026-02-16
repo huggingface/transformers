@@ -634,6 +634,7 @@ class DebertaV2Encoder(nn.Module):
         attention_mask,
         query_states=None,
         relative_pos=None,
+        output_attentions=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         if attention_mask.dim() <= 2:
@@ -642,9 +643,6 @@ class DebertaV2Encoder(nn.Module):
             input_mask = attention_mask.sum(-2) > 0
         attention_mask = self.get_attention_mask(attention_mask)
         relative_pos = self.get_rel_pos(hidden_states, query_states, relative_pos)
-
-        # Extract output_attentions from kwargs
-        output_attentions = kwargs.get("output_attentions", False)
 
         next_kv = hidden_states
         rel_embeddings = self.get_rel_embedding()
