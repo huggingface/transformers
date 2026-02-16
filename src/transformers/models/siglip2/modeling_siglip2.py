@@ -35,7 +35,8 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Ima
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_siglip2 import Siglip2Config, Siglip2TextConfig, Siglip2VisionConfig
 
 
@@ -539,7 +540,7 @@ class Siglip2VisionTransformer(Siglip2PreTrainedModel):
 
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 
@@ -597,7 +598,7 @@ class Siglip2TextTransformer(Siglip2PreTrainedModel):
         # note: Siglip2's text model does not use a causal mask, unlike the original CLIP model.
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 
@@ -641,7 +642,8 @@ class Siglip2TextModel(Siglip2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -697,7 +699,7 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
             target_len, source_len = probe.shape[1], hidden_state.shape[1]
             attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=probe,
+                inputs_embeds=probe,
                 attention_mask=attention_mask,
                 encoder_hidden_states=hidden_state,
             )
@@ -743,7 +745,8 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -901,7 +904,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
             **kwargs,
         )
 
-    # NOTE: Siglip2Model uses Pretrained backbones, so we don't need to add `check_model_inputs` here
+    # NOTE: Siglip2Model uses Pretrained backbones, so we don't need to add `capture_outputs` here
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1045,7 +1048,8 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.vision_model.embeddings.patch_embedding = value
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

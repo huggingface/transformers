@@ -123,8 +123,7 @@ class CodeGenAttention(nn.Module):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         if attention_mask is not None:
-            causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-            attn_weights += causal_mask
+            attn_weights = attn_weights + attention_mask
 
         attn_weights = attn_weights / self.scale_attn
         attn_weights = nn.Softmax(dim=-1)(attn_weights)
@@ -360,7 +359,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,

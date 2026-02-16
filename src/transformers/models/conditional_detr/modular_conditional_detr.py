@@ -32,8 +32,8 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import can_return_tuple, check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..deformable_detr.modeling_deformable_detr import inverse_sigmoid
 from ..detr.image_processing_detr_fast import DetrImageProcessorFast
 from ..detr.modeling_detr import (
@@ -598,7 +598,8 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         inputs_embeds=None,
