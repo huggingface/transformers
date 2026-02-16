@@ -13,6 +13,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch GlmMoeDsa model."""
 
+import copy
+import re
+import tempfile
 import unittest
 
 import torch
@@ -122,47 +125,62 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     ):
         pass
 
-    @unittest.skip("I am in a rush, will check it out later on")
-    def test_keep_in_fp32_modules_strict(self):
-        pass
-
-    @unittest.skip("I am in a rush, will check it out later on")
     def test_keep_in_fp32_modules(self):
+        """Override: base test doesn't account for _keep_in_fp32_modules_strict also being fp32."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config))
+                if len(model._keep_in_fp32_modules) == 0:
+                    self.skipTest(reason=f"{model_class.__name__} has no _keep_in_fp32_modules")
+                all_fp32 = list(set(model._keep_in_fp32_modules) | set(model._keep_in_fp32_modules_strict))
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+                    model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
+                    for name, param in model.state_dict().items():
+                        if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in all_fp32):
+                            self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
+                        else:
+                            self.assertTrue(param.dtype == torch.float16, f"{name} was upcasted but it should NOT")
+                    model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+                    for name, param in model.state_dict().items():
+                        if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules_strict):
+                            self.assertTrue(param.dtype == torch.float32, f"{name} not kept strict fp32")
+                        else:
+                            self.assertTrue(param.dtype == torch.bfloat16, f"{name} was upcasted but it should NOT")
+
+    def test_keep_in_fp32_modules_strict(self):
+        """Override: base test doesn't account for _keep_in_fp32_modules also being fp32 in fp16 loading."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config))
+                if len(model._keep_in_fp32_modules_strict) == 0:
+                    self.skipTest(reason=f"{model_class.__name__} has no _keep_in_fp32_modules_strict")
+                all_fp32 = list(set(model._keep_in_fp32_modules) | set(model._keep_in_fp32_modules_strict))
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+                    model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
+                    for name, param in model.state_dict().items():
+                        if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in all_fp32):
+                            self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
+                        else:
+                            self.assertTrue(param.dtype == torch.float16, f"{name} was upcasted but it should NOT")
+                    model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+                    for name, param in model.state_dict().items():
+                        if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules_strict):
+                            self.assertTrue(param.dtype == torch.float32, f"{name} not kept strict fp32")
+                        else:
+                            self.assertTrue(param.dtype == torch.bfloat16, f"{name} was upcasted but it should NOT")
+
+    @unittest.skip("Indexer mutable cache (dynamic shape) is incompatible with fullgraph compilation")
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
     @require_torch_accelerator
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="Qwen2Moe flash attention does not support right padding")
-
-    @unittest.skip("DSA indexer mask shape mismatch with assisted decoding")
-    @parameterized.expand([("random",), ("same",)])
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @unittest.skip("DSA indexer mask shape mismatch with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("Requires torch>=2.9.0 for grouped MM")
-    def test_eager_matches_batched_and_grouped_inference(self):
-        pass
-
-    @unittest.skip("DSA indexer mask shape mismatch with static cache")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("DSA indexer mask shape mismatch with compiled forward")
-    def test_generate_compile_model_forward_fullgraph(self):
-        pass
-
-    @unittest.skip("DSA indexer mask shape mismatch with compilation")
-    def test_generate_compilation_all_outputs(self):
-        pass
-
-    @unittest.skip("DSA indexer mask shape mismatch with static cache")
-    def test_generate_with_static_cache(self):
-        pass
 
 
 @require_torch_accelerator

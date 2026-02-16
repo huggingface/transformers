@@ -342,6 +342,7 @@ class GlmMoeDsaIndexer(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         use_cache: bool = False,
+        cache_position: torch.LongTensor | None = None,
     ) -> torch.LongTensor:
         """
         Computes top-k token indices for sparse attention (DSA).
@@ -381,13 +382,25 @@ class GlmMoeDsaIndexer(nn.Module):
         k = torch.cat([k_pe, k_nope], dim=-1)  # [B, S, D]
 
         # === Key cache (managed by the indexer, not DynamicCache) ===
-        # Reset cache on prefill (new prompt) to avoid stale keys / batch-size mismatch
-        if seq_len > 1:
-            self._cached_keys = None
-
-        if use_cache:
+        # Use cache_position for proper cache management across generation modes:
+        #   - Prefill (cache_position starts at 0): reset cache to just current keys
+        #   - Single-token decode: append one key to existing cache
+        #   - Multi-token decode (assisted generation): trim to correct position, then append
+        if use_cache and cache_position is not None:
+            start_pos = cache_position[0]
+            if start_pos == 0:
+                k_cached = k
+            elif self._cached_keys is not None:
+                k_cached = torch.cat([self._cached_keys[:, :start_pos], k], dim=1)
+            else:
+                k_cached = k
+            self._cached_keys = k_cached
+        elif use_cache:
+            # Fallback when cache_position is not available
+            if seq_len > 1:
+                self._cached_keys = None
             if self._cached_keys is not None:
-                k_cached = torch.cat([self._cached_keys, k], dim=1)  # [B, T, D]
+                k_cached = torch.cat([self._cached_keys, k], dim=1)
             else:
                 k_cached = k
             self._cached_keys = k_cached
@@ -413,10 +426,11 @@ class GlmMoeDsaIndexer(nn.Module):
         # Weight per head and sum across heads → [B, S, T]
         index_scores = torch.einsum("bsht,bsh->bst", scores, weights)
 
-        if attention_mask is not None:
-            index_scores = index_scores + attention_mask
-
         total_len = index_scores.shape[-1]
+        if attention_mask is not None:
+            # Trim mask to match indexer's cache length (may differ from main attention's cache,
+            # e.g. static cache pre-allocates for max_cache_len but indexer only has filled positions)
+            index_scores = index_scores + attention_mask[..., :total_len]
         topk = min(self.index_topk, total_len)
         topk_indices = index_scores.topk(topk, dim=-1).indices  # [B, S, topk]
         return topk_indices
@@ -542,20 +556,21 @@ class GlmMoeDsaAttention(nn.Module):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # ===== Indexer (DSA sparse mask) =====
-        # attention_mask is [B, 1, S, T] (4D) for eager and (2D) otherwise but indexer works with [B, S, T] (3D)
-        indexer_mask = (
-            attention_mask[:, 0, :, :]
-            if attention_mask is not None and attention_mask.dim() == 4
-            else attention_mask.unsqueeze(1)
-            if attention_mask is not None
-            else None
-        )
+        # Normalize attention_mask to 4D for consistent handling downstream.
+        # _update_causal_mask returns 4D [B, 1, S, T] for eager/sdpa, or 2D [B, T] otherwise.
+        if attention_mask is not None and attention_mask.dim() == 2:
+            attention_mask = attention_mask[:, None, None, :]  # [B, T] → [B, 1, 1, T]
+
+        # Indexer works with [B, S, T] (3D) — extract from the (now always 4D) mask
+        indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
+
         topk_indices = self.indexer(
             hidden_states,
             q_resid,
             position_embeddings,
             indexer_mask,
             use_cache=past_key_values is not None,
+            cache_position=cache_position,
         )  # [B, S, topk]
 
         # Build combined DSA + causal mask: -inf everywhere except selected top-k positions
@@ -568,15 +583,10 @@ class GlmMoeDsaAttention(nn.Module):
         )
         index_mask.scatter_(-1, topk_indices, 0.0)  # [B, S, T]
         index_mask = index_mask.unsqueeze(1)  # [B, 1, S, T]
-        if attention_mask is not None and attention_mask.dim() == 4:
-            causal_mask = attention_mask[..., :total_len]
-            combined_mask = index_mask + causal_mask
+        if attention_mask is not None:
+            combined_mask = index_mask + attention_mask[..., :total_len]
         else:
-            combined_mask = (
-                attention_mask.masked_fill(index_mask == float("-inf"), float("-inf"))
-                if attention_mask is not None
-                else index_mask
-            )
+            combined_mask = index_mask
 
         # Flash attention head_dim padding (qk_head_dim != v_head_dim)
         if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
