@@ -31,13 +31,17 @@ if is_vision_available():
 class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PixtralProcessor
     model_id = "mistral-community/pixtral-12b"
-    url_0 = url_to_local_path(
-        "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-    )
-    image_0 = np.random.randint(255, size=(3, 876, 1300), dtype=np.uint8)
-    url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image_1 = np.random.randint(255, size=(3, 480, 640), dtype=np.uint8)
-    image_2 = np.random.randint(255, size=(3, 1024, 1024), dtype=np.uint8)
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        cls.url_0 = url_to_local_path(
+            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+        )
+        cls.image_0 = np.random.randint(255, size=(3, 876, 1300), dtype=np.uint8)
+        cls.url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        cls.image_1 = np.random.randint(255, size=(3, 480, 640), dtype=np.uint8)
+        cls.image_2 = np.random.randint(255, size=(3, 1024, 1024), dtype=np.uint8)
+        cls.image_token = processor.image_token
 
     @parameterized.expand([(1, "pt"), (2, "pt")])
     @unittest.skip("Not tested before, to investigate")

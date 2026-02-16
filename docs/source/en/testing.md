@@ -458,14 +458,14 @@ Let's depict the GPU requirements in the following table:
 | `< 2`  | `@require_torch_non_multi_gpu` |
 | `< 3`  | `@require_torch_up_to_2_gpus`  |
 
-For example, here is a test that must be run only when there are 2 or more GPUs available and pytorch is installed:
+For example, here is a test that must be run only when there are 2 or more GPUs available and PyTorch is installed:
 
 ```python no-style
 @require_torch_multi_gpu
 def test_example_with_multi_gpu():
 ```
 
-These decorators can be stacked. For example, if a test is slow and requires at least one GPU under pytorch, here is
+These decorators can be stacked. For example, if a test is slow and requires at least one GPU under PyTorch, here is
 how to set it up:
 
 ```python no-style

@@ -119,7 +119,6 @@ class MambaCache:
             self.conv_states.append(conv_state)
             self.ssm_states.append(ssm_state)
 
-    @torch.no_grad()
     def update_conv_state(
         self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
     ) -> torch.Tensor:
@@ -137,7 +136,6 @@ class MambaCache:
         self.conv_states[layer_idx] += conv_state
         return self.conv_states[layer_idx]
 
-    @torch.no_grad()
     def update_ssm_state(self, layer_idx: int, new_ssm_state: torch.Tensor):
         self.ssm_states[layer_idx].zero_()
         self.ssm_states[layer_idx] += new_ssm_state.to(self.ssm_states[layer_idx].device)

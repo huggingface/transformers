@@ -312,7 +312,7 @@ class MoonshineStreamingEncoder(MoonshineStreamingPreTrainedModel):
         if attention_mask is not None:
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
             }
             per_layer_attention_mask = [
