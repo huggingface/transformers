@@ -180,7 +180,7 @@ Instantiate the data collator:
 
 > [!TIP]
 
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training)!
+> If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training)!
 
 
 Load the Audio Flamingo model. We use `bfloat16` precision and `device_map="auto"` for efficient memory usage:
