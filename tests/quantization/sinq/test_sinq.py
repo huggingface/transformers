@@ -191,6 +191,3 @@ class SinqTest(unittest.TestCase):
 
             del loaded_model
 
-
-if __name__ == "__main__":
-    unittest.main()
