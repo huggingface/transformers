@@ -219,10 +219,8 @@ def _can_use_grouped_mm(
     if torch.compiler.is_compiling() and weight.dtype != torch.bfloat16:
         # torch.grouped_mm is not supported in torch.compile with dtypes other than bfloat16
         return False
-    elif hasattr(torch.nn.functional, "grouped_mm") or hasattr(torch, "_grouped_mm"):
-        return True
-    else:
-        return False
+
+    return hasattr(torch.nn.functional, "grouped_mm") or hasattr(torch, "_grouped_mm")
 
 
 def _grouped_mm(
@@ -339,7 +337,11 @@ def grouped_mm_experts_forward(
 
     # --- Up projection per expert (grouped) ---
     gate_up_out = _grouped_linear(
-        selected_hidden_states_g, selected_gate_up, selected_gate_up_bias, offsets, is_transposed=self.is_transposed
+        selected_hidden_states_g,
+        selected_gate_up,
+        offs=offsets,
+        bias=selected_gate_up_bias,
+        is_transposed=self.is_transposed,
     )  # (S, 2 * intermediate_dim)
 
     # Apply gating
@@ -347,7 +349,11 @@ def grouped_mm_experts_forward(
 
     # --- Down projection per expert (grouped) ---
     out_per_sample_g = _grouped_linear(
-        gated_out, selected_down, selected_down_bias, offsets, is_transposed=self.is_transposed
+        gated_out,
+        selected_down,
+        offs=offsets,
+        bias=selected_down_bias,
+        is_transposed=self.is_transposed,
     )  # (S, hidden_dim)
 
     # Apply routing weights
