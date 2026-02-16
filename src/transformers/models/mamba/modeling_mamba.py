@@ -185,9 +185,7 @@ class MambaMixer(nn.Module):
         self.act = ACT2FN[config.hidden_act]
 
         self.use_mambapy = config.use_mambapy
-        # Use PyTorch's associative scan for the parallel scan path during torch.compile tracing.
-        # Set config.use_associative_scan = False to fall back to the naive sequential implementation.
-        self.use_associative_scan = getattr(config, "use_associative_scan", True)
+        self.use_associative_scan = config.use_associative_scan
 
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=config.use_bias)

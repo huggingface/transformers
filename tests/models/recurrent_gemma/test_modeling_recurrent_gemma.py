@@ -261,3 +261,40 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False, use_cache=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, expected_text)
+
+    @pytest.mark.torch_compile_test
+    def test_associative_scan_matches_sequential(self):
+        """Compiled generate with use_associative_scan=False vs =True produces the same text."""
+        from transformers.models.recurrent_gemma.modeling_recurrent_gemma import associative_scan
+
+        if associative_scan is None:
+            self.skipTest("associative_scan is not available (requires torch >= 2.9.0).")
+        if torch_device == "cpu":
+            self.skipTest("Associative scan test requires a torch accelerator.")
+
+        model_id = "alpindale/recurrentgemma-9b-it"
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        # Opt-out: use_associative_scan=False → compiled sequential loop
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, dtype=torch.float16, use_associative_scan=False
+        ).to(torch_device)
+        model.eval()
+        model.forward = torch.compile(model.forward)
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False, use_cache=False)
+        expected_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        torch._dynamo.reset()
+        torch.cuda.empty_cache()
+
+        # Opt-in: use_associative_scan=True → compiled associative scan
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, dtype=torch.float16, use_associative_scan=True
+        ).to(torch_device)
+        model.eval()
+        model.forward = torch.compile(model.forward)
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False, use_cache=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, expected_text)

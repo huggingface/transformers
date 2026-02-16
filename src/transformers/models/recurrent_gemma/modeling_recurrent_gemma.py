@@ -74,10 +74,6 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
 
         self.config = config
 
-        # Use PyTorch's associative scan for the parallel scan path during torch.compile tracing.
-        # Set config.use_associative_scan = False to fall back to the naive sequential implementation.
-        self.use_associative_scan = getattr(config, "use_associative_scan", True)
-
         self.rope_type = self.config.rope_parameters["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
@@ -339,6 +335,7 @@ class RecurrentGemmaRglru(nn.Module):
             torch.empty([self.num_attention_heads, self.block_width, self.block_width])
         )
         self.recurrent_gate_bias = nn.Parameter(torch.empty([self.num_attention_heads, self.block_width]))
+        self.use_associative_scan = config.use_associative_scan
         self.recurrent_states = None
 
     def forward(
