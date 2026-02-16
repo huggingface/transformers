@@ -388,7 +388,11 @@ class GlmMoeDsaAttention(nn.Module):
 
         # ===== Indexer (DSA sparse mask) =====
         # attention_mask is [B, 1, S, T] (4D) but indexer works with [B, S, T] (3D)
-        indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None and attention_mask.dim() == 4 else attention_mask.unsqueeze(1)
+        indexer_mask = (
+            attention_mask[:, 0, :, :]
+            if attention_mask is not None and attention_mask.dim() == 4
+            else attention_mask.unsqueeze(1)
+        )
         topk_indices = self.indexer(
             hidden_states,
             q_resid,
@@ -411,7 +415,11 @@ class GlmMoeDsaAttention(nn.Module):
             causal_mask = attention_mask[..., :total_len]
             combined_mask = index_mask + causal_mask
         else:
-            combined_mask = attention_mask.masked_fill(index_mask == float("-inf"), float("-inf")) if attention_mask is not None else index_mask
+            combined_mask = (
+                attention_mask.masked_fill(index_mask == float("-inf"), float("-inf"))
+                if attention_mask is not None
+                else index_mask
+            )
 
         # Flash attention head_dim padding (qk_head_dim != v_head_dim)
         if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
@@ -429,7 +437,7 @@ class GlmMoeDsaAttention(nn.Module):
             combined_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            indices=topk_indices, # flash_mla_with_kvcache
+            indices=topk_indices,  # flash_mla_with_kvcache
             **kwargs,
         )
 
@@ -628,7 +636,7 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["GlmMoeDsaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = False # flash-mla kernels need a bit more work in the way we enable them!
+    _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False
     _can_compile_fullgraph = (

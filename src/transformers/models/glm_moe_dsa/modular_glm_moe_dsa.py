@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-
 from collections.abc import Callable
 
 import torch
@@ -296,6 +295,7 @@ class GlmMoeDsaConfig(PreTrainedConfig):
 class GlmMoeDsaRMSNorm(Glm4MoeRMSNorm):
     pass
 
+
 class GlmMoeDsaIndexer(nn.Module):
     """
     Dynamic Sparse Attention (DSA) indexer for selecting top-k tokens.
@@ -406,7 +406,7 @@ class GlmMoeDsaIndexer(nn.Module):
 
         # Don't force fp32 inputs here: the checkpoint stores `weights_proj.weight` in bf16.
         # Use native dtype for matmul, then upcast the result for scoring stability.
-        weights = self.weights_proj(hidden_states).float() * (self.n_heads ** -0.5)  # [B, S, H]
+        weights = self.weights_proj(hidden_states).float() * (self.n_heads**-0.5)  # [B, S, H]
 
         # q·k^T per head: [B, S, H, D] @ [B, T, D]^T → [B, S, H, T]
         scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale
@@ -540,13 +540,15 @@ class GlmMoeDsaAttention(nn.Module):
         # Cache update
         if past_key_values is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(
-                key_states, value_states, self.layer_idx, cache_kwargs
-            )
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # ===== Indexer (DSA sparse mask) =====
         # attention_mask is [B, 1, S, T] (4D) but indexer works with [B, S, T] (3D)
-        indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
+        indexer_mask = (
+            attention_mask[:, 0, :, :]
+            if attention_mask is not None and attention_mask.dim() == 4
+            else attention_mask.unsqueeze(1)
+        )
         topk_indices = self.indexer(
             hidden_states,
             q_resid,
@@ -558,22 +560,27 @@ class GlmMoeDsaAttention(nn.Module):
         # Build combined DSA + causal mask: -inf everywhere except selected top-k positions
         total_len = key_states.shape[2]
         index_mask = torch.full(
-            (batch_size, seq_length, total_len), float("-inf"),
-            device=hidden_states.device, dtype=query_states.dtype,
+            (batch_size, seq_length, total_len),
+            float("-inf"),
+            device=hidden_states.device,
+            dtype=query_states.dtype,
         )
         index_mask.scatter_(-1, topk_indices, 0.0)  # [B, S, T]
         index_mask = index_mask.unsqueeze(1)  # [B, 1, S, T]
-        if attention_mask is not None:
-            causal_mask = attention_mask[:, :, :, :total_len]
+        if attention_mask is not None and attention_mask.dim() == 4:
+            causal_mask = attention_mask[..., :total_len]
             combined_mask = index_mask + causal_mask
         else:
-            combined_mask = index_mask
+            combined_mask = (
+                attention_mask.masked_fill(index_mask == float("-inf"), float("-inf"))
+                if attention_mask is not None
+                else index_mask
+            )
 
         # Flash attention head_dim padding (qk_head_dim != v_head_dim)
         if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
 
-        # ===== Attention via standard interface =====
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
@@ -586,13 +593,13 @@ class GlmMoeDsaAttention(nn.Module):
             combined_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            indices=topk_indices,  # flash_mla_with_kvcache
             **kwargs,
         )
 
         if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
             attn_output = attn_output[:, :, :, : self.v_head_dim]
 
-        # ===== Output projection =====
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
@@ -609,6 +616,9 @@ class GlmMoeDsaPreTrainedModel(Glm4MoePreTrainedModel):
     _keep_in_fp32_modules = ["indexer.weights_proj"]
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
+    _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
+    _supports_sdpa = True
+    _supports_flex_attn = False
 
     @torch.no_grad()
     def _init_weights(self, module):
