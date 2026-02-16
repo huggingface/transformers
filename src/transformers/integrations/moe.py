@@ -179,7 +179,10 @@ def _grouped_mm_fallback(
     """
     output = torch.zeros(input.size(0), weight.size(2), device=input.device, dtype=input.dtype)
     for i in range(weight.size(0)):
-        start, end = offs[i - 1], offs[i]
+        start = 0 if i == 0 else offs[i - 1]
+        end = offs[i]
+        if start >= end:
+            continue
         output[start:end] = torch.matmul(input[start:end], weight[i])
     return output
 
