@@ -19,16 +19,15 @@ import torch
 from torch import nn
 
 from transformers import PreTrainedModel
-from transformers.modeling_outputs import (
-    BaseModelOutputWithNoAttention,
-)
 from transformers.models.superpoint.configuration_superpoint import SuperPointConfig
 
 from ...utils import (
     ModelOutput,
     auto_docstring,
+    can_return_tuple,
     logging,
 )
+from ...utils.output_capturing import capture_outputs
 
 
 logger = logging.get_logger(__name__)
@@ -165,26 +164,10 @@ class SuperPointEncoder(nn.Module):
         )
         self.conv_blocks = nn.ModuleList(conv_blocks)
 
-    def forward(
-        self,
-        input,
-        output_hidden_states: bool | None = False,
-        return_dict: bool | None = True,
-    ) -> tuple | BaseModelOutputWithNoAttention:
-        all_hidden_states = () if output_hidden_states else None
-
+    def forward(self, input) -> torch.Tensor:
         for conv_block in self.conv_blocks:
             input = conv_block(input)
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (input,)
-        output = input
-        if not return_dict:
-            return tuple(v for v in [output, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=output,
-            hidden_states=all_hidden_states,
-        )
+        return input
 
 
 class SuperPointInterestPointDecoder(nn.Module):
@@ -326,6 +309,7 @@ class SuperPointPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = False
+    _can_record_outputs = {"hidden_states": SuperPointConvBlock}
 
     def extract_one_channel_pixel_values(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
         """
@@ -370,13 +354,12 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
 
         self.post_init()
 
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         labels: torch.LongTensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | SuperPointKeypointDescriptionOutput:
         r"""
@@ -403,33 +386,22 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         if labels is not None:
             raise ValueError("SuperPoint does not support training for now.")
 
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         pixel_values = self.extract_one_channel_pixel_values(pixel_values)
 
         batch_size, _, height, width = pixel_values.shape
 
-        encoder_outputs = self.encoder(
-            pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = self.encoder(pixel_values)
 
         list_keypoints_scores = [
-            self.keypoint_decoder(last_hidden_state[None, ...]) for last_hidden_state in last_hidden_state
+            self.keypoint_decoder(lhs[None, ...]) for lhs in last_hidden_state
         ]
 
         list_keypoints = [keypoints_scores[0] for keypoints_scores in list_keypoints_scores]
         list_scores = [keypoints_scores[1] for keypoints_scores in list_keypoints_scores]
 
         list_descriptors = [
-            self.descriptor_decoder(last_hidden_state[None, ...], keypoints[None, ...])
-            for last_hidden_state, keypoints in zip(last_hidden_state, list_keypoints)
+            self.descriptor_decoder(lhs[None, ...], keypoints[None, ...])
+            for lhs, keypoints in zip(last_hidden_state, list_keypoints)
         ]
 
         maximum_num_keypoints = max(keypoints.shape[0] for keypoints in list_keypoints)
@@ -451,17 +423,12 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         # Convert to relative coordinates
         keypoints = keypoints / torch.tensor([width, height], device=keypoints.device)
 
-        hidden_states = encoder_outputs[1] if output_hidden_states else None
-        if not return_dict:
-            return tuple(v for v in [loss, keypoints, scores, descriptors, mask, hidden_states] if v is not None)
-
         return SuperPointKeypointDescriptionOutput(
             loss=loss,
             keypoints=keypoints,
             scores=scores,
             descriptors=descriptors,
             mask=mask,
-            hidden_states=hidden_states,
         )
 
 
