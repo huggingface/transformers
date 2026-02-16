@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -85,7 +85,9 @@ class SinqHfQuantizer(HfQuantizer):
             raise ImportError("The 'sinq' package is not installed. Please install it with: pip install sinq")
 
         if not torch.cuda.is_available():
-            raise RuntimeError("SINQ currently expects a CUDA device (for GemLite backend).")
+            logger.warning(
+                "No CUDA is available. Quantization and inference run on CPU. Please note that this will significantly slow down inference speed and increase quantization time."
+            )
 
         device_map = kwargs.get("device_map")
 
@@ -101,7 +103,7 @@ class SinqHfQuantizer(HfQuantizer):
             raise ValueError(
                 "You are using `method='asinq'` in the quantization config. Right now the calibrated version of SINQ"
                 " is not supported in Hugging Face, please refer and use the official SINQ repository "
-                "`to quantized a model with this method. "
+                "`to quantize a model with this method. "
             )
 
     def _build_sinq_quant_dict(self, cfg: SinqConfig) -> dict:

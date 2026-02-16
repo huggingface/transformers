@@ -61,9 +61,9 @@ See the [HQQ documentation](./hqq) for more details.
 
 | Pros                                                                 | Cons                                                                       |
 |----------------------------------------------------------------------|----------------------------------------------------------------------------|
-| Super-fast but high-quality quantization process, no calibration data needed.              | Accuracy can degrade significantly at bit depths <=2-bit.                     |
+| Super-fast but high-quality quantization process, no calibration data needed.              | Accuracy can degrade significantly at bit widths <=2-bit.                     |
 | GemLite backend for faster inference.                                  | Slower inference for 3-bit models (no gemlite kernel)
-| Supports wide range of bit depths (8, 4, 3, 2 bit).              |                                                                            |
+| Supports wide range of bit widths (8, 4, 3, 2 bits).              |                                                                            |
 
 See the [SINQ documentation](./sinq) for more details.
 
