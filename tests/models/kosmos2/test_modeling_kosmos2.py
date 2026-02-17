@@ -23,15 +23,13 @@ import pytest
 import requests
 from parameterized import parameterized
 
-from transformers import AutoModelForImageTextToText, AutoProcessor, Kosmos2Config, set_seed
+from transformers import AutoModelForImageTextToText, AutoProcessor, Kosmos2Config
 from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2TextConfig, Kosmos2VisionConfig
 from transformers.testing_utils import (
     IS_ROCM_SYSTEM,
     IS_XPU_SYSTEM,
     require_torch,
     require_vision,
-    set_config_for_less_flaky_test,
-    set_model_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -311,6 +309,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.config_tester = ConfigTester(
             self, config_class=Kosmos2Config, has_text_modality=False, common_properties=["latent_query_num"]
         )
+        global_rng.seed(0)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -419,71 +418,6 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @unittest.skip(reason="Kosmos2 does not support generation from no inputs")
     def test_generate_without_input_ids(self):
         pass
-
-    @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        # Overwrite GenerationTesterMixin:
-        # - Keep deterministic setup for this model-specific test path.
-        # - Override both generated parameterized methods from the mixin.
-        for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason="Stateful models don't support assisted generation")
-
-            # Keep model/input init deterministic in this test.
-            # `prepare_config_and_inputs_for_generate()` uses `global_rng`, which is separate from `set_seed()`.
-            global_rng.seed(0)
-            set_seed(0, deterministic=True)
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
-            set_config_for_less_flaky_test(config)
-
-            if self.has_attentions:
-                config._attn_implementation = "eager"
-
-            if not hasattr(config.get_text_config(), "use_cache"):
-                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
-
-            config.is_decoder = True
-            model = model_class._from_config(config, attn_implementation="eager").to(torch_device).eval()
-            set_model_for_less_flaky_test(model)
-
-            generation_kwargs = {
-                "eos_token_id": -1,
-                "max_new_tokens": 4,
-                "num_beams": 1,
-                "do_sample": False,
-                "output_scores": True,
-                "output_logits": True,
-                "output_hidden_states": True,
-                "output_attentions": self.has_attentions,
-                "return_dict_in_generate": True,
-                "use_cache": True,
-                "cache_implementation": "dynamic_full",
-            }
-            logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
-
-            set_seed(42, deterministic=True)
-            output_greedy = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
-
-            if assistant_type == "random":
-                set_seed(43, deterministic=True)
-                assistant_model = model_class(config).to(torch_device).eval()
-            else:
-                assistant_model = model
-
-            set_model_for_less_flaky_test(assistant_model)
-            assistant_model.config._attn_implementation = "eager"
-            assistant_model.generation_config.num_assistant_tokens = 2
-            assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-
-            generation_kwargs["assistant_model"] = assistant_model
-
-            set_seed(42, deterministic=True)
-            output_assisted = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
-
-            self.assertTrue(has_similar_generate_outputs(output_greedy, output_assisted, atol=1e-5, rtol=1e-5))
-            for output in (output_greedy, output_assisted):
-                self._check_generate_outputs(output, model.config, use_cache=True)
 
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
