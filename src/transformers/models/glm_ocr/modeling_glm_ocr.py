@@ -945,6 +945,8 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
         )
         image_index, video_index = 0, 0
         video_group_index = 0
+        image_grid_thw_list = image_grid_thw.tolist() if image_grid_thw is not None else None
+        video_grid_thw_list = video_grid_thw.tolist() if video_grid_thw is not None else None
         attention_mask = attention_mask.to(total_input_ids.device)
         for i, input_ids in enumerate(total_input_ids):
             input_ids = input_ids[attention_mask[i] == 1]
@@ -974,15 +976,11 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
             for modality_type, start_idx, end_idx in input_type_group:
                 st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
                 if modality_type == "image":
-                    t, h, w = (
-                        image_grid_thw[image_index][0],
-                        image_grid_thw[image_index][1],
-                        image_grid_thw[image_index][2],
-                    )
+                    t, h, w = image_grid_thw_list[image_index]
                     llm_grid_t, llm_grid_h, llm_grid_w = (
-                        t.item(),
-                        h.item() // spatial_merge_size,
-                        w.item() // spatial_merge_size,
+                        t,
+                        h // spatial_merge_size,
+                        w // spatial_merge_size,
                     )
                     t_index = torch.arange(llm_grid_t).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten()
                     h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(llm_grid_t, -1, llm_grid_w).flatten()
@@ -991,15 +989,12 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
                     image_index += 1
                     video_frame_num = 1
                 elif modality_type == "video":
-                    t, h, w = (
-                        video_frame_num,
-                        video_grid_thw[video_index][1],
-                        video_grid_thw[video_index][2],
-                    )
+                    _, h, w = video_grid_thw_list[video_index]
+                    t = video_frame_num
                     llm_grid_t, llm_grid_h, llm_grid_w = (
                         t,
-                        h.item() // spatial_merge_size,
-                        w.item() // spatial_merge_size,
+                        h // spatial_merge_size,
+                        w // spatial_merge_size,
                     )
                     for t_idx in range(llm_grid_t):
                         t_index = torch.tensor(t_idx).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten()
@@ -1007,7 +1002,7 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
                         w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(1, llm_grid_h, -1).flatten()
                         llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
                     video_group_index += 1
-                    if video_group_index >= video_grid_thw[video_index][0]:
+                    if video_group_index >= video_grid_thw_list[video_index][0]:
                         video_index += 1
                         video_group_index = 0
                     video_frame_num += 1
@@ -1038,8 +1033,9 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
         temp_frames_hw = []
-        for t, h, w in video_grid_thw:
-            repeated_row = torch.tensor([1, h.item(), w.item()]).unsqueeze(0).repeat(t, 1)
+        video_grid_thw_list = video_grid_thw.tolist()
+        for t, h, w in video_grid_thw_list:
+            repeated_row = torch.tensor([1, h, w]).unsqueeze(0).repeat(t, 1)
             temp_frames_hw.append(repeated_row)
         flattened_video_grid_thw = torch.cat(temp_frames_hw, dim=0)
         vision_outputs = self.visual(
