@@ -354,6 +354,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
 
         self.post_init()
 
+    @can_return_tuple
     @capture_outputs
     @auto_docstring
     def forward(
@@ -392,9 +393,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
 
         last_hidden_state = self.encoder(pixel_values)
 
-        list_keypoints_scores = [
-            self.keypoint_decoder(lhs[None, ...]) for lhs in last_hidden_state
-        ]
+        list_keypoints_scores = [self.keypoint_decoder(lhs[None, ...]) for lhs in last_hidden_state]
 
         list_keypoints = [keypoints_scores[0] for keypoints_scores in list_keypoints_scores]
         list_scores = [keypoints_scores[1] for keypoints_scores in list_keypoints_scores]
