@@ -383,8 +383,9 @@ class ModelOutput(OrderedDict):
             # if we provided an iterator as first field and the iterator is a (key, value) iterator
             # set the associated fields
             if first_field_iterator:
-                # reset first field to None
+                # reset first field to None and remove it from the internal dictionary
                 setattr(self, class_fields[0].name, None)
+                super().__delitem__(class_fields[0].name)
                 for idx, element in enumerate(iterator):
                     if not isinstance(element, (list, tuple)) or len(element) != 2 or not isinstance(element[0], str):
                         if idx == 0:
