@@ -122,9 +122,7 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs,
     ) -> BackboneOutput:
-        output_hidden_states = kwargs.pop(
-            "output_hidden_states", self.config.output_hidden_states
-        )
+        output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
         output_attentions = kwargs.pop("output_attentions", self.config.output_attentions)
 
         if output_attentions:
