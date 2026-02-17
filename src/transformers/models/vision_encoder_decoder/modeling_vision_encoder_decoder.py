@@ -188,8 +188,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                 All remaining positional arguments will be passed to the underlying model's `__init__` method.
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
-                Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
-                `output_attentions=True`).
+                Can be used to update the configuration object (after it being loaded) and initiate the model.
 
                 - To update the encoder configuration, use the prefix *encoder_* for each configuration parameter.
                 - To update the decoder configuration, use the prefix *decoder_* for each configuration parameter.
@@ -310,8 +309,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> Seq2SeqLMOutput:
@@ -385,8 +382,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
             encoder_outputs = self.encoder(
                 pixel_values=pixel_values,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
                 **kwargs_encoder,
             )
         elif isinstance(encoder_outputs, tuple):
@@ -416,8 +411,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             use_cache=use_cache,
             past_key_values=past_key_values,
             cache_position=cache_position,
