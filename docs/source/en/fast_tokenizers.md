@@ -53,7 +53,7 @@ tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
 
 A model-specific tokenization class is a pre-configured [`TokenizersBackend`] that uses the exact tokenization configuration (normalizer, pre-tokenizer, special token conventions, etc.) a model was trained with.
 
-Use a model-specific class to initialize an empty tokenizer for training or to pass model-specific arguments like `vocab` or `merges`. An empty tokenizer is minimal and only contains a model's special tokens like `<pad>`, `<eos>`, or `<bos>`.
+Use a model-specific class to initialize an empty tokenizer for training or to pass model-specific arguments like `vocab` or `merges` (see the [Customizing tokenizers](./custom_tokenizers) guide to learn how). An empty tokenizer is minimal and only contains a model's special tokens like `<pad>`, `<eos>`, or `<bos>`.
 
 ```py
 from transformers import GemmaTokenizer
