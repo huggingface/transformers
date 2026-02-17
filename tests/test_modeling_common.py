@@ -4064,8 +4064,8 @@ class ModelTesterMixin:
 
         model = cls(config).to(device=torch_device)
 
-        # torch._grouped_mm still only supports bfloat16 when used with torch.compile
-        # bfloat16 is problematic with precisions so we keep an implementation with full precision
+        # torch.nn.functional.grouped_mm still only supports bfloat16 when used with torch.compile
+        # bfloat16 is problematic with precisions so we use an implementation with full precision
         if model.config._experts_implementation == "grouped_mm":
             model.set_experts_implementation("batched_mm")
 
