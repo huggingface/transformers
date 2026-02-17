@@ -22,7 +22,10 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_poolformer import PoolFormerConfig
 
 
@@ -146,28 +149,20 @@ class PoolFormerLayer(nn.Module):
             scaled_op = self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) * pooling_output
             # First residual connection
             hidden_states = hidden_states + self.drop_path(scaled_op)
-            outputs = ()
 
             layer_output = self.output(self.after_norm(hidden_states))
             scaled_op = self.layer_scale_2.unsqueeze(-1).unsqueeze(-1) * layer_output
             # Second residual connection
-            output = hidden_states + self.drop_path(scaled_op)
-
-            outputs = (output,) + outputs
-            return outputs
+            return hidden_states + self.drop_path(scaled_op)
 
         else:
             pooling_output = self.drop_path(self.pooling(self.before_norm(hidden_states)))
             # First residual connection
             hidden_states = pooling_output + hidden_states
-            outputs = ()
 
             # Second residual connection inside the PoolFormerOutput block
             layer_output = self.drop_path(self.output(self.after_norm(hidden_states)))
-            output = hidden_states + layer_output
-
-            outputs = (output,) + outputs
-            return outputs
+            return hidden_states + layer_output
 
 
 class PoolFormerEncoder(nn.Module):
@@ -214,26 +209,24 @@ class PoolFormerEncoder(nn.Module):
 
         self.block = nn.ModuleList(blocks)
 
-    def forward(self, pixel_values, output_hidden_states=False, return_dict=True):
-        all_hidden_states = () if output_hidden_states else None
+    def forward(self, pixel_values, output_hidden_states: bool = False) -> BaseModelOutputWithNoAttention:
+        all_hidden_states = [] if output_hidden_states else None
 
         hidden_states = pixel_values
-        for idx, layers in enumerate(zip(self.patch_embeddings, self.block)):
-            embedding_layer, block_layer = layers
+        for embedding_layer, block_layer in zip(self.patch_embeddings, self.block):
             # Get patch embeddings from hidden_states
             hidden_states = embedding_layer(hidden_states)
             # Send the embeddings through the blocks
-            for _, blk in enumerate(block_layer):
-                layer_outputs = blk(hidden_states)
-                hidden_states = layer_outputs[0]
+            for blk in block_layer:
+                hidden_states = blk(hidden_states)
 
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+            if all_hidden_states is not None:
+                all_hidden_states.append(hidden_states)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_states,
+            hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
+        )
 
 
 @auto_docstring
@@ -272,34 +265,25 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
     def set_input_embeddings(self, value):
         self.encoder.patch_embeddings[0] = value
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithNoAttention:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithNoAttention:
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        encoder_outputs = self.encoder(
-            pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        sequence_output = encoder_outputs[0]
-
-        if not return_dict:
-            return (sequence_output, None) + encoder_outputs[1:]
+        encoder_outputs = self.encoder(pixel_values, output_hidden_states=output_hidden_states)
 
         return BaseModelOutputWithNoAttention(
-            last_hidden_state=sequence_output,
+            last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
         )
 
@@ -341,40 +325,27 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
     def set_input_embeddings(self, value):
         self.poolformer.set_input_embeddings(value)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | ImageClassifierOutputWithNoAttention:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        outputs = self.poolformer(pixel_values, **kwargs)
 
-        outputs = self.poolformer(
-            pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        logits = self.classifier(self.norm(sequence_output).mean([-2, -1]))
+        logits = self.classifier(self.norm(outputs.last_hidden_state).mean([-2, -1]))
 
         loss = None
         if labels is not None:
             loss = self.loss_function(labels, logits, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
