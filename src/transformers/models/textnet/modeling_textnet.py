@@ -268,9 +268,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         self.textnet = TextNetModel(config)
 
         self.classifier = nn.Sequential(
-            nn.AdaptiveAvgPool2d((1, 1)),
-            nn.Flatten(),
-            nn.Linear(config.hidden_sizes[-1], config.num_labels)
+            nn.AdaptiveAvgPool2d((1, 1)), nn.Flatten(), nn.Linear(config.hidden_sizes[-1], config.num_labels)
         )
 
         self.post_init()
@@ -326,7 +324,6 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
 
         loss = None
         if labels is not None:
-
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
