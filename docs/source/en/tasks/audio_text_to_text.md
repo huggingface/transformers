@@ -18,9 +18,9 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Audio-text-to-text models, take audio and text inputs and generate text outputs. These models can understand audio and generate text, enabling tasks like audio question answering, audio reasoning, and spoken dialogue understanding. Unlike traditional ASR models that simply transcribe speech, audio-text-to-text models can reason about audio content, follow instructions, and generate contextual responses.
+Audio-text-to-text models accept both audio and text as inputs and generate text as output. They combine audio understanding with language generation, enabling tasks like audio question answering (e.g., "What is being said in this clip?"), audio reasoning (e.g., "What emotion does the speaker convey?"), and spoken dialogue understanding. Unlike traditional automatic speech recognition (ASR) models that only transcribe speech into text, audio-text-to-text models can reason about the audio content, follow complex instructions, and produce contextual responses based on what they hear.
 
-Here is an example of how to use an audio-text-to-text model:
+The example below shows how to load a model and processor, pass an audio file with a text prompt, and generate a response. In this case, we ask the model to transcribe a speech recording.
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
@@ -50,10 +50,7 @@ outputs = model.generate(**inputs, max_new_tokens=500)
 
 decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 print(decoded_outputs)
-```
-
-```
-["The transcription of the audio is 'summer follows spring the days grow longer and the nights are warm'."]
+## ["The transcription of the audio is 'summer follows spring the days grow longer and the nights are warm'."]
 ```
 
 This guide will show you how to:
@@ -154,7 +151,7 @@ Create a data collator that processes audio-text pairs into the format expected 
 ...             ]
 ...             conversations.append(sample)
 ...
-...         # Apply chat template with automatic label generation
+...         # Apply chat template and format labels for training
 ...         return self.processor.apply_chat_template(
 ...             conversations,
 ...             tokenize=True,
@@ -331,6 +328,7 @@ Generate a response:
 >>> input_len = inputs["input_ids"].shape[1]
 >>> response = processor.tokenizer.decode(output_ids[0][input_len:], skip_special_tokens=True)
 >>> print(response)
+## A sewing machine is running while people are talking
 ```
 
 ## Pipeline
