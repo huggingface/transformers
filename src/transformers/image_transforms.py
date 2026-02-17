@@ -359,7 +359,18 @@ def resize(
     # To maintain backwards compatibility with the resizing done in previous image feature extractors, we use
     # the pillow library to resize the image and then convert back to numpy
     do_rescale = False
+    # Track whether we needed to temporarily normalize for PIL conversion
+    _pil_norm_min = None
+    _pil_norm_range = None
     if not isinstance(image, PIL.Image.Image):
+        # If image has values outside [0, 1] range (e.g. after normalization), temporarily
+        # rescale to [0, 1] so it can be converted to PIL for resizing, then rescale back after.
+        if image.dtype != np.uint8 and (np.any(image < 0) or np.any(image > 1)):
+            _pil_norm_min = float(image.min())
+            _pil_norm_max = float(image.max())
+            _pil_norm_range = _pil_norm_max - _pil_norm_min
+            if _pil_norm_range > 0:
+                image = (image - _pil_norm_min) / _pil_norm_range
         do_rescale = _rescale_for_pil_conversion(image)
         image = to_pil_image(image, do_rescale=do_rescale, input_data_format=input_data_format)
     height, width = size
@@ -378,6 +389,9 @@ def resize(
         # If an image was rescaled to be in the range [0, 255] before converting to a PIL image, then we need to
         # rescale it back to the original range.
         resized_image = rescale(resized_image, 1 / 255) if do_rescale else resized_image
+        # If the image was temporarily normalized to [0, 1] for PIL conversion, rescale back.
+        if _pil_norm_min is not None and _pil_norm_range > 0:
+            resized_image = resized_image.astype(np.float64) * _pil_norm_range + _pil_norm_min
     return resized_image
 
 
