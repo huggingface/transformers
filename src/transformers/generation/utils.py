@@ -2535,11 +2535,7 @@ class GenerationMixin(ContinuousMixin):
         if not self.config.is_encoder_decoder:
             # If `input_ids` was given, check if the last id in any sequence is `pad_token_id`
             # Note: If using, `inputs_embeds` this check does not work, because we want to be more hands-off.
-            if (
-                generation_config._pad_token_tensor is not None
-                and batch_size > 1
-                and len(inputs_tensor.shape) == 2
-            ):
+            if generation_config._pad_token_tensor is not None and batch_size > 1 and len(inputs_tensor.shape) == 2:
                 # When an attention mask is provided, use it to detect right-padding (more reliable than
                 # checking token ids, which can produce false positives when pad_token_id == eos_token_id
                 # or pad_token_id == bos_token_id, as is the case for Qwen3 and other models).
