@@ -23,15 +23,17 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithPooling,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_lilt import LiltConfig
 
 
@@ -222,8 +224,7 @@ class LiltSelfAttention(nn.Module):
         hidden_states,
         layout_inputs,
         attention_mask=None,
-        output_attentions=False,
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         layout_value_layer = self.transpose_for_scores(self.layout_value(layout_inputs), r=self.channel_shrink_ratio)
         layout_key_layer = self.transpose_for_scores(self.layout_key(layout_inputs), r=self.channel_shrink_ratio)
         layout_query_layer = self.transpose_for_scores(self.layout_query(layout_inputs), r=self.channel_shrink_ratio)
@@ -278,11 +279,7 @@ class LiltSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, layout_context_layer)
-        if output_attentions:
-            outputs = outputs + (attention_probs,)
-
-        return outputs
+        return context_layer, layout_context_layer, attention_probs
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput
@@ -316,18 +313,15 @@ class LiltAttention(nn.Module):
         hidden_states: torch.Tensor,
         layout_inputs: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
-    ) -> tuple[torch.Tensor]:
-        self_outputs = self.self(
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        context_layer, layout_context_layer, attention_probs = self.self(
             hidden_states,
             layout_inputs,
             attention_mask,
-            output_attentions,
         )
-        attention_output = self.output(self_outputs[0], hidden_states)
-        layout_attention_output = self.layout_output(self_outputs[1], layout_inputs)
-        outputs = (attention_output, layout_attention_output) + self_outputs[2:]  # add attentions if we output them
-        return outputs
+        attention_output = self.output(context_layer, hidden_states)
+        layout_attention_output = self.layout_output(layout_context_layer, layout_inputs)
+        return attention_output, layout_attention_output, attention_probs
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate
@@ -384,18 +378,12 @@ class LiltLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         layout_inputs: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
-    ) -> tuple[torch.Tensor]:
-        self_attention_outputs = self.attention(
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        attention_output, layout_attention_output, _ = self.attention(
             hidden_states,
             layout_inputs,
             attention_mask,
-            output_attentions=output_attentions,
         )
-        attention_output = self_attention_outputs[0]
-        layout_attention_output = self_attention_outputs[1]
-
-        outputs = self_attention_outputs[2:]  # add self attentions if we output attention weights
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
@@ -403,9 +391,8 @@ class LiltLayer(GradientCheckpointingLayer):
         layout_layer_output = apply_chunking_to_forward(
             self.layout_feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, layout_attention_output
         )
-        outputs = (layer_output, layout_layer_output) + outputs
 
-        return outputs
+        return layer_output, layout_layer_output
 
     # Copied from transformers.models.bert.modeling_bert.BertLayer.feed_forward_chunk
     def feed_forward_chunk(self, attention_output):
@@ -430,48 +417,15 @@ class LiltEncoder(nn.Module):
         hidden_states: torch.Tensor,
         layout_inputs: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
-        output_hidden_states: bool | None = False,
-        return_dict: bool | None = True,
-    ) -> tuple[torch.Tensor] | BaseModelOutput:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        for layer_module in self.layer:
+            hidden_states, layout_inputs = layer_module(
                 hidden_states,
                 layout_inputs,
                 attention_mask,
-                output_attentions,
             )
 
-            hidden_states = layer_outputs[0]
-            layout_inputs = layer_outputs[1]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[2],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    all_hidden_states,
-                    all_self_attentions,
-                ]
-                if v is not None
-            )
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return hidden_states, layout_inputs
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler
@@ -496,6 +450,10 @@ class LiltPreTrainedModel(PreTrainedModel):
     base_model_prefix = "lilt"
     supports_gradient_checkpointing = True
     _no_split_modules = []
+    _can_record_outputs = {
+        "hidden_states": LiltLayer,
+        "attentions": OutputRecorder(LiltAttention, index=2),
+    }
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -528,6 +486,8 @@ class LiltModel(LiltPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -537,11 +497,8 @@ class LiltModel(LiltPreTrainedModel):
         token_type_ids: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor] | BaseModelOutputWithPooling:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -568,12 +525,6 @@ class LiltModel(LiltPreTrainedModel):
         >>> outputs = model(**encoding)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -614,25 +565,16 @@ class LiltModel(LiltPreTrainedModel):
 
         layout_embedding_output = self.layout_embeddings(bbox=bbox, position_ids=position_ids)
 
-        encoder_outputs = self.encoder(
+        sequence_output, _ = self.encoder(
             embedding_output,
             layout_embedding_output,
             attention_mask=extended_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -655,6 +597,7 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -665,11 +608,8 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SequenceClassifierOutput:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -701,8 +641,6 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
         >>> predicted_class_idx = outputs.logits.argmax(-1).item()
         >>> predicted_class = model.config.id2label[predicted_class_idx]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.lilt(
             input_ids,
             bbox=bbox,
@@ -710,9 +648,7 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
@@ -742,10 +678,6 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
 
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
@@ -771,6 +703,7 @@ class LiltForTokenClassification(LiltPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -781,11 +714,8 @@ class LiltForTokenClassification(LiltPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor] | TokenClassifierOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> TokenClassifierOutput:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -814,8 +744,6 @@ class LiltForTokenClassification(LiltPreTrainedModel):
         >>> outputs = model(**encoding)
         >>> predicted_class_indices = outputs.logits.argmax(-1)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.lilt(
             input_ids,
             bbox=bbox,
@@ -823,9 +751,7 @@ class LiltForTokenClassification(LiltPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -839,10 +765,6 @@ class LiltForTokenClassification(LiltPreTrainedModel):
             labels = labels.to(logits.device)
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -888,6 +810,7 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -899,11 +822,8 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor] | QuestionAnsweringModelOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> QuestionAnsweringModelOutput:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -935,8 +855,6 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
         >>> predict_answer_tokens = encoding.input_ids[0, answer_start_index : answer_end_index + 1]
         >>> predicted_answer = tokenizer.decode(predict_answer_tokens)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.lilt(
             input_ids,
             bbox=bbox,
@@ -944,9 +862,7 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -972,10 +888,6 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,
