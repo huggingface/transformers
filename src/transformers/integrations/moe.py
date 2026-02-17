@@ -156,8 +156,8 @@ def batched_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
-# For compatibility with torch.compile
-@torch.library.custom_op("transformers::naive_grouped_mm", mutates_args=())
+# We wrap it as a custim op to be able to use it in torch.compile without breaking the graph capture
+@torch.library.custom_op("transformers::grouped_mm_fallback", mutates_args=())
 def _grouped_mm_fallback(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -165,13 +165,13 @@ def _grouped_mm_fallback(
 ) -> torch.Tensor:
     """
     Naive implementation of grouped matrix multiplication that can be used as a fallback when torch.nn.functional.grouped_mm
-    or torch._grouped_mm are not available or not compatible with torch.compile.
+    and torch._grouped_mm are not available or not compatible with torch.compile.
 
     Args:
         input (`torch.Tensor`):
             Input tensor of shape (S, input_dim).
         weight (`torch.Tensor`):
-            Weight tensor of shape (num_experts, output_dim, input_dim).
+            Weight tensor of shape (num_experts, input_dim, output_dim).
         offs (`torch.Tensor`):
             Offsets tensor indicating the boundaries of each group in the input tensor.
     Returns:
@@ -179,22 +179,21 @@ def _grouped_mm_fallback(
     """
     output = torch.zeros(input.size(0), weight.size(2), device=input.device, dtype=input.dtype)
     for i in range(weight.size(0)):
-        start = 0 if i == 0 else offs[i - 1]
-        end = offs[i]
+        start, end = offs[i - 1], offs[i]
         if start >= end:
             continue
         output[start:end] = torch.matmul(input[start:end], weight[i])
     return output
 
 
-# For compatibility with torch.compile
-@torch.library.register_fake("transformers::naive_grouped_mm")
+# We register the fallback implementation as a fake op for shape inference during torch.compile graph capture
+@torch.library.register_fake("transformers::grouped_mm_fallback")
 def _grouped_mm_fallback_fake(
     input: torch.Tensor,
     weight: torch.Tensor,
     offs: torch.Tensor,
 ) -> torch.Tensor:
-    """Fake implementation of naive grouped mm for compilability purposes."""
+    """Fake implementation of grouped matrix multiplication for shape inference during torch.compile graph capture."""
     return torch.empty(input.size(0), weight.size(2), device=input.device, dtype=input.dtype)
 
 
@@ -210,7 +209,7 @@ def _can_use_grouped_mm(
         input (`torch.Tensor`):
             Input tensor of shape (S, input_dim).
         weight (`torch.Tensor`):
-            Weight tensor of shape (num_experts, output_dim, input_dim).
+            Weight tensor of shape (num_experts, input_dim, output_dim).
         offs (`torch.Tensor`):
             Offsets tensor indicating the boundaries of each group in the input tensor.
     Returns:
@@ -234,7 +233,7 @@ def _grouped_mm(
         input (`torch.Tensor`):
             Input tensor of shape (S, input_dim).
         weight (`torch.Tensor`):
-            Weight tensor of shape (num_experts, output_dim, input_dim).
+            Weight tensor of shape (num_experts, input_dim, output_dim).
         offs (`torch.Tensor`):
             Offsets tensor indicating the boundaries of each group in the input tensor.
     Returns:
@@ -267,8 +266,8 @@ def _grouped_linear(
         input (`torch.Tensor`):
             Input tensor of shape (S, input_dim).
         weight (`torch.Tensor`):
-            Weight tensor of shape (num_experts, output_dim, input_dim) if transposed is `False`,
-            else of shape (num_experts, input_dim, output_dim).
+            Weight tensor of shape (num_experts, input_dim, output_dim) if `is_transposed`,
+            else of shape (num_experts, output_dim, input_dim).
         offs (`torch.Tensor`):
             Offsets tensor indicating the boundaries of each group in the input tensor.
         bias (`torch.Tensor`, *optional*):
