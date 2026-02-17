@@ -2329,10 +2329,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if getattr(module, "_is_hf_initialized", False):
             return
 
-        if (
-            (weight := getattr(module, "weight", None)) is not None
-            and getattr(weight, "_is_hf_initialized", False)
-            and not list(module.named_buffers())
+        # This check is for remote code that does NOT use either `torch.init` or `transformers.initialization` which
+        # allows to check the flag directly on param. As they don't and write the params in-place, params would be reinitialized
+        # otherwise
+        if all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False)) and all(
+            getattr(buffer, "_is_hf_initialized", False) for buffer in module.buffers(recurse=False)
         ):
             module._is_hf_initialized = True
             return
