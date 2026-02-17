@@ -166,6 +166,11 @@ class SamplingStrategy(ExplicitEnum):
     ROUND_ROBIN = "round_robin"
 
 
+class LossAggregationStrategy(ExplicitEnum):
+    SUM = "sum"
+    MEAN = "mean"
+
+
 def _convert_str_dict(passed_value: dict):
     "Safely checks that a passed value is a dictionary and converts any string values to their appropriate types."
     for key, value in passed_value.items():
@@ -793,7 +798,7 @@ class TrainingArguments:
             )
         },
     )
-    loss_aggregation_strategy: str = field(
+    loss_aggregation_strategy: LossAggregationStrategy | str = field(
         default="mean",
         metadata={
             "help": (
@@ -1527,6 +1532,7 @@ class TrainingArguments:
         self.hub_strategy = HubStrategy(self.hub_strategy)
         self.multi_dataset_strategy = MultiDatasetStrategy(self.multi_dataset_strategy)
         self.dataset_sampling_strategy = SamplingStrategy(self.dataset_sampling_strategy)
+        self.loss_aggregation_strategy = LossAggregationStrategy(self.loss_aggregation_strategy)
 
         self.lr_scheduler_type = SchedulerType(self.lr_scheduler_type)
         self.optim = OptimizerNames(self.optim)

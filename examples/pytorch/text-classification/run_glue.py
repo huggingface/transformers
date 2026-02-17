@@ -362,7 +362,11 @@ def main():
         else:
             # A useful fast method:
             # https://huggingface.co/docs/datasets/package_reference/main_classes#datasets.Dataset.unique
-            label_list = raw_datasets["train"].unique("label")
+            if isinstance(raw_datasets["train"], dict):
+                first_train_dataset = next(iter(raw_datasets["train"].values()))
+                label_list = first_train_dataset.unique("label")
+            else:
+                label_list = raw_datasets["train"].unique("label")
             label_list.sort()  # Let's sort it for determinism
             num_labels = len(label_list)
 
@@ -503,8 +507,13 @@ def main():
             raise ValueError("--do_train requires a train dataset")
         train_dataset = raw_datasets["train"]
         if data_args.max_train_samples is not None:
-            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
-            train_dataset = train_dataset.select(range(max_train_samples))
+            if isinstance(train_dataset, dict):
+                for task_name, ds in train_dataset.items():
+                    max_train_samples = min(len(ds), data_args.max_train_samples)
+                    train_dataset[task_name] = ds.select(range(max_train_samples))
+            else:
+                max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+                train_dataset = train_dataset.select(range(max_train_samples))
         if isinstance(train_dataset, dict):
             for task_name, ds in train_dataset.items():
                 print_class_distribution(ds, f"train_{task_name}")

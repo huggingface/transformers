@@ -146,7 +146,7 @@ from .trainer_utils import (
     unwrap_peft_model,
     validate_quantization_for_training,
 )
-from .training_args import OptimizerNames, ParallelMode, TrainingArguments
+from .training_args import LossAggregationStrategy, OptimizerNames, ParallelMode, TrainingArguments
 from .utils import (
     ADAPTER_CONFIG_NAME,
     ADAPTER_SAFE_WEIGHTS_NAME,
@@ -1703,11 +1703,14 @@ class Trainer:
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_dataloader = train_dataloader
 
-            steps_in_epoch = (
-                len(epoch_dataloader)
-                if len_dataloader is not None
-                else args.max_steps * args.gradient_accumulation_steps
-            )
+            if is_multi_dataset_aggregate:
+                steps_in_epoch = len_dataloader
+            else:
+                steps_in_epoch = (
+                    len(epoch_dataloader)
+                    if len_dataloader is not None
+                    else args.max_steps * args.gradient_accumulation_steps
+                )
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
             step = -1
@@ -1716,7 +1719,13 @@ class Trainer:
             # Handle resumption from checkpoint
             if epoch == epochs_trained and resume_from_checkpoint is not None:
                 if steps_trained_in_current_epoch > 0 and not args.ignore_data_skip:
-                    epoch_dataloader = skip_first_batches(epoch_dataloader, steps_trained_in_current_epoch)
+                    if is_multi_dataset_aggregate:
+                        epoch_dataloader = {
+                            domain: skip_first_batches(dl, steps_trained_in_current_epoch)
+                            for domain, dl in epoch_dataloader.items()
+                        }
+                    else:
+                        epoch_dataloader = skip_first_batches(epoch_dataloader, steps_trained_in_current_epoch)
                     step = steps_trained_in_current_epoch - 1
                     rng_to_sync = True
                 elif steps_trained_in_current_epoch == 0:
@@ -1768,9 +1777,9 @@ class Trainer:
                     if not domain_losses:
                         break
                     # Aggregate the losses.
-                    if self.args.loss_aggregation_strategy == "sum":
+                    if self.args.loss_aggregation_strategy == LossAggregationStrategy.SUM:
                         aggregated_loss = torch.sum(torch.stack(domain_losses))
-                    elif self.args.loss_aggregation_strategy == "mean":
+                    elif self.args.loss_aggregation_strategy == LossAggregationStrategy.MEAN:
                         aggregated_loss = torch.mean(torch.stack(domain_losses))
                     else:
                         raise ValueError(f"Unknown loss_aggregation_strategy: {self.args.loss_aggregation_strategy}")
@@ -1854,6 +1863,26 @@ class Trainer:
                         break
                     if args.max_steps > 0 and self.state.global_step >= max_steps:
                         break
+                if step < 0:
+                    logger.warning(
+                        "There seems not to be a single sample in your epoch_iterator, stopping training at step"
+                        f" {self.state.global_step}! This is expected if you're using an IterableDataset and set"
+                        f" num_steps ({max_steps}) higher than the number of available samples."
+                    )
+                    self.control.should_training_stop = True
+                self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
+                self._maybe_log_save_evaluate(
+                    tr_loss,
+                    grad_norm,
+                    model,
+                    trial,
+                    epoch,
+                    ignore_keys_for_eval,
+                    start_time,
+                    learning_rate=learning_rate,
+                )
+                if self.control.should_training_stop:
+                    break
                 continue
             for _ in range(total_updates):
                 update_step += 1

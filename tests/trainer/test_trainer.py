@@ -3501,10 +3501,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
             trainer = Trainer(model=model, args=args, train_dataset=train_datasets, compute_loss_fns=loss_fns)
             trainer.train()
-            self.assertGreater(call_counts["domain_a"], 0, "Loss function for domain_a was never called")
-            self.assertGreater(call_counts["domain_b"], 0, "Loss function for domain_b was never called")
-            # NOTE: This assert hinges on both datasets having same length + batch size dividing evenly.
-            self.assertEqual(call_counts["domain_a"], call_counts["domain_b"])
+            # 32 (samples) / 4 (batch_size) = 8 batches / domain for 1 epoch.
+            self.assertEqual(call_counts["domain_a"], 8)
+            self.assertEqual(call_counts["domain_b"], 8)
 
     def test_multi_dataset_round_robin(self):
         train_dataset_a = RegressionDataset(a=2, b=3, length=32)

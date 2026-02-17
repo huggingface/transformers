@@ -76,6 +76,7 @@ class MultiDatasetLoader:
         self.dataloaders = dataloaders
         self.strategy = strategy
         self.seed = seed
+        self._epoch = 0
         self.num_examples = {
             domain: len(loader.dataset) for domain, loader in self.dataloaders.items() if hasattr(loader, "dataset")
         }
@@ -112,7 +113,8 @@ class MultiDatasetLoader:
 
     def __iter__(self):
         self.iterators = {domain: iter(loader) for domain, loader in self.dataloaders.items()}
-        rng = np.random.RandomState(self.seed)
+        rng = np.random.RandomState(self.seed + self._epoch)
+        self._epoch += 1
         if self.strategy == "round_robin":
             self._next_domain_idx = 0
         for _ in range(len(self)):
