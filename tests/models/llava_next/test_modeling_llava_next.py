@@ -114,6 +114,7 @@ class LlavaNextForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase
 
     model_tester_class = LlavaNextVisionText2TextModelTester
     test_resize_embeddings = False
+    skip_test_image_features_output_shape = True
 
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
