@@ -219,7 +219,7 @@ class TextNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
 
     _can_record_outputs = {
-        "hidden_states": TextNetStage,
+        "hidden_states": TextNetEncoder,
     }
 
 
