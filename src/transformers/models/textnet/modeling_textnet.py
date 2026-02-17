@@ -243,7 +243,6 @@ class TextNetModel(TextNetPreTrainedModel):
 
         encoder_outputs = self.encoder(hidden_state)
 
-
         last_hidden_state = encoder_outputs[0]
         pooled_output = self.pooler(last_hidden_state)
 
