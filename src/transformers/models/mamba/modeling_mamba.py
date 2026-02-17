@@ -217,13 +217,15 @@ class MambaMixer(nn.Module):
         self.warn_slow_implementation()
 
     def warn_slow_implementation(self):
-        is_fast_path_available = all((
-            selective_state_update,
-            selective_scan_fn,
-            causal_conv1d_fn,
-            causal_conv1d_update,
-            mamba_inner_fn,
-        ))
+        is_fast_path_available = all(
+            (
+                selective_state_update,
+                selective_scan_fn,
+                causal_conv1d_fn,
+                causal_conv1d_update,
+                mamba_inner_fn,
+            )
+        )
         if not is_fast_path_available:
             if self.use_mambapy:
                 if is_mambapy_available():
@@ -434,13 +436,15 @@ class MambaMixer(nn.Module):
         cache_position: torch.LongTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
-        is_fast_path_available = all((
-            selective_state_update,
-            selective_scan_fn,
-            causal_conv1d_fn,
-            causal_conv1d_update,
-            mamba_inner_fn,
-        ))
+        is_fast_path_available = all(
+            (
+                selective_state_update,
+                selective_scan_fn,
+                causal_conv1d_fn,
+                causal_conv1d_update,
+                mamba_inner_fn,
+            )
+        )
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
         return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
