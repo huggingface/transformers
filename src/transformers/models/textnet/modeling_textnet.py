@@ -274,11 +274,11 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         # initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -313,21 +313,30 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.textnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-        last_hidden_state = outputs[0]
-        for layer in self.classifier:
-            last_hidden_state = layer(last_hidden_state)
-        logits = self.fc(last_hidden_state)
-        loss = None
+        outputs: BaseModelOutputWithPoolingAndNoAttention = self.textnet(
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,   # IMPORTANT: must be True
+            **kwargs,
+        )
 
+        pooled_output = outputs.pooler_output
+        logits = self.classifier(pooled_output)
+
+        loss = None
         if labels is not None:
-            loss = self.loss_function(labels, logits, self.config)
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
-            return (loss,) + output if loss is not None else output
+            output = (logits,)
+            return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+        return ImageClassifierOutputWithNoAttention(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+        )
 
 
 @auto_docstring(
@@ -382,7 +391,7 @@ class TextNetBackbone(BackboneMixin, TextNetPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        outputs = self.textnet(pixel_values, output_hidden_states=True, return_dict=return_dict)
+        outputs = self.textnet(pixel_values, output_hidden_states=True, return_dict=True)
 
         hidden_states = outputs.hidden_states if return_dict else outputs[2]
 
