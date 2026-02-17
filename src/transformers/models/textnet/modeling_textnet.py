@@ -199,7 +199,6 @@ class TextNetEncoder(nn.Module):
         self,
         hidden_state: torch.Tensor,
     ) -> BaseModelOutputWithNoAttention:
-
         hidden_states = [hidden_state]
 
         for stage in self.stages:
@@ -239,7 +238,6 @@ class TextNetModel(TextNetPreTrainedModel):
         pixel_values: Tensor,
         **kwargs,
     ) -> tuple[Any, list[Any]] | tuple[Any] | BaseModelOutputWithPoolingAndNoAttention:
-
         hidden_state = self.stem(pixel_values)
 
         encoder_outputs = self.encoder(hidden_state)
