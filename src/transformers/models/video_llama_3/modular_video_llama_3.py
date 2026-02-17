@@ -47,7 +47,8 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import check_model_inputs, is_flash_attention_requested
+from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ...video_utils import (
     VideoInput,
     group_videos_by_shape,
@@ -312,9 +313,9 @@ class VideoLlama3VisionAttention(SiglipAttention):
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         if is_flash_attention_requested(self.config):
             # Flash Attention 2: Use cu_seqlens for variable length attention
@@ -491,7 +492,8 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
 
         return torch.cat(outputs, dim=0)
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -592,6 +594,9 @@ class VideoLlama3Model(Qwen2VLModel):
         self.post_init()
 
     def get_rope_index(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
+
+    def compute_3d_position_ids(self):
         raise AttributeError("Not needed for VideoLLaMA3")
 
     @can_return_tuple
@@ -894,6 +899,9 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             model_inputs["pixel_values_videos"] = None
 
         return model_inputs
+
+    def _prepare_position_ids_for_generation(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
 
     def _get_image_nums_and_video_nums(
         self,
@@ -1624,7 +1632,9 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)
         pixel_values_videos = torch.cat(processed_videos, dim=0)
         video_grid_thw = torch.tensor(processed_grids)
-        video_merge_sizes = torch.tensor([merge_size] * video_grid_thw.size(0)).to(video_grid_thw)
+        video_merge_sizes = torch.full(
+            (video_grid_thw.size(0),), merge_size, dtype=video_grid_thw.dtype, device=video_grid_thw.device
+        )
 
         if use_token_compression:
             video_compression_mask = self._get_compression_mask(

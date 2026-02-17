@@ -15,7 +15,7 @@
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import torch
 import torch.nn as nn
@@ -31,7 +31,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
@@ -117,10 +118,9 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
             End of stream token id.
         bos_token_id (`int`, *optional*, defaults to 2):
             Beginning of stream token id.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
+        rope_parameters (`dict`, *optional*):
+            Dictionary mapping attention patterns (`"full_attention"`, `"sliding_attention"`) to `RopeParameters`.
+            Each value should be a dictionary containing `rope_type` and optional scaling parameters.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -192,7 +192,7 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
         pad_token_id: int = 0,
         eos_token_id: int = 1,
         bos_token_id: int = 2,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        rope_parameters: dict[Literal["sliding_attention", "full_attention"], RopeParameters] | None = None,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
         sliding_window: int = 512,
@@ -286,9 +286,15 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
+
+        # Set default values if not present
+        if self.rope_parameters.get("full_attention") is None:
+            self.rope_parameters["full_attention"] = {"rope_type": "default"}
         self.rope_parameters["full_attention"].setdefault(
             "rope_theta", kwargs.pop("rope_theta", self.default_theta["global"])
         )
+        if self.rope_parameters.get("sliding_attention") is None:
+            self.rope_parameters["sliding_attention"] = {"rope_type": "default"}
         self.rope_parameters["sliding_attention"].setdefault(
             "rope_theta", kwargs.pop("rope_local_base_freq", self.default_theta["local"])
         )
@@ -1394,7 +1400,7 @@ class Gemma3nAudioConformerFeedForward(nn.Module):
         self.ffw_layer_1 = nn.Linear(self.config.hidden_size, self.config.hidden_size * 4, bias=False)
         self.ffw_layer_2 = nn.Linear(self.config.hidden_size * 4, self.config.hidden_size, bias=False)
         self.post_layer_norm = Gemma3nRMSNorm(self.config.hidden_size)
-        self.post_layer_scale = torch.tensor(self.config.conf_residual_weight)
+        self.post_layer_scale = self.config.conf_residual_weight
 
     def forward(self, audio_encodings: torch.Tensor) -> torch.Tensor:
         residual = audio_encodings
@@ -1498,7 +1504,8 @@ class Gemma3nAudioEncoder(PreTrainedModel):
         )
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | Gemma3nAudioEncoderModelOutput:
@@ -1687,12 +1694,14 @@ class Gemma3nTextAltUp(nn.Module):
         innovation = innovation.repeat(self.config.altup_num_inputs, 1, 1, 1)  # Repeat on dim0 to match predictions
 
         if self.training and self.config.altup_coef_clip is not None:
-            self.correction_coefs.weight.data.clamp_(-self.config.altup_coef_clip, self.config.altup_coef_clip)
+            weight = self.correction_coefs.weight.clamp(-self.config.altup_coef_clip, self.config.altup_coef_clip)
+            all_coefs = torch.nn.functional.linear(modalities, weight, bias=None) + 1.0
+        else:
+            all_coefs = self.correction_coefs(modalities) + 1.0
 
         # all_coefs adapted from jax.numpy.einsum("...p,pi->...i", ...)
         # Permute to (altup_num_inputs, batch_size, num_tokens) as the last dim is a scalar applied to each altup input
         # and expand on dim1 for broadcastability
-        all_coefs: torch.Tensor = self.correction_coefs(modalities) + 1.0
         all_coefs = all_coefs.permute(2, 0, 1).unsqueeze(-1)
 
         corrected = torch.mul(innovation, all_coefs)
@@ -1807,9 +1816,9 @@ class Gemma3nTextAttention(Gemma3Attention):
                     past_key_values.shared_layers = {}
                 past_key_values.shared_layers[self.layer_idx] = key_states, value_states
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -2027,7 +2036,8 @@ class Gemma3nTextModel(Gemma3TextModel):
         )
 
     # Last hidden states should be before reprojecting, to stay consistent with the other layer outputs
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -2069,7 +2079,7 @@ class Gemma3nTextModel(Gemma3TextModel):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,

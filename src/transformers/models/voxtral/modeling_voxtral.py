@@ -33,7 +33,8 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_voxtral import VoxtralConfig, VoxtralEncoderConfig
 
@@ -55,8 +56,8 @@ def eager_attention_forward(
         scaling = query.size(-1) ** -0.5
 
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if attention_mask is not None and attention_mask.ndim == 4:
-        attn_weights = attn_weights + attention_mask[:, :, :, : key.shape[-2]]
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -133,9 +134,9 @@ class VoxtralAttention(nn.Module):
         key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
         value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -290,7 +291,8 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_features,

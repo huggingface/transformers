@@ -29,7 +29,6 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_cohere2_vision import Cohere2VisionConfig
 
@@ -202,7 +201,7 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
         )
         return special_image_mask
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -279,7 +278,7 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -391,7 +390,7 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
 
         if is_first_iteration or not kwargs.get("use_cache", True):
             # Pixel values are used only in the first iteration if available
-            # In subsquent iterations, they are already merged with text and cached
+            # In subsequent iterations, they are already merged with text and cached
             # NOTE: first iteration doesn't have to be prefill, it can be the first
             # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values

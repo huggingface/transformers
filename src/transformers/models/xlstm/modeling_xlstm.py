@@ -176,12 +176,13 @@ else:
         _device = matQ.device
         nc = num_chunks
         batch_size, nh, dqk, dhv = matC_states.shape
-        matC_k_states = matC_states.view(batch_size, nh, nc, dqk // nc, dhv)
-        vecN_k_states = vecN_states.view(batch_size, nh, nc, dqk // nc)
+        dhqk = dqk // nc
+        matC_k_states = matC_states.view(batch_size, nh, nc, dhqk, dhv)
+        vecN_k_states = vecN_states.view(batch_size, nh, nc, dhqk)
         scaMinter_k_states = scaMinter_states
 
-        matQ = matQ.view(batch_size, nh, nc, chunk_size, dqk)
-        matK = matK.view(batch_size, nh, nc, chunk_size, dqk)
+        matQ = matQ.view(batch_size, nh, nc, chunk_size, dhqk)
+        matK = matK.view(batch_size, nh, nc, chunk_size, dhqk)
         matV = matV.view(batch_size, nh, nc, chunk_size, dhv)
 
         ltr = torch.tril(
@@ -232,7 +233,7 @@ else:
 
         # we need the denominator and the overall max state for the backward pass
         vecN_out = vecDenom_max_common.reshape(batch_size, nh, nc * chunk_size)
-        vecM_out = vecM_k_combine(batch_size, nh, nc * chunk_size)
+        vecM_out = vecM_k_combine.reshape(batch_size, nh, nc * chunk_size)
         return matH_out, vecN_out, vecM_out
 
     def mlstm_chunkwise_fw(
@@ -780,7 +781,7 @@ else:
             c_initial: torch.Tensor | None = None,
             n_initial: torch.Tensor | None = None,
             m_initial: torch.Tensor | None = None,
-            return_last_states: bool = False,
+            return_last_states: bool | None = None,
             mode: Literal["train", "inference"] | None = None,
         ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
             """Forward pass of the mLSTM backend.
@@ -1537,38 +1538,6 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, new_embeddings):
         return self.backbone.set_input_embeddings(new_embeddings)
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        attention_mask=None,  # not used but needed, otherwise generate complains when passing tokenizer inputs
-        inputs_embeds=None,
-        use_cache=None,
-        cache_params: xLSTMCache | None = None,
-        **kwargs,
-    ):
-        if use_cache and cache_params is not None:
-            # If the first cache position is non-zero, we assume we are in generation mode.
-            # Thus, the cache_params state is assumed to be the state before the last token
-            # (lastly generated token), and all previous tokens are already ingested.
-            # This should as well support generation from scratch with the [BOS] token inserted first.
-            input_ids = input_ids[:, -1:]
-            if inputs_embeds is not None:
-                inputs_embeds = inputs_embeds[:, -1:]
-
-        if inputs_embeds is not None and cache_params is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        model_inputs.update({"cache_params": cache_params, "use_cache": use_cache})
-
-        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
-        for key, value in kwargs.items():
-            if key not in model_inputs:
-                model_inputs[key] = value
-
-        return model_inputs
 
     @can_return_tuple
     @auto_docstring

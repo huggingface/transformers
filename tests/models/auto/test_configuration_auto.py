@@ -60,16 +60,6 @@ class AutoConfigTest(unittest.TestCase):
         config = AutoConfig.for_model("roberta")
         self.assertIsInstance(config, RobertaConfig)
 
-    def test_pattern_matching_fallback(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # This model name contains bert and roberta, but roberta ends up being picked.
-            folder = os.path.join(tmp_dir, "fake-roberta")
-            os.makedirs(folder, exist_ok=True)
-            with open(os.path.join(folder, "config.json"), "w") as f:
-                f.write(json.dumps({}))
-            config = AutoConfig.from_pretrained(folder)
-            self.assertEqual(type(config), RobertaConfig)
-
     def test_new_config_registration(self):
         try:
             AutoConfig.register("custom", CustomConfig)
@@ -148,3 +138,18 @@ class AutoConfigTest(unittest.TestCase):
         finally:
             if "new-model" in CONFIG_MAPPING._extra_content:
                 del CONFIG_MAPPING._extra_content["new-model"]
+
+    def test_config_missing_model_type(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_dict = {
+                "hidden_size": 768,
+                "num_attention_heads": 12,
+                "num_hidden_layers": 12,
+            }
+            config_path = os.path.join(tmp_dir, "config.json")
+
+            with open(config_path, "w") as f:
+                json.dump(config_dict, f)
+
+            with self.assertRaisesRegex(ValueError, "Should have a `model_type` key"):
+                AutoConfig.from_pretrained(tmp_dir)

@@ -12,13 +12,8 @@ _use_top_left_mask = flash_attn_supports_top_left_mask()
 def get_target_dtype(query: torch.Tensor, module: torch.nn.Module) -> torch.dtype:
     """If the query is in float32, return a target dtype compatible with flash attention. Return None otherwise."""
     if query.dtype == torch.float32:
-        if torch.is_autocast_enabled():
-            # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
-            return (
-                torch.get_autocast_dtype("cuda")
-                if hasattr(torch, "get_autocast_dtype")
-                else torch.get_autocast_gpu_dtype()
-            )
+        if torch.is_autocast_enabled("cuda"):
+            return torch.get_autocast_dtype("cuda")
         # Handle the case where the model is quantized
         elif hasattr(module.config, "_is_quantized"):
             return module.config.dtype

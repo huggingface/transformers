@@ -32,7 +32,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_blip import BlipConfig, BlipTextConfig, BlipVisionConfig
 from .modeling_blip_text import BlipTextLMHeadModel, BlipTextModel
 
@@ -479,7 +480,8 @@ class BlipVisionModel(BlipPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,

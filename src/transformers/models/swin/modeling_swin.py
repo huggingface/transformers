@@ -22,12 +22,11 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import meshgrid
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
-from ...utils.backbone_utils import BackboneMixin
 from .configuration_swin import SwinConfig
 
 
@@ -462,7 +461,7 @@ class SwinSelfAttention(nn.Module):
         # get pair-wise relative position index for each token inside the window
         coords_h = torch.arange(self.window_size[0])
         coords_w = torch.arange(self.window_size[1])
-        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
+        coords = torch.stack(torch.meshgrid([coords_h, coords_w], indexing="ij"))
         coords_flatten = torch.flatten(coords, 1)
         relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
         relative_coords = relative_coords.permute(1, 2, 0).contiguous()
@@ -1099,10 +1098,9 @@ class SwinForImageClassification(SwinPreTrainedModel):
     Swin backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
+class SwinBackbone(BackboneMixin, SwinPreTrainedModel):
     def __init__(self, config: SwinConfig):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
         self.embeddings = SwinEmbeddings(config)
@@ -1110,7 +1108,7 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}
-        for stage, num_channels in zip(self._out_features, self.channels):
+        for stage, num_channels in zip(self.out_features, self.channels):
             hidden_states_norms[stage] = nn.LayerNorm(num_channels)
         self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
 

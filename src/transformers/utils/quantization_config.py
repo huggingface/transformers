@@ -62,6 +62,7 @@ class QuantizationMethod(str, Enum):
     FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
     MXFP4 = "mxfp4"
+    SINQ = "sinq"
 
 
 class AwqFormat(str, Enum):
@@ -1488,25 +1489,6 @@ class TorchAoConfig(QuantizationConfigMixin):
     # int4_weight_only quant is only working with *torch.bfloat16* dtype right now
     model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", dtype=torch.bfloat16, quantization_config=quantization_config)
 
-    # autoquant
-    # `autoquant` is a convenient way for users to search for the best quantization for each layer
-    # `min_sqnr` is an option to control the accuracy of the model, higher value means the model is more
-    # accurate, we can start with 30 and adjust it to larger or smaller (e.g. 40, 20)
-    # defaults to None, which means we'll try to get the best performing quantized model without
-    # considering accuracy
-    quantization_config = TorchAoConfig("autoquant", min_sqnr=30)
-    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", dtype=torch.bfloat16, quantization_config=quantization_config)
-    # run through example inputs, quantization methods will be selected based on the shape of example input
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    input_text = "What are we having for dinner?"
-    input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
-    MAX_NEW_TOKENS = 1000
-    model.generate(**input_ids, max_new_tokens=MAX_NEW_TOKENS, cache_implementation="static")
-    # manually ran finalize_autoquant if needed
-    if hasattr(quantized_model, "finalize_autoquant"):
-      print("finalizing autoquant")
-      quantized_model.finalize_autoquant()
-
     ```
     """
 
@@ -1583,7 +1565,6 @@ class TorchAoConfig(QuantizationConfigMixin):
     def _get_torchao_quant_type_to_method(self):
         """Get mapping of quant_type strings to their corresponding methods."""
         from torchao.quantization import (
-            autoquant,
             int4_weight_only,
             int8_dynamic_activation_int8_weight,
             int8_weight_only,
@@ -1593,7 +1574,6 @@ class TorchAoConfig(QuantizationConfigMixin):
             "int4_weight_only": int4_weight_only,
             "int8_weight_only": int8_weight_only,
             "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
-            "autoquant": autoquant,
         }
 
     def get_apply_tensor_subclass(self):
@@ -1923,3 +1903,72 @@ class Mxfp4Config(QuantizationConfigMixin):
             `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         return {"quant_method": self.quant_method, "modules_to_not_convert": self.modules_to_not_convert}
+
+
+@dataclass
+class SinqConfig(QuantizationConfigMixin):
+    """
+    Quantization config for SINQ / A-SINQ.
+
+    Pass this to:
+
+        AutoModel.from_pretrained(..., quantization_config=SinqConfig(...))
+
+    Args:
+        nbits (`int`, default 4):
+            Quantization bits for weights.
+        group_size (`int`, default 64):
+            Group size used in SINQ weight quantization (must be multiple of 8).
+        tiling_mode (`str`, default "1D"):
+            Tiling mode for SINQ (typically "1D"; "2D" if supported in your backend).
+        method (`str`, default "sinq"):
+            "sinq"  – calibration-free weight-only SINQ
+            "asinq" – A-SINQ (activation-aware), not supported in Hugging Face. Please refer to the official SINQ repository.
+        modules_to_not_convert (`list[str]`, *optional*):
+            List of module names/prefixes to keep in full precision.
+
+        **kwargs:
+            Extra user arguments (kept in `_extra_kwargs` for round-tripping).
+    """
+
+    def __init__(
+        self,
+        nbits: int = 4,
+        group_size: int = 64,
+        tiling_mode: str = "1D",
+        method: str = "sinq",  # "sinq" | "asinq"
+        modules_to_not_convert: list[str] | None = None,
+        **kwargs: Any,
+    ):
+        self.quant_method = QuantizationMethod.SINQ
+
+        self.nbits = nbits
+        self.group_size = group_size
+        self.tiling_mode = tiling_mode
+        self.method = method
+
+        self.modules_to_not_convert = modules_to_not_convert
+
+        self._extra_kwargs: dict[str, Any] = dict(kwargs)
+
+        self.post_init()
+
+    def post_init(self):
+        self.nbits = int(self.nbits)
+        self.group_size = int(self.group_size)
+        self.tiling_mode = str(self.tiling_mode)
+        self.method = str(self.method).lower()
+
+        # Validation
+        if not isinstance(self.nbits, int):
+            raise TypeError("`nbits` must be convertible to an int")
+        if not isinstance(self.group_size, int):
+            raise TypeError("`group_size` must be convertible to an int")
+        if not isinstance(self.tiling_mode, str):
+            raise TypeError("`tiling_mode` must be convertible to a string")
+        if self.method not in {"sinq", "asinq"}:
+            raise ValueError(f"`method` must be either 'sinq' or 'asinq', got {self.method}")
+        if self.group_size is not None and self.group_size % 8 != 0:
+            logger.warning(
+                f"SINQ: group_size={self.group_size} is not a multiple of 8; this may be rejected by the backend."
+            )

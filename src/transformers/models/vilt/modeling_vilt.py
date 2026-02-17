@@ -33,7 +33,6 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import meshgrid
 from ...utils import auto_docstring, logging
 from .configuration_vilt import ViltConfig
 
@@ -121,7 +120,7 @@ class ViltEmbeddings(nn.Module):
         x = x.flatten(2).transpose(1, 2)
         # Set `device` here, otherwise `patch_index` will always be on `CPU` and will fail near the end for torch>=1.13
         patch_index = torch.stack(
-            meshgrid(torch.arange(x_mask.shape[-2]), torch.arange(x_mask.shape[-1]), indexing="ij"), dim=-1
+            torch.meshgrid(torch.arange(x_mask.shape[-2]), torch.arange(x_mask.shape[-1]), indexing="ij"), dim=-1
         ).to(device=x_mask.device)
         patch_index = patch_index[None, None, :, :, :]
         patch_index = patch_index.expand(x_mask.shape[0], x_mask.shape[1], -1, -1, -1)

@@ -36,7 +36,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_afmoe import AfmoeConfig
 
 
@@ -107,7 +108,7 @@ class AfmoeRotaryEmbedding(nn.Module):
 
 @use_kernel_forward_from_hub("RMSNorm")
 class AfmoeRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         AfmoeRMSNorm is equivalent to T5LayerNorm
         """
@@ -115,7 +116,7 @@ class AfmoeRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -247,7 +248,7 @@ class AfmoeMoE(nn.Module):
         self.router = AfmoeTokenChoiceRouter(config)
         self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.num_shared_experts)
         self.experts = AfmoeExperts(config)
-        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts, dtype=torch.float32), requires_grad=False)
+        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
 
     def forward(self, hidden_states):
         batch_size, seq_len, hidden_dim = hidden_states.shape
@@ -324,8 +325,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -405,9 +405,9 @@ class AfmoeAttention(nn.Module):
             cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         output, attn_weights = attention_interface(
             self,
@@ -560,7 +560,8 @@ class AfmoeModel(AfmoePreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -576,7 +577,7 @@ class AfmoeModel(AfmoePreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -595,7 +596,7 @@ class AfmoeModel(AfmoePreTrainedModel):
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
@@ -635,7 +636,7 @@ class AfmoeModel(AfmoePreTrainedModel):
 @auto_docstring
 class AfmoeForCausalLM(AfmoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):

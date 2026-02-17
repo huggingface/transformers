@@ -24,6 +24,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import load_backbone
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -37,7 +38,6 @@ from ...utils import (
     requires_backends,
     torch_compilable_check,
 )
-from ...utils.backbone_utils import load_backbone
 from ...utils.generic import maybe_autocast
 from .configuration_oneformer import OneFormerConfig
 
@@ -1107,7 +1107,7 @@ class OneFormerPixelDecoderEncoderLayer(nn.Module):
         hidden_states = self.final_layer_norm(hidden_states)
 
         if self.is_training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 

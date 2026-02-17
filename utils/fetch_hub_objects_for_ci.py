@@ -1,4 +1,5 @@
 import os
+import re
 
 import httpx
 from huggingface_hub import hf_hub_download, snapshot_download
@@ -44,6 +45,88 @@ def url_to_local_path(url, return_url_if_not_found=True):
 
     if not os.path.exists(filename) and return_url_if_not_found:
         return url
+
+    return filename
+
+
+def parse_hf_url(url):
+    """
+    Parse a HuggingFace Hub URL into components for hf_hub_download.
+
+    Returns dict with (repo_id, filename, repo_type, revision) or None if not a HF URL.
+    """
+    pattern = r"https://huggingface\.co/(datasets/)?([^/]+/[^/]+)/resolve/([^/]+)/(.+)"
+    match = re.match(pattern, url)
+    if not match:
+        return None
+
+    is_dataset = match.group(1) is not None
+    revision = match.group(3)
+    return {
+        "repo_id": match.group(2),
+        "filename": match.group(4),
+        "repo_type": "dataset" if is_dataset else "model",
+        "revision": revision if revision != "main" else None,
+    }
+
+
+def validate_downloaded_content(filepath):
+    with open(filepath, "rb") as f:
+        header = f.read(32)
+
+    for bad_sig in [b"<!doctype", b"<html", b'{"error', b'{"message']:
+        if header.lower().startswith(bad_sig):
+            raise ValueError(
+                f"Downloaded file appears to be an HTML error page, not a valid media file. "
+                f"This may indicate rate limiting. File starts with: {header[:50]!r}"
+            )
+
+    file_size = os.path.getsize(filepath)
+    if file_size < 100:
+        raise ValueError(f"Downloaded file is suspiciously small ({file_size} bytes).")
+
+    return True
+
+
+def download_test_file(url):
+    """
+    Download a URL to a local file, using hf_hub_download for HF URLs.
+
+    For HuggingFace URLs, uses hf_hub_download which handles authentication
+    automatically via the HF_TOKEN environment variable.
+
+    Returns the local filename.
+    """
+    filename = url.split("/")[-1]
+
+    # Skip if file already exists
+    if os.path.exists(filename):
+        print(f"File already exists: {filename}")
+        return filename
+
+    # Check if this is a HuggingFace URL
+    hf_parts = parse_hf_url(url)
+
+    if hf_parts:
+        # Use hf_hub_download for HF URLs - handles auth automatically via HF_TOKEN env var
+        print(f"Downloading {filename} from HuggingFace Hub...")
+        try:
+            hf_hub_download(**hf_parts, local_dir=".")
+            print(f"Successfully downloaded: {filename}")
+        except Exception as e:
+            print(f"Error downloading {filename} from HuggingFace Hub: {e}")
+            raise
+    else:
+        # Use httpx for non-HF URLs (COCO, Britannica, etc.)
+        print(f"Downloading {filename} from external URL...")
+        with open(filename, "wb") as f:
+            with httpx.stream("GET", url, follow_redirects=True) as resp:
+                resp.raise_for_status()
+                f.writelines(resp.iter_bytes(chunk_size=8192))
+
+        # Validate the downloaded content
+        validate_downloaded_content(filename)
+        print(f"Successfully downloaded: {filename}")
 
     return filename
 
@@ -180,36 +263,41 @@ if __name__ == "__main__":
 
         # For `tests/test_tokenization_mistral_common.py:TestMistralCommonBackend`, which eventually calls
         # `mistral_common.tokens.tokenizers.utils.download_tokenizer_from_hf_hub` which (probably) doesn't have the cache.
+        # For `revision=None`, see https://github.com/huggingface/transformers/pull/40623
         if is_mistral_common_available():
             from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
+            from mistral_common.tokens.tokenizers.utils import list_local_hf_repo_files
 
             from transformers import AutoTokenizer
             from transformers.tokenization_mistral_common import MistralCommonBackend
 
             repo_id = "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503"
-            AutoTokenizer.from_pretrained(repo_id, tokenizer_type="mistral")
-            MistralCommonBackend.from_pretrained(repo_id)
-            MistralTokenizer.from_hf_hub(repo_id)
+
+            # determine if we already have this downloaded
+            local_files_only = len(list_local_hf_repo_files(repo_id, revision=None)) > 0
+
+            # This will go the path `transformers/tokenization_mistral_common.py::MistralCommonBackend::from_pretrained --> mistral_common.tokens.tokenizers.utils.download_tokenizer_from_hf_hub`.
+            # No idea at all why we need the statement below again (`MistralCommonBackend.from_pretrained`).
+            AutoTokenizer.from_pretrained(
+                repo_id, tokenizer_type="mistral", local_files_only=local_files_only, revision=None
+            )
+
+            _ = MistralCommonBackend.from_pretrained(
+                repo_id,
+                local_files_only=local_files_only,
+                # This is a hack as `list_local_hf_repo_files` from `mistral_common` has a bug
+                # TODO: Discuss with `mistral-common` maintainers: after a fix being done there, remove this `revision` hack
+                revision=None,
+            )
+
+            MistralTokenizer.from_hf_hub(repo_id, local_files_only=local_files_only)
 
             repo_id = "mistralai/Voxtral-Mini-3B-2507"
-            AutoTokenizer.from_pretrained(repo_id)
-            MistralTokenizer.from_hf_hub(repo_id)
+            local_files_only = len(list_local_hf_repo_files(repo_id, revision=None)) > 0
+
+            AutoTokenizer.from_pretrained(repo_id, local_files_only=local_files_only, revision=None)
+            MistralTokenizer.from_hf_hub(repo_id, local_files_only=local_files_only)
 
     # Download files from URLs to local directory
     for url in URLS_FOR_TESTING_DATA:
-        filename = url_to_local_path(url, return_url_if_not_found=False)
-
-        # Skip if file already exists
-        if os.path.exists(filename):
-            print(f"File already exists: {filename}")
-            continue
-
-        print(f"Downloading {filename}...")
-        try:
-            with open(filename, "wb") as f:
-                with httpx.stream("GET", url) as resp:
-                    resp.raise_for_status()
-                    f.writelines(resp.iter_bytes(chunk_size=8192))
-            print(f"Successfully downloaded: {filename}")
-        except httpx.HTTPError as e:
-            print(f"Error downloading {filename}: {e}")
+        download_test_file(url)

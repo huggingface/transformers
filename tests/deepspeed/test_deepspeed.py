@@ -55,6 +55,8 @@ from transformers.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_available_on_dev
 
 
 if is_torch_available():
+    import os
+
     import torch
     import torch.nn as nn
 
@@ -386,6 +388,129 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         )
         # check that we get the same results either with torch or deepspeed
         torch.testing.assert_close(good_torch_sin_cos, good_deepspeed_sin_cos.cpu())
+
+    def test_init_zero3_moe_weight_conversion(self):
+        # test that weight conversions (MoE expert fusion) work correctly under zero3
+        import tempfile
+
+        import deepspeed
+
+        from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM
+
+        tiny_config = Qwen3MoeConfig(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=32,
+            moe_intermediate_size=16,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            num_experts=8,
+            num_experts_per_tok=2,
+        )
+
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertTrue(dschf.is_zero3())
+        self.assertTrue(is_deepspeed_zero3_enabled())
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            with LoggingLevel(logging.INFO):
+                with mockenv_context(**self.dist_env_1_gpu):
+                    model = Qwen3MoeForCausalLM(tiny_config)
+                    reference_weights = {k: v.clone() for k, v in model.state_dict().items()}
+                    model.save_pretrained(tmpdirname)
+
+            with LoggingLevel(logging.INFO):
+                with mockenv_context(**self.dist_env_1_gpu):
+                    logger = logging.get_logger("transformers.modeling_utils")
+                    with CaptureLogger(logger) as cl:
+                        loaded_model, loading_info = Qwen3MoeForCausalLM.from_pretrained(
+                            tmpdirname, output_loading_info=True
+                        )
+            self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+            self.assertEqual(len(loading_info["missing_keys"]), 0, f"Missing keys: {loading_info['missing_keys']}")
+            self.assertEqual(
+                len(loading_info["unexpected_keys"]), 0, f"Unexpected keys: {loading_info['unexpected_keys']}"
+            )
+
+            # gather all params and verify they match the original weights exactly
+            all_params = list(loaded_model.named_parameters())
+            with deepspeed.zero.GatheredParameters([p for _, p in all_params], modifier_rank=0):
+                for name, param in all_params:
+                    torch.testing.assert_close(
+                        param.data.cpu(),
+                        reference_weights[name].cpu(),
+                        msg=f"Parameter '{name}' doesn't match reference weights",
+                    )
+
+    def test_init_zero3_variance_scaling(self):
+        """
+        Tests whether variance scaling initializations (`lecun_normal_`, `default_flax_embed_init_`) work correctly
+        with DeepSpeed ZeRO-3, e.g. as in SigLIP models. It indirectly checks for the `_is_hf_initialized` flag to
+        prevent re-initialization in ZeRO-3 environments. See #43574
+        """
+        import tempfile
+
+        from transformers import (
+            SiglipConfig,
+            SiglipModel,
+            SiglipTextConfig,
+            SiglipVisionConfig,
+        )
+
+        text_cfg = SiglipTextConfig(
+            vocab_size=64,
+            hidden_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            intermediate_size=32,
+            max_position_embeddings=16,
+        )
+
+        vision_cfg = SiglipVisionConfig(
+            image_size=4,
+            patch_size=2,
+            num_channels=3,
+            hidden_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            intermediate_size=32,
+        )
+
+        cfg = SiglipConfig(text_config=text_cfg.to_dict(), vision_config=vision_cfg.to_dict())
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model = SiglipModel(cfg).eval()
+            model.save_pretrained(tmpdirname)
+
+            ds_config = {
+                "train_batch_size": 1,
+                "zero_optimization": {
+                    "stage": 3,
+                },
+            }
+
+            dschf = HfDeepSpeedConfig(ds_config)
+
+            self.assertTrue(dschf.is_zero3())
+            self.assertTrue(is_deepspeed_zero3_enabled())
+
+            with LoggingLevel(logging.INFO):
+                with mockenv_context(**self.dist_env_1_gpu):
+                    logger = logging.get_logger("transformers.modeling_utils")
+                    with CaptureLogger(logger) as cl:
+                        model = SiglipModel.from_pretrained(tmpdirname)
+
+        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+        self.assertIsNotNone(model)
 
 
 class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
@@ -1276,7 +1401,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --predict_with_generate
             --save_steps 0
             --eval_steps {eval_steps}
-            --group_by_length
+            --train_sampling_strategy group_by_length
             --label_smoothing_factor 0.1
             --source_lang en
             --target_lang ro

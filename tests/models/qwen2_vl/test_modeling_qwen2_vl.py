@@ -210,7 +210,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
             curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
@@ -220,7 +220,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
 
             # two images and two image tokens don't raise an error
@@ -249,6 +249,14 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             forward_output = model(**input_dict)
             torch.testing.assert_close(
                 generation_output.logits[0], forward_output.logits[:, -1, :], rtol=1e-4, atol=1e-4
+            )
+
+            # Same happens if we call `generate` API instead of `forward`
+            generation_output_second = model.generate(
+                **input_dict, max_new_tokens=10, return_dict_in_generate=True, output_logits=True
+            )
+            torch.testing.assert_close(
+                generation_output.logits[0], generation_output_second.logits[0], rtol=1e-4, atol=1e-4
             )
 
     def attention_mask_padding_matches_padding_free_with_position_ids(
