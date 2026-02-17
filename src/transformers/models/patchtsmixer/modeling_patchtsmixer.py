@@ -1133,8 +1133,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         self.mlp_mixer_encoder = PatchTSMixerBlock(config=config)
 
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        self.post_init()
 
     @auto_docstring
     def forward(
@@ -1243,8 +1242,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
             self.scaler = PatchTSMixerNOPScaler(config)
 
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        self.post_init()
 
     @auto_docstring
     def forward(
@@ -1354,8 +1352,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
         self.use_return_dict = config.use_return_dict
 
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        self.post_init()
 
     @auto_docstring
     def forward(
@@ -1566,8 +1563,7 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
         )
 
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        self.post_init()
 
     @auto_docstring
     def forward(
@@ -1791,8 +1787,7 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
             self.inject_scale = None
 
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        self.post_init()
 
     @auto_docstring
     def forward(
@@ -1982,8 +1977,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         )
 
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        self.post_init()
 
     @auto_docstring
     def forward(
