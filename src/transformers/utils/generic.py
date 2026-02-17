@@ -407,6 +407,8 @@ class ModelOutput(OrderedDict):
                 if v is not None:
                     self[field.name] = v
 
+        self.__dict__["_post_init_complete"] = True
+
     def __delitem__(self, *args, **kwargs):
         raise Exception(f"You cannot use ``__delitem__`` on a {self.__class__.__name__} instance.")
 
@@ -429,6 +431,15 @@ class ModelOutput(OrderedDict):
     def __setattr__(self, name, value):
         if name in self.keys() and value is not None:
             # Don't call self.__setitem__ to avoid recursion errors
+            super().__setitem__(name, value)
+        elif (
+            value is not None
+            and self.__dict__.get("_post_init_complete", False)
+            and is_dataclass(self)
+            and any(f.name == name for f in fields(self))
+        ):
+            # If the field was previously None (not in dict keys), but is a valid dataclass field
+            # being set to a non-None value after initialization, add it to the dict as well.
             super().__setitem__(name, value)
         super().__setattr__(name, value)
 

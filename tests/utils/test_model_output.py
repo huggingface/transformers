@@ -103,6 +103,27 @@ class ModelOutputTester(unittest.TestCase):
         self.assertEqual(x.a, 10)
         self.assertEqual(x["a"], 10)
 
+    def test_set_attributes_previously_none(self):
+        # Setting a dataclass field that was initially None should add it to keys
+        x = ModelOutputTest(a=30)
+        self.assertEqual(list(x.keys()), ["a"])
+        self.assertIsNone(x.b)
+
+        x.b = 10
+        self.assertEqual(x.b, 10)
+        self.assertEqual(x["b"], 10)
+        self.assertEqual(list(x.keys()), ["a", "b"])
+
+        # Setting multiple previously-None fields
+        x.c = 20
+        self.assertEqual(list(x.keys()), ["a", "b", "c"])
+        self.assertEqual(list(x.values()), [30, 10, 20])
+
+        # Overwriting a field that was set from None should still work
+        x.b = 99
+        self.assertEqual(x.b, 99)
+        self.assertEqual(x["b"], 99)
+
     def test_set_keys(self):
         x = ModelOutputTest(a=30)
         x["a"] = 10
