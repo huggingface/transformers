@@ -205,11 +205,11 @@ class SolarOpenRMSNorm(Glm4MoeRMSNorm):
 
 
 class SolarOpenPreTrainedModel(Glm4MoePreTrainedModel):
-    pass
+    _keys_to_ignore_on_load_unexpected = None
 
 
 class SolarOpenModel(Glm4MoeModel):
-    _keys_to_ignore_on_load_unexpected = []
+    pass
 
 
 class SolarOpenForCausalLM(Glm4MoeForCausalLM):

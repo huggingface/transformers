@@ -529,6 +529,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         """
         return self._tokenizer.get_added_tokens_decoder()
 
+    # BC v5: expose ``_added_tokens_encoder`` / ``_added_tokens_decoder`` attrs for custom tokenizers that expect
+    # them from slow tokenizers. Only supports read, not write (won't sync to Rust backend, use add_tokens() instead
+    _added_tokens_encoder = added_tokens_encoder
+    _added_tokens_decoder = added_tokens_decoder
+
     def get_added_vocab(self) -> dict[str, int]:
         """
         Returns the added tokens in the vocabulary as a dictionary of token to index.

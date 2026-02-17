@@ -314,8 +314,7 @@ class UMT5Attention(nn.Module):
             position_bias = position_bias[:, :, -seq_length:, :]
 
         if attention_mask is not None:
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-            position_bias = position_bias + causal_mask
+            position_bias = position_bias + attention_mask
 
         position_bias_masked = position_bias
         scores += position_bias_masked
@@ -683,7 +682,7 @@ class UMT5Stack(UMT5PreTrainedModel):
         if self.is_decoder:
             causal_mask = create_causal_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 cache_position=cache_position,
                 past_key_values=past_key_values,

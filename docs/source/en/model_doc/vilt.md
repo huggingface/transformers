@@ -57,7 +57,6 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
   which pixel values are real and which are padding. [`ViltProcessor`] automatically creates this for you.
 - The design of ViLT is very similar to that of a standard Vision Transformer (ViT). The only difference is that the model includes
   additional embedding layers for the language modality.
-- The PyTorch version of this model is only available in torch 1.10 and higher.
 
 ## ViltConfig
 

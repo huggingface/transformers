@@ -215,7 +215,7 @@ class OmDetTurboProcessor(ProcessorMixin):
 
         task = output_kwargs["text_kwargs"].pop("task", None)
         if task is None:
-            task = ["Detect {}.".format(", ".join(text_single)) for text_single in text]
+            task = [f"Detect {', '.join(text_single)}." for text_single in text]
         elif not isinstance(task, (list, tuple)):
             task = [task]
 

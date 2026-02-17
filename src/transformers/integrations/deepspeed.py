@@ -347,16 +347,11 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     # Sort keys to ensure consistent ordering (important for MoE conversions)
     # Iterate over sorted keys and pop from state_dict to free memory immediately
     conversion_mapping = {}
-    key_rename_cache = {}  # Cache rename results to avoid redundant processing
-    new_state_dict = {}  # Initialize here for direct key copies (non-converted keys)
+    new_state_dict = {}
     sorted_keys = sorted(state_dict.keys(), key=lambda k: dot_natural_key(k))
     for original_key in sorted_keys:
-        tensor = state_dict.pop(original_key)  # Pop to free memory immediately
-        # Rename the key according to all renaming pattern and optional weight converter patterns
+        tensor = state_dict.pop(original_key)
         renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, prefix, model_state_dict)
-
-        # Cache the rename result for use in the cleanup loop
-        key_rename_cache[original_key] = renamed_key
 
         # Only process if the renamed key is in the model's state dict
         if renamed_key in model_state_dict:
@@ -380,10 +375,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     # Apply the conversions and build the new state dict
     for renamed_key, mapping in conversion_mapping.items():
         try:
-            # Only WeightConverter needs convert(); WeightRenaming is just a simple rename
-            if not isinstance(mapping, WeightConverter):
-                continue
-            realized_value, _ = mapping.convert(
+            realized_value = mapping.convert(
                 renamed_key,
                 model=model,
                 config=model.config,
@@ -391,25 +383,12 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
             for target_name, param in realized_value.items():
                 param = param[0] if isinstance(param, list) else param
                 new_state_dict[target_name] = param
-            # Free memory by clearing source tensors
-            if hasattr(mapping, "source_tensors"):
-                mapping.source_tensors = {}
         except Exception as e:
             raise RuntimeError(
                 f"Failed to apply weight conversion for '{renamed_key}'. "
                 f"This likely means the checkpoint format is incompatible with the current model version. "
                 f"Error: {e}"
             ) from e
-
-    # Add any keys that didn't need conversion (use cached rename results)
-    # At this point, state_dict only contains unconverted keys (others were popped)
-    for key in list(state_dict.keys()):
-        renamed_key = key_rename_cache.get(key)
-        if renamed_key is None:
-            # Key wasn't in our cache, compute rename
-            renamed_key, _ = rename_source_key(key, renamings, [], prefix, model_state_dict)
-        if renamed_key not in new_state_dict and renamed_key in model_state_dict:
-            new_state_dict[renamed_key] = state_dict.pop(key)
 
     # Attach metadata to the new state dict
     if metadata is not None:
@@ -642,3 +621,67 @@ def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path, load_module_str
             raise ValueError(f"[deepspeed] failed to resume from checkpoint {checkpoint_path}")
     else:
         raise ValueError(f"Can't find a valid checkpoint at {checkpoint_path}")
+
+
+def propagate_args_to_deepspeed(accelerator, args, auto_find_batch_size=False):
+    """
+    Sets values in the deepspeed plugin based on the TrainingArguments.
+
+    Args:
+        accelerator (`Accelerator`): The Accelerator object.
+        args (`TrainingArguments`): The training arguments to propagate to DeepSpeed config.
+        auto_find_batch_size (`bool`, *optional*, defaults to `False`):
+            Whether batch size was auto-discovered by trying increasingly smaller sizes.
+    """
+    ds_plugin = accelerator.state.deepspeed_plugin
+
+    ds_plugin.hf_ds_config = HfTrainerDeepSpeedConfig(ds_plugin.hf_ds_config.config)
+    ds_plugin.deepspeed_config = ds_plugin.hf_ds_config.config
+    ds_plugin.hf_ds_config.trainer_config_process(args, auto_find_batch_size)
+
+
+def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
+    """
+    Computes the loss under sequence parallelism with `sp_backend="deepspeed"` and `sp_size > 1`.
+
+    Performs weighted loss aggregation across SP ranks, accounting for varying numbers of valid tokens per rank
+    (e.g., when some ranks receive only padding or prompt tokens that are masked with -100).
+
+    Args:
+        accelerator (`Accelerator`): The accelerator instance with `torch_device_mesh` support.
+        model (`torch.nn.Module`): The model to compute the loss for.
+        inputs (`dict[str, torch.Tensor | Any]`): The input data for the model. Must include `"shift_labels"` key.
+        return_outputs (`bool`): Whether to return the model outputs along with the loss.
+        pc (`accelerate.parallelism_config.ParallelismConfig`): The parallelism configuration.
+
+    Returns:
+        The loss, or a tuple of `(loss, outputs)` if `return_outputs` is `True`.
+    """
+    # DeepSpeed SP automatically injects shift_labels into inputs (pre-shifted labels for SP).
+    # The model's forward pass receives shift_labels via **kwargs and passes it to the loss function.
+    # Both standard transformer models and Liger-patched models handle shift_labels correctly,
+    # so we can directly use the computed loss from the model output.
+    # See: https://huggingface.co/docs/accelerate/en/concept_guides/sequence_parallelism
+    if "labels" not in inputs and "shift_labels" in inputs:
+        # DeepSpeed SP Dataloader removes "labels" but we need it, otherwise, we won't compute the loss.
+        inputs["labels"] = inputs["shift_labels"]
+    outputs = model(**inputs)
+    loss = outputs.loss
+
+    sp_group = accelerator.torch_device_mesh["sp"].get_group()
+    sp_world_size = pc.sp_size
+    # differentiable weighted per-shard-loss aggregation across ranks
+    losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
+    # special dealing with SFT that has prompt tokens that aren't used in loss computation
+    good_tokens = (inputs["shift_labels"] != -100).view(-1).sum()
+    good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
+    # Skip ranks with zero valid tokens
+    total_loss = sum(
+        losses_per_rank[rank] * good_tokens_per_rank[rank]
+        for rank in range(sp_world_size)
+        if good_tokens_per_rank[rank] > 0
+    )
+    total_good_tokens = sum(good_tokens_per_rank)
+    loss = total_loss / max(total_good_tokens, 1)
+
+    return (loss, outputs) if return_outputs else loss

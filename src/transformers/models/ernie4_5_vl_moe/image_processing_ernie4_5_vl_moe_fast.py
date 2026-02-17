@@ -190,14 +190,6 @@ class Ernie4_5_VL_MoeImageProcessorFast(BaseImageProcessorFast):
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[Ernie4_5_VL_MoeImageProcessorKwargs],
-    ) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
         """
         A utility that returns number of image patches for a given image size.
@@ -226,6 +218,14 @@ class Ernie4_5_VL_MoeImageProcessorFast(BaseImageProcessorFast):
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
+
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        **kwargs: Unpack[Ernie4_5_VL_MoeImageProcessorKwargs],
+    ) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
 
 __all__ = ["Ernie4_5_VL_MoeImageProcessorFast"]

@@ -104,7 +104,7 @@ VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.4.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.9.0"
+KERNELS_MIN_VERSION = "0.10.2"
 
 
 @lru_cache
@@ -1009,6 +1009,11 @@ def is_qutlass_available():
 @lru_cache
 def is_compressed_tensors_available() -> bool:
     return _is_package_available("compressed_tensors")
+
+
+@lru_cache
+def is_sinq_available() -> bool:
+    return _is_package_available("sinq")
 
 
 @lru_cache

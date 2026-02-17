@@ -601,13 +601,19 @@ class TrainingArguments:
             except if the model used is one of the `XxxForQuestionAnswering` in which case it will also include the
             `["start_positions", "end_positions"]` keys.
             You should only specify `label_names` if you're using custom label names or if your model's `forward` consumes multiple label tensors (e.g., extractive QA).
-        group_by_length (`bool`, *optional*, defaults to `False`):
-            Whether or not to group together samples of roughly the same length in the training dataset (to minimize
-            padding applied and be more efficient). Only useful if applying dynamic padding.
+        train_sampling_strategy (`str`, *optional*, defaults to `"random"`):
+            The sampler to use for the training dataloader. Possible values are:
+
+                - `"random"`: Uses `RandomSampler` (default).
+                - `"sequential"`: Uses `SequentialSampler`.
+                - `"group_by_length"`: Uses `LengthGroupedSampler` to group samples of roughly the same length
+                  together (to minimize padding and be more efficient).
+
+            Note: When using an `IterableDataset`, this argument is ignored.
         length_column_name (`str`, *optional*, defaults to `"length"`):
             Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
-            than computing them on train startup. Ignored unless `group_by_length` is `True` and the dataset is an
-            instance of `Dataset`.
+            than computing them on train startup. Ignored unless `train_sampling_strategy` is `"group_by_length"` and the dataset
+            is an instance of `Dataset`.
 
         > DDP (DistributedDataParallel)
 
@@ -1300,15 +1306,18 @@ class TrainingArguments:
     label_names: list[str] | None = field(
         default=None, metadata={"help": "The list of keys in your dictionary of inputs that correspond to the labels."}
     )
-    group_by_length: bool = field(
-        default=False,
+    train_sampling_strategy: str = field(
+        default="random",
         metadata={
-            "help": "Whether or not to group samples of roughly the same length together when batching. Only useful if applying dynamic padding."
+            "help": "Sampler for training: 'random' (default), 'sequential', or 'group_by_length'.",
+            "choices": ["random", "sequential", "group_by_length"],
         },
     )
     length_column_name: str = field(
         default="length",
-        metadata={"help": "Column name for precomputed lengths. Ignored unless `group_by_length` is True."},
+        metadata={
+            "help": "Column name for precomputed lengths. Ignored unless `train_sampling_strategy` is 'group_by_length'."
+        },
     )
 
     # --- DDP ---
@@ -1431,12 +1440,6 @@ class TrainingArguments:
         default=-1,
         metadata={
             "help": "When using torch.distributed.launch (Deprecated), it will pass `local_rank` in the script, so we need this for the parser. To get the local rank, prefer using the property `local_process_index`"
-        },
-    )
-    place_model_on_device: bool | None = field(
-        default=None,
-        metadata={
-            "help": "Whether to automatically place the model on the device. When `None` (default), the Trainer decides."
         },
     )
 
@@ -1973,6 +1976,13 @@ class TrainingArguments:
         log_level_main_node = logging.get_verbosity() if log_level == -1 else log_level
         log_level_replica_node = logging.get_verbosity() if log_level_replica == -1 else log_level_replica
         return log_level_main_node if self.should_log else log_level_replica_node
+
+    @property
+    def place_model_on_device(self) -> bool | None:
+        """
+        Can be subclassed and overridden for some specific integrations.
+        """
+        return None
 
     @property
     def _no_sync_in_gradient_accumulation(self):

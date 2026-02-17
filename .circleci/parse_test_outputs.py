@@ -5,7 +5,7 @@ import re
 def parse_pytest_output(file_path):
     skipped_tests = {}
     skipped_count = 0
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8') as file:
         for line in file:
             match = re.match(r'^SKIPPED \[(\d+)\] (tests/.*): (.*)$', line)
             if match:
@@ -19,7 +19,7 @@ def parse_pytest_output(file_path):
 def parse_pytest_failure_output(file_path):
     failed_tests = {}
     failed_count = 0
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8') as file:
         for line in file:
             match = re.match(r'^FAILED (tests/.*) - (.*): (.*)$', line)
             if match:
@@ -36,7 +36,7 @@ def parse_pytest_errors_output(file_path):
     print(file_path)
     error_tests = {}
     error_count = 0
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8') as file:
         for line in file:
             match = re.match(r'^ERROR (tests/.*) - (.*): (.*)$', line)
             if match:

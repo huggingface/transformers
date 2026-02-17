@@ -23,7 +23,8 @@ from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..dac.modeling_dac import DacEncoder, DacEncoderBlock, Snake1d
 from ..pe_audio_video.modeling_pe_audio_video import (
@@ -111,7 +112,8 @@ class PeAudioEncoder(PeAudioVideoEncoder):
     base_model_prefix = "audio_model.audio_encoder"
 
     @can_return_tuple
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_values: torch.Tensor,
@@ -124,7 +126,7 @@ class PeAudioEncoder(PeAudioVideoEncoder):
         if attention_mask is not None:
             attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
             )
 
