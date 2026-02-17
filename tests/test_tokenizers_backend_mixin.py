@@ -437,6 +437,30 @@ class TokenizersBackendTesterMixin:
             if hasattr(fast_tokenizer.backend_tokenizer.pre_tokenizer, "add_prefix_space"):
                 self.assertEqual(fast_tokenizer.backend_tokenizer.pre_tokenizer.add_prefix_space, add_prefix_space)
 
+    def test_add_bos_token_without_bos_token(self):
+        """
+        Test that setting add_bos_token=True when bos_token=None silently disables add_bos_token.
+        """
+        tokenizer_r = self.get_rust_tokenizer()
+
+        # Reload the tokenizer with bos_token=None
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tokenizer_r.save_pretrained(tmpdir)
+            tokenizer_class = getattr(self, "rust_tokenizer_class", None) or getattr(self, "tokenizer_class", None)
+            tokenizer_no_bos = tokenizer_class.from_pretrained(tmpdir, bos_token=None)
+
+        self.assertIsNone(tokenizer_no_bos.bos_token)
+
+        tokenizer_no_bos.add_bos_token = True
+
+        self.assertFalse(tokenizer_no_bos.add_bos_token)
+
+        test_text = "Hello world"
+        encoded = tokenizer_no_bos(test_text)
+        self.assertIsNotNone(encoded["input_ids"])
+        decoded = tokenizer_no_bos.decode(encoded["input_ids"], skip_special_tokens=True)
+        self.assertIsInstance(decoded, str)
+
     def test_local_files_only(self):
         from transformers import AutoTokenizer
 
