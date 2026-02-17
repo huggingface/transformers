@@ -29,9 +29,10 @@ from ...modeling_outputs import (
     MultipleChoiceModelOutput,
     SequenceClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, capture_outputs, can_return_tuple
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils.output_capturing import capture_outputs
 from .configuration_visual_bert import VisualBertConfig
 
 
@@ -463,7 +464,7 @@ class VisualBertPreTrainedModel(PreTrainedModel):
         "hidden_states": VisualBertLayer,
         "attentions": VisualBertSelfAttention,
     }
-    
+
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -553,6 +554,9 @@ class VisualBertModel(VisualBertPreTrainedModel):
         visual_attention_mask: torch.LongTensor | None = None,
         visual_token_type_ids: torch.LongTensor | None = None,
         image_text_alignment: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPooling:
         r"""
@@ -601,15 +605,22 @@ class VisualBertModel(VisualBertPreTrainedModel):
         last_hidden_states = outputs.last_hidden_state
         ```"""
 
-        
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
+
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
+
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -625,17 +636,16 @@ class VisualBertModel(VisualBertPreTrainedModel):
         if visual_embeds is not None and visual_attention_mask is None:
             visual_attention_mask = torch.ones(visual_input_shape, device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
         if visual_embeds is not None:
             combined_attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
-            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-                combined_attention_mask, (batch_size, input_shape + visual_input_shape)
+            extended_attention_mask = self.get_extended_attention_mask(
+                combined_attention_mask,
+                (batch_size, seq_length + visual_input_shape[1]),
             )
-
         else:
-            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-                attention_mask, (batch_size, input_shape)
+            extended_attention_mask = self.get_extended_attention_mask(
+                attention_mask,
+                (batch_size, seq_length),
             )
 
         embedding_output = self.embeddings(
@@ -648,32 +658,25 @@ class VisualBertModel(VisualBertPreTrainedModel):
             image_text_alignment=image_text_alignment,
         )
 
-        if self.bypass_transformer and visual_embeds is not None:
-            text_length = input_ids.size(1)
-            text_embedding_output = embedding_output[:, :text_length, :]
-            visual_embedding_output = embedding_output[:, text_length:, :]
+        encoder_outputs = self.encoder(
+            embedding_output,
+            attention_mask=extended_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
-            text_extended_attention_mask = extended_attention_mask[:, :, text_length, :text_length]
+        sequence_output = encoder_outputs[0]
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-            encoder_outputs = self.encoder(
-                embedding_output,
-                attention_mask=extended_attention_mask,
-            )
-
-            sequence_output = encoder_outputs.last_hidden_state
-
-        else:
-            encoder_outputs = self.encoder(
-                embedding_output,
-                attention_mask=extended_attention_mask,
-            )
-            sequence_output = encoder_outputs[0]
-
-            pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        if not return_dict:
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
