@@ -1145,6 +1145,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _supports_sdpa: bool = False
     _supports_flash_attn: bool = False
     _supports_flex_attn: bool = False
+    _default_flash_implementation: str | None = (
+        None  # Model's preferred flash kernel (e.g., "kernels-community/flash-mla")
+    )
 
     # Tensor-parallelism-related properties
     # A tensor parallel plan of the form `{"model.layer.mlp.param": "colwise"}` to be applied to the model when TP is enabled.
@@ -1785,6 +1788,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
             None to sdpa (to potentially eager).
         """
+        # Auto-correct flash_attention_2/3 to model's default flash implementation if specified
+        if attn_implementation is not None:
+            is_paged = attn_implementation.startswith("paged|")
+            base_impl = attn_implementation.removeprefix("paged|")
+
+            if base_impl in ("flash_attention_2", "flash_attention_3"):
+                default_flash = getattr(self, "_default_flash_implementation", None)
+                if default_flash is not None:
+                    logger.warning_once(
+                        f"This model is optimized for '{default_flash}'. "
+                        f"Automatically using '{default_flash}' instead of '{attn_implementation}'."
+                    )
+                    attn_implementation = f"paged|{default_flash}" if is_paged else default_flash
+
         applicable_attn_implementation = attn_implementation
 
         is_paged = attn_implementation is not None and attn_implementation.startswith("paged|")
@@ -3741,7 +3758,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                 - `"eager"` (sequential implementation of the experts matrix multiplications).
                 - `"batched_mm"` (using [`torch.bmm`](https://pytorch.org/docs/stable/generated/torch.bmm.html)).
-                - `"grouped_mm"` (using [`torch._grouped_mm`](https://docs.pytorch.org/docs/main/generated/torch.nn.functional.grouped_mm.html)).
+                - `"grouped_mm"` (using [`torch.nn.functional.grouped_mm`](https://docs.pytorch.org/docs/main/generated/torch.nn.functional.grouped_mm.html)).
 
                 By default, if available, `grouped_mm` will be used for torch>=2.9.0. The default is otherwise the sequential `"eager"` implementation.
 

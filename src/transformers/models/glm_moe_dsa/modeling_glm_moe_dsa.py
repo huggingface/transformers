@@ -19,7 +19,6 @@
 # limitations under the License.
 
 
-import math
 from collections.abc import Callable
 from typing import Optional
 
@@ -31,7 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -39,14 +38,10 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_grouped_mm_available, logging
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.import_utils import is_tracing
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_grouped_mm_available
+from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_glm_moe_dsa import GlmMoeDsaConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -70,32 +65,6 @@ class GlmMoeDsaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -103,48 +72,162 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    r"""
-    TODO let's just use the original freqcis computation to not have the view
-    transpose + reshape! This is not optimized!
-    Applies Rotary Position Embedding to the query and key tensors.
+def apply_rotary_pos_emb(
+    x: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    unsqueeze_dim: int = 1,
+) -> torch.Tensor:
+    """
+    Applies Rotary Position Embedding to a single tensor.
+
+    This is the transformers equivalent of DeepSeek V3.2's `apply_rotary_emb(x, freqs_cis, interleaved)`.
+    Instead of using complex-number `freqs_cis`, we use pre-split `(cos, sin)` tensors from RotaryEmbedding.
 
     Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`):
-            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
-            used to pass offsetted position ids when working with a KV-cache.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+        x (`torch.Tensor`): Input tensor of shape `[..., head_dim]`.
+        cos (`torch.Tensor`): Cosine part from RotaryEmbedding, shape `[batch, seq_len, head_dim]`.
+        sin (`torch.Tensor`): Sine part from RotaryEmbedding, shape `[batch, seq_len, head_dim]`.
+        unsqueeze_dim (`int`): Dimension along which to unsqueeze cos/sin for broadcasting.
+            Use `1` when x is `[B, H, S, D]` (BHSD) and `2` when x is `[B, S, H, D]` (BSHD).
+
     Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+        `torch.Tensor`: Tensor with rotary embeddings applied, same shape as input.
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
 
-    b, h, s, d = q.shape
-    q = q.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
-
-    b, h, s, d = k.shape
-    k = k.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
-
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
+    # Split-half (NeoX/Llama style): (x[:d/2], x[d/2:])
+    # This matches llama's apply_rotary_pos_emb logic.
+    x_rotated = (x * cos) + (rotate_half(x) * sin)
+    return x_rotated
 
 
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
+class GlmMoeDsaIndexer(nn.Module):
+    """
+    Dynamic Sparse Attention (DSA) indexer for selecting top-k tokens.
+
+    The Indexer has its own lightweight projections (wq_b, wk) separate from the
+    main MLA attention. It uses non-interleaved (NeoX/Llama) RoPE, unlike the main attention
+    which uses interleaved RoPE.
+
+    **Cache strategy**: The Indexer manages its own key cache (`_cached_keys`) separately
+    from the DynamicCache used by MLA attention, since DynamicCache is sized for exactly
+    `num_hidden_layers` attention layers. Keys are concatenated along the sequence dimension
+    during autoregressive decode.
+    """
+
+    def __init__(self, config: "GlmMoeDsaConfig", layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+
+        self.hidden_size: int = config.hidden_size
+        self.n_heads: int = config.index_n_heads
+        self.head_dim: int = config.index_head_dim
+        self.qk_rope_head_dim: int = config.qk_rope_head_dim
+        self.index_topk: int = config.index_topk
+        self.q_lora_rank: int = config.q_lora_rank
+
+        # Named to match checkpoint: wq_b, wk, k_norm
+        self.wq_b = nn.Linear(self.q_lora_rank, self.n_heads * self.head_dim, bias=False)
+        self.wk = nn.Linear(self.hidden_size, self.head_dim, bias=False)
+        self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
+        # Named to match checkpoint: weights_proj
+        # In the reference, this is fp32; the HF FP8 checkpoint stores a bf16 tensor.
+        # Keeping it as a plain Linear prevents FP8 conversion (see `_keep_in_fp32_modules`).
+        self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
+        self.softmax_scale = self.head_dim**-0.5
+
+        # Indexer maintains its own key cache (not in DynamicCache, which is sized for attention layers only)
+        self._cached_keys: torch.Tensor | None = None
+
+    @torch.no_grad()
+    def forward(
+        self,
+        hidden_states: torch.Tensor,  # [B, S, hidden]
+        q_resid: torch.Tensor,  # [B, S, q_lora_rank]
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
+        use_cache: bool = False,
+    ) -> torch.LongTensor:
+        """
+        Computes top-k token indices for sparse attention (DSA).
+
+        This is the bf16 equivalent of the reference Indexer which uses `rotate_activation` (Hadamard transform)
+        and `fp8_index` (FP8 quantized scoring kernel). Since the Hadamard transform is orthogonal (dot products
+        are preserved: Hq·Hk = q·k), and FP8 quantization is a precision optimization, we skip both and compute
+        scores directly in bf16/fp32.
+
+        The scoring logic computes:
+            index_score[b,s,t] = Σ_h (weight[b,s,h] · softmax_scale · q[b,s,h,:] · k[b,t,:])
+
+        Args:
+            hidden_states: Input hidden states `[B, S, hidden_size]`.
+            q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
+            position_embeddings: `(cos, sin)` from RotaryEmbedding.
+            attention_mask: Causal mask, broadcastable to `[B, S, T]`.
+            use_cache: Whether to store/update the indexer's own key cache for autoregressive decode.
+
+        Returns:
+            `torch.LongTensor`: Top-k token indices of shape `[B, S, topk]`.
+        """
+        batch_size, seq_len, _ = hidden_states.shape
+        cos, sin = position_embeddings
+
+        # === Queries ===
+        q = self.wq_b(q_resid)  # [B, S, H*D]
+        q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
+        q_pe, q_nope = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+        q_pe = apply_rotary_pos_emb(q_pe, cos, sin, unsqueeze_dim=2)  # [B, S, H, rope_D]
+        q = torch.cat([q_pe, q_nope], dim=-1)  # [B, S, H, D]
+
+        # === Keys ===
+        k = self.k_norm(self.wk(hidden_states))  # [B, S, D]
+        k_pe, k_nope = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+        k_pe = apply_rotary_pos_emb(k_pe.unsqueeze(2), cos, sin, unsqueeze_dim=2).squeeze(2)  # [B, S, rope_D]
+        k = torch.cat([k_pe, k_nope], dim=-1)  # [B, S, D]
+
+        # === Key cache (managed by the indexer, not DynamicCache) ===
+        # Reset cache on prefill (new prompt) to avoid stale keys / batch-size mismatch
+        if seq_len > 1:
+            self._cached_keys = None
+
+        if use_cache:
+            if self._cached_keys is not None:
+                k_cached = torch.cat([self._cached_keys, k], dim=1)  # [B, T, D]
+            else:
+                k_cached = k
+            self._cached_keys = k_cached
+        else:
+            k_cached = k
+
+        # === Scoring ===
+        # Reference: weights = weights_proj(x.float()) * n_heads^(-0.5)
+        # Reference: weights = weights.unsqueeze(-1) * q_scale * softmax_scale
+        # Reference: index_score = fp8_index(q_fp8, weights, k_cache, k_scale_cache)
+        #
+        # In bf16 mode (no FP8), q_scale = 1. The fp8_index kernel computes:
+        #   score[b,s,t] = sum_h(weights[b,s,h] * dot(q[b,s,h,:], k[b,t,:]))
+        # where weights already absorbs n_heads^(-0.5) and softmax_scale.
+
+        # Don't force fp32 inputs here: the checkpoint stores `weights_proj.weight` in bf16.
+        # Use native dtype for matmul, then upcast the result for scoring stability.
+        weights = self.weights_proj(hidden_states).float() * (self.n_heads**-0.5)  # [B, S, H]
+
+        # q·k^T per head: [B, S, H, D] @ [B, T, D]^T → [B, S, H, T]
+        scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale
+
+        # Weight per head and sum across heads → [B, S, T]
+        index_scores = torch.einsum("bsht,bsh->bst", scores, weights)
+
+        if attention_mask is not None:
+            index_scores = index_scores + attention_mask
+
+        total_len = index_scores.shape[-1]
+        topk = min(self.index_topk, total_len)
+        topk_indices = index_scores.topk(topk, dim=-1).indices  # [B, S, topk]
+        return topk_indices
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -186,14 +269,22 @@ def eager_attention_forward(
 
 class GlmMoeDsaAttention(nn.Module):
     """
-    DeepSeek V3.2 sparse attention mechanism with indexer.
+    Multi-head Latent Attention (MLA) with Dynamic Sparse Attention (DSA) indexer.
 
-    This implements the native sparse attention from [DeepSeek V3.2](https://huggingface.co/deepseek-ai/DeepSeek-V3.2) which uses
-    an indexer to select top-k tokens for attention computation, making it more efficient for long sequences.
+    This follows the same architecture as DeepSeek V3.2's MLA:
+      - Query: x → q_a_proj → RMSNorm → q_b_proj → split(q_nope, q_pe) → RoPE(q_pe)
+      - KV:    x → kv_a_proj → split(kv_compressed, k_pe) → RMSNorm(kv_compressed) → kv_b_proj
+                                                           → RoPE(k_pe)
+      - Cache: fully expanded key_states [B, H, T, qk_head_dim] and value_states [B, H, T, v_head_dim]
+      - Indexer: selects top-k tokens via DSA, applied as an additive -inf mask on attention scores
 
-    In GLM-5, the indexer RoPE uses neox_style = false. Therefore, we introduced the indexer_rope_interleave parameter:
-    when indexer_rope_interleave is set to True, RoPE is computed using the same neox_style = false behavior as in the
-    GlmMoeDsa model. This part has not yet been implemented in transformers.
+    **Caching strategy**: follows the DeepSeek V3 transformers convention of fully expanding K/V
+    before caching. This ensures compatibility with DynamicCache, StaticCache, flash attention,
+    and SDPA backends. The reference's compressed-cache decode path (which avoids the kv_b_proj
+    expansion at decode time) is a future optimization that would require a dedicated MLA cache class.
+
+    **FP8 compatibility**: all weight accesses use standard nn.Linear forward calls (never
+    raw `.weight` access), so FP8-quantized checkpoints work transparently.
     """
 
     def __init__(self, config: GlmMoeDsaConfig, layer_idx: int):
@@ -210,11 +301,10 @@ class GlmMoeDsaAttention(nn.Module):
         self.v_head_dim = config.v_head_dim
         self.qk_nope_head_dim = config.qk_nope_head_dim
         self.qk_head_dim = config.qk_head_dim
-        self.index_topk = config.index_topk
 
         self.is_causal = True
 
-        # Query projection
+        # Query projection (with optional LoRA)
         if self.q_lora_rank is None:
             self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
         else:
@@ -222,7 +312,7 @@ class GlmMoeDsaAttention(nn.Module):
             self.q_a_layernorm = GlmMoeDsaRMSNorm(config.q_lora_rank)
             self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
 
-        # Key-Value projections
+        # Key-Value projections (MLA compressed path)
         self.kv_a_proj_with_mqa = nn.Linear(
             config.hidden_size,
             self.kv_lora_rank + self.qk_rope_head_dim,
@@ -242,19 +332,9 @@ class GlmMoeDsaAttention(nn.Module):
             bias=config.attention_bias,
         )
 
-        # Indexer components for sparse attention
-        self.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-        self.wk = nn.Linear(config.hidden_size, self.qk_head_dim, bias=config.attention_bias)
-        self.k_norm = GlmMoeDsaRMSNorm(self.qk_head_dim)
-        self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
-
         self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_parameters.get("rope_type", "default") != "default":
-            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_parameters["factor"]
-            if mscale_all_dim:
-                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
-                self.scaling = self.scaling * mscale * mscale
+
+        self.indexer = GlmMoeDsaIndexer(config, layer_idx)
 
     def forward(
         self,
@@ -266,70 +346,85 @@ class GlmMoeDsaAttention(nn.Module):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
-
-        # For training or when index_topk is not effective, fall back to standard attention
-        # This is a simplified implementation - in practice, you'd implement the full sparse indexer
-        if self.training or seq_length <= self.index_topk:
-            if not is_tracing(hidden_states):
-                logger.warning_once(
-                    "DeepSeek V3.2 sparse attention is not fully implemented in this version. "
-                    "Falling back to standard attention. For production use, please use vLLM or "
-                    "other optimized inference engines.",
-                )
-            return self._standard_attention(
-                hidden_states, position_embeddings, attention_mask, past_key_values, cache_position, **kwargs
-            )
-
-        # Sparse attention implementation would go here
-        # This requires custom CUDA kernels for efficient top-k selection and indexing
-        return self._standard_attention(
-            hidden_states, position_embeddings, attention_mask, past_key_values, cache_position, **kwargs
-        )
-
-    def _standard_attention(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        """Standard attention fallback (same as DeepSeek V3)"""
-        batch_size, seq_length = hidden_states.shape[:-1]
-        query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
-        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
-
-        if self.q_lora_rank is None:
-            q_states = self.q_proj(hidden_states)
-        else:
-            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
-        q_states = q_states.view(query_shape).transpose(1, 2)
-        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
-
-        compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-
-        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
-        k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
-        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-
         cos, sin = position_embeddings
-        if self.config.rope_interleave:
-            q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
+
+        # ===== Query path =====
+        if self.q_lora_rank is None:
+            query_states = self.q_proj(hidden_states)
+            q_resid = None
         else:
-            q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
-        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
+            q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))  # [B, S, q_lora_rank]
+            query_states = self.q_b_proj(q_resid)
+        query_states = query_states.view(batch_size, seq_length, self.num_heads, self.qk_head_dim).transpose(1, 2)
+        # Split nope/rope, apply RoPE, recombine — layout: [B, H, S, D]
+        q_nope, q_pe = torch.split(query_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+        q_pe = apply_rotary_pos_emb(q_pe, cos, sin, unsqueeze_dim=1)  # BHSD format
 
-        query_states = torch.cat((q_pass, q_rot), dim=-1)
-        key_states = torch.cat((k_pass, k_rot), dim=-1)
+        # ===== KV path =====
+        compressed_kv = self.kv_a_proj_with_mqa(hidden_states)  # [B, S, kv_rank + rope_D]
+        k_compressed, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        k_compressed = self.kv_a_layernorm(k_compressed)  # [B, S, kv_rank]
 
+        # Expand KV through kv_b_proj
+        kv_expanded = self.kv_b_proj(k_compressed)  # [B, S, H * (nope_D + v_D)]
+        kv_expanded = kv_expanded.view(batch_size, seq_length, self.num_heads, self.qk_nope_head_dim + self.v_head_dim)
+        k_nope, value_states = torch.split(kv_expanded, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        k_nope = k_nope.transpose(1, 2)  # [B, H, S, nope_D]
+        value_states = value_states.transpose(1, 2)  # [B, H, S, v_D]
+
+        # RoPE on k_pe (single-head rope stream)
+        k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)  # [B, 1, S, rope_D]
+        k_pe = apply_rotary_pos_emb(k_pe, cos, sin, unsqueeze_dim=1)  # BHSD format
+        k_pe = k_pe.expand(-1, self.num_heads, -1, -1)  # [B, H, S, rope_D]
+
+        # Assemble full Q and K
+        query_states = torch.cat([q_nope, q_pe], dim=-1)  # [B, H, S, qk_head_dim]
+        key_states = torch.cat([k_nope, k_pe], dim=-1)  # [B, H, S, qk_head_dim]
+
+        # Cache update
         if past_key_values is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
+        # ===== Indexer (DSA sparse mask) =====
+        # attention_mask is [B, 1, S, T] (4D) for eager and (2D) otherwise but indexer works with [B, S, T] (3D)
+        indexer_mask = (
+            attention_mask[:, 0, :, :]
+            if attention_mask is not None and attention_mask.dim() == 4
+            else attention_mask.unsqueeze(1)
+            if attention_mask is not None
+            else None
+        )
+        topk_indices = self.indexer(
+            hidden_states,
+            q_resid,
+            position_embeddings,
+            indexer_mask,
+            use_cache=past_key_values is not None,
+        )  # [B, S, topk]
+
+        # Build combined DSA + causal mask: -inf everywhere except selected top-k positions
+        total_len = key_states.shape[2]
+        index_mask = torch.full(
+            (batch_size, seq_length, total_len),
+            float("-inf"),
+            device=hidden_states.device,
+            dtype=query_states.dtype,
+        )
+        index_mask.scatter_(-1, topk_indices, 0.0)  # [B, S, T]
+        index_mask = index_mask.unsqueeze(1)  # [B, 1, S, T]
+        if attention_mask is not None and attention_mask.dim() == 4:
+            causal_mask = attention_mask[..., :total_len]
+            combined_mask = index_mask + causal_mask
+        else:
+            combined_mask = (
+                attention_mask.masked_fill(index_mask == float("-inf"), float("-inf"))
+                if attention_mask is not None
+                else index_mask
+            )
+
+        # Flash attention head_dim padding (qk_head_dim != v_head_dim)
+        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -341,13 +436,14 @@ class GlmMoeDsaAttention(nn.Module):
             query_states,
             key_states,
             value_states,
-            attention_mask,
+            combined_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            indices=topk_indices,  # flash_mla_with_kvcache
             **kwargs,
         )
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
+        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
             attn_output = attn_output[:, :, :, : self.v_head_dim]
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
@@ -542,9 +638,9 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["GlmMoeDsaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
+    _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
-    _supports_flex_attn = True
+    _supports_flex_attn = False
     _can_compile_fullgraph = (
         is_grouped_mm_available()
     )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
@@ -555,6 +651,10 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
+    # NOTE: FP8 quantization uses `_keep_in_fp32_modules` (not `_strict`) to decide which modules to NOT convert.
+    # We must keep `indexer.weights_proj` as a plain Linear to match the checkpoint (no `weight_scale_inv`).
+    _keep_in_fp32_modules = ["indexer.weights_proj"]
+    _default_flash_implementation = "kernels-community/flash-mla"
 
     @torch.no_grad()
     def _init_weights(self, module):

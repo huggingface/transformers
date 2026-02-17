@@ -16,7 +16,7 @@ Integration with Deepspeed
 """
 
 import copy
-import importlib.metadata as importlib_metadata
+import importlib.metadata
 import importlib.util
 import weakref
 from functools import partialmethod
@@ -40,9 +40,9 @@ def is_deepspeed_available():
     # AND checking it has an author field in the metadata that is HuggingFace.
     if package_exists:
         try:
-            _ = importlib_metadata.metadata("deepspeed")
+            _ = importlib.metadata.metadata("deepspeed")
             return True
-        except importlib_metadata.PackageNotFoundError:
+        except importlib.metadata.PackageNotFoundError:
             return False
 
 
@@ -347,16 +347,11 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     # Sort keys to ensure consistent ordering (important for MoE conversions)
     # Iterate over sorted keys and pop from state_dict to free memory immediately
     conversion_mapping = {}
-    key_rename_cache = {}  # Cache rename results to avoid redundant processing
-    new_state_dict = {}  # Initialize here for direct key copies (non-converted keys)
+    new_state_dict = {}
     sorted_keys = sorted(state_dict.keys(), key=lambda k: dot_natural_key(k))
     for original_key in sorted_keys:
-        tensor = state_dict.pop(original_key)  # Pop to free memory immediately
-        # Rename the key according to all renaming pattern and optional weight converter patterns
+        tensor = state_dict.pop(original_key)
         renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, prefix, model_state_dict)
-
-        # Cache the rename result for use in the cleanup loop
-        key_rename_cache[original_key] = renamed_key
 
         # Only process if the renamed key is in the model's state dict
         if renamed_key in model_state_dict:
@@ -380,10 +375,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     # Apply the conversions and build the new state dict
     for renamed_key, mapping in conversion_mapping.items():
         try:
-            # Only WeightConverter needs convert(); WeightRenaming is just a simple rename
-            if not isinstance(mapping, WeightConverter):
-                continue
-            realized_value, _ = mapping.convert(
+            realized_value = mapping.convert(
                 renamed_key,
                 model=model,
                 config=model.config,
@@ -391,25 +383,12 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
             for target_name, param in realized_value.items():
                 param = param[0] if isinstance(param, list) else param
                 new_state_dict[target_name] = param
-            # Free memory by clearing source tensors
-            if hasattr(mapping, "source_tensors"):
-                mapping.source_tensors = {}
         except Exception as e:
             raise RuntimeError(
                 f"Failed to apply weight conversion for '{renamed_key}'. "
                 f"This likely means the checkpoint format is incompatible with the current model version. "
                 f"Error: {e}"
             ) from e
-
-    # Add any keys that didn't need conversion (use cached rename results)
-    # At this point, state_dict only contains unconverted keys (others were popped)
-    for key in list(state_dict.keys()):
-        renamed_key = key_rename_cache.get(key)
-        if renamed_key is None:
-            # Key wasn't in our cache, compute rename
-            renamed_key, _ = rename_source_key(key, renamings, [], prefix, model_state_dict)
-        if renamed_key not in new_state_dict and renamed_key in model_state_dict:
-            new_state_dict[renamed_key] = state_dict.pop(key)
 
     # Attach metadata to the new state dict
     if metadata is not None:

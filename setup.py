@@ -78,7 +78,6 @@ _deps = [
     "codecarbon>=2.8.1",
     "datasets>=2.15.0",  # We need either this pin or pyarrow<21.0.0
     "deepspeed>=0.9.3",
-    "diffusers",
     "dill<0.3.5",
     "evaluate>=0.4.6",
     "faiss-cpu",
@@ -88,7 +87,6 @@ _deps = [
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
     "huggingface-hub>=1.3.0,<2.0",
-    "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "jmespath>=1.0.1",
@@ -150,7 +148,7 @@ _deps = [
     "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.27",
-    "typer-slim",
+    "typer",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "urllib3<2.0.0",
@@ -268,7 +266,7 @@ install_requires = [
     deps["pyyaml"],  # used for the model cards metadata
     deps["regex"],  # for OpenAI GPT
     deps["tokenizers"],
-    deps["typer-slim"],  # CLI utilities. In practice, already a dependency of huggingface_hub but we use it as well
+    deps["typer"],  # CLI utilities. In practice, already a dependency of huggingface_hub but we use it as well
     deps["safetensors"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]

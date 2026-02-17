@@ -1012,6 +1012,11 @@ def is_compressed_tensors_available() -> bool:
 
 
 @lru_cache
+def is_sinq_available() -> bool:
+    return _is_package_available("sinq")
+
+
+@lru_cache
 def is_gptqmodel_available() -> bool:
     return _is_package_available("gptqmodel")
 
