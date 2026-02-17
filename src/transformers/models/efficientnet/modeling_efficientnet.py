@@ -26,7 +26,8 @@ from ...modeling_outputs import (
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.output_capturing import capture_outputs
 from .configuration_efficientnet import EfficientNetConfig
 
 
@@ -404,26 +405,16 @@ class EfficientNetEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.FloatTensor,
-        output_hidden_states: bool | None = False,
-        return_dict: bool | None = True,
     ) -> BaseModelOutputWithNoAttention:
-        all_hidden_states = (hidden_states,) if output_hidden_states else None
-
         for block in self.blocks:
             hidden_states = block(hidden_states)
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
 
         hidden_states = self.top_conv(hidden_states)
         hidden_states = self.top_bn(hidden_states)
         hidden_states = self.top_activation(hidden_states)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
-
         return BaseModelOutputWithNoAttention(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
         )
 
 
@@ -434,6 +425,9 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = ["EfficientNetBlock"]
+    _can_record_outputs = {
+        "hidden_states": EfficientNetBlock,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -467,42 +461,29 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPoolingAndNoAttention:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         embedding_output = self.embeddings(pixel_values)
 
-        encoder_outputs = self.encoder(
-            embedding_output,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        encoder_outputs = self.encoder(embedding_output)
+        last_hidden_state = encoder_outputs.last_hidden_state
+
         # Apply pooling
-        last_hidden_state = encoder_outputs[0]
         pooled_output = self.pooler(last_hidden_state)
         # Reshape (batch_size, 1280, 1 , 1) -> (batch_size, 1280)
         pooled_output = pooled_output.reshape(pooled_output.shape[:2])
 
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
-
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
         )
 
 
@@ -525,13 +506,12 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | ImageClassifierOutputWithNoAttention:
         r"""
@@ -540,21 +520,15 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        outputs = self.efficientnet(pixel_values, **kwargs)
 
-        outputs = self.efficientnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-
-        pooled_output = outputs.pooler_output if return_dict else outputs[1]
+        pooled_output = outputs.pooler_output
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:
             loss = self.loss_function(labels, logits, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(
             loss=loss,
