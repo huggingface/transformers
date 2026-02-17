@@ -32,7 +32,8 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, logging, can_return_tuple
+from ...utils.output_capturing import capture_outputs
 from .configuration_mpnet import MPNetConfig
 
 
@@ -43,6 +44,8 @@ logger = logging.get_logger(__name__)
 class MPNetPreTrainedModel(PreTrainedModel):
     config: MPNetConfig
     base_model_prefix = "mpnet"
+
+    _can_record_outputs = None
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -273,6 +276,12 @@ class MPNetLayer(nn.Module):
         return outputs
 
 
+MPNetPreTrainedModel._can_record_outputs = {
+    "hidden_states": MPNetLayer,
+    "attentions": MPNetAttention,
+}
+
+
 class MPNetEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -287,13 +296,15 @@ class MPNetEncoder(nn.Module):
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        return_dict: bool = False,
+        return_dict: bool = True,
         **kwargs,
     ):
         position_bias = self.compute_position_bias(hidden_states)
+
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        for i, layer_module in enumerate(self.layer):
+
+        for layer_module in self.layer:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -302,19 +313,16 @@ class MPNetEncoder(nn.Module):
                 attention_mask,
                 position_bias,
                 output_attentions=output_attentions,
-                **kwargs,
             )
+
             hidden_states = layer_outputs[0]
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
-        # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -400,6 +408,7 @@ class MPNetModel(MPNetPreTrainedModel):
         self.embeddings.word_embeddings = value
 
     @auto_docstring
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -411,40 +420,55 @@ class MPNetModel(MPNetPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPooling:
+        # Resolve flags from config
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # Validate inputs
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
+            device = input_ids.device
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
+            device = inputs_embeds.device
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
+        # Default attention mask
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=device)
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
-        embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds)
-        encoder_outputs = self.encoder(
-        embedding_output,
-        attention_mask=extended_attention_mask,
-        output_attentions=output_attentions,
-        output_hidden_states=output_hidden_states,
-        return_dict=return_dict,
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
+
+        # Embeddings
+        embedding_output = self.embeddings(
+            input_ids=input_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
         )
 
-        sequence_output = encoder_outputs[0] if not return_dict else encoder_outputs.last_hidden_state
+        # Encoder
+        encoder_outputs = self.encoder(
+            embedding_output,
+            attention_mask=extended_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+        )
+
+        sequence_output = encoder_outputs.last_hidden_state
+
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
+        # tuple return support
         if not return_dict:
             return (
                 sequence_output,
@@ -453,11 +477,12 @@ class MPNetModel(MPNetPreTrainedModel):
                 encoder_outputs.attentions,
             )
 
+        # Correct structured return
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
-                pooler_output=pooled_output,
-                hidden_states=encoder_outputs.hidden_states,
-                attentions=encoder_outputs.attentions,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
@@ -483,6 +508,7 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
         self.lm_head.decoder = new_embeddings
         self.lm_head.bias = new_embeddings.bias
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -573,6 +599,7 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -653,6 +680,7 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -746,6 +774,7 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -829,6 +858,7 @@ class MPNetForQuestionAnswering(MPNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
