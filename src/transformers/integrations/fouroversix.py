@@ -30,38 +30,28 @@ class FourOverSixQuantize(ConversionOps):
         since we create an op per tensor.
         """
 
-        target_keys, value = list(input_dict.items())[0]
-        value = value[0]
         module, _ = get_module_from_name(model, full_layer_name)
-
         module_name = full_layer_name.rsplit(".", 1)[0]
-        missing_keys.discard(target_keys)
-        quantized_params = module.get_quantized_parameters(value)
+        high_precision_parameters = {
+            key.replace(f"{module_name}.", "", 1): value[0]
+            for key, value in input_dict.items()
+        }
 
+        quantized_params = module.get_quantized_parameters(**high_precision_parameters)
+
+        # Delete the high-precision parameters from the module now that we've used them to create
+        # the quantized parameters
         for parameter_name in module.high_precision_parameter_names:
             delattr(module, parameter_name)
+
+        # Remove these keys from the missing_keys list since we've deleted them from hte model
+        for key in input_dict:
+            missing_keys.discard(key)
 
         return {
             f"{module_name}.{quantized_key}": quantized_params[quantized_key]
             for quantized_key in quantized_params
         }
-
-
-class FourOverSixDequantize(ConversionOps):
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
-
-    def convert(
-        self,
-        input_dict: dict[str, torch.Tensor],
-        model: torch.nn.Module | None = None,
-        full_layer_name: str | None = None,
-        missing_keys: list[str] | None = None,
-        **kwargs,
-    ) -> dict[str, torch.Tensor]:
-        module_name = full_layer_name.rsplit(".", 1)[0]
-        module = model.get_submodule(module_name)
-        return {f"{module_name}.weight": module.quantized_weight().dequantize()}
 
 
 def adapt_fouroversix_config(config: FourOverSixConfig):

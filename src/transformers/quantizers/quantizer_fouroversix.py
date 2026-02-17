@@ -70,7 +70,7 @@ class FourOverSixHfQuantizer(HfQuantizer):
         device_map,
         **kwargs,
     ):
-        from fouroversix import FourOverSixLinear, quantize_model
+        from fouroversix import QuantizedModule, quantize_model
 
         from ..integrations.fouroversix import adapt_fouroversix_config
 
@@ -83,7 +83,7 @@ class FourOverSixHfQuantizer(HfQuantizer):
         # it's not expected when parameters are loaded from the checkpoint.
         if self.pre_quantized:
             for _, module in model.named_modules():
-                if isinstance(module, FourOverSixLinear):
+                if QuantizedModule.is_quantized_module_type(type(module)):
                     for parameter_name in module.high_precision_parameter_names:
                         delattr(module, parameter_name)
 
