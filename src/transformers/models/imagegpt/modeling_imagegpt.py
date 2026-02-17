@@ -32,12 +32,9 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import Conv1D
-from ...utils import (
-    auto_docstring,
-    logging,
-    torch_float,
-)
+from ...utils import auto_docstring, can_return_tuple, logging, torch_float
 from ...utils.generic import maybe_autocast
+from ...utils.output_capturing import capture_outputs
 from .configuration_imagegpt import ImageGPTConfig
 
 
@@ -365,6 +362,10 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["ImageGPTBlock"]
+    _can_record_outputs = {
+        "hidden_states": ImageGPTBlock,
+        "attentions": ImageGPTAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -417,6 +418,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         self.wte = new_embeddings
 
     @auto_docstring
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -428,9 +430,6 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         cache_position: torch.Tensor | None = None,
         **kwargs: Any,
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
@@ -465,12 +464,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -550,13 +544,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         hidden_states = self.drop(hidden_states)
         output_shape = input_shape + (hidden_states.size(-1),)
 
-        all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
-        all_hidden_states = () if output_hidden_states else None
         for i, block in enumerate(self.h):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
             outputs = block(
                 hidden_states,
                 past_key_values,
@@ -564,36 +552,17 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 use_cache=use_cache,
-                output_attentions=output_attentions,
                 cache_position=cache_position,
             )
 
             hidden_states = outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (outputs[2],)
 
         hidden_states = self.ln_f(hidden_states)
         hidden_states = hidden_states.view(*output_shape)
 
-        # Add last hidden state
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, past_key_values, all_hidden_states, all_self_attentions, all_cross_attentions]
-                if v is not None
-            )
-
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -615,6 +584,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -627,9 +597,6 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
         encoder_attention_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         cache_position: torch.Tensor | None = None,
         **kwargs: Any,
     ) -> tuple | CausalLMOutputWithCrossAttentions:
@@ -684,8 +651,6 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
         ...     ax.imshow(img)
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
@@ -696,10 +661,8 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
         hidden_states = transformer_outputs[0]
 
@@ -713,10 +676,6 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-
-        if not return_dict:
-            output = (lm_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
@@ -745,6 +704,7 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -755,9 +715,6 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs: Any,
     ) -> tuple | SequenceClassifierOutputWithPast:
         r"""
@@ -795,8 +752,6 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         >>> logits = outputs.logits
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
@@ -805,9 +760,7 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
         hidden_states = transformer_outputs[0]
         # average-pool the hidden states along the sequence dimension
@@ -818,10 +771,6 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         loss = None
         if labels is not None:
             loss = self.loss_function(labels, logits, self.config)
-
-        if not return_dict:
-            output = (logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutputWithPast(
             loss=loss,
