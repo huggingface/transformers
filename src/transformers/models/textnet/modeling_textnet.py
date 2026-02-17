@@ -27,7 +27,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, capture_outputs, can_return_tuple
 from ...utils import auto_docstring, logging
 from .configuration_textnet import TextNetConfig
 
@@ -197,19 +197,18 @@ class TextNetEncoder(nn.Module):
     def forward(
         self,
         hidden_state: torch.Tensor,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
     ) -> BaseModelOutputWithNoAttention:
+
         hidden_states = [hidden_state]
+
         for stage in self.stages:
             hidden_state = stage(hidden_state)
             hidden_states.append(hidden_state)
 
-        if not return_dict:
-            output = (hidden_state,)
-            return output + (hidden_states,) if output_hidden_states else output
-
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_state,
+            hidden_states=hidden_states,
+        )
 
 
 @auto_docstring
@@ -217,6 +216,10 @@ class TextNetPreTrainedModel(PreTrainedModel):
     config: TextNetConfig
     base_model_prefix = "textnet"
     main_input_name = "pixel_values"
+
+    _can_record_outputs = {
+        "hidden_states": TextNetStage,
+    }
 
 
 @auto_docstring
@@ -229,35 +232,24 @@ class TextNetModel(TextNetPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @capture_outputs
     def forward(
         self,
         pixel_values: Tensor,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[Any, list[Any]] | tuple[Any] | BaseModelOutputWithPoolingAndNoAttention:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
 
         hidden_state = self.stem(pixel_values)
 
-        encoder_outputs = self.encoder(
-            hidden_state, output_hidden_states=output_hidden_states, return_dict=return_dict
-        )
+        encoder_outputs = self.encoder(hidden_state)
+
 
         last_hidden_state = encoder_outputs[0]
         pooled_output = self.pooler(last_hidden_state)
 
-        if not return_dict:
-            output = (last_hidden_state, pooled_output)
-            return output + (encoder_outputs[1],) if output_hidden_states else output
-
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs[1] if output_hidden_states else None,
         )
 
 
@@ -283,6 +275,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -355,6 +348,7 @@ class TextNetBackbone(BackboneMixin, TextNetPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         pixel_values: Tensor,
