@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 Transformers support three subword tokenization algorithms: Byte pair encoding (BPE), Unigram, and WordPiece. They split text into units between words and characters, keeping the vocabulary compact while still capturing meaningful pieces. Common words stay intact as single tokens, and rare or unknown words decompose into subwords.
 
-For instance, `annoyingly` might be split into `["annoying", "ly"]` or `["annoy", "ing", "ly"]` depending on the vocabulary. The model never encounters a truly unknown word because it can decompose it into known subwords.
+For instance, `annoyingly` might be split into `["annoying", "ly"]` or `["annoy", "ing", "ly"]` depending on the vocabulary. Subword splitting lets the model represent unseen words from known subwords.
 
 > [!TIP]
 > Subword tokenization is especially useful for languages like Turkish, where you can form long, complex words by stringing subwords together.
@@ -29,7 +29,7 @@ For instance, `annoyingly` might be split into `["annoying", "ly"]` or `["annoy"
 
 <Youtube id="HEikzVL-lZU"/>
 
-[Byte pair encoding](https://huggingface.co/papers/1508.07909) (BPE) is the most popular tokenization algorithm in Transformers, used by models like Llama, Gemma, Qwen2, and more.
+[Byte pair encoding](https://huggingface.co/papers/1508.07909) (BPE) is the most popular tokenization algorithm in Transformers, used by models like [Llama](./model_doc/llama), [Gemma](./model_doc/gemma), [Qwen2](./model_doc/qwen2), and more.
 
 1. A pre-tokenizer splits text on whitespace or other rules, producing a set of unique words and their frequencies.
 
@@ -67,7 +67,7 @@ Including all Unicode characters would make the base vocabulary enormous. Byte-l
 
 <Youtube id="TGZfZVuF9Yc"/>
 
-[Unigram](https://huggingface.co/papers/1804.10959) is the second most popular tokenization algorithm in Transformers, used by models like T5, BigBird, Pegasus, and more.
+[Unigram](https://huggingface.co/papers/1804.10959) is the second most popular tokenization algorithm in Transformers, used by models like [T5](./model_doc/t5), [BigBird](./model_doc/big_bird), [Pegasus](./model_doc/pegasus), and more.
 
 1. Unigram starts with a large set of candidate subwords, and each candidate gets a probability score based on how often it appears.
 
@@ -109,7 +109,7 @@ At decoding, SentencePiece concatenates all tokens and replaces `"▁"` with a s
 
 <Youtube id="qpv6ms_t_1A"/>
 
-[WordPiece](https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/37842.pdf) is the tokenization algorithm for BERT-family models like DistilBERT and Electra.
+[WordPiece](https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/37842.pdf) is the tokenization algorithm for BERT-family models like [DistilBERT](./model_doc/distilbert) and [Electra](./model_doc/electra).
 
 It's similar to [BPE](#byte-pair-encoding-bpe) and iteratively merges pairs from the bottom up, but differs in how it selects pairs.
 
