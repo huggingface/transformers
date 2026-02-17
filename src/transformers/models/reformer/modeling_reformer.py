@@ -1497,7 +1497,7 @@ class ReformerLayer(nn.Module):
 
         # randomize seeds
         # use cuda generator if available
-        if hasattr(torch.cuda, "default_generators") and len(torch.cuda.default_generators) > 0:
+        if len(torch.cuda.default_generators) > 0:
             # GPU
             device_idx = torch.cuda.current_device()
             self.attention_seed = torch.cuda.default_generators[device_idx].seed()
@@ -1514,7 +1514,7 @@ class ReformerLayer(nn.Module):
         """
         # randomize seeds
         # use cuda generator if available
-        if hasattr(torch.cuda, "default_generators") and len(torch.cuda.default_generators) > 0:
+        if len(torch.cuda.default_generators) > 0:
             # GPU
             device_idx = torch.cuda.current_device()
             self.feed_forward_seed = torch.cuda.default_generators[device_idx].seed()
@@ -2244,6 +2244,10 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
             hidden_states=reformer_outputs.hidden_states,
             attentions=reformer_outputs.attentions,
         )
+
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        # Overwritten -- attention mask or input ids size doesn't match with actual input size
+        return None
 
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, is_first_iteration=False, **kwargs

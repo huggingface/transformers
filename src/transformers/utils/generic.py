@@ -15,28 +15,25 @@
 Generic utilities
 """
 
+from __future__ import annotations
+
 import inspect
 import json
 import os
 import warnings
-from collections import OrderedDict, UserDict, defaultdict
+from collections import OrderedDict, UserDict
 from collections.abc import Callable, Iterable, MutableMapping
 from contextlib import AbstractContextManager, ExitStack, nullcontext
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, Optional, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import numpy as np
 
 from ..utils import logging
-from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, requires
+from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy
 
-
-_CAN_RECORD_REGISTRY = {}
-
-
-logger = logging.get_logger(__name__)
 
 _is_torch_available = False
 if is_torch_available():
@@ -47,6 +44,13 @@ if is_torch_available():
     from ..model_debugging_utils import model_addition_debugger_context
 
     _is_torch_available = True
+
+
+if TYPE_CHECKING:
+    from torch import nn
+
+
+logger = logging.get_logger(__name__)
 
 
 # required for @can_return_tuple decorator to work with torchdynamo
@@ -177,7 +181,7 @@ def _is_tensor_or_array_like(value):
 
 def maybe_autocast(
     device_type: str,
-    dtype: Optional["_dtype"] = None,
+    dtype: _dtype | None = None,
     enabled: bool = True,
     cache_enabled: bool | None = None,
 ):
@@ -244,12 +248,11 @@ def to_py_obj(obj):
     elif isinstance(obj, (dict, UserDict)):
         return {k: to_py_obj(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
-        try:
-            arr = np.array(obj)
-            if np.issubdtype(arr.dtype, np.integer) or np.issubdtype(arr.dtype, np.floating):
-                return arr.tolist()
-        except Exception:
-            pass
+        # Only convert directly if all elements are numeric scalars
+        if all(isinstance(x, (int, float, np.number)) for x in obj):
+            return list(obj)
+
+        # Otherwise recurse element-wise
         return [to_py_obj(o) for o in obj]
 
     framework_to_py_obj = {
@@ -452,12 +455,12 @@ class ModelOutput(OrderedDict):
 if _is_torch_available:
     import torch.utils._pytree as _torch_pytree
 
-    def _model_output_flatten(output: ModelOutput) -> tuple[list[Any], "_torch_pytree.Context"]:
+    def _model_output_flatten(output: ModelOutput) -> tuple[list[Any], _torch_pytree.Context]:
         return list(output.values()), list(output.keys())
 
     def _model_output_unflatten(
         values: Iterable[Any],
-        context: "_torch_pytree.Context",
+        context: _torch_pytree.Context,
         output_type=None,
     ) -> ModelOutput:
         return output_type(**dict(zip(context, values)))
@@ -750,17 +753,20 @@ class TransformersKwargs(TypedDict, total=False):
             Maximum sequence length for key state.
         position_ids (`torch.LongTensor`, *optional*)
             Indices of positions of each input sequence tokens.
+        is_causal (`bool`, *optional*)
+            Can be set to False to enable bi-directional attention, i.e. use decoder Attention modules as encoders.
     """
 
-    num_items_in_batch: Optional["torch.Tensor"]
+    num_items_in_batch: torch.Tensor | None
     output_hidden_states: bool | None
     output_attentions: bool | None
     output_router_logits: bool | None
-    cu_seq_lens_q: Optional["torch.LongTensor"]
-    cu_seq_lens_k: Optional["torch.LongTensor"]
+    cu_seq_lens_q: torch.LongTensor | None
+    cu_seq_lens_k: torch.LongTensor | None
     max_length_q: int | None
     max_length_k: int | None
-    position_ids: Optional["torch.LongTensor"]
+    position_ids: torch.LongTensor | None
+    is_causal: bool | None
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
@@ -796,7 +802,7 @@ def is_timm_local_checkpoint(pretrained_model_path: str) -> bool:
     return False
 
 
-def set_attribute_for_modules(module: "torch.nn.Module", key: str, value: Any):
+def set_attribute_for_modules(module: nn.Module, key: str, value: Any):
     """
     Set a value to a module and all submodules.
     """
@@ -805,7 +811,7 @@ def set_attribute_for_modules(module: "torch.nn.Module", key: str, value: Any):
         set_attribute_for_modules(submodule, key, value)
 
 
-def del_attribute_from_modules(module: "torch.nn.Module", key: str):
+def del_attribute_from_modules(module: nn.Module, key: str):
     """
     Delete a value from a module and all submodules.
     """
@@ -840,214 +846,84 @@ def can_return_tuple(func):
     return wrapper
 
 
-@dataclass
-@requires(backends=("torch",))
-class OutputRecorder:
+def merge_with_config_defaults(func):
     """
-    Configuration for recording outputs from a model via hooks.
-
-    Attributes:
-        target_class (Type): The class (e.g., nn.Module) to which the hook will be attached.
-        index (Optional[int]): If the output is a tuple/list, optionally record only at a specific index.
-        layer_name (Optional[str]): Name of the submodule to target (if needed), e.g., "transformer.layer.3.attn".
-        class_name (Optional[str]): Name of the class to which the hook will be attached. Could be the suffix of class name in some cases.
+    Decorator using config field (if they exist) as default value for some args and kwargs. Precedence is always
+    given to the args/kwargs that are explicitly passed.
     """
 
-    target_class: "type[torch.nn.Module]"
-    index: int = 0
-    layer_name: str | None = None
-    class_name: str | None = None
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        args_with_config_defaults = [
+            "use_cache",
+            "vision_feature_layer",
+            "vision_feature_select_strategy",
+            "vision_aspect_ratio",
+        ]
+        for arg_name in args_with_config_defaults:
+            arg_index = None
+            if arg_name in func.__code__.co_varnames:
+                arg_index = func.__code__.co_varnames.index(arg_name) - 1  # -1 for self
 
+            if arg_index is not None and len(args) > arg_index and args[arg_index] is not None:
+                arg_value = args[arg_index]
+            elif kwargs.get(arg_name) is not None:
+                arg_value = kwargs[arg_name]
+            else:
+                arg_value = getattr(self.config, arg_name, None)
 
-def check_model_inputs(func=None, *, tie_last_hidden_states=True):
-    """
-    Decorator to intercept specific layer outputs without using hooks.
-    Compatible with torch.compile (Dynamo tracing).
+            if arg_value is not None:
+                # Arg-specific handling
+                if arg_name == "use_cache":
+                    if getattr(self, "gradient_checkpointing", False) and self.training and arg_value:
+                        logger.warning_once(
+                            "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+                        )
+                        arg_value = False
+                elif arg_name == "vision_feature_select_strategy":
+                    valid_strategies = ["default", "full"]
+                    if arg_value not in valid_strategies:
+                        raise ValueError(
+                            f"`Unexpected select feature strategy: {arg_value}. Please select from {valid_strategies}."
+                        )
 
-    Args:
-        tie_last_hidden_states (`bool`, *optional*, defaults to `True`):
-            Whether to overwrite `out.hidden_states[-1]` with the `out.last_hidden_state`.
-            This is true for all language models and should be toggled off only if
-            `out.hidden_states[-1]` has to be the hidden state before last layer norm, which
-            is needed for some vision models (e.g. CLIP, SigLIP)
-    """
-
-    def wrapped_fn(func):
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            args_with_config_defaults = [
-                "use_cache",
-                "vision_feature_layer",
-                "vision_feature_select_strategy",
-                "vision_aspect_ratio",
-            ]
-            for arg_name in args_with_config_defaults:
-                arg_index = None
-                if arg_name in func.__code__.co_varnames:
-                    arg_index = func.__code__.co_varnames.index(arg_name) - 1  # -1 for self
-
-                if arg_index is not None and len(args) > arg_index and args[arg_index] is not None:
-                    arg_value = args[arg_index]
-                elif kwargs.get(arg_name) is not None:
-                    arg_value = kwargs[arg_name]
+                if arg_index is not None and len(args) > arg_index:
+                    args = list(args)
+                    args[arg_index] = arg_value
+                    args = tuple(args)
                 else:
-                    arg_value = getattr(self.config, arg_name, None)
+                    kwargs[arg_name] = arg_value
 
-                if arg_value is not None:
-                    # Arg-specific handling
-                    if arg_name == "use_cache":
-                        if getattr(self, "gradient_checkpointing", False) and self.training and arg_value:
-                            logger.warning_once(
-                                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-                            )
-                            arg_value = False
-                    elif arg_name == "vision_feature_select_strategy":
-                        valid_strategies = ["default", "full"]
-                        if arg_value not in valid_strategies:
-                            raise ValueError(
-                                f"`Unexpected select feature strategy: {arg_value}. "
-                                f"Please select from {valid_strategies}."
-                            )
+        # Maybe temporarily overwrite config value to create the correct mask - kwarg takes precedence
+        is_causal = kwargs.get("is_causal", getattr(self.config, "is_causal", None))
+        if is_causal is not None:
+            is_causal_in_config = hasattr(self.config, "is_causal")
+            if is_causal_in_config:
+                is_causal_original_value = self.config.is_causal
+            # Set it to both config and kwargs (it's needed in both, and can come from only 1 of the sources)
+            self.config.is_causal = is_causal
+            kwargs["is_causal"] = is_causal
 
-                    if arg_index is not None and len(args) > arg_index:
-                        args = list(args)
-                        args[arg_index] = arg_value
-                        args = tuple(args)
-                    else:
-                        kwargs[arg_name] = arg_value
-
-            return_dict = kwargs.pop("return_dict", None)
-            if return_dict is None:
-                return_dict = getattr(self.config, "return_dict", True)
-
-            all_args = kwargs.copy()
-            if "kwargs" in all_args:
-                for k, v in all_args["kwargs"].items():
-                    all_args[k] = v
-
-            # _can_record_outputs is None by default
-            capture_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__)) or {}  # there is a weak ref for executorch
-            recordable_keys = {
-                f"output_{k}": all_args.get(
-                    f"output_{k}",
-                    getattr(
-                        self.config,
-                        f"output_{k}",
-                        all_args.get("output_attentions", getattr(self.config, "output_attentions", False)),
-                    ),
-                )
-                for k in capture_flags
-            }
-
-            # We let cross attentions to be saved separately because some models add `cross-attn` layer
-            # when certain condtions are met. Let's output cross attention if attentions are requested (for BC)
-            if "output_attentions" in recordable_keys:
-                recordable_keys["output_cross_attentions"] = recordable_keys["output_attentions"]
-
-            collected_outputs = defaultdict(tuple)
-            monkey_patched_layers = []
-
-            def make_capture_wrapper(module, orig_forward, key, index):
-                @wraps(orig_forward)
-                def wrapped_forward(*args, **kwargs):
-                    if key == "hidden_states" and len(collected_outputs[key]) == 0:
-                        collected_outputs[key] += (args[0],)
-                    output = orig_forward(*args, **kwargs)
-                    if not isinstance(output, tuple):
-                        collected_outputs[key] += (output,)
-                    elif output[index] is not None:
-                        if key not in collected_outputs:
-                            collected_outputs[key] = (output[index],)
-                        else:
-                            collected_outputs[key] += (output[index],)
-                    return output
-
-                return wrapped_forward
-
-            if any(recordable_keys.values()):
-                capture_tasks = []
-                for key, layer_specs in capture_flags.items():
-                    if not recordable_keys.get(f"output_{key}", False):
-                        continue
-                    if not isinstance(layer_specs, list):
-                        layer_specs = [layer_specs]
-                    for specs in layer_specs:
-                        if not isinstance(specs, OutputRecorder):
-                            index = 0 if "hidden_states" in key else 1
-                            class_name = None if not isinstance(specs, str) else specs
-                            target_class = specs if not isinstance(specs, str) else None
-                            specs = OutputRecorder(target_class=target_class, index=index, class_name=class_name)
-                        capture_tasks.append((key, specs))
-
-                for name, module in self.named_modules():
-                    for key, specs in capture_tasks:
-                        # The second check is for multimodals where only backbone layer suffix is available
-                        if (specs.target_class is not None and isinstance(module, specs.target_class)) or (
-                            specs.class_name is not None and name.endswith(specs.class_name)
-                        ):
-                            if specs.layer_name is not None and specs.layer_name not in name:
-                                continue
-                            # Monkey patch forward
-                            original_forward = module.forward
-                            module.forward = make_capture_wrapper(module, original_forward, key, specs.index)
-                            monkey_patched_layers.append((module, original_forward))
-
-            try:
-                if kwargs.get("debug_io", False):
-                    with model_addition_debugger_context(
-                        self, kwargs.get("debug_io_dir", "model_debug"), kwargs.get("prune_layers")
-                    ):
-                        outputs = func(self, *args, **kwargs)
+        # Call the original forward with the updated kwargs/config
+        try:
+            if kwargs.get("debug_io", False):
+                with model_addition_debugger_context(
+                    self, kwargs.get("debug_io_dir", "model_debug"), kwargs.get("prune_layers")
+                ):
+                    output = func(self, *args, **kwargs)
+            else:
+                output = func(self, *args, **kwargs)
+        # Restore original config value
+        finally:
+            if is_causal is not None:
+                if is_causal_in_config:
+                    self.config.is_causal = is_causal_original_value
                 else:
-                    outputs = func(self, *args, **kwargs)
-            except TypeError as original_exception:
-                # If we get a TypeError, it's possible that the model is not receiving the recordable kwargs correctly.
-                # Get a TypeError even after removing the recordable kwargs -> re-raise the original exception
-                # Otherwise -> we're probably missing `**kwargs` in the decorated function
-                kwargs_without_recordable = {k: v for k, v in kwargs.items() if k not in recordable_keys}
-                try:
-                    outputs = func(self, *args, **kwargs_without_recordable)
-                except TypeError:
-                    raise original_exception
-                raise TypeError(
-                    "Missing `**kwargs` in the signature of the `@check_model_inputs`-decorated function "
-                    f"({func.__qualname__})"
-                )
+                    del self.config.is_causal
 
-            # Restore original forward methods
-            for module, original_forward in monkey_patched_layers:
-                module.forward = original_forward
+        return output
 
-            # Inject collected outputs into model output
-            for key in collected_outputs:
-                if key == "hidden_states":
-                    if not tie_last_hidden_states:
-                        pass
-                    elif hasattr(outputs, "vision_hidden_states"):
-                        collected_outputs[key] = collected_outputs[key][:-1]
-                        collected_outputs[key] += (outputs.vision_hidden_states,)
-                    elif hasattr(outputs, "last_hidden_state"):
-                        collected_outputs[key] = collected_outputs[key][:-1]
-                        collected_outputs[key] += (outputs.last_hidden_state,)
-
-                    outputs[key] = collected_outputs[key]
-                elif key == "attentions":
-                    if isinstance(capture_flags[key], list) and len(capture_flags[key]) == 2:
-                        outputs[key] = collected_outputs[key][0::2]
-                        outputs["cross_" + key] = collected_outputs[key][1::2]
-                    else:
-                        outputs[key] = collected_outputs[key]
-                else:
-                    outputs[key] = collected_outputs[key]
-            if return_dict is False:
-                outputs = outputs.to_tuple()
-            return outputs
-
-        return wrapper
-
-    if func is not None:
-        return wrapped_fn(func)
-    return wrapped_fn
+    return wrapper
 
 
 class GeneralInterface(MutableMapping):

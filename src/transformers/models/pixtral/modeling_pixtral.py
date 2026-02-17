@@ -236,9 +236,9 @@ class PixtralAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=0)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -278,7 +278,7 @@ class PixtralMLP(nn.Module):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Pixtral
 class PixtralRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         PixtralRMSNorm is equivalent to T5LayerNorm
         """
@@ -286,7 +286,7 @@ class PixtralRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -493,7 +493,8 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             image_sizes = [(height, width)] * batch_size
 
         # pass images through initial convolution independently
-        patch_embeds = self.patch_conv(pixel_values)
+        target_dtype = self.patch_conv.weight.dtype
+        patch_embeds = self.patch_conv(pixel_values.to(dtype=target_dtype))
         patch_embeds_list = [
             embed[..., : (size[0] // self.patch_size), : (size[1] // self.patch_size)]
             for embed, size in zip(patch_embeds, image_sizes)
@@ -507,7 +508,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         position_ids = position_ids_in_meshgrid(
             patch_embeds_list, max_width=self.config.image_size // self.config.patch_size
         )
-        kwargs["position_ids"] = position_ids.to(patch_embeds.device, non_blocking=True)
+        kwargs["position_ids"] = position_ids.unsqueeze(0).to(patch_embeds.device, non_blocking=True)
 
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
 

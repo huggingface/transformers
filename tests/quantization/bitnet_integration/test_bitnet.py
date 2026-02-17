@@ -36,6 +36,42 @@ if is_torch_available():
     import torch
 
 
+class BitNetPackedWeightsTest(unittest.TestCase):
+    def test_offline_autobitlinear_weight_conversion(self):
+        """get_weight_conversions() must return a WeightConverter for autobitlinear+offline"""
+        from transformers.quantizers.quantizer_bitnet import BitNetHfQuantizer
+
+        config = BitNetQuantConfig(linear_class="autobitlinear", quantization_mode="offline")
+        quantizer = BitNetHfQuantizer(config)
+        conversions = quantizer.get_weight_conversions()
+        self.assertEqual(len(conversions), 1)
+        self.assertEqual(conversions[0].source_patterns, ["weight"])
+        self.assertEqual(conversions[0].target_patterns, ["weight"])
+
+    def test_unpack_packed_weights(self):
+        """BitNetDeserialize.convert() must unpack packed weights to the original ternary values"""
+        from transformers.integrations.bitnet import AutoBitLinear, BitNetDeserialize, pack_weights
+
+        out_features = 128
+        in_features = 64
+
+        class SimpleModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = AutoBitLinear(in_features=in_features, out_features=out_features, bias=False)
+
+        model = SimpleModel()
+        # same as the ckpt loading with safetensors: ternary weights {-1, 0, 1} packed into uint8, then cast to bfloat16
+        original = torch.randint(-1, 2, (out_features, in_features)).to(torch.bfloat16)
+        packed = pack_weights(original.clone().float()).to(torch.bfloat16)
+        # packed shape is [out_features // 4, in_features]
+        self.assertEqual(packed.shape[0], out_features // 4)
+        deserializer = BitNetDeserialize(hf_quantizer=None)
+        result = deserializer.convert({"weight": packed}, model=model, full_layer_name="linear.weight")
+        self.assertEqual(result["weight"].shape, (out_features, in_features))
+        self.assertTrue(torch.equal(result["weight"], original))
+
+
 @require_torch_accelerator
 class BitNetQuantConfigTest(unittest.TestCase):
     def test_to_dict(self):

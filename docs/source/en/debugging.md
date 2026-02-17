@@ -288,8 +288,9 @@ One solution is to go back a few steps before the values started growing too lar
 import torch
 
 def forward(self, hidden_states):
-    if torch.is_autocast_enabled():
-        with torch.cuda.amp.autocast(enabled=False):
+    device_type = hidden_states.device.type
+    if torch.is_autocast_enabled(device_type):
+        with torch.amp.autocast(device_type, enabled=False):
             return self._forward(hidden_states)
     else:
         return self._forward(hidden_states)

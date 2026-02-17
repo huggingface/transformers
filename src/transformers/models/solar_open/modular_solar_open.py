@@ -108,9 +108,9 @@ class SolarOpenConfig(Glm4MoeConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
-        "layers.*.mlp.experts.down_proj": "local_rowwise",
-        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
 
     def __init__(
@@ -205,11 +205,11 @@ class SolarOpenRMSNorm(Glm4MoeRMSNorm):
 
 
 class SolarOpenPreTrainedModel(Glm4MoePreTrainedModel):
-    pass
+    _keys_to_ignore_on_load_unexpected = None
 
 
 class SolarOpenModel(Glm4MoeModel):
-    _keys_to_ignore_on_load_unexpected = []
+    pass
 
 
 class SolarOpenForCausalLM(Glm4MoeForCausalLM):
