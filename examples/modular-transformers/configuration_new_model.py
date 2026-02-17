@@ -6,7 +6,7 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # Example where we only want to overwrite the defaults of an init
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 
 
 class NewModelConfig(PreTrainedConfig):
@@ -59,14 +59,14 @@ class NewModelConfig(PreTrainedConfig):
             Beginning of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer.
         use_bidirectional_attention (`bool`, *optional*):
             If True, the model will attend to all text tokens instead of using a causal mask.
 
@@ -116,20 +116,12 @@ class NewModelConfig(PreTrainedConfig):
         eos_token_id=1,
         bos_token_id=2,
         tie_word_embeddings=True,
-        rope_theta=10000.0,
+        rope_parameters=None,
         attention_bias=False,
         attention_dropout=0.0,
         use_bidirectional_attention=False,
-        layer_types=None,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -142,15 +134,18 @@ class NewModelConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.use_bidirectional_attention = use_bidirectional_attention
+        self.rope_parameters = rope_parameters
 
-        self.layer_types = layer_types
-        if self.layer_types is None:
-            self.layer_types = ["full_attention" for _ in range(self.num_hidden_layers)]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
     @property
     def num_heads(self):

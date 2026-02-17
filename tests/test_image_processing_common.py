@@ -27,10 +27,9 @@ from datetime import datetime
 import httpx
 import numpy as np
 import pytest
-from packaging import version
 
 from transformers import AutoImageProcessor, BatchFeature
-from transformers.image_utils import AnnotationFormat, AnnotionFormat
+from transformers.image_utils import AnnotationFormat
 from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
@@ -341,9 +340,10 @@ class ImageProcessingTestMixin:
         }
         dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
         dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        # Fast processors filter None values from to_dict(), so differences should only be special keys
         self.assertTrue(
-            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+            all(key in ["default_to_square", "data_format"] for key in difference.keys()),
+            f"Fast processors should only differ in special keys, found: {list(difference.keys())}",
         )
         # check that the remaining keys are the same
         self.assertEqual(dict_fast_0, dict_fast_1)
@@ -391,9 +391,10 @@ class ImageProcessingTestMixin:
         }
         dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
         dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        # Fast processors filter None values from to_dict(), so differences should only be special keys
         self.assertTrue(
-            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+            all(key in ["default_to_square", "data_format"] for key in difference.keys()),
+            f"Fast processors should only differ in special keys, found: {list(difference.keys())}",
         )
         # check that the remaining keys are the same
         self.assertEqual(dict_fast_0, dict_fast_1)
@@ -619,8 +620,6 @@ class ImageProcessingTestMixin:
     def test_can_compile_fast_image_processor(self):
         if self.fast_image_processing_class is None:
             self.skipTest("Skipping compilation test as fast image processor is not defined")
-        if version.parse(torch.__version__) < version.parse("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         torch.compiler.reset()
         input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)
@@ -693,12 +692,39 @@ class ImageProcessingTestMixin:
             f"a fast image processor implementation. Please implement the corresponding fast processor.",
         )
 
+    def test_fast_image_processor_explicit_none_preserved(self):
+        """Test that explicitly setting an attribute to None is preserved through save/load."""
+        if self.fast_image_processing_class is None:
+            self.skipTest("Skipping test as fast image processor is not defined")
+
+        # Find an attribute with a non-None class default to test explicit None override
+        test_attr = None
+        for attr in ["do_resize", "do_rescale", "do_normalize"]:
+            if getattr(self.fast_image_processing_class, attr, None) is not None:
+                test_attr = attr
+                break
+
+        if test_attr is None:
+            self.skipTest("Could not find a suitable attribute to test")
+
+        # Create processor with explicit None (override the attribute)
+        kwargs = self.image_processor_dict.copy()
+        kwargs[test_attr] = None
+        image_processor = self.fast_image_processing_class(**kwargs)
+
+        # Verify it's in to_dict() as None (not filtered out)
+        self.assertIn(test_attr, image_processor.to_dict())
+        self.assertIsNone(image_processor.to_dict()[test_attr])
+
+        # Verify explicit None survives save/load cycle
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            image_processor.save_pretrained(tmpdirname)
+            reloaded = self.fast_image_processing_class.from_pretrained(tmpdirname)
+
+        self.assertIsNone(getattr(reloaded, test_attr), f"Explicit None for {test_attr} was lost after reload")
+
 
 class AnnotationFormatTestMixin:
-    # this mixin adds a test to assert that usages of the
-    # to-be-deprecated `AnnotionFormat` continue to be
-    # supported for the time being
-
     def test_processor_can_use_legacy_annotation_format(self):
         image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
         fixtures_path = pathlib.Path(__file__).parent / "fixtures" / "tests_samples" / "COCO"
@@ -731,8 +757,6 @@ class AnnotationFormatTestMixin:
         test_cases = [
             ("coco_detection", detection_params),
             ("coco_panoptic", panoptic_params),
-            (AnnotionFormat.COCO_DETECTION, detection_params),
-            (AnnotionFormat.COCO_PANOPTIC, panoptic_params),
             (AnnotationFormat.COCO_DETECTION, detection_params),
             (AnnotationFormat.COCO_PANOPTIC, panoptic_params),
         ]

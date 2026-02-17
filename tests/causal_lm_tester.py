@@ -176,7 +176,7 @@ class CausalLMModelTester:
         num_hidden_layers=2,
         num_attention_heads=2,
         num_key_value_heads=2,
-        intermediate_size=37,
+        intermediate_size=32,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -193,7 +193,7 @@ class CausalLMModelTester:
         scope=None,
         expert_interval=1,
         moe_layer_start_index=0,
-        moe_intermediate_size=12,
+        moe_intermediate_size=16,
         shared_expert_intermediate_size=36,
         shared_expert_gate=True,
         moe_num_shared_experts=2,
@@ -604,6 +604,8 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             if not model_class._supports_flash_attn:
                 self.skipTest(reason="Model does not support Flash Attention 2")
 
+            # Set seed for deterministic test - ensures reproducible model initialization and inputs
+            set_seed(42)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 

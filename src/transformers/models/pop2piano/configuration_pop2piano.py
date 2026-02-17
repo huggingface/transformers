@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -93,8 +92,12 @@ class Pop2PianoConfig(PreTrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         dense_act_fn="relu",
+        is_decoder=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.composer_vocab_size = composer_vocab_size
         self.d_model = d_model
@@ -115,14 +118,10 @@ class Pop2PianoConfig(PreTrainedConfig):
         self.hidden_size = self.d_model
         self.num_attention_heads = num_heads
         self.num_hidden_layers = num_layers
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
-        self.tie_encoder_decoder = True  # forcing it
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["Pop2PianoConfig"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team and Google LLC. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -140,17 +138,18 @@ class LasrFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
         truncation: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
-        padding: Optional[str] = "longest",
-        max_length: Optional[int] = None,
-        sampling_rate: Optional[int] = None,
-        do_normalize: Optional[bool] = None,
-        device: Optional[str] = "cpu",
-        return_token_timestamps: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = None,
+        padding: str | None = "longest",
+        max_length: int | None = None,
+        sampling_rate: int | None = None,
+        do_normalize: bool | None = None,
+        device: str | None = "cpu",
+        return_token_timestamps: bool | None = None,
+        center: bool = True,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -205,6 +204,8 @@ class LasrFeatureExtractor(SequenceFeatureExtractor):
 
                 Whether or not to return the number of frames of the input raw_speech.
                 These num_frames can be used by the model to compute word level timestamps.
+            center (`bool`, *optional*, defaults to `True`):
+                Whether to use centering for the STFT computation.
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -262,7 +263,7 @@ class LasrFeatureExtractor(SequenceFeatureExtractor):
             return_tensors="pt",
         )
         input_features = padded_inputs.input_features.squeeze(-1)
-        input_features = self._torch_extract_fbank_features(input_features, device)
+        input_features = self._torch_extract_fbank_features(input_features, device, center)
         data = {
             "input_features": input_features.to(torch.float32),
         }

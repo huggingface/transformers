@@ -147,8 +147,6 @@ class TokenClassificationPipeline(ChunkPipeline):
     def _sanitize_parameters(
         self,
         ignore_labels=None,
-        grouped_entities: bool | None = None,
-        ignore_subwords: bool | None = None,
         aggregation_strategy: AggregationStrategy | None = None,
         offset_mapping: list[tuple[int, int]] | None = None,
         is_split_into_words: bool = False,
@@ -165,25 +163,6 @@ class TokenClassificationPipeline(ChunkPipeline):
             preprocess_params["offset_mapping"] = offset_mapping
 
         postprocess_params = {}
-        if grouped_entities is not None or ignore_subwords is not None:
-            if grouped_entities and ignore_subwords:
-                aggregation_strategy = AggregationStrategy.FIRST
-            elif grouped_entities and not ignore_subwords:
-                aggregation_strategy = AggregationStrategy.SIMPLE
-            else:
-                aggregation_strategy = AggregationStrategy.NONE
-
-            if grouped_entities is not None:
-                warnings.warn(
-                    "`grouped_entities` is deprecated and will be removed in version v5.0.0, defaulted to"
-                    f' `aggregation_strategy="{aggregation_strategy}"` instead.'
-                )
-            if ignore_subwords is not None:
-                warnings.warn(
-                    "`ignore_subwords` is deprecated and will be removed in version v5.0.0, defaulted to"
-                    f' `aggregation_strategy="{aggregation_strategy}"` instead.'
-                )
-
         if aggregation_strategy is not None:
             if isinstance(aggregation_strategy, str):
                 aggregation_strategy = AggregationStrategy[aggregation_strategy.upper()]
@@ -279,7 +258,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                 raise ValueError("When `is_split_into_words=True`, `sentence` must be a list of tokens.")
             words = sentence
             sentence = delimiter.join(words)  # Recreate the sentence string for later display and slicing
-            # This map will allows to convert back word => char indices
+            # This map will allow to convert back word => char indices
             word_to_chars_map = []
             delimiter_len = len(delimiter)
             char_offset = 0

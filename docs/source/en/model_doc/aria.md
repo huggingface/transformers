@@ -149,6 +149,7 @@ print(response)
 ## AriaProcessor
 
 [[autodoc]] AriaProcessor
+    - __call__
 
 ## AriaTextConfig
 
@@ -174,3 +175,4 @@ print(response)
 
 [[autodoc]] AriaForConditionalGeneration
     - forward
+    - get_image_features

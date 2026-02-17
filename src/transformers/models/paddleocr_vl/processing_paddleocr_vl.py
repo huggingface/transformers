@@ -23,8 +23,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Union
-
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -62,7 +60,7 @@ class PaddleOCRVLProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[PaddleOCRVLProcessorKwargs],
     ) -> BatchFeature:
         """

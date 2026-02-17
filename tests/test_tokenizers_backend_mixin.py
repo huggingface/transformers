@@ -58,8 +58,8 @@ class TokenizersBackendTesterMixin:
                     **(cls.from_pretrained_kwargs if cls.from_pretrained_kwargs is not None else {}),
                 )
                 tokenizer.save_pretrained(cls.tmpdirname)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Could not setup tokenizer: {e}")
 
     @classmethod
     def tearDownClass(cls):
@@ -456,5 +456,6 @@ class TokenizersBackendTesterMixin:
                         tokenizer_cached.all_special_tokens_extended,
                         tokenizer_local.all_special_tokens_extended,
                     )
-                except Exception as _:
-                    pass  # if the pretrained model is not loadable how could it pass locally :)
+                except Exception as e:
+                    # if the pretrained model is not loadable how could it pass locally :)
+                    print(f"Could not load tokenizer model: {e}")

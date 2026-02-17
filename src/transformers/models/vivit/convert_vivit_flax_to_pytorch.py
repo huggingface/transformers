@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,8 +20,8 @@ import json
 import os.path
 from collections import OrderedDict
 
+import httpx
 import numpy as np
-import requests
 import torch
 from flax.training.checkpoints import restore_checkpoint
 from huggingface_hub import hf_hub_download
@@ -35,8 +34,9 @@ def download_checkpoint(path):
     url = "https://storage.googleapis.com/scenic-bucket/vivit/kinetics_400/vivit_base_16x2_unfactorized/checkpoint"
 
     with open(path, "wb") as f:
-        with requests.get(url, stream=True) as req:
-            f.writelines(req.iter_content(chunk_size=2048))
+        with httpx.stream("GET", url) as resp:
+            resp.raise_for_status()
+            f.writelines(resp.iter_bytes(chunk_size=2048))
 
 
 def get_vivit_config() -> VivitConfig:

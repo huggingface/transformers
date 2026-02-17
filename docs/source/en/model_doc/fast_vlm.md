@@ -43,7 +43,7 @@ The original code can be found [here](https://github.com/apple/ml-fastvlm).
 
 - Note the model has not been explicitly trained to process multiple images in the same prompt, although this is technically possible, you may experience inaccurate results.
 
-**Important: **
+**Important:**
 
 Hugging Face models use SDPA by default; however, this model’s visual backbone supports only eager attention, so it automatically falls back to `"eager"`.
 
@@ -62,6 +62,7 @@ will result in an error.
 Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor’s `apply_chat_template` method.
 
 **Important:**
+
 - You must construct a conversation history — passing a plain string won't work.
 - Each message should be a dictionary with `"role"` and `"content"` keys.
 - The `"content"` should be a list of dictionaries for different modalities like `"text"` and `"image"`.
@@ -69,7 +70,6 @@ Each **checkpoint** is trained with a specific prompt format, depending on the u
 ## Usage examples
 
 ### Single input inference
-
 
 ```python
 import torch
@@ -101,7 +101,6 @@ inputs = processor.apply_chat_template(
 generate_ids = model.generate(**inputs, max_new_tokens=30)
 processor.batch_decode(generate_ids, skip_special_tokens=True)
 ```
-
 
 ### Batched inference
 
@@ -152,7 +151,6 @@ generate_ids = model.generate(**inputs, max_new_tokens=30)
 processor.batch_decode(generate_ids, skip_special_tokens=True)
 ```
 
-
 ## Note regarding reproducing original implementation
 
 In order to match the logits of the [original implementation](https://github.com/apple/ml-fastvlm), one needs to use float32. In half precision the logit difference is higher due to tiny differences in how some ops are implemented in timm.
@@ -173,3 +171,4 @@ Flash Attention 2 is an even faster, optimized version of the previous optimizat
 
 [[autodoc]] FastVlmForConditionalGeneration
     - forward
+    - get_image_features

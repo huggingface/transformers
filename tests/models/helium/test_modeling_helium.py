@@ -18,7 +18,6 @@ import unittest
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    require_read_token,
     require_torch,
     slow,
     torch_device,
@@ -51,12 +50,11 @@ class HeliumModelTest(CausalLMModelTest, unittest.TestCase):
 class HeliumIntegrationTest(unittest.TestCase):
     input_text = ["Hello, today is a great day to"]
 
-    @require_read_token
     def test_model_2b(self):
         model_id = "kyutai/helium-1-preview"
         expected_texts = Expectations(
             {
-                ("rocm", (9, 5)): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now, and I"],
+                ("rocm", (9, 5)): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now, and I have"],
                 (None, None): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now and I have"],
                 ("cuda", 8): ['Hello, today is a great day to start a new project. I have been working on a new project for a while now, and I'],
             }

@@ -17,7 +17,6 @@ import gc
 import unittest
 
 import pytest
-from packaging import version
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, BitsAndBytesConfig, DynamicCache, is_torch_available, set_seed
@@ -30,7 +29,6 @@ from transformers.testing_utils import (
     get_device_properties,
     require_bitsandbytes,
     require_flash_attn,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -72,7 +70,6 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-@require_read_token
 class MistralIntegrationTest(unittest.TestCase):
     # This variable is used to determine which accelerator are we using for our runners (e.g. A10 or T4)
     # Depending on the hardware we get different logits / generations
@@ -231,7 +228,7 @@ class MistralIntegrationTest(unittest.TestCase):
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
-        set_seed(0)
+        set_seed(42)
         generated_ids = model.generate(
             input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=model
         )
@@ -241,11 +238,6 @@ class MistralIntegrationTest(unittest.TestCase):
     @pytest.mark.torch_compile_test
     @slow
     def test_compile_static_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
         if self.device_properties[0] == "cuda" and self.device_properties[1] == 7:
             self.skipTest(reason="This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
 

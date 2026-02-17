@@ -27,7 +27,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_large_accelerator,
-    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
@@ -130,9 +129,7 @@ class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
 
-# Run on runners with larger accelerators (for example A10 instead of T4) with a lot of CPU RAM (e.g. g5-12xlarge)
-@require_torch_multi_accelerator
-@require_torch_large_accelerator
+@slow
 @require_torch
 class Ernie4_5_MoeIntegrationTest(unittest.TestCase):
     @classmethod
@@ -144,27 +141,57 @@ class Ernie4_5_MoeIntegrationTest(unittest.TestCase):
         del cls.model
         cleanup(torch_device, gc_collect=True)
 
+    def setup(self):
+        cleanup(torch_device, gc_collect=True)
+
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
     @classmethod
-    def get_model(cls):
-        if cls.model is None:
-            cls.model = Ernie4_5_MoeForCausalLM.from_pretrained(
-                "baidu/ERNIE-4.5-21B-A3B-PT",
-                device_map="auto",
-                quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            )
+    def get_large_model(cls):
+        cls.model = Ernie4_5_MoeForCausalLM.from_pretrained(
+            "baidu/ERNIE-4.5-21B-A3B-PT",
+            device_map="auto",
+            experts_implementation="eager",
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+        )
 
         return cls.model
 
-    @require_bitsandbytes
-    @slow
-    def test_model_21b_a3b_generation(self):
-        EXPECTED_TEXT_COMPLETION = "User: Hey, are you conscious? Can you talk to me?\nAssistant:  I don't have consciousness in the way humans do. I'm a text-based AI created to process and generate responses based on patterns in data."  # fmt: skip
+    @classmethod
+    def get_small_model(cls):
+        cls.model = Ernie4_5_MoeForCausalLM.from_pretrained(
+            "hf-internal-testing/ERNIE-4.5-Small-Moe", device_map="auto", dtype="auto", experts_implementation="eager"
+        )
 
-        model = self.get_model()
-        tokenizer = AutoTokenizer.from_pretrained("baidu/ERNIE-4.5-21B-A3B-PT", revision="refs/pr/11")
+        return cls.model
+
+    @require_torch_large_accelerator(memory=48)  # Tested on A100 but requires around 48GiB
+    @require_bitsandbytes
+    def test_model_21b_a3b_generation(self):
+        EXPECTED_TEXT_COMPLETION = "User: Hey, are you conscious? Can you talk to me?\nAssistant: \nI don't have consciousness in the way humans do. I don't feel emotions, have thoughts, or experience awareness. However, I'm"  # fmt: skip
+
+        model = self.get_large_model()
+        tokenizer = AutoTokenizer.from_pretrained("baidu/ERNIE-4.5-21B-A3B-PT")
+        prompt = "Hey, are you conscious? Can you talk to me?"
+        messages = [{"role": "user", "content": prompt}]
+        text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        model_inputs = tokenizer([text], add_special_tokens=False, return_tensors="pt").to(model.device)
+
+        generated_ids = model.generate(
+            model_inputs.input_ids,
+            max_new_tokens=32,
+            do_sample=False,
+        )
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True).strip("\n")
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+    def test_shortened_model_generation(self):
+        # This is gibberish which is expected as the model are the first x layers of the original 28B model
+        EXPECTED_TEXT_COMPLETION = 'User: Hey, are you conscious? Can you talk to me?\nAssistant: 不了的 tongues说话 dagat绵席裹着头phones<mask:11>odikèkèk<mask:11><mask:11>bun褶席席地说起来这么说的话的话retti upside upsideolate疡疡疡'  # fmt: skip
+
+        model = self.get_small_model()
+        tokenizer = AutoTokenizer.from_pretrained("baidu/ERNIE-4.5-21B-A3B-PT")
         prompt = "Hey, are you conscious? Can you talk to me?"
         messages = [{"role": "user", "content": prompt}]
         text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)

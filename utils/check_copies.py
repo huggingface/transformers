@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,13 +26,13 @@ Use from the root of the repo with:
 python utils/check_copies.py
 ```
 
-for a check that will error in case of inconsistencies (used by `make repo-consistency`) or
+for a check that will error in case of inconsistencies (used by `make check-repo`) or
 
 ```bash
 python utils/check_copies.py --fix_and_overwrite
 ```
 
-for a check that will fix all inconsistencies automatically (used by `make fix-copies`).
+for a check that will fix all inconsistencies automatically (used by `make fix-repo`).
 """
 
 import argparse
@@ -810,8 +809,11 @@ def is_copy_consistent(
         # Test for a diff and act accordingly.
         diff_index = check_codes_match(observed_code, theoretical_code)
         if diff_index is not None:
-            # switch to the index in the original `observed_code` (i.e. before removing empty lines)
-            diff_index = idx_to_orig_idx_mapping_for_observed_code_lines[diff_index]
+            try:
+                # switch to the index in the original `observed_code` (i.e. before removing empty lines)
+                diff_index = idx_to_orig_idx_mapping_for_observed_code_lines[diff_index]
+            except KeyError:
+                raise RuntimeError(f"{filename}:L{start_index}: Error in the format")
             diffs.append([object_name, diff_index + start_index + 1])
             if overwrite:
                 # `theoretical_code_to_write` is a single string but may have several lines.
@@ -857,7 +859,7 @@ def check_copies(overwrite: bool = False, file: str | None = None):
         raise Exception(
             "Found the following copy inconsistencies:\n"
             + diff
-            + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
+            + "\nRun `make fix-repo` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
         )
 
 

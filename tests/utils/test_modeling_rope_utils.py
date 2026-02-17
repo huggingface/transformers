@@ -101,17 +101,15 @@ class RopeTest(unittest.TestCase):
             with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
                 config.validate_rope()
 
-        # bad rope config, no `original_max_position_embeddings` -> warning
+        # bad rope config, no `original_max_position_embeddings` -> raise error
         rope_config = {
             "rope_type": "yarn",
             "rope_theta": 10000.0,
             "factor": 2.0,
         }
         config.rope_parameters = rope_config
-        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+        with self.assertRaises(KeyError):
             config.validate_rope()
-            self.assertEqual(len(logs.output), 1)
-            self.assertIn("is unset", logs.output[0])
 
         # bad rope config, bad implicit fator -> warning
         rope_config = {
@@ -338,9 +336,8 @@ class RopeTest(unittest.TestCase):
         default_inv_freq, _ = rope_fn(config=config, device=torch_device)
 
         # Check 1: according to the paper, if `attention_factor` is not specified, then it has a specific default --
-        # `math.sqrt(1 + math.log(factor) / math.log(max_position_embeddings))`
+        # `math.sqrt(1 + math.log(factor) / math.log(original_max_position_embeddings))`
         rope_fn = ROPE_INIT_FUNCTIONS["longrope"]
-        max_position_embeddings = config.max_position_embeddings
         for factor in (2.0, 10.0, 20.0):
             config.rope_parameters = {
                 "rope_type": "longrope",
@@ -350,7 +347,9 @@ class RopeTest(unittest.TestCase):
                 "long_factor": long_factor,
             }
             _, attention_scale = rope_fn(config=config, device=torch_device)
-            self.assertEqual(attention_scale, math.sqrt(1 + math.log(factor) / math.log(max_position_embeddings)))
+            self.assertEqual(
+                attention_scale, math.sqrt(1 + math.log(factor) / math.log(config.max_position_embeddings))
+            )
 
             config.rope_parameters = {
                 "rope_type": "longrope",
@@ -372,6 +371,7 @@ class RopeTest(unittest.TestCase):
             }
             self.assertEqual(config.rope_parameters.get("attention_factor"), None)
             # Verify that "TypeError: '<' not supported between instances of 'NoneType' and 'int'" is not raised.
+            config.standardize_rope_params()
             config.validate_rope()
 
         # Check 2: seq_len == 0 -> short factor is applied to the default frequencies

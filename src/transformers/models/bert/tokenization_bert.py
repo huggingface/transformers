@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """Tokenization classes for Bert."""
 
 import collections
-from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
@@ -80,7 +78,7 @@ class BertTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
+        vocab: str | dict[str, int] | None = None,
         do_lower_case: bool = False,
         unk_token: str = "[UNK]",
         sep_token: str = "[SEP]",
@@ -88,7 +86,7 @@ class BertTokenizer(TokenizersBackend):
         cls_token: str = "[CLS]",
         mask_token: str = "[MASK]",
         tokenize_chinese_chars: bool = True,
-        strip_accents: Optional[bool] = None,
+        strip_accents: bool | None = None,
         **kwargs,
     ):
         self.do_lower_case = do_lower_case

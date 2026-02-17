@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """Qwen2VL model configuration"""
 
 import inspect
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
@@ -99,8 +97,6 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         use_sliding_window (`bool`, *optional*, defaults to `False`):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
@@ -158,27 +154,26 @@ class Qwen2VLTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 152064,
-        hidden_size: Optional[int] = 8192,
-        intermediate_size: Optional[int] = 29568,
-        num_hidden_layers: Optional[int] = 80,
-        num_attention_heads: Optional[int] = 64,
-        num_key_value_heads: Optional[int] = 8,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-05,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        use_sliding_window: Optional[bool] = False,
-        sliding_window: Optional[int] = 4096,
-        max_window_layers: Optional[int] = 80,
-        layer_types: Optional[list[str]] = None,
-        attention_dropout: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        bos_token_id: Optional[int] = 151643,
-        eos_token_id: Optional[int] = 151645,
-        pad_token_id: Optional[int] = None,
+        vocab_size: int | None = 152064,
+        hidden_size: int | None = 8192,
+        intermediate_size: int | None = 29568,
+        num_hidden_layers: int | None = 80,
+        num_attention_heads: int | None = 64,
+        num_key_value_heads: int | None = 8,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-05,
+        use_cache: bool | None = True,
+        use_sliding_window: bool | None = False,
+        sliding_window: int | None = 4096,
+        max_window_layers: int | None = 80,
+        layer_types: list[str] | None = None,
+        attention_dropout: float | None = 0.0,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        bos_token_id: int | None = 151643,
+        eos_token_id: int | None = 151645,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -213,16 +208,15 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
         super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
             ignore_keys_at_rope_validation={"mrope_section"},
             **kwargs,
         )
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: Optional[set] = None, **kwargs):
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
@@ -260,6 +254,8 @@ class Qwen2VLConfig(PreTrainedConfig):
             The token index to denote start of vision input.
         vision_end_token_id (`int`, *optional*, defaults to 151653):
             The token index to denote end of vision input.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Qwen2VLForConditionalGeneration, Qwen2VLConfig
@@ -286,6 +282,7 @@ class Qwen2VLConfig(PreTrainedConfig):
         video_token_id=151656,
         vision_start_token_id=151652,
         vision_end_token_id=151653,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -307,9 +304,7 @@ class Qwen2VLConfig(PreTrainedConfig):
         self.video_token_id = video_token_id
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
-
-        # FIXME: arthur/cyril - tying has to be used from the text config
-        kwargs["tie_word_embeddings"] = self.text_config.tie_word_embeddings
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

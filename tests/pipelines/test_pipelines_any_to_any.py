@@ -20,6 +20,7 @@ import numpy as np
 from transformers import MODEL_FOR_MULTIMODAL_LM_MAPPING, is_vision_available
 from transformers.pipelines import AnyToAnyPipeline, pipeline
 from transformers.testing_utils import (
+    Expectations,
     is_pipeline_test,
     require_librosa,
     require_torch,
@@ -179,15 +180,23 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         text = "What is the capital of France? Assistant:"
 
         outputs = pipe(text=text, generate_kwargs={"do_sample": False})
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "input_text": "What is the capital of France? Assistant:",
-                    "generated_None": "What is the capital of France? Assistant: The capital of France is Paris.\n",
-                }
-            ],
-        )
+        EXPECTED_OUTPUT = Expectations(
+            {
+                ("cuda", 8): [
+                    {
+                        "input_text": "What is the capital of France? Assistant:",
+                        "generated_text": "What is the capital of France? Assistant: The capital of France is Paris.",
+                    }
+                ],
+                ("rocm", (9, 4)): [
+                    {
+                        "input_text": "What is the capital of France? Assistant:",
+                        "generated_text": "What is the capital of France? Assistant: The capital of France is Paris.\n",
+                    }
+                ],
+            }
+        ).get_expectation()
+        self.assertEqual(outputs, EXPECTED_OUTPUT)
 
         messages = [
             [
@@ -208,42 +217,89 @@ class AnyToAnyPipelineTests(unittest.TestCase):
             ],
         ]
         outputs = pipe(text=messages, generate_kwargs={"do_sample": False})
-        self.assertEqual(
-            outputs,
-            [
-                [
-                    {
-                        "input_text": [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
-                            }
-                        ],
-                        "generated_None": [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
-                            },
-                            {
-                                "role": "assistant",
-                                "content": "A digital embrace, a friendly face,\nHugging Face rises, setting the pace.\nFor AI's heart, a vibrant core,\nOpen source models, and so much more.\n\nFrom transformers deep, a powerful might,\nNLP's future, shining so bright.\nDatasets curated, a treasure trove found,\nFor researchers and builders, on fertile ground.\n\nA community thriving, a collaborative art,\nSharing knowledge, playing a vital part.\nSpaces to showcase, creations unfold,\nStories in code, bravely told.\n\nWith libraries sleek, and tools so refined,\nDemocratizing AI, for all humankind.\nFrom sentiment analysis to text generation's grace,\nHugging Face empowers, at a rapid pace.\n\nA platform of learning, a place to explore,\nUnlocking potential, and asking for more.\nSo let's give a cheer, for this innovative team,\nHugging Face's vision, a beautiful dream. \n",
-                            },
-                        ],
-                    }
+        EXPECTED_OUTPUT = Expectations(
+            {
+                ("cuda", 8): [
+                    [
+                        {
+                            "input_text": [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
+                                }
+                            ],
+                            "generated_text": [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
+                                },
+                                {
+                                    "role": "assistant",
+                                    "content": "A digital embrace, a friendly face,Hugging Face, a vibrant space.Where models bloom and knowledge flows,And AI's potential brightly glows.From transformers deep, a powerful core,To datasets vast, and so much more.A community thrives, a helping hand,Sharing insights across the land.Pipelines built with elegant ease,For NLP tasks, designed to please.Fine-tuning models, a joyful art,To tailor AI to play its part.Spaces open wide, for demos bright,Showcasing wonders, day and night.From text to image, code to sound,Innovation's fertile ground.A platform built on open grace,Democratizing AI's embrace.For researchers, builders, and all who seek,To unlock the future, bold and sleek.So raise a glass to the Face so kind,Hugging Face, expanding the mind.Connecting minds, with code and care,A future of AI, beyond compare.",
+                                },
+                            ],
+                        }
+                    ],
+                    [
+                        {
+                            "input_text": [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "What is the capital of France?"}],
+                                }
+                            ],
+                            "generated_text": [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "What is the capital of France?"}],
+                                },
+                                {"role": "assistant", "content": "The capital of France is **Paris**. "},
+                            ],
+                        }
+                    ],
                 ],
-                [
-                    {
-                        "input_text": [
-                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}
-                        ],
-                        "generated_None": [
-                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]},
-                            {"role": "assistant", "content": "The capital of France is **Paris**. \n"},
-                        ],
-                    }
+                ("rocm", (9, 4)): [
+                    [
+                        {
+                            "input_text": [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
+                                }
+                            ],
+                            "generated_text": [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
+                                },
+                                {
+                                    "role": "assistant",
+                                    "content": "A digital embrace, a friendly face,\nHugging Face, a vibrant space.\nWhere models bloom and knowledge flows,\nAnd AI's potential brightly glows.\n\nFrom transformers deep, a powerful core,\nTo datasets vast, and so much more.\nA community thrives, a helping hand,\nSharing insights across the land.\n\nPipelines built with elegant ease,\nFor NLP tasks, designed to please.\nFine-tuning models, a joyful art,\nTo tailor AI to play its part.\n\nSpaces open wide, for demos bright,\nShowcasing wonders, day and night.\nFrom text to image, code to sound,\nInnovation's fertile ground.\n\nA platform built on open grace,\nDemocratizing AI's embrace.\nFor researchers, builders, and all who seek,\nTo unlock the future, bold and sleek.\n\nSo raise a glass to the Face so kind,\nHugging Face, expanding the mind.\nConnecting minds, with code and care,\nA future of AI, beyond compare.\n\n\n\n",
+                                },
+                            ],
+                        }
+                    ],
+                    [
+                        {
+                            "input_text": [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "What is the capital of France?"}],
+                                }
+                            ],
+                            "generated_text": [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "What is the capital of France?"}],
+                                },
+                                {"role": "assistant", "content": "The capital of France is **Paris**. \n"},
+                            ],
+                        }
+                    ],
                 ],
-            ],
-        )
+            }
+        ).get_expectation()
+        self.assertEqual(outputs, EXPECTED_OUTPUT)
 
     @slow
     def test_small_model_pt_token_audio_input(self):
@@ -306,6 +362,18 @@ class AnyToAnyPipelineTests(unittest.TestCase):
             load_audio_from_video=True,
             generate_kwargs={"use_audio_in_video": True, "talker_do_sample": False, "do_sample": False},
         )
+        EXPECTED_CONTENT = Expectations(
+            {
+                (
+                    "cuda",
+                    8,
+                ): "system\nYou are a helpful assistant.\nuser\nDescribe this video.\nassistant\nThe video begins with a man standing in a kitchen, wearing a black shirt. He is holding a large glass bowl filled with flour and a spoon. The man starts to mix the flour in the bowl, creating a dough. As he mixes, he continues to talk to the camera, explaining the process. The kitchen has wooden cabinets and a white refrigerator in the background. The man's movements are deliberate and focused as he works with the dough. The video ends with the man still mixing the dough in the bowl. Overall, the video provides a clear and detailed demonstration of how to make dough using flour and a spoon.",
+                (
+                    "rocm",
+                    (9, 4),
+                ): "The video begins with a man standing in a kitchen, wearing a black shirt. He is positioned in front of a refrigerator and wooden cabinets. The man is speaking and gesturing with his hands, possibly explaining something or giving instructions. The kitchen appears to be well-lit and has a clean, organized appearance.\n\nAs the video progresses, the man continues to speak and gesture, maintaining his position in the kitchen. The camera remains focused on him, capturing his upper body and face. The background remains consistent, showing the refrigerator and wooden cabinets. The lighting in the kitchen stays bright, and the overall atmosphere remains calm and focused.\n\nThroughout the video, the man's movements and expressions suggest that he is engaged in a conversation or presentation. His gestures and facial expressions indicate that he is actively communicating and possibly demonstrating something related to cooking or food preparation. The kitchen setting provides a practical and relatable backdrop for his actions and words.\n\nOverall, the video depicts a man in a kitchen, speaking and gesturing while possibly explaining or demonstrating something related to cooking or food preparation. The kitchen setting, with its well-lit and organized appearance, serves as a suitable environment for his actions and words.",
+            }
+        ).get_expectation()
         self.assertEqual(
             outputs,
             [
@@ -322,7 +390,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                             ],
                         }
                     ],
-                    "generated_None": [
+                    "generated_text": [
                         {
                             "role": "user",
                             "content": [
@@ -335,7 +403,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                         },
                         {
                             "role": "assistant",
-                            "content": "system\nYou are a helpful assistant.\nuser\nDescribe this video.\nassistant\nThe video begins with a man standing in a kitchen, wearing a black shirt. He is holding a large glass bowl filled with flour and a spoon. The man starts to mix the flour in the bowl, creating a dough. As he mixes, he continues to talk to the camera, explaining the process. The kitchen has wooden cabinets and a white refrigerator in the background. The man's movements are deliberate and focused as he works with the dough. The video ends with the man still mixing the dough in the bowl. Overall, the video provides a clear and detailed demonstration of how to make dough using flour and a spoon.",
+                            "content": EXPECTED_CONTENT,
                         },
                     ],
                 }

@@ -11,10 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib.metadata
 import os
 import re
 from collections.abc import Callable
 from types import ModuleType
+
+from packaging import version as pkg_version
 
 from ..utils import ENV_VARS_TRUE_VALUES, logging
 from ..utils.import_utils import is_kernels_available
@@ -28,9 +31,11 @@ try:
         Device,
         LayerRepository,
         Mode,
-        get_kernel,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
+    )
+    from kernels import (
+        get_kernel as get_kernel_hub,
     )
     from kernels import (
         use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub,
@@ -147,13 +152,19 @@ try:
                     layer_name="MegaBlocksMoeMLP",
                 )
             },
+            "xpu": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/megablocks",
+                    layer_name="MegaBlocksMoeMLP",
+                )
+            },
         },
         "FastGELU": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/activation",
                     layer_name="FastGELU",
-                    version=">=0.0.4,<0.1.0",
+                    version=1,
                 )
             }
         },
@@ -162,7 +173,7 @@ try:
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/activation",
                     layer_name="QuickGELU",
-                    version=">=0.0.4,<0.1.0",
+                    version=1,
                 )
             }
         },
@@ -171,28 +182,28 @@ try:
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/activation",
                     layer_name="NewGELU",
-                    version=">=0.0.4,<0.1.0",
+                    version=1,
                 )
             }
         },
         "SiLU": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation", layer_name="Silu", version=">=0.1.0"
+                    repo_id="kernels-community/activation", layer_name="Silu", version=1
                 )
             }
         },
         "GeLU": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation", layer_name="Gelu", version=">=0.1.0"
+                    repo_id="kernels-community/activation", layer_name="Gelu", version=1
                 )
             }
         },
         "GeluTanh": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation", layer_name="GeluTanh", version=">=0.1.0"
+                    repo_id="kernels-community/activation", layer_name="GeluTanh", version=1
                 )
             }
         },
@@ -205,7 +216,12 @@ try:
                 Mode.INFERENCE: FuncRepository(
                     repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
                 )
-            }
+            },
+            "cuda": {
+                Mode.INFERENCE: FuncRepository(
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                )
+            },
         }
 
     def has_key(d, key):
@@ -258,9 +274,9 @@ except ImportError:
 
 
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
-    "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d"},
-    "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "revision": "v0.0.4"},
-    "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "revision": "v0.0.4"},
+    "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d", "version": 1},
+    "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
+    "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
@@ -340,8 +356,6 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
         mapping[kernel_name] = None
         return None
     if _kernels_available:
-        from kernels import get_kernel
-
         try:
             repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
             revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
@@ -370,7 +384,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
         if callable(is_kernel_available) and is_kernel_available():
             # Try to import the module "{kernel_name}" from parent package level
             try:
-                module = importlib.import_module(f"{kernel_name}")
+                module = importlib.import_module(f"{new_kernel_name}")
                 mapping[kernel_name] = module
                 return module
             except Exception:
@@ -379,6 +393,20 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
             mapping[kernel_name] = None
 
     return mapping[kernel_name]
+
+
+def get_kernel(kernel_name: str, revision: str | None = None, version: int | str | None = None) -> ModuleType:
+    from .. import __version__
+
+    user_agent = {"framework": "transformers", "version": __version__, "repo_id": kernel_name}
+    if _kernels_available:
+        kernels_version = importlib.metadata.version("kernels")
+        if pkg_version.parse(kernels_version) >= pkg_version.parse("0.10.4"):
+            return get_kernel_hub(kernel_name, revision=revision, version=version, user_agent=user_agent)
+        else:
+            return get_kernel_hub(kernel_name, revision=revision, version=version)
+    else:
+        raise ImportError("kernels is not installed, please install it with `pip install kernels`")
 
 
 def use_kernelized_func(module_names: list[Callable] | Callable):
@@ -415,5 +443,6 @@ __all__ = [
     "register_kernel_mapping_transformers",
     "replace_kernel_forward_from_hub",
     "lazy_load_kernel",
+    "get_kernel",
     "use_kernelized_func",
-]
+]  # type: ignore
