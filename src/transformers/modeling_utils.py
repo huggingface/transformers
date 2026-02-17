@@ -2322,7 +2322,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             init.copy_(module.inv_freq, buffer_value)
             init.copy_(module.original_inv_freq, buffer_value)
 
-    def _initialize_weights(self, module):
+    def _initialize_weights(self, module, is_remote_code: bool = False):
         """
         Initialize the weights if they are not already initialized.
         """
@@ -2332,10 +2332,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # This check is for remote code that does NOT use either `torch.init` or `transformers.initialization` in `_init_weights`
         # which allow to check the flag directly on param. As they don't and write the params in-place, params would be reinitialized
         # otherwise
-        if all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False)) and all(
-            getattr(buffer, "_is_hf_initialized", False)
-            for buffer in module.buffers(recurse=False)
-            if buffer is not None
+        if (
+            is_remote_code
+            and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
+            and all(
+                getattr(buffer, "_is_hf_initialized", False)
+                for buffer in module.buffers(recurse=False)
+                if buffer is not None
+            )
         ):
             module._is_hf_initialized = True
             return
@@ -2356,20 +2360,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if not hasattr(torch.nn.Module, "smart_apply"):
             # This function is equivalent to `torch.nn.Module.apply`, except that it dynamically adjust the function
             # to apply as we go down the graph
-            def smart_apply(self, fn):
+            def smart_apply(self, fn, is_remote_code):
                 for module in self.children():
                     # We found a sub-model: recursively dispatch its own init function now!
                     if isinstance(module, PreTrainedModel):
-                        module.smart_apply(module._initialize_weights)
+                        module.smart_apply(module._initialize_weights, is_remote_code)
                     else:
-                        module.smart_apply(fn)
-                fn(self)
+                        module.smart_apply(fn, is_remote_code)
+                fn(self, is_remote_code)
                 return self
 
             torch.nn.Module.smart_apply = smart_apply
 
         # Let the magic happen with this simple call
-        self.smart_apply(self._initialize_weights)
+        self.smart_apply(self._initialize_weights, self.is_remote_code())
 
     def get_expanded_tied_weights_keys(self, all_submodels: bool = False) -> dict:
         r"""
