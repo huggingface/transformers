@@ -242,7 +242,8 @@ def _grouped_mm(
     """
 
     if _can_use_grouped_mm(input, weight, offs):
-        # torch.nn.functional.grouped_mm is not autocast-enabled, so if autocast is enabled we might end up with input tensors in fp32 (e.g. LayerNorm output) and weight tensors in fp16/bf16
+        # torch.nn.functional.grouped_mm and torch._grouped_mm are not autocast-enabled,
+        # when autocast is enabled we can end up with intermediate tensors in fp32 (e.g. LayerNorm output) and weight tensors in bf16
         # In that case we need to cast the input to the weight dtype to avoid dtype mismatch errors.
         # See: https://github.com/pytorch/pytorch/issues/174763
         if hasattr(torch.nn.functional, "grouped_mm"):
