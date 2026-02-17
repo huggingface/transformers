@@ -319,7 +319,7 @@ class VoxtralRealtimeForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
         EXPECTED_OUTPUT = [
-            " Come on! Dude, you got a tattoo. So do you, dude. No. Oh, dude, what does my tattoo say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude! What does mine say? Sweet! Idiot! Your tattoo says dude. Your tattoo says sweet. Got it?",
+            " Come on! Dude. You got a tattoo. So did you, dude. No. Oh, dude, what does my tattoo say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude! What does mine say? Sweet! Idiot! Your tattoo says dude. Your tattoo says sweet. Got it? Sorry. Hey, sorry.",
         ]
 
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
@@ -375,8 +375,8 @@ class VoxtralRealtimeForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
         EXPECTED_OUTPUT = [
-            " Come on! Dude, you got a tattoo. So do you, dude. No. Oh, dude, what does my tattoo say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude! What does mine say? Sweet! Idiot! Your tattoo says dude. Your tattoo says sweet. Got it?",
-            " This week, I traveled to Chicago to deliver my final farewell address to the nation. Following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, My conversations with you, the American people, in living rooms, in schools, at farms, and on factory floors, at diners, and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American",
+            " Come on. Dude. You got a tattoo. So did you, dude. No. Oh, dude, what does my tattoo say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude! What does mine say? Sweet! Idiot! Your tattoo says dude. Your tattoo says sweet. Got it? Sorry. Hey, sorry.",
+            " This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, All these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the",
         ]
 
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)

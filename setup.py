@@ -78,7 +78,6 @@ _deps = [
     "codecarbon>=2.8.1",
     "datasets>=2.15.0",  # We need either this pin or pyarrow<21.0.0
     "deepspeed>=0.9.3",
-    "diffusers",
     "dill<0.3.5",
     "evaluate>=0.4.6",
     "faiss-cpu",
@@ -88,7 +87,6 @@ _deps = [
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
     "huggingface-hub>=1.3.0,<2.0",
-    "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "jmespath>=1.0.1",
