@@ -246,12 +246,13 @@ class CodeGenBlock(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
-        attn_outputs, attn_weights = self.attn(
+        attn_outputs, _attn_weights = self.attn(
             hidden_states=hidden_states,
             layer_past=layer_past,
             attention_mask=attention_mask,
             position_ids=position_ids,
             cache_position=cache_position,
+            **kwargs,
         )
         feed_forward_hidden_states = self.mlp(hidden_states)
         hidden_states = attn_outputs + feed_forward_hidden_states + residual
@@ -371,6 +372,8 @@ class CodeGenModel(CodeGenPreTrainedModel):
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 cache_position=cache_position,
+                use_cache=use_cache,
+                **kwargs,
             )
 
         hidden_states = self.ln_f(hidden_states)
