@@ -328,6 +328,10 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
+        # Pass output flags from config to backbone when not in kwargs (e.g. config.output_hidden_states = True)
+        kwargs.setdefault("output_hidden_states", self.config.output_hidden_states)
+        kwargs.setdefault("output_attentions", self.config.output_attentions)
+
         outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
         features = outputs.feature_maps
 
