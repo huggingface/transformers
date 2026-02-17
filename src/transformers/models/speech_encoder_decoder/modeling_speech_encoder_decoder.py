@@ -195,8 +195,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                 All remaining positional arguments will be passed to the underlying model's `__init__` method.
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
-                Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
-                `output_attentions=True`).
+                Can be used to update the configuration object (after it being loaded) and initiate the model.
 
                 - To update the encoder configuration, use the prefix *encoder_* for each configuration parameter.
                 - To update the decoder configuration, use the prefix *decoder_* for each configuration parameter.
@@ -318,8 +317,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         input_values: torch.FloatTensor | None = None,
         input_features: torch.FloatTensor | None = None,
         **kwargs,
@@ -395,6 +392,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         }
         if "num_items_in_batch" in kwargs_encoder:
             kwargs_decoder["num_items_in_batch"] = kwargs_encoder.pop("num_items_in_batch", None)
+        kwargs_decoder = kwargs_decoder | {k: v for k, v in kwargs.items() if not k.startswith("decoder_")}
 
         if encoder_outputs is None:
             if inputs is None:
@@ -410,8 +408,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             encoder_outputs = self.encoder(
                 inputs,
                 attention_mask=attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
                 **kwargs_encoder,
             )
         elif isinstance(encoder_outputs, tuple):
@@ -446,8 +442,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             use_cache=use_cache,
             past_key_values=past_key_values,
             **kwargs_decoder,
