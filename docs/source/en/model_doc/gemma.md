@@ -134,7 +134,7 @@ visualizer("LLMs generate text through a process known as")
 
 ## Notes
 
-- The original Gemma models support standard kv-caching used in many transformer-based language models. You can use use the default [`DynamicCache`] instance or a tuple of tensors for past key values during generation. This makes it compatible with typical autoregressive generation workflows.
+- The original Gemma models support standard kv-caching used in many transformer-based language models. You can use the default [`DynamicCache`] instance or a tuple of tensors for past key values during generation. This makes it compatible with typical autoregressive generation workflows.
 
    ```py
    import torch
