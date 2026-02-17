@@ -122,14 +122,6 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     ):
         pass
 
-    @unittest.skip("I am in a rush, will check it out later on")
-    def test_keep_in_fp32_modules_strict(self):
-        pass
-
-    @unittest.skip("I am in a rush, will check it out later on")
-    def test_keep_in_fp32_modules(self):
-        pass
-
     @require_torch_accelerator
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):

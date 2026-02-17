@@ -914,61 +914,39 @@ class ModelTesterMixin:
                     )
 
     def test_keep_in_fp32_modules(self):
-        """Test that the flag `_keep_in_fp32_modules` is correctly respected."""
+        """Test that the flag `_keep_in_fp32_modules` and `_keep_in_fp32_modules_strict`  is correctly respected."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
                 model = model_class(copy.deepcopy(config))
-                if len(model._keep_in_fp32_modules) == 0:
+                if len(model._keep_in_fp32_modules) == 0 and len(model._keep_in_fp32_modules_strict) == 0:
                     self.skipTest(
-                        reason=f"{model_class.__name__} class has no _keep_in_fp32_modules attribute defined"
+                        reason=f"{model_class.__name__} class has no _keep_in_fp32_modules or _keep_in_fp32_modules_strict attribute defined"
                     )
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     model.save_pretrained(tmpdirname)
 
-                    # Test when reloading in fp16 -> should be upcasted to fp32
                     model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
-                    for name, param in model.state_dict().items():
-                        if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules):
-                            self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
-                        else:
-                            self.assertTrue(param.dtype == torch.float16, f"{name} was upcasted but it should NOT")
-
-                    # Test when reloading in bf16 -> should stay bf16
-                    model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
-                    for name, param in model.state_dict().items():
-                        self.assertTrue(param.dtype == torch.bfloat16, f"{name} was upcasted but it should NOT")
-
-    def test_keep_in_fp32_modules_strict(self):
-        """Test that the flag `_keep_in_fp32_modules_strict` is correctly respected."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                model = model_class(copy.deepcopy(config))
-                if len(model._keep_in_fp32_modules_strict) == 0:
-                    self.skipTest(
-                        reason=f"{model_class.__name__} class has no _keep_in_fp32_modules_strict attribute defined"
+                    self.assertFalse(
+                        model._keep_in_fp32_modules & model._keep_in_fp32_modules_strict,
+                        "We found a layer in both the `_keep_in_fp32_modules` and `_keep_in_fp32_modules_strict` lists. Please remove it from one of the two lists.",
                     )
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    model.save_pretrained(tmpdirname)
-
-                    # Test when reloading in fp16 -> should be upcasted to fp32
-                    model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
+                    # When reloading in fp16, keep_in_fp32_modules AND keep_in_fp32_modules_strict should be upcasted
+                    all_fp32_modules = model._keep_in_fp32_modules | model._keep_in_fp32_modules_strict
                     for name, param in model.state_dict().items():
-                        if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules_strict):
+                        if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in all_fp32_modules):
                             self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:
-                            self.assertTrue(param.dtype == torch.float16, f"{name} was upcasted but it should NOT")
+                            self.assertTrue(param.dtype == torch.float16, f"{name} was upcasted but it should NOT be")
 
-                    # Test when reloading in bf16 -> should also be upcasted to fp32
+                    # When reloading in bf16, only keep_in_fp32_modules_strict should be upcasted
                     model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                     for name, param in model.state_dict().items():
                         if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules_strict):
                             self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:
-                            self.assertTrue(param.dtype == torch.bfloat16, f"{name} was upcasted but it should NOT")
+                            self.assertTrue(param.dtype == torch.bfloat16, f"{name} was upcasted but it should NOT be")
 
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
