@@ -300,6 +300,7 @@ class Qwen3VLMoeTextDecoderLayer(Qwen3MoeDecoderLayer):
 
 class Qwen3VLMoePreTrainedModel(Qwen3MoePreTrainedModel):
     config: Qwen3VLMoeConfig
+    input_modalities = ("text", "image", "video")
     _no_split_modules = ["Qwen3VLMoeTextDecoderLayer", "Qwen3VLMoeVisionBlock"]
 
     @torch.no_grad()

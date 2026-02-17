@@ -1086,6 +1086,7 @@ class Qwen3_5VisionBlock(GradientCheckpointingLayer):
 
 class Qwen3_5VisionModel(Qwen3_5PreTrainedModel):
     config: Qwen3_5VisionConfig
+    input_modalities = ("image", "video")
     _no_split_modules = ["Qwen3_5VisionBlock"]
     _can_record_outputs = {
         "hidden_states": Qwen3_5VisionBlock,
