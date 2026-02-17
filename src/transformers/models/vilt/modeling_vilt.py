@@ -488,7 +488,6 @@ class ViltEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
 
         for layer_module in self.layer:
-
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -514,7 +513,6 @@ class ViltEncoder(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-
 
 
 @auto_docstring
@@ -601,9 +599,7 @@ class ViltModel(ViltPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        output_attentions = (
-            output_attentions if output_attentions is not None else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -675,6 +671,7 @@ class ViltModel(ViltPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
 
 class ViltPooler(nn.Module):
     def __init__(self, config):
@@ -825,7 +822,6 @@ class ViltForMaskedLM(ViltPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
 
 
 class ViltPredictionHeadTransform(nn.Module):
