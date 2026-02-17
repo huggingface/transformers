@@ -18,10 +18,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...utils import auto_docstring, logging
-from ...utils.import_utils import (
-    is_mambapy_available,
-    is_torchdynamo_compiling,
-)
+from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (
     MambaBlock,
@@ -111,7 +108,7 @@ class FalconMambaConfig(MambaConfig):
         use_falcon_mambapy (`bool`, *optional*, defaults to `False`):
             This argument corresponds to `use_mambapy` in MambaConfig.
             Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not available. If `True`, the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
-        use_falcon_associative_scan (`bool`, *optional*, defaults to `True`):
+        use_associative_scan (`bool`, *optional*, defaults to `True`):
             Whether to use PyTorch's `torch._higher_order_ops.associative_scan` for the parallel scan instead of the naive
             sequential implementation. The associative scan is only active during `torch.compile` tracing and
             requires torch >= 2.9.0. Both paths are tested to produce numerically identical results (see
@@ -163,7 +160,7 @@ class FalconMambaConfig(MambaConfig):
         rescale_prenorm_residual=False,
         use_cache=True,
         use_falcon_mambapy=False,
-        use_falcon_associative_scan=True,
+        use_associative_scan=True,
         mixer_rms_eps=1e-6,
         tie_word_embeddings=True,
         **kwargs,
@@ -193,7 +190,7 @@ class FalconMambaConfig(MambaConfig):
             rescale_prenorm_residual=rescale_prenorm_residual,
             use_cache=use_cache,
             use_falcon_mambapy=use_falcon_mambapy,
-            use_associative_scan=use_falcon_associative_scan,
+            use_associative_scan=use_associative_scan,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
