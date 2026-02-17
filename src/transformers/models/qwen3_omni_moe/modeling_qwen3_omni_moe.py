@@ -2931,7 +2931,7 @@ class Qwen3OmniMoeTalkerDecoderLayer(GradientCheckpointingLayer):
 )
 class Qwen3OmniMoeTalkerModel(Qwen3OmniMoePreTrainedModel):
     config: Qwen3OmniMoeTextConfig
-    input_modalities = ("text",)
+    input_modalities = ("audio",)
     _no_split_modules = ["Qwen3OmniMoeTalkerDecoderLayer"]
     config_class = Qwen3OmniMoeTalkerTextConfig
     base_model_prefix = "talker.model"

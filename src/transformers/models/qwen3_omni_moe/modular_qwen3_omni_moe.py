@@ -1934,6 +1934,7 @@ class Qwen3OmniMoeTalkerDecoderLayer(Qwen3MoeDecoderLayer):
 class Qwen3OmniMoeTalkerModel(Qwen3VLMoeTextModel):
     config_class = Qwen3OmniMoeTalkerTextConfig
     base_model_prefix = "talker.model"
+    input_modalities = ("audio",)
     _no_split_modules = ["Qwen3OmniMoeTalkerDecoderLayer"]
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeTalkerDecoderLayer,
