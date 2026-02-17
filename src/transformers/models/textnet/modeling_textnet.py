@@ -316,7 +316,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         outputs: BaseModelOutputWithPoolingAndNoAttention = self.textnet(
             pixel_values,
             output_hidden_states=output_hidden_states,
-            return_dict=True,   # IMPORTANT: must be True
+            return_dict=True,  # IMPORTANT: must be True
             **kwargs,
         )
 
