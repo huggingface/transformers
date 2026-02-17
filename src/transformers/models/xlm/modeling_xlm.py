@@ -625,20 +625,22 @@ class XLMLayer(nn.Module):
             x,
             attn_mask,
             cache=cache,
-            output_attentions=output_attentions,
             cache_position=cache_position,
         )
+
         attn_output = nn.functional.dropout(attn_output, p=self.dropout, training=self.training)
-        tensor = tensor + attn_output
+
+        # Residual connection
+        tensor = x + attn_output
         tensor = self.layer_norm1(tensor)
 
         # FFN
-        tensor = tensor + self.ffn(tensor)
+        ffn_output = self.ffn(tensor)
+        tensor = tensor + ffn_output
         tensor = self.layer_norm2(tensor)
+
         tensor *= mask.unsqueeze(-1).to(tensor.dtype)
 
-        # Return (hidden_state, attn_weights).
-        # The capture_outputs hook records output[1] (attn_weights) as attentions.
         return tensor, attn_weights
 
 
@@ -727,11 +729,10 @@ class XLMForQuestionAnsweringOutput(ModelOutput):
 
 @auto_docstring
 class XLMModel(XLMPreTrainedModel):
-    
     _can_record_outputs = {
         "attentions": XLMLayer,
     }
-    
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -919,7 +920,9 @@ class XLMModel(XLMPreTrainedModel):
         return BaseModelOutput(
             last_hidden_state=tensor,
             hidden_states=hidden_states,
+            attentions=None,
         )
+
 
 class XLMPredLayer(nn.Module):
     """
