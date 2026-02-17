@@ -295,8 +295,6 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         labels: torch.Tensor | None = None,
         **kwargs,
     ) -> SemanticSegmenterOutput:
@@ -330,14 +328,7 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
-        outputs = self.backbone.forward_with_filtered_kwargs(
-            pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
-        )
+        outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
         features = outputs.feature_maps
 
         logits = self.decode_head(features)
