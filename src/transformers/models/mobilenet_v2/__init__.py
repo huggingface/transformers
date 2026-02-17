@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_mobilenet_v2 import *
-    from .feature_extraction_mobilenet_v2 import *
     from .image_processing_mobilenet_v2 import *
+    from .image_processing_pil_mobilenet_v2 import *
     from .modeling_mobilenet_v2 import *
 else:
     import sys

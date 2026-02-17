@@ -157,9 +157,10 @@ class ImageProcessingTestMixin:
 
         test_file_path = pathlib.Path(sys.modules[self.__class__.__module__].__file__).resolve()
         model_name = test_file_path.parent.name
-        print("model_name: ", model_name)
-        image_processing_classes_names = IMAGE_PROCESSOR_MAPPING_NAMES[model_name]
-        print("image_processing_classes_names: ", image_processing_classes_names)
+        try:
+            image_processing_classes_names = IMAGE_PROCESSOR_MAPPING_NAMES[model_name]
+        except KeyError:
+            raise ValueError(f"Override `setUp` in your test class to provide custom setup for {model_name}.")
         self.image_processing_classes = {
             backend_name: get_image_processor_class_from_name(class_name)
             for backend_name, class_name in image_processing_classes_names.items()
@@ -206,8 +207,6 @@ class ImageProcessingTestMixin:
         # Create processors for each backend
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():
-            print(f"backend_name: {backend_name}")
-            print(f"image_processor_dict: {image_processing_class}")
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 

@@ -15,10 +15,8 @@
 
 from typing import Union
 
-import numpy as np
-
-from ...image_processing_backends import PilBackend, TorchVisionBackend
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -29,7 +27,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, logging
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
 
 
 if is_torch_available():
@@ -37,8 +35,6 @@ if is_torch_available():
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
-
-logger = logging.get_logger(__name__)
 
 
 class MobileNetV2ImageProcessorKwargs(ImagesKwargs, total=False):
@@ -52,121 +48,11 @@ class MobileNetV2ImageProcessorKwargs(ImagesKwargs, total=False):
     do_reduce_labels: bool
 
 
-class MobileNetV2TorchVisionBackend(TorchVisionBackend):
-    """TorchVision backend for MobileNetV2 with reduce_label support."""
+@auto_docstring
+class MobileNetV2ImageProcessor(TorchvisionBackend):
+    """Torchvision backend for MobileNetV2 with reduce_label support."""
 
-    def reduce_label(self, labels: list["torch.Tensor"]) -> list["torch.Tensor"]:
-        """Reduce label values by 1, replacing 0 with 255."""
-        for idx in range(len(labels)):
-            label = labels[idx]
-            label = torch.where(label == 0, torch.tensor(255, dtype=label.dtype, device=label.device), label)
-            label = label - 1
-            label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype, device=label.device), label)
-            labels[idx] = label
-        return labels
-
-    def preprocess(
-        self,
-        images: list["torch.Tensor"],
-        do_resize: bool,
-        size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        do_center_crop: bool,
-        crop_size: SizeDict,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        do_pad: bool | None,
-        pad_size: SizeDict | None,
-        disable_grouping: bool | None,
-        return_tensors: str | TensorType | None,
-        do_reduce_labels: bool = False,
-        **kwargs,
-    ) -> BatchFeature:
-        """Custom preprocessing for MobileNetV2."""
-        if do_reduce_labels:
-            images = self.reduce_label(images)
-
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            if do_resize:
-                stacked_images = self.resize(stacked_images, size, resample)
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            if do_center_crop:
-                stacked_images = self.center_crop(stacked_images, crop_size)
-            stacked_images = self._rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            processed_images_grouped[shape] = stacked_images
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
-
-class MobileNetV2PilBackend(PilBackend):
-    """PIL backend for MobileNetV2 with reduce_label support."""
-
-    def reduce_label(self, image: np.ndarray) -> np.ndarray:
-        """Reduce label values by 1, replacing 0 with 255."""
-        # Avoid using underflow conversion
-        image[image == 0] = 255
-        image = image - 1
-        image[image == 254] = 255
-        return image
-
-    def preprocess(
-        self,
-        images: list[np.ndarray],
-        do_resize: bool,
-        size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        do_center_crop: bool,
-        crop_size: SizeDict,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        do_pad: bool | None,
-        pad_size: SizeDict | None,
-        disable_grouping: bool | None,
-        return_tensors: str | TensorType | None,
-        do_reduce_labels: bool = False,
-        **kwargs,
-    ) -> BatchFeature:
-        """Custom preprocessing for MobileNetV2."""
-        processed_images = []
-        for image in images:
-            if do_reduce_labels:
-                image = self.reduce_label(image)
-            if do_resize:
-                image = self.resize(image, size, resample)
-            if do_center_crop:
-                image = self.center_crop(image, crop_size)
-            if do_rescale:
-                image = self.rescale(image, rescale_factor)
-            if do_normalize:
-                image = self.normalize(image, image_mean, image_std)
-            processed_images.append(image)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
-
-@auto_docstring(custom_intro="Constructs a MobileNetV2 image processor.")
-class MobileNetV2ImageProcessor(BaseImageProcessor):
     valid_kwargs = MobileNetV2ImageProcessorKwargs
-
-    _backend_classes = {
-        "torchvision": MobileNetV2TorchVisionBackend,
-        "pil": MobileNetV2PilBackend,
-    }
 
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
@@ -202,6 +88,7 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
+        return_tensors: str | TensorType | None,
         device: Union[str, "torch.device"] | None = None,
         **kwargs,
     ) -> BatchFeature:
@@ -211,7 +98,8 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         )
         images_kwargs = kwargs.copy()
         images_kwargs["do_reduce_labels"] = False
-        batch_feature = self._backend_instance.preprocess(images, **images_kwargs)
+        data = {}
+        data["pixel_values"] = self._preprocess(images, **images_kwargs)
 
         if segmentation_maps is not None:
             processed_segmentation_maps = self._prepare_image_like_inputs(
@@ -231,18 +119,70 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
                 }
             )
 
-            processed_segmentation_maps = self._backend_instance.preprocess(
+            processed_segmentation_maps = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
-            ).pixel_values
+            )
 
             # Squeeze channel dimension and convert to int64
-            if is_torchvision_available() and isinstance(processed_segmentation_maps, torch.Tensor):
-                processed_segmentation_maps = processed_segmentation_maps.squeeze(1).to(torch.int64)
-            else:
-                processed_segmentation_maps = processed_segmentation_maps.squeeze(1).astype(np.int64)
-            batch_feature["labels"] = processed_segmentation_maps
+            processed_segmentation_maps = [
+                processed_segmentation_map.squeeze(0).to(torch.int64)
+                for processed_segmentation_map in processed_segmentation_maps
+            ]
+            data["labels"] = processed_segmentation_maps
 
-        return batch_feature
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def reduce_label(self, labels: list["torch.Tensor"]) -> list["torch.Tensor"]:
+        """Reduce label values by 1, replacing 0 with 255."""
+        for idx in range(len(labels)):
+            label = labels[idx]
+            label = torch.where(label == 0, torch.tensor(255, dtype=label.dtype, device=label.device), label)
+            label = label - 1
+            label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype, device=label.device), label)
+            labels[idx] = label
+        return labels
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        do_reduce_labels: bool = False,
+        **kwargs,
+    ) -> list["torch.Tensor"]:
+        """Custom preprocessing for MobileNetV2."""
+        if do_reduce_labels:
+            images = self.reduce_label(images)
+
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(stacked_images, size, resample)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            stacked_images = self._rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        return processed_images
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """

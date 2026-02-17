@@ -17,8 +17,8 @@ from typing import Union
 
 import numpy as np
 
-from ...image_processing_backends import PilBackend, TorchVisionBackend
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
@@ -28,15 +28,15 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
 
+
+if is_torch_available():
+    import torch
 
 if is_torchvision_available():
-    import torch
     from torchvision.transforms.v2 import functional as tvF
-
-logger = logging.get_logger(__name__)
 
 
 def get_resize_output_image_size(
@@ -46,7 +46,7 @@ def get_resize_output_image_size(
     size_divisor: int = 32,
 ) -> tuple[int, int]:
     """Get output image size after resizing with size_divisor."""
-    if isinstance(input_image, torch.Tensor):
+    if is_torch_available() and isinstance(input_image, torch.Tensor):
         input_height, input_width = input_image.shape[-2:]
     else:
         input_height, input_width = get_image_size(input_image, channel_dim=ChannelDimension.FIRST)
@@ -82,8 +82,28 @@ class BridgeTowerImageProcessorKwargs(ImagesKwargs, total=False):
     size_divisor: int
 
 
-class BridgeTowerTorchVisionBackend(TorchVisionBackend):
-    """TorchVision backend for BridgeTower with custom resize and center_crop."""
+@auto_docstring
+class BridgeTowerImageProcessor(TorchvisionBackend):
+    """Torchvision backend for BridgeTower with custom resize and center_crop."""
+
+    valid_kwargs = BridgeTowerImageProcessorKwargs
+    model_input_names = ["pixel_values", "pixel_mask"]
+
+    resample = PILImageResampling.BICUBIC
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    size = {"shortest_edge": 288}
+    default_to_square = False
+    crop_size = {"shortest_edge": 288}
+    do_resize = True
+    do_center_crop = True
+    do_rescale = True
+    do_normalize = True
+    do_pad = True
+    size_divisor = 32
+
+    def __init__(self, **kwargs: Unpack[BridgeTowerImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
     def resize(
         self,
@@ -108,7 +128,7 @@ class BridgeTowerTorchVisionBackend(TorchVisionBackend):
             **kwargs,
         )
 
-    def preprocess(
+    def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
@@ -164,105 +184,6 @@ class BridgeTowerTorchVisionBackend(TorchVisionBackend):
         data["pixel_values"] = processed_images
 
         return BatchFeature(data=data, tensor_type=return_tensors)
-
-
-class BridgeTowerPilBackend(PilBackend):
-    """PIL backend for BridgeTower with custom resize and center_crop."""
-
-    def resize(
-        self,
-        image: np.ndarray,
-        size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        size_divisor: int = 32,
-        **kwargs,
-    ) -> np.ndarray:
-        """Resize with size_divisor support."""
-
-        if not size.shortest_edge:
-            raise ValueError(f"The `size` dictionary must contain the key `shortest_edge`. Got {size.keys()}")
-        shorter = size.shortest_edge
-        longer = int(1333 / 800 * shorter)
-        output_height, output_width = get_resize_output_image_size(
-            image, shorter=shorter, longer=longer, size_divisor=size_divisor
-        )
-        return super().resize(
-            image,
-            size=SizeDict(height=output_height, width=output_width),
-            resample=resample,
-            **kwargs,
-        )
-
-    def preprocess(
-        self,
-        images: list[np.ndarray],
-        do_resize: bool,
-        size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        do_center_crop: bool,
-        crop_size: SizeDict,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        do_pad: bool | None,
-        pad_size: SizeDict | None,
-        disable_grouping: bool | None,
-        return_tensors: str | TensorType | None,
-        size_divisor: int = 32,
-        **kwargs,
-    ) -> BatchFeature:
-        """Custom preprocessing for BridgeTower."""
-        processed_images = []
-        for image in images:
-            if do_resize:
-                image = self.resize(image, size, resample, size_divisor)
-            if do_center_crop:
-                image = self.center_crop(
-                    image, size=SizeDict(height=crop_size.shortest_edge, width=crop_size.shortest_edge)
-                )
-            if do_rescale:
-                image = self.rescale(image, rescale_factor)
-            if do_normalize:
-                image = self.normalize(image, image_mean, image_std)
-            processed_images.append(image)
-
-        data = {}
-        if do_pad:
-            processed_images, processed_masks = self.pad(
-                processed_images,
-                return_mask=True,
-            )
-            data["pixel_mask"] = processed_masks
-
-        data["pixel_values"] = processed_images
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
-
-
-@auto_docstring(custom_intro="Constructs a BridgeTower image processor.")
-class BridgeTowerImageProcessor(BaseImageProcessor):
-    model_input_names = ["pixel_values", "pixel_mask"]
-    valid_kwargs = BridgeTowerImageProcessorKwargs
-
-    _backend_classes = {
-        "torchvision": BridgeTowerTorchVisionBackend,
-        "pil": BridgeTowerPilBackend,
-    }
-
-    resample = PILImageResampling.BICUBIC
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
-    size = {"shortest_edge": 288}
-    default_to_square = False
-    crop_size = {"shortest_edge": 288}
-    do_resize = True
-    do_center_crop = True
-    do_rescale = True
-    do_normalize = True
-    do_pad = True
-    size_divisor = 32
 
 
 __all__ = ["BridgeTowerImageProcessor"]

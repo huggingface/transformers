@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_perceiver import *
     from .image_processing_perceiver import *
+    from .image_processing_pil_perceiver import *
     from .modeling_perceiver import *
     from .tokenization_perceiver import *
 else:

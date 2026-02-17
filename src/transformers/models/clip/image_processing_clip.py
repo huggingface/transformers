@@ -13,14 +13,14 @@
 # limitations under the License.
 """Image processor class for CLIP."""
 
-from ...image_processing_backends import TorchVisionBackend
+from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import auto_docstring
 
 
 @auto_docstring
-class CLIPImageProcessor(TorchVisionBackend):
+class CLIPImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD

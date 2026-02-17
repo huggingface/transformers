@@ -16,10 +16,8 @@
 from functools import lru_cache
 from typing import Optional
 
-import numpy as np
-
-from ...image_processing_backends import PilBackend, TorchVisionBackend
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -28,14 +26,12 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
+from ...utils import TensorType, auto_docstring, is_torchvision_available
 
 
 if is_torchvision_available():
     import torch
     from torchvision.transforms.v2 import functional as tvF
-
-logger = logging.get_logger(__name__)
 
 
 class EfficientNetImageProcessorKwargs(ImagesKwargs, total=False):
@@ -50,8 +46,27 @@ class EfficientNetImageProcessorKwargs(ImagesKwargs, total=False):
     include_top: bool
 
 
-class EfficientNetTorchVisionBackend(TorchVisionBackend):
-    """TorchVision backend for EfficientNet with rescale offset and include_top."""
+@auto_docstring
+class EfficientNetImageProcessor(TorchvisionBackend):
+    """Torchvision backend for EfficientNet with rescale offset and include_top."""
+
+    valid_kwargs = EfficientNetImageProcessorKwargs
+
+    resample = PILImageResampling.BICUBIC
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    size = {"height": 346, "width": 346}
+    crop_size = {"height": 289, "width": 289}
+    do_resize = True
+    do_center_crop = False
+    do_rescale = True
+    rescale_factor = 1 / 255
+    rescale_offset = False
+    do_normalize = True
+    include_top = True
+
+    def __init__(self, **kwargs: Unpack[EfficientNetImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
     def rescale(
         self,
@@ -109,7 +124,7 @@ class EfficientNetTorchVisionBackend(TorchVisionBackend):
             images = self.normalize(images.to(dtype=torch.float32), image_mean, image_std)
         return images
 
-    def preprocess(
+    def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
@@ -152,84 +167,6 @@ class EfficientNetTorchVisionBackend(TorchVisionBackend):
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
-
-class EfficientNetPilBackend(PilBackend):
-    """PIL backend for EfficientNet with rescale offset and include_top."""
-
-    def rescale(
-        self,
-        image: np.ndarray,
-        scale: float,
-        offset: bool = False,
-    ) -> np.ndarray:
-        """Rescale by scale; if offset=True then image = image * scale - 1."""
-        rescaled = super().rescale(image, scale=scale)
-        if offset:
-            rescaled -= 1
-        return rescaled
-
-    def preprocess(
-        self,
-        images: list[np.ndarray],
-        do_resize: bool,
-        size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        do_center_crop: bool,
-        crop_size: SizeDict,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        do_pad: bool | None,
-        pad_size: SizeDict | None,
-        disable_grouping: bool | None,
-        return_tensors: str | TensorType | None,
-        rescale_offset: bool = False,
-        include_top: bool = True,
-        **kwargs,
-    ) -> BatchFeature:
-        """Custom preprocessing for EfficientNet."""
-        processed_images = []
-        for image in images:
-            if do_resize:
-                image = self.resize(image=image, size=size, resample=resample)
-            if do_center_crop:
-                image = self.center_crop(image, crop_size)
-            if do_rescale:
-                image = self.rescale(image, rescale_factor, offset=rescale_offset)
-            if do_normalize:
-                image = self.normalize(image, image_mean, image_std)
-            if include_top:
-                image = self.normalize(image, 0, image_std)
-            processed_images.append(image)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
-
-@auto_docstring(custom_intro="Constructs an EfficientNet image processor.")
-class EfficientNetImageProcessor(BaseImageProcessor):
-    _backend_classes = {
-        "torchvision": EfficientNetTorchVisionBackend,
-        "pil": EfficientNetPilBackend,
-    }
-
-    resample = PILImageResampling.BICUBIC
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
-    size = {"height": 346, "width": 346}
-    crop_size = {"height": 289, "width": 289}
-    do_resize = True
-    do_center_crop = False
-    do_rescale = True
-    rescale_factor = 1 / 255
-    rescale_offset = False
-    do_normalize = True
-    include_top = True
-    valid_kwargs = EfficientNetImageProcessorKwargs
-
-    def __init__(self, **kwargs: Unpack[EfficientNetImageProcessorKwargs]):
-        super().__init__(**kwargs)
 
 
 __all__ = ["EfficientNetImageProcessor"]

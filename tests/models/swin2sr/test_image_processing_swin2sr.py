@@ -29,7 +29,6 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import Swin2SRImageProcessor
     from transformers.image_transforms import get_image_size
 
 
@@ -96,8 +95,6 @@ class Swin2SRImageProcessingTester:
 @require_torch
 @require_vision
 class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = Swin2SRImageProcessor if is_vision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = Swin2SRImageProcessingTester(self)
@@ -107,8 +104,8 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_rescale"))
             self.assertTrue(hasattr(image_processing, "rescale_factor"))
             self.assertTrue(hasattr(image_processing, "do_pad"))
@@ -124,8 +121,8 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Swin2SRImageProcessor does not support batched input
     def test_call_pil(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
@@ -138,8 +135,8 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Swin2SRImageProcessor does not support batched input
     def test_call_numpy(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
@@ -152,8 +149,8 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Swin2SRImageProcessor does not support batched input
     def test_call_numpy_4_channels(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
             self.image_processor_tester.num_channels = 4
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
@@ -170,8 +167,8 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Swin2SRImageProcessor does not support batched input
     def test_call_pytorch(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
@@ -185,14 +182,14 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_slow_fast_equivalence_batched(self):
         """Swin2SR requires equal-resolution images for batched processing (returns stacked tensor)."""
-        if len(self.image_processors_backends_list) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
         encodings = {}
-        for backend_name in self.image_processors_backends_list:
-            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(image_inputs, return_tensors="pt")
 
         backend_names = list(encodings.keys())

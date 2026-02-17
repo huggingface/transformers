@@ -79,13 +79,13 @@ else:
 logger = logging.get_logger(__name__)
 
 
-class TorchVisionBackend(BaseImageProcessor):
-    """TorchVision backend for GPU-accelerated batched image processing."""
+class TorchvisionBackend(BaseImageProcessor):
+    """Torchvision backend for GPU-accelerated batched image processing."""
 
     @property
     def is_fast(self) -> bool:
         """
-        `bool`: Whether or not this image processor is using the fast (TorchVision) backend.
+        `bool`: Whether or not this image processor is using the fast (Torchvision) backend.
         The `is_fast` property is deprecated and will be removed in v5.3 of Transformers.
         Use the `backend` attribute instead (e.g., `processor.backend == "torchvision"`).
         """
@@ -152,7 +152,7 @@ class TorchVisionBackend(BaseImageProcessor):
         is_nested: bool | None = False,
         **kwargs,
     ) -> Union[tuple["torch.Tensor", "torch.Tensor"], "torch.Tensor"]:
-        """Pad images using TorchVision with batched operations."""
+        """Pad images using Torchvision with batched operations."""
         if pad_size is not None:
             if not (pad_size.height and pad_size.width):
                 raise ValueError(f"Pad size must contain 'height' and 'width' keys only. Got pad_size={pad_size}.")
@@ -199,7 +199,7 @@ class TorchVisionBackend(BaseImageProcessor):
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
-        """Resize an image using TorchVision."""
+        """Resize an image using Torchvision."""
         # Convert PIL resample to torchvision interpolation if needed
         if resample is not None:
             if isinstance(resample, (PILImageResampling, int)):
@@ -261,7 +261,7 @@ class TorchVisionBackend(BaseImageProcessor):
         scale: float,
         **kwargs,
     ) -> "torch.Tensor":
-        """Rescale an image by a scale factor using TorchVision."""
+        """Rescale an image by a scale factor using Torchvision."""
         return image * scale
 
     def normalize(
@@ -271,7 +271,7 @@ class TorchVisionBackend(BaseImageProcessor):
         std: float | Iterable[float],
         **kwargs,
     ) -> "torch.Tensor":
-        """Normalize an image using TorchVision."""
+        """Normalize an image using Torchvision."""
         return tvF.normalize(image, mean, std)
 
     @lru_cache(maxsize=10)
@@ -300,7 +300,7 @@ class TorchVisionBackend(BaseImageProcessor):
         image_mean: float | list[float],
         image_std: float | list[float],
     ) -> "torch.Tensor":
-        """Rescale and normalize images using TorchVision (fused for efficiency)."""
+        """Rescale and normalize images using Torchvision (fused for efficiency)."""
         image_mean, image_std, do_rescale = self._fuse_mean_std_and_rescale_factor(
             do_normalize=do_normalize,
             image_mean=image_mean,
@@ -322,7 +322,7 @@ class TorchVisionBackend(BaseImageProcessor):
         size: SizeDict,
         **kwargs,
     ) -> "torch.Tensor":
-        """Center crop an image using TorchVision."""
+        """Center crop an image using Torchvision."""
         if size.height is None or size.width is None:
             raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
         image_height, image_width = image.shape[-2:]
@@ -363,7 +363,7 @@ class TorchVisionBackend(BaseImageProcessor):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        """Preprocess using TorchVision backend (fast, GPU-accelerated)."""
+        """Preprocess using Torchvision backend (fast, GPU-accelerated)."""
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
@@ -398,7 +398,7 @@ class PilBackend(BaseImageProcessor):
     @property
     def is_fast(self) -> bool:
         """
-        `bool`: Whether or not this image processor is using the fast (TorchVision) backend.
+        `bool`: Whether or not this image processor is using the fast (Torchvision) backend.
         The `is_fast` property is deprecated and will be removed in v5.3 of Transformers.
         Use the `backend` attribute instead (e.g., `processor.backend == "torchvision"`).
         """

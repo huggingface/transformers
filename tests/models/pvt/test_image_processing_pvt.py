@@ -16,13 +16,8 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
-
-if is_vision_available():
-    from transformers import PvtImageProcessor
 
 
 class PvtImageProcessingTester:
@@ -80,8 +75,6 @@ class PvtImageProcessingTester:
 @require_torch
 @require_vision
 class PvtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = PvtImageProcessor if is_vision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = PvtImageProcessingTester(self)
@@ -91,8 +84,8 @@ class PvtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
             self.assertTrue(hasattr(image_processing, "do_normalize"))
@@ -100,11 +93,11 @@ class PvtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processor = self.image_processing_class.from_dict(self.image_processor_dict, backend=backend_name)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-            image_processor = self.image_processing_class.from_dict(
-                self.image_processor_dict, backend=backend_name, size=42
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict, size=42
             )
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})

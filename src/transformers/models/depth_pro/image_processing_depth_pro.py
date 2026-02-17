@@ -15,8 +15,8 @@
 
 from typing import TYPE_CHECKING
 
-from ...image_processing_backends import TorchVisionBackend
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -48,26 +48,27 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-class DepthProTorchVisionBackend(TorchVisionBackend):
-    """TorchVision backend for DepthPro with custom order (rescale+normalize then resize)."""
+@auto_docstring(custom_intro="Constructs a DepthPro image processor.")
+class DepthProImageProcessor(TorchvisionBackend):
+    resample = PILImageResampling.BILINEAR
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    size = {"height": 1536, "width": 1536}
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
 
-    # DepthPro resizes image after rescaling and normalizing,
-    # which makes it different from TorchVisionBackend.preprocess
-    def preprocess(
+    def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        do_center_crop: bool,
-        crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
-        do_pad: bool | None,
-        pad_size: SizeDict | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
@@ -86,23 +87,6 @@ class DepthProTorchVisionBackend(TorchVisionBackend):
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
-
-@auto_docstring(custom_intro="Constructs a DepthPro image processor.")
-class DepthProImageProcessor(BaseImageProcessor):
-    model_input_names = ["pixel_values"]
-
-    _backend_classes = {
-        "torchvision": DepthProTorchVisionBackend,
-    }
-
-    resample = PILImageResampling.BILINEAR
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
-    size = {"height": 1536, "width": 1536}
-    do_resize = True
-    do_rescale = True
-    do_normalize = True
 
     def post_process_depth_estimation(
         self,

@@ -15,7 +15,7 @@
 
 from typing import Union
 
-from ...image_processing_backends import TorchVisionBackend
+from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
@@ -50,7 +50,7 @@ class BeitImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-class BeitImageProcessor(TorchVisionBackend):
+class BeitImageProcessor(TorchvisionBackend):
     """PIL backend for BEiT with reduce_label support."""
 
     valid_kwargs = BeitImageProcessorKwargs
@@ -89,6 +89,7 @@ class BeitImageProcessor(TorchVisionBackend):
         segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
+        return_tensors: str | TensorType | None,
         device: Union[str, "torch.device"] | None = None,
         **kwargs,
     ) -> BatchFeature:
@@ -98,7 +99,8 @@ class BeitImageProcessor(TorchVisionBackend):
         )
         images_kwargs = kwargs.copy()
         images_kwargs["do_reduce_labels"] = False
-        batch_feature = self._preprocess(images, **images_kwargs)
+        data = {}
+        data["pixel_values"] = self._preprocess(images, **images_kwargs)
 
         # Prepare segmentation maps if provided
         if segmentation_maps is not None:
@@ -114,13 +116,16 @@ class BeitImageProcessor(TorchVisionBackend):
             segmentation_maps_kwargs.update({"do_normalize": False, "do_rescale": False})
             processed_segmentation_maps = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
-            ).pixel_values
+            )
 
             # Convert to int64 and squeeze channel dimension
-            processed_segmentation_maps = processed_segmentation_maps.squeeze(1).to(torch.int64)
-            batch_feature["labels"] = processed_segmentation_maps
+            processed_segmentation_maps = [
+                processed_segmentation_map.squeeze(0).to(torch.int64)
+                for processed_segmentation_map in processed_segmentation_maps
+            ]
+            data["labels"] = processed_segmentation_maps
 
-        return batch_feature
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def reduce_label(self, labels: list["torch.Tensor"]) -> list["torch.Tensor"]:
         """Reduce label values by 1, replacing 0 with 255."""
@@ -146,10 +151,9 @@ class BeitImageProcessor(TorchVisionBackend):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         disable_grouping: bool | None,
-        return_tensors: str | TensorType | None,
         do_reduce_labels: bool = False,
         **kwargs,
-    ) -> BatchFeature:
+    ) -> list["torch.Tensor"]:
         """Custom preprocessing for BEiT."""
         if do_reduce_labels:
             images = self.reduce_label(images)
@@ -177,7 +181,7 @@ class BeitImageProcessor(TorchVisionBackend):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return processed_images
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """

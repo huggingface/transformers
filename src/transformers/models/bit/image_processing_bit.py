@@ -13,13 +13,13 @@
 # limitations under the License.
 """Image processor class for BiT."""
 
-from ...image_processing_utils import BaseImageProcessor
+from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from ...utils import auto_docstring
 
 
 @auto_docstring
-class BitImageProcessor(BaseImageProcessor):
+class BitImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD

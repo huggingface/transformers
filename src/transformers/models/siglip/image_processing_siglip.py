@@ -13,20 +13,17 @@
 # limitations under the License.
 """Image processor class for SigLIP."""
 
-from ...image_processing_utils import BaseImageProcessor
+from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     PILImageResampling,
 )
-from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import auto_docstring
 
 
 @auto_docstring(custom_intro="Constructs a SigLIP image processor.")
-class SiglipImageProcessor(BaseImageProcessor):
-    model_input_names = ["pixel_values"]
-
+class SiglipImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -36,9 +33,6 @@ class SiglipImageProcessor(BaseImageProcessor):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-
-    def __init__(self, **kwargs: Unpack[ImagesKwargs]):
-        super().__init__(**kwargs)
 
 
 __all__ = ["SiglipImageProcessor"]

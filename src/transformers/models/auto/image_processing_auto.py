@@ -21,8 +21,6 @@ from typing import TYPE_CHECKING
 # Build the list of all image processors
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...image_processing_backends import TorchVisionBackend
-from ...image_processing_utils import BaseImageProcessor, ImageProcessingMixin
 from ...utils import (
     CONFIG_NAME,
     IMAGE_PROCESSOR_NAME,
@@ -100,7 +98,7 @@ else:
             ),
             ("deit", {"torchvision": "DeiTImageProcessor", "pil": "DeiTImageProcessorPil"}),
             ("depth_anything", {"torchvision": "DPTImageProcessor", "pil": "DPTImageProcessorPil"}),
-            ("depth_pro", {"torchvision": "DepthProImageProcessor", "pil": "DepthProImageProcessorPil"}),
+            ("depth_pro", {"torchvision": "DepthProImageProcessor"}),
             ("detr", {"torchvision": "DetrImageProcessor", "pil": "DetrImageProcessorPil"}),
             ("dinat", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("dinov2", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
@@ -271,8 +269,10 @@ IMAGE_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, IMAGE_PROCESSOR
 
 def get_image_processor_class_from_name(class_name: str):
     if class_name == "BaseImageProcessorFast":
-        # kept for backward compatibility - return TorchVisionBackend
-        return TorchVisionBackend
+        # kept for backward compatibility - return TorchvisionBackend
+        from ...image_processing_backends import TorchvisionBackend
+
+        return TorchvisionBackend
 
     # First, check registered extra content (user-registered classes)
     for extractors in IMAGE_PROCESSOR_MAPPING._extra_content.values():
@@ -568,7 +568,7 @@ class AutoImageProcessor:
             backend (`str`, *optional*, defaults to `"auto"`):
                 The backend to use for image processing. Can be:
                 - `"auto"`: Automatically select the best available backend (torchvision if available, otherwise pil)
-                - `"torchvision"`: Use TorchVision backend (GPU-accelerated, faster)
+                - `"torchvision"`: Use Torchvision backend (GPU-accelerated, faster)
                 - `"pil"`: Use PIL backend (portable, CPU-only)
                 - Any custom backend name registered via `register()` method
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
@@ -629,6 +629,8 @@ class AutoImageProcessor:
             image_processor_filename = IMAGE_PROCESSOR_NAME
 
         # Load the image processor config
+        from ...image_processing_utils import ImageProcessingMixin
+
         try:
             config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
                 pretrained_model_name_or_path, image_processor_filename=image_processor_filename, **kwargs
@@ -740,10 +742,10 @@ class AutoImageProcessor:
             slow_image_processor_class (`type`, *optional*):
                 The PIL backend image processor class (deprecated, use `image_processor_classes={"pil": ...}`).
             fast_image_processor_class (`type`, *optional*):
-                The TorchVision backend image processor class (deprecated, use `image_processor_classes={"torchvision": ...}`).
+                The Torchvision backend image processor class (deprecated, use `image_processor_classes={"torchvision": ...}`).
             image_processor_classes (`dict[str, type]`, *optional*):
                 Dictionary mapping backend names to image processor classes. Allows registering custom backends.
-                Example: `{"pil": MyPilProcessor, "torchvision": MyTorchVisionProcessor, "custom": MyCustomProcessor}`
+                Example: `{"pil": MyPilProcessor, "torchvision": MyTorchvisionProcessor, "custom": MyCustomProcessor}`
             exist_ok (`bool`, *optional*, defaults to `False`):
                 If `True`, allow overwriting existing registrations.
         """
@@ -785,6 +787,8 @@ class AutoImageProcessor:
                     image_processor_classes.setdefault("torchvision", existing_fast)
 
         # Validate that all classes are proper image processor classes
+        from ...image_processing_utils import BaseImageProcessor
+
         for backend_key, processor_class in image_processor_classes.items():
             if processor_class is not None and not issubclass(processor_class, BaseImageProcessor):
                 raise ValueError(

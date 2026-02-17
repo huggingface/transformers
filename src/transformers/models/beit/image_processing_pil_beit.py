@@ -13,8 +13,6 @@
 # limitations under the License.
 """Image processor class for BEiT."""
 
-from typing import Union
-
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -80,16 +78,17 @@ class BeitImageProcessorPil(PilBackend):
         segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Union[str, "torch.device"] | None = None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
         images = self._prepare_image_like_inputs(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format
         )
         images_kwargs = kwargs.copy()
         images_kwargs["do_reduce_labels"] = False
-        batch_feature = self._preprocess(images, **images_kwargs)
+        data = {}
+        data["pixel_values"] = self._preprocess(images, **images_kwargs)
 
         # Prepare segmentation maps if provided
         if segmentation_maps is not None:
@@ -105,13 +104,15 @@ class BeitImageProcessorPil(PilBackend):
             segmentation_maps_kwargs.update({"do_normalize": False, "do_rescale": False})
             processed_segmentation_maps = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
-            ).pixel_values
+            )
 
             # Convert to int64 and squeeze channel dimension
-            processed_segmentation_maps = processed_segmentation_maps.squeeze(1).astype(np.int64)
-            batch_feature["labels"] = processed_segmentation_maps
+            data["labels"] = [
+                processed_segmentation_map.squeeze(0).astype(np.int64)
+                for processed_segmentation_map in processed_segmentation_maps
+            ]
 
-        return batch_feature
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def reduce_label(self, image: np.ndarray) -> np.ndarray:
         """Reduce label values by 1, replacing 0 with 255."""
@@ -134,10 +135,9 @@ class BeitImageProcessorPil(PilBackend):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
-        return_tensors: str | TensorType | None,
         do_reduce_labels: bool = False,
         **kwargs,
-    ) -> BatchFeature:
+    ) -> list[np.ndarray]:
         """Custom preprocessing for BEiT."""
         processed_images = []
         for image in images:
@@ -153,7 +153,7 @@ class BeitImageProcessorPil(PilBackend):
                 image = self.normalize(image, image_mean, image_std)
             processed_images.append(image)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return processed_images
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """

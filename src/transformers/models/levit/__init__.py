@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .configuration_levit import *
     from .feature_extraction_levit import *
     from .image_processing_levit import *
+    from .image_processing_pil_levit import *
     from .modeling_levit import *
 else:
     import sys

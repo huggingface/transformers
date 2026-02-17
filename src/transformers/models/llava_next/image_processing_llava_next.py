@@ -15,7 +15,7 @@
 
 from typing import Union
 
-from ...image_processing_backends import TorchVisionBackend
+from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import (
     BatchFeature,
     get_patch_output_size,
@@ -54,7 +54,7 @@ class LlavaNextImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-class LlavaNextImageProcessor(TorchVisionBackend):
+class LlavaNextImageProcessor(TorchvisionBackend):
     model_input_names = ["pixel_values", "image_sizes"]
     valid_kwargs = LlavaNextImageProcessorKwargs
 

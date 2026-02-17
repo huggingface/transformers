@@ -27,8 +27,6 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 if is_vision_available():
     from PIL import Image
 
-    from transformers import PerceiverImageProcessor
-
 
 if is_torch_available():
     import torch
@@ -105,8 +103,6 @@ class PerceiverImageProcessingTester:
 @require_torch
 @require_vision
 class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = PerceiverImageProcessor if is_vision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = PerceiverImageProcessingTester(self)
@@ -116,8 +112,8 @@ class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_center_crop"))
             self.assertTrue(hasattr(image_processing, "crop_size"))
             self.assertTrue(hasattr(image_processing, "do_resize"))
@@ -130,9 +126,9 @@ class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "image_std"))
 
     def test_call_numpy(self):
-        for backend_name in self.image_processors_backends_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # Initialize image_processing
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for sample_images in image_inputs:
@@ -153,10 +149,10 @@ class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_numpy_4_channels(self):
         # Idefics3 always processes images as RGB, so it always returns images with 3 channels
-        for backend_name in self.image_processors_backends_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # Initialize image_processing
             image_processor_dict = self.image_processor_dict
-            image_processing = self.image_processing_class(backend=backend_name, **image_processor_dict)
+            image_processing = image_processing_class(**image_processor_dict)
             # create random numpy tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
 
@@ -177,9 +173,9 @@ class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pil(self):
-        for backend_name in self.image_processors_backends_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # Initialize image_processing
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
@@ -198,9 +194,9 @@ class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pytorch(self):
-        for backend_name in self.image_processors_backends_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # Initialize image_processing
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 

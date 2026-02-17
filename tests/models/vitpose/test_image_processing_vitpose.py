@@ -31,8 +31,6 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import VitPoseImageProcessor
-
 
 class VitPoseImageProcessingTester:
     def __init__(
@@ -95,8 +93,6 @@ class VitPoseImageProcessingTester:
 @require_torch
 @require_vision
 class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = VitPoseImageProcessor if is_vision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = VitPoseImageProcessingTester(self)
@@ -106,8 +102,8 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_affine_transform"))
             self.assertTrue(hasattr(image_processing, "size"))
             self.assertTrue(hasattr(image_processing, "do_rescale"))
@@ -117,18 +113,18 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "image_std"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processor = self.image_processing_class.from_dict(self.image_processor_dict, backend=backend_name)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 20, "width": 20})
 
-            image_processor = self.image_processing_class.from_dict(
+            image_processor = image_processing_class.from_dict(
                 self.image_processor_dict, backend=backend_name, size={"height": 42, "width": 42}
             )
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_call_pil(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
@@ -149,8 +145,8 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_numpy(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
@@ -171,8 +167,8 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pytorch(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
@@ -194,8 +190,8 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_numpy_4_channels(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
 
             # create random numpy tensors
             self.image_processor_tester.num_channels = 4
@@ -234,7 +230,7 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_torch
     def test_backends_equivalence(self):
         """VitPose requires boxes parameter for preprocessing."""
-        if len(self.image_processors_backends_list) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = Image.open(
@@ -245,8 +241,8 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         boxes = [[[0, 0, 1, 1]]]
 
         encodings = {}
-        for backend_name in self.image_processors_backends_list:
-            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, boxes=boxes, return_tensors="pt")
 
         backend_names = list(encodings.keys())
@@ -258,15 +254,15 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_torch
     def test_slow_fast_equivalence_batched(self):
         """VitPose requires boxes parameter for batched preprocessing."""
-        if len(self.image_processors_backends_list) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         boxes = [[[0, 0, 1, 1]]] * len(dummy_images)
 
         encodings = {}
-        for backend_name in self.image_processors_backends_list:
-            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, boxes=boxes, return_tensors="pt")
 
         backend_names = list(encodings.keys())
@@ -281,12 +277,12 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         """VitPose requires boxes parameter for preprocessing."""
         from transformers.testing_utils import torch_device
 
-        if "torchvision" not in self.image_processors_backends_list:
+        if "torchvision" not in self.image_processing_classes:
             self.skipTest("Skipping compilation test as torchvision backend is not available")
 
         torch.compiler.reset()
         input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)
-        image_processor = self.image_processing_class(backend="torchvision", **self.image_processor_dict)
+        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
         boxes = [[[0, 0, 1, 1]]]
         output_eager = image_processor(input_image, boxes=boxes, device=torch_device, return_tensors="pt")
 

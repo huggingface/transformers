@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_bit import *
     from .image_processing_bit import *
+    from .image_processing_pil_bit import *
     from .modeling_bit import *
 else:
     import sys

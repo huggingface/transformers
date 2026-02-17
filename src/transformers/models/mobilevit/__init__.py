@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_mobilevit import *
     from .image_processing_mobilevit import *
+    from .image_processing_pil_mobilevit import *
     from .modeling_mobilevit import *
 else:
     import sys

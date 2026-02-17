@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_vitpose import *
     from .image_processing_vitpose import *
+    from .image_processing_pil_vitpose import *
     from .modeling_vitpose import *
 else:
     import sys

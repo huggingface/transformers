@@ -19,8 +19,8 @@ from typing import TYPE_CHECKING, Union
 
 import numpy as np
 
-from ...image_processing_backends import PilBackend, TorchVisionBackend
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -162,7 +162,7 @@ def scipy_warp_affine(src, M, size):
 
     # Convert to a 3x3 matrix used by SciPy
     M_scipy = np.vstack([M, [0, 0, 1]])
-    # If you have a matrix for the ‘push’ transformation, use its inverse (numpy.linalg.inv) in this function.
+    # If you have a matrix for the 'push' transformation, use its inverse (numpy.linalg.inv) in this function.
     M_inv = inv(M_scipy)
     M_inv[0, 0], M_inv[0, 1], M_inv[1, 0], M_inv[1, 1], M_inv[0, 2], M_inv[1, 2] = (
         M_inv[1, 1],
@@ -339,8 +339,54 @@ def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
     return bboxes
 
 
-class VitPoseTorchVisionBackend(TorchVisionBackend):
-    """TorchVision backend for VitPose with affine transform."""
+@auto_docstring
+class VitPoseImageProcessor(TorchvisionBackend):
+    """Torchvision backend for VitPose with affine transform."""
+
+    valid_kwargs = VitPoseImageProcessorKwargs
+    model_input_names = ["pixel_values"]
+
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
+    size = {"height": 256, "width": 192}
+    do_rescale = True
+    do_normalize = True
+    do_affine_transform = True
+    normalize_factor = 200.0
+
+    def __init__(self, **kwargs: Unpack[VitPoseImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        boxes: list[list[list[float]]] | np.ndarray,
+        **kwargs: Unpack[VitPoseImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        boxes (`list[list[list[float]]]` or `np.ndarray`):
+            List or array of bounding boxes for each image. Each box should be a list of 4 floats representing the
+            bounding box coordinates in COCO format (top_left_x, top_left_y, width, height).
+        """
+        return super().preprocess(images, boxes, **kwargs)
+
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        boxes: list[list[list[float]]] | np.ndarray | None,
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Union[str, "torch.device"] | None = None,
+        **kwargs,
+    ) -> BatchFeature:
+        """Handle extra inputs beyond images."""
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        # Pass boxes to backend preprocess
+        kwargs["boxes"] = boxes
+        return self._preprocess(images, **kwargs)
 
     def affine_transform(
         self,
@@ -359,7 +405,7 @@ class VitPoseTorchVisionBackend(TorchVisionBackend):
         transformed = torch.from_numpy(transformed_np).permute(2, 0, 1).to(image.device)
         return transformed
 
-    def preprocess(
+    def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
@@ -405,129 +451,6 @@ class VitPoseTorchVisionBackend(TorchVisionBackend):
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
-
-class VitPosePilBackend(PilBackend):
-    """PIL backend for VitPose with affine transform."""
-
-    def affine_transform(
-        self,
-        image: np.ndarray,
-        center: tuple[float],
-        scale: tuple[float],
-        rotation: float,
-        size: SizeDict,
-    ) -> np.ndarray:
-        """Apply an affine transformation to an image."""
-        size_tuple = (size.width, size.height)
-        transformation = get_warp_matrix(rotation, center * 2.0, np.array(size_tuple) - 1.0, scale * 200.0)
-        # scipy_warp_affine expects (H, W, C) - channels_last format
-        if image.ndim == 3 and image.shape[0] <= 4 and image.shape[0] < image.shape[1]:
-            # channels_first (C, H, W) -> channels_last (H, W, C)
-            image = image.transpose(1, 2, 0)
-        transformed = scipy_warp_affine(src=image, M=transformation, size=(size.height, size.width))
-        # Convert back to channels_first (C, H, W) - PilBackend pipeline expects it
-        transformed = transformed.transpose(2, 0, 1)
-        return transformed
-
-    def preprocess(
-        self,
-        images: list[np.ndarray],
-        do_resize: bool,
-        size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        do_center_crop: bool,
-        crop_size: SizeDict,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        do_pad: bool | None,
-        pad_size: SizeDict | None,
-        disable_grouping: bool | None,
-        return_tensors: str | TensorType | None,
-        do_affine_transform: bool = True,
-        normalize_factor: float = 200.0,
-        boxes: list | np.ndarray | None = None,
-        **kwargs,
-    ) -> BatchFeature:
-        """Custom preprocessing for VitPose."""
-        if boxes is not None and do_affine_transform:
-            transformed_images = []
-            for image, image_boxes in zip(images, boxes):
-                for box in image_boxes:
-                    center, scale = box_to_center_and_scale(
-                        box,
-                        image_width=size.width,
-                        image_height=size.height,
-                        normalize_factor=normalize_factor,
-                    )
-                    transformed_image = self.affine_transform(image, center, scale, rotation=0, size=size)
-                    transformed_images.append(transformed_image)
-            images = transformed_images
-
-        processed_images = []
-        for image in images:
-            if do_rescale:
-                image = self.rescale(image, rescale_factor)
-            if do_normalize:
-                image = self.normalize(image, image_mean, image_std)
-            processed_images.append(image)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
-
-@auto_docstring(custom_intro="Constructs a VitPose image processor.")
-class VitPoseImageProcessor(BaseImageProcessor):
-    model_input_names = ["pixel_values"]
-    valid_kwargs = VitPoseImageProcessorKwargs
-
-    _backend_classes = {
-        "torchvision": VitPoseTorchVisionBackend,
-        "pil": VitPosePilBackend,
-    }
-
-    image_mean = IMAGENET_DEFAULT_MEAN
-    image_std = IMAGENET_DEFAULT_STD
-    size = {"height": 256, "width": 192}
-    do_rescale = True
-    do_normalize = True
-    do_affine_transform = True
-    normalize_factor = 200.0
-
-    def __init__(self, **kwargs: Unpack[VitPoseImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        boxes: list[list[list[float]]] | np.ndarray,
-        **kwargs: Unpack[VitPoseImageProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        boxes (`list[list[list[float]]]` or `np.ndarray`):
-            List or array of bounding boxes for each image. Each box should be a list of 4 floats representing the
-            bounding box coordinates in COCO format (top_left_x, top_left_y, width, height).
-        """
-        return super().preprocess(images, boxes, **kwargs)
-
-    def _preprocess_image_like_inputs(
-        self,
-        images: ImageInput,
-        boxes: list[list[list[float]]] | np.ndarray | None,
-        do_convert_rgb: bool,
-        input_data_format: ChannelDimension,
-        device: Union[str, "torch.device"] | None = None,
-        **kwargs,
-    ) -> BatchFeature:
-        """Handle extra inputs beyond images."""
-        images = self._prepare_image_like_inputs(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
-        # Pass boxes to backend preprocess
-        kwargs["boxes"] = boxes
-        return self._backend_instance.preprocess(images, **kwargs)
 
     def keypoints_from_heatmaps(
         self,
@@ -617,4 +540,4 @@ class VitPoseImageProcessor(BaseImageProcessor):
         return results
 
 
-__all__ = ["VitPoseImageProcessor", "VitPoseImageProcessorKwargs"]
+__all__ = ["VitPoseImageProcessor"]

@@ -13,14 +13,13 @@
 # limitations under the License.
 """Image processor class for PVT."""
 
-from ...image_processing_utils import BaseImageProcessor
+from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
-from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import auto_docstring
 
 
 @auto_docstring
-class PvtImageProcessor(BaseImageProcessor):
+class PvtImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -29,9 +28,6 @@ class PvtImageProcessor(BaseImageProcessor):
     do_resize = True
     do_rescale = True
     do_normalize = True
-
-    def __init__(self, **kwargs: Unpack[ImagesKwargs]):
-        super().__init__(**kwargs)
 
 
 __all__ = ["PvtImageProcessor"]

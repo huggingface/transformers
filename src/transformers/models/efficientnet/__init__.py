@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_efficientnet import *
     from .image_processing_efficientnet import *
+    from .image_processing_pil_efficientnet import *
     from .modeling_efficientnet import *
 else:
     import sys

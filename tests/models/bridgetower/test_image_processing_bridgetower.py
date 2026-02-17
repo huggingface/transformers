@@ -17,14 +17,9 @@ import unittest
 
 from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 from ...test_processing_common import url_to_local_path
-
-
-if is_vision_available():
-    from transformers import BridgeTowerImageProcessor
 
 
 class BridgeTowerImageProcessingTester:
@@ -94,8 +89,6 @@ class BridgeTowerImageProcessingTester:
 @require_torch
 @require_vision
 class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = BridgeTowerImageProcessor if is_vision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = BridgeTowerImageProcessingTester(self)
@@ -105,8 +98,8 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
             self.assertTrue(hasattr(image_processing, "do_normalize"))
@@ -117,14 +110,14 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     @require_vision
     @require_torch
     def test_backends_equivalence(self):
-        if len(self.image_processors_backends_list) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
 
         encodings = {}
-        for backend_name in self.image_processors_backends_list:
-            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
         backend_names = list(encodings.keys())
@@ -138,7 +131,7 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     @require_vision
     @require_torch
     def test_slow_fast_equivalence_batched(self):
-        if len(self.image_processors_backends_list) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
@@ -149,8 +142,8 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         encodings = {}
-        for backend_name in self.image_processors_backends_list:
-            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 
         backend_names = list(encodings.keys())

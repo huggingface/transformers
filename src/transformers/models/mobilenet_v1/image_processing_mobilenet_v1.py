@@ -13,20 +13,17 @@
 # limitations under the License.
 """Image processor class for MobileNetV1."""
 
-from ...image_processing_utils import BaseImageProcessor
+from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     PILImageResampling,
 )
-from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import auto_docstring
 
 
 @auto_docstring(custom_intro="Constructs a MobileNetV1 image processor.")
-class MobileNetV1ImageProcessor(BaseImageProcessor):
-    model_input_names = ["pixel_values"]
-
+class MobileNetV1ImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -38,9 +35,6 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = None
-
-    def __init__(self, **kwargs: Unpack[ImagesKwargs]):
-        super().__init__(**kwargs)
 
 
 __all__ = ["MobileNetV1ImageProcessor"]

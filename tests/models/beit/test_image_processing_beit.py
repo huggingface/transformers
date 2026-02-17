@@ -18,16 +18,13 @@ import unittest
 from datasets import load_dataset
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    from transformers import BeitImageProcessor
 
 
 class BeitImageProcessingTester:
@@ -106,8 +103,6 @@ def prepare_semantic_batch_inputs():
 @require_torch
 @require_vision
 class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = BeitImageProcessor if is_vision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = BeitImageProcessingTester(self)
@@ -117,8 +112,8 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
             self.assertTrue(hasattr(image_processing, "do_center_crop"))
@@ -129,23 +124,23 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_reduce_labels"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for backend_name in self.image_processors_backends_list:
-            image_processor = self.image_processing_class.from_dict(self.image_processor_dict, backend=backend_name)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 20, "width": 20})
             self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
             self.assertEqual(image_processor.do_reduce_labels, False)
 
-            image_processor = self.image_processing_class.from_dict(
-                self.image_processor_dict, backend=backend_name, size=42, crop_size=84, do_reduce_labels=True
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict, size=42, crop_size=84, do_reduce_labels=True
             )
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
             self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
             self.assertEqual(image_processor.do_reduce_labels, True)
 
     def test_call_segmentation_maps(self):
-        for backend_name in self.image_processors_backends_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # Initialize image_processing
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
             maps = []
@@ -250,9 +245,9 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
     def test_reduce_labels(self):
-        for backend_name in self.image_processors_backends_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # Initialize image_processing
-            image_processing = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+            image_processing = image_processing_class(**self.image_processor_dict)
 
             # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
             image, map = prepare_semantic_single_inputs()
@@ -271,14 +266,14 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(len(encoding["labels"]) == len(map))
 
     def test_backends_equivalence(self):
-        if len(self.image_processors_backends_list) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image, dummy_map = prepare_semantic_single_inputs()
 
         encodings = {}
-        for backend_name in self.image_processors_backends_list:
-            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
 
         backend_names = list(encodings.keys())
@@ -290,7 +285,7 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self._assert_tensors_equivalence(reference_labels, encodings[backend_name].labels.float())
 
     def test_backends_equivalence_batched(self):
-        if len(self.image_processors_backends_list) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
@@ -301,8 +296,8 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         dummy_images, dummy_maps = prepare_semantic_batch_inputs()
 
         encodings = {}
-        for backend_name in self.image_processors_backends_list:
-            image_processor = self.image_processing_class(backend=backend_name, **self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
 
         backend_names = list(encodings.keys())

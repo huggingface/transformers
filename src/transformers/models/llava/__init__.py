@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_llava import *
     from .image_processing_llava import *
+    from .image_processing_pil_llava import *
     from .modeling_llava import *
     from .processing_llava import *
 else:

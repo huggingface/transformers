@@ -13,27 +13,21 @@
 # limitations under the License.
 """Image processor class for Swin2SR."""
 
-import numpy as np
-
-from ...image_processing_backends import PilBackend, TorchVisionBackend
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_transforms import pad as np_pad
 from ...image_utils import (
-    ChannelDimension,
     ImageInput,
     PILImageResampling,
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
+from ...utils import TensorType, auto_docstring, is_torchvision_available
 
 
 if is_torchvision_available():
     import torch
     from torchvision.transforms.v2 import functional as tvF
-
-logger = logging.get_logger(__name__)
 
 
 class Swin2SRImageProcessorKwargs(ImagesKwargs, total=False):
@@ -45,8 +39,30 @@ class Swin2SRImageProcessorKwargs(ImagesKwargs, total=False):
     size_divisor: int
 
 
-class Swin2SRTorchVisionBackend(TorchVisionBackend):
-    """TorchVision backend for Swin2SR with custom pad."""
+@auto_docstring
+class Swin2SRImageProcessor(TorchvisionBackend):
+    """Torchvision backend for Swin2SR with custom pad."""
+
+    valid_kwargs = Swin2SRImageProcessorKwargs
+
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_pad = True
+    size_divisor = 8
+
+    def __init__(self, **kwargs: Unpack[Swin2SRImageProcessorKwargs]):
+        # Handle legacy pad_size parameter
+        pad_size = kwargs.pop("pad_size", None)
+        kwargs.setdefault("size_divisor", pad_size)
+        super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        **kwargs: Unpack[Swin2SRImageProcessorKwargs],
+    ) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     def pad(
         self,
@@ -61,7 +77,7 @@ class Swin2SRTorchVisionBackend(TorchVisionBackend):
         pad_width = (width // size_divisor + 1) * size_divisor - width
         return tvF.pad(images, (0, 0, pad_width, pad_height), padding_mode="symmetric")
 
-    def preprocess(
+    def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
@@ -94,85 +110,4 @@ class Swin2SRTorchVisionBackend(TorchVisionBackend):
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
-class Swin2SRPilBackend(PilBackend):
-    """PIL backend for Swin2SR with custom pad."""
-
-    def pad(
-        self,
-        image: np.ndarray,
-        pad_size: SizeDict | None,
-        size_divisor: int = 8,
-        **kwargs,
-    ) -> np.ndarray:
-        """Pad image to make height and width divisible by size_divisor using symmetric padding."""
-        height, width = image.shape[-2:]
-        pad_height = (height // size_divisor + 1) * size_divisor - height
-        pad_width = (width // size_divisor + 1) * size_divisor - width
-        return np_pad(
-            image,
-            padding=((0, pad_height), (0, pad_width)),
-            mode="symmetric",
-            data_format=ChannelDimension.FIRST,
-            input_data_format=ChannelDimension.FIRST,
-        )
-
-    def preprocess(
-        self,
-        images: list[np.ndarray],
-        do_resize: bool,
-        size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        do_center_crop: bool,
-        crop_size: SizeDict,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        do_pad: bool | None,
-        pad_size: SizeDict | None,
-        disable_grouping: bool | None,
-        return_tensors: str | TensorType | None,
-        size_divisor: int = 8,
-        **kwargs,
-    ) -> BatchFeature:
-        """Custom preprocessing for Swin2SR."""
-        processed_images = []
-        for image in images:
-            if do_rescale:
-                image = self.rescale(image, rescale_factor)
-            if do_pad:
-                image = self.pad(image, pad_size=pad_size, size_divisor=size_divisor)
-            processed_images.append(image)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
-
-@auto_docstring(custom_intro="Constructs a Swin2SR image processor.")
-class Swin2SRImageProcessor(BaseImageProcessor):
-    valid_kwargs = Swin2SRImageProcessorKwargs
-
-    _backend_classes = {
-        "torchvision": Swin2SRTorchVisionBackend,
-        "pil": Swin2SRPilBackend,
-    }
-
-    do_rescale = True
-    rescale_factor = 1 / 255
-    do_pad = True
-    size_divisor = 8
-
-    def __init__(self, **kwargs: Unpack[Swin2SRImageProcessorKwargs]):
-        # Handle legacy pad_size parameter
-        pad_size = kwargs.pop("pad_size", None)
-        kwargs.setdefault("size_divisor", pad_size)
-        super().__init__(**kwargs)
-
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[Swin2SRImageProcessorKwargs],
-    ) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
-
-__all__ = ["Swin2SRImageProcessor", "Swin2SRImageProcessorKwargs"]
+__all__ = ["Swin2SRImageProcessor"]

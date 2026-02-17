@@ -13,12 +13,9 @@
 # limitations under the License.
 """Image processor class for TextNet."""
 
-import numpy as np
-
-from ...image_processing_backends import PilBackend, TorchVisionBackend
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
 from ...image_transforms import get_resize_output_image_size, group_images_by_shape, reorder_images
-from ...image_transforms import resize as np_resize
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -28,16 +25,11 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, logging
+from ...utils import TensorType, auto_docstring, is_torchvision_available
 
-
-if is_torch_available():
-    import torch
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
-
-logger = logging.get_logger(__name__)
 
 
 class TextNetImageProcessorKwargs(ImagesKwargs, total=False):
@@ -49,8 +41,31 @@ class TextNetImageProcessorKwargs(ImagesKwargs, total=False):
     size_divisor: int
 
 
-class TextNetTorchVisionBackend(TorchVisionBackend):
-    """TorchVision backend for TextNet with size_divisor resize."""
+@auto_docstring
+class TextNetImageProcessor(TorchvisionBackend):
+    """Torchvision backend for TextNet with size_divisor resize."""
+
+    valid_kwargs = TextNetImageProcessorKwargs
+
+    resample = PILImageResampling.BILINEAR
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
+    size = {"shortest_edge": 640}
+    default_to_square = False
+    crop_size = {"height": 224, "width": 224}
+    do_resize = True
+    do_center_crop = False
+    do_rescale = True
+    do_normalize = True
+    do_convert_rgb = True
+    size_divisor = 32
+
+    def __init__(self, **kwargs: Unpack[TextNetImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[TextNetImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     def resize(
         self,
@@ -82,7 +97,7 @@ class TextNetTorchVisionBackend(TorchVisionBackend):
             **kwargs,
         )
 
-    def preprocess(
+    def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
@@ -124,101 +139,4 @@ class TextNetTorchVisionBackend(TorchVisionBackend):
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
-class TextNetPilBackend(PilBackend):
-    """PIL backend for TextNet with size_divisor resize."""
-
-    def resize(
-        self,
-        image: np.ndarray,
-        size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        size_divisor: int = 32,
-        **kwargs,
-    ) -> np.ndarray:
-        """Resize to shortest_edge then round up to be divisible by size_divisor."""
-        if not size.shortest_edge:
-            raise ValueError(f"Size must contain 'shortest_edge' key. Got {size.keys()}")
-        height, width = get_resize_output_image_size(
-            image,
-            size=size.shortest_edge,
-            default_to_square=False,
-            input_data_format=ChannelDimension.FIRST,
-        )
-        # Round up to be divisible by size_divisor
-        if height % size_divisor != 0:
-            height += size_divisor - (height % size_divisor)
-        if width % size_divisor != 0:
-            width += size_divisor - (width % size_divisor)
-        return np_resize(
-            image,
-            size=(height, width),
-            resample=resample,
-            data_format=ChannelDimension.FIRST,
-            input_data_format=ChannelDimension.FIRST,
-        )
-
-    def preprocess(
-        self,
-        images: list[np.ndarray],
-        do_resize: bool,
-        size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        do_center_crop: bool,
-        crop_size: SizeDict,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        do_pad: bool | None,
-        pad_size: SizeDict | None,
-        disable_grouping: bool | None,
-        return_tensors: str | TensorType | None,
-        size_divisor: int = 32,
-        **kwargs,
-    ) -> BatchFeature:
-        """Custom preprocessing for TextNet."""
-        processed_images = []
-        for image in images:
-            if do_resize:
-                image = self.resize(image, size, resample, size_divisor=size_divisor)
-            if do_center_crop:
-                image = self.center_crop(image, crop_size)
-            if do_rescale:
-                image = self.rescale(image, rescale_factor)
-            if do_normalize:
-                image = self.normalize(image, image_mean, image_std)
-            processed_images.append(image)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
-
-@auto_docstring(custom_intro="Constructs a TextNet image processor.")
-class TextNetImageProcessor(BaseImageProcessor):
-    valid_kwargs = TextNetImageProcessorKwargs
-
-    _backend_classes = {
-        "torchvision": TextNetTorchVisionBackend,
-        "pil": TextNetPilBackend,
-    }
-
-    resample = PILImageResampling.BILINEAR
-    image_mean = IMAGENET_DEFAULT_MEAN
-    image_std = IMAGENET_DEFAULT_STD
-    size = {"shortest_edge": 640}
-    default_to_square = False
-    crop_size = {"height": 224, "width": 224}
-    do_resize = True
-    do_center_crop = False
-    do_rescale = True
-    do_normalize = True
-    do_convert_rgb = True
-    size_divisor = 32
-
-    def __init__(self, **kwargs: Unpack[TextNetImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[TextNetImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
-
-__all__ = ["TextNetImageProcessor", "TextNetImageProcessorKwargs"]
+__all__ = ["TextNetImageProcessor"]
