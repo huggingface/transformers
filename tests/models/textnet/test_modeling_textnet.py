@@ -251,9 +251,9 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = outputs.hidden_states
 
-            self.assertEqual(len(hidden_states), self.model_tester.num_stages)
+            self.assertEqual(len(hidden_states), len(config.hidden_sizes))
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
@@ -261,18 +261,17 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        layers_type = ["preactivation", "bottleneck"]
+
         for model_class in self.all_model_classes:
-            for layer_type in layers_type:
-                config.layer_type = layer_type
-                inputs_dict["output_hidden_states"] = True
-                check_hidden_states_output(inputs_dict, config, model_class)
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
 
-                # check that output_hidden_states also work using config
-                del inputs_dict["output_hidden_states"]
-                config.output_hidden_states = True
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
 
-                check_hidden_states_output(inputs_dict, config, model_class)
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+
 
     @unittest.skip(reason="TextNet does not use feedforward chunking")
     def test_feed_forward_chunking(self):
