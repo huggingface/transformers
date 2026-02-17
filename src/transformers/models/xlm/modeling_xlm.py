@@ -38,7 +38,8 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils.output_capturing import capture_outputs
 from .configuration_xlm import XLMConfig
 
 
@@ -513,7 +514,6 @@ class MultiHeadAttention(nn.Module):
         mask,
         kv=None,
         cache=None,
-        output_attentions=False,
         cache_position=None,
     ):
         """
@@ -567,10 +567,9 @@ class MultiHeadAttention(nn.Module):
         context = torch.matmul(weights, v)  # (bs, n_heads, qlen, head_dim)
         context = context.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * self.head_dim)
 
-        outputs = (self.out_lin(context),)
-        if output_attentions:
-            outputs = outputs + (weights,)
-        return outputs
+        # Always return (attn_output, attn_weights) so capture_outputs hooks can
+        # record attention weights unconditionally via _can_record_outputs.
+        return self.out_lin(context), weights
 
 
 class TransformerFFN(nn.Module):
@@ -594,10 +593,54 @@ class TransformerFFN(nn.Module):
         return x
 
 
+class XLMLayer(nn.Module):
+    """
+    A single transformer layer wrapping attention + FFN.
+
+    This class exists so that `@capture_outputs` can hook into it for
+    attention weights via `_can_record_outputs`. The layer returns
+    `(hidden_state, attn_weights)` so the attentions hook records the
+    second element (index 1).
+    """
+
+    def __init__(self, attention, layer_norm1, ffn, layer_norm2, dropout):
+        super().__init__()
+        self.attention = attention
+        self.layer_norm1 = layer_norm1
+        self.ffn = ffn
+        self.layer_norm2 = layer_norm2
+        self.dropout = dropout
+
+    def forward(self, tensor, attn_mask, mask, cache=None, cache_position=None):
+        # self attention — always returns (attn_output, attn_weights)
+        attn_output, attn_weights = self.attention(
+            tensor,
+            attn_mask,
+            cache=cache,
+            cache_position=cache_position,
+        )
+        attn_output = nn.functional.dropout(attn_output, p=self.dropout, training=self.training)
+        tensor = tensor + attn_output
+        tensor = self.layer_norm1(tensor)
+
+        # FFN
+        tensor = tensor + self.ffn(tensor)
+        tensor = self.layer_norm2(tensor)
+        tensor *= mask.unsqueeze(-1).to(tensor.dtype)
+
+        # Return (hidden_state, attn_weights).
+        # The capture_outputs hook records output[1] (attn_weights) as attentions.
+        return tensor, attn_weights
+
+
 @auto_docstring
 class XLMPreTrainedModel(PreTrainedModel):
     config: XLMConfig
     base_model_prefix = "transformer"
+
+    _can_record_outputs = {
+        "attentions": XLMLayer,
+    }
 
     @property
     def dummy_inputs(self):
@@ -675,6 +718,10 @@ class XLMForQuestionAnsweringOutput(ModelOutput):
 
 @auto_docstring
 class XLMModel(XLMPreTrainedModel):
+    _can_record_outputs = {
+        "attentions": XLMLayer,
+    }
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -714,23 +761,19 @@ class XLMModel(XLMPreTrainedModel):
         self.embeddings = nn.Embedding(self.n_words, self.dim, padding_idx=self.pad_index)
         self.layer_norm_emb = nn.LayerNorm(self.dim, eps=config.layer_norm_eps)
 
-        # transformer layers
-        self.attentions = nn.ModuleList()
-        self.layer_norm1 = nn.ModuleList()
-        self.ffns = nn.ModuleList()
-        self.layer_norm2 = nn.ModuleList()
         # if self.is_decoder:
         #     self.layer_norm15 = nn.ModuleList()
         #     self.encoder_attn = nn.ModuleList()
-
+        self.layers = nn.ModuleList()
         for i in range(self.n_layers):
-            self.attentions.append(MultiHeadAttention(self.n_heads, self.dim, config=config, layer_idx=i))
-            self.layer_norm1.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
+            attn = MultiHeadAttention(self.n_heads, self.dim, config=config, layer_idx=i)
+            ln1 = nn.LayerNorm(self.dim, eps=config.layer_norm_eps)
+            ffn = TransformerFFN(self.dim, self.hidden_dim, self.dim, config=config)
+            ln2 = nn.LayerNorm(self.dim, eps=config.layer_norm_eps)
             # if self.is_decoder:
             #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
             #     self.encoder_attn.append(MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout))
-            self.ffns.append(TransformerFFN(self.dim, self.hidden_dim, self.dim, config=config))
-            self.layer_norm2.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
+            self.layers.append(XLMLayer(attn, ln1, ffn, ln2, config.dropout))
 
         # Initialize weights and apply final processing
         self.register_buffer(
@@ -745,6 +788,7 @@ class XLMModel(XLMPreTrainedModel):
         self.embeddings = new_embeddings
 
     @auto_docstring
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -840,40 +884,25 @@ class XLMModel(XLMPreTrainedModel):
         tensor = nn.functional.dropout(tensor, p=self.dropout, training=self.training)
         tensor *= mask.unsqueeze(-1).to(tensor.dtype)
 
-        # transformer layers
+        # transformer layers — attentions are collected automatically via
+        # hooks registered by @capture_outputs on XLMLayer (declared in
+        # _can_record_outputs). hidden_states are collected manually here
+        # because XLM includes the embedding output as the first entry,
+        # which cannot be captured by a submodule hook.
         hidden_states = () if output_hidden_states else None
-        attentions = () if output_attentions else None
-        for i in range(self.n_layers):
+        for layer in self.layers:
             if output_hidden_states:
                 hidden_states = hidden_states + (tensor,)
-
-            # self attention
-            attn_outputs = self.attentions[i](
-                tensor,
-                attn_mask,
-                cache=cache,
-                output_attentions=output_attentions,
-                cache_position=cache_position,
-            )
-            attn = attn_outputs[0]
-            if output_attentions:
-                attentions = attentions + (attn_outputs[1],)
-            attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
-            tensor = tensor + attn
-            tensor = self.layer_norm1[i](tensor)
-
-            # FFN
-            tensor = tensor + self.ffns[i](tensor)
-            tensor = self.layer_norm2[i](tensor)
-            tensor *= mask.unsqueeze(-1).to(tensor.dtype)
+            tensor, _ = layer(tensor, attn_mask, mask, cache=cache, cache_position=cache_position)
 
         # Add last hidden state
         if output_hidden_states:
             hidden_states = hidden_states + (tensor,)
 
-        if not return_dict:
-            return tuple(v for v in [tensor, hidden_states, attentions] if v is not None)
-        return BaseModelOutput(last_hidden_state=tensor, hidden_states=hidden_states, attentions=attentions)
+        return BaseModelOutput(
+            last_hidden_state=tensor,
+            hidden_states=hidden_states,
+        )
 
 
 class XLMPredLayer(nn.Module):
@@ -968,6 +997,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
 
         return model_inputs
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1008,9 +1038,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
+        transformer_outputs: BaseModelOutput = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             langs=langs,
@@ -1021,21 +1049,18 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
 
-        hidden_states = transformer_outputs[0]
+        hidden_states = transformer_outputs.last_hidden_state
         # Only compute necessary logits
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         outputs = self.pred_layer(
             hidden_states[:, slice_indices, :],
             labels,
         )  # (loss, logits) or (logits,) depending on if labels are provided.
-
-        if not return_dict:
-            return outputs + transformer_outputs[1:]
 
         return MaskedLMOutput(
             loss=outputs[0] if labels is not None else None,
@@ -1063,6 +1088,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1101,9 +1127,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
+        transformer_outputs: BaseModelOutput = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             langs=langs,
@@ -1114,10 +1138,10 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        output = transformer_outputs[0]
+        output = transformer_outputs.last_hidden_state
         logits = self.sequence_summary(output)
 
         loss = None
@@ -1143,10 +1167,6 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
 
-        if not return_dict:
-            output = (logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
@@ -1171,6 +1191,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1206,9 +1227,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
+        transformer_outputs: BaseModelOutput = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             langs=langs,
@@ -1219,10 +1238,10 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        sequence_output = transformer_outputs[0]
+        sequence_output = transformer_outputs.last_hidden_state
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
@@ -1246,10 +1265,6 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
 
-        if not return_dict:
-            output = (start_logits, end_logits) + transformer_outputs[1:]
-            return ((total_loss,) + output) if total_loss is not None else output
-
         return QuestionAnsweringModelOutput(
             loss=total_loss,
             start_logits=start_logits,
@@ -1270,6 +1285,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1334,9 +1350,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
         >>> loss = outputs.loss
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
+        transformer_outputs: BaseModelOutput = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             langs=langs,
@@ -1347,10 +1361,10 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        output = transformer_outputs[0]
+        output = transformer_outputs.last_hidden_state
 
         outputs = self.qa_outputs(
             output,
@@ -1359,11 +1373,8 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
             cls_index=cls_index,
             is_impossible=is_impossible,
             p_mask=p_mask,
-            return_dict=return_dict,
+            return_dict=True,
         )
-
-        if not return_dict:
-            return outputs + transformer_outputs[1:]
 
         return XLMForQuestionAnsweringOutput(
             loss=outputs.loss,
@@ -1390,6 +1401,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1426,9 +1438,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.transformer(
+        transformer_outputs: BaseModelOutput = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             langs=langs,
@@ -1439,11 +1449,10 @@ class XLMForTokenClassification(XLMPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        sequence_output = outputs[0]
-
+        sequence_output = transformer_outputs.last_hidden_state
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
 
@@ -1452,15 +1461,11 @@ class XLMForTokenClassification(XLMPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
         return TokenClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
         )
 
 
@@ -1476,6 +1481,7 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1538,7 +1544,6 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -1559,7 +1564,7 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
             )
             lengths = None
 
-        transformer_outputs = self.transformer(
+        transformer_outputs: BaseModelOutput = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
             langs=langs,
@@ -1570,9 +1575,9 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
-        output = transformer_outputs[0]
+        output = transformer_outputs.last_hidden_state
         logits = self.sequence_summary(output)
         logits = self.logits_proj(logits)
         reshaped_logits = logits.view(-1, num_choices)
@@ -1581,10 +1586,6 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
-
-        if not return_dict:
-            output = (reshaped_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
             loss=loss,
