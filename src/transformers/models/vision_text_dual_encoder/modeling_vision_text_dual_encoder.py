@@ -311,8 +311,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                 All remaining positional arguments will be passed to the underlying model's `__init__` method.
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
-                Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
-                `output_attentions=True`).
+                Can be used to update the configuration object (after it being loaded) and initiate the model.
 
                 - To update the text configuration, use the prefix *text_* for each configuration parameter.
                 - To update the vision configuration, use the prefix *vision_* for each configuration parameter.
