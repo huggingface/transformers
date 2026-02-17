@@ -28,7 +28,7 @@ from ...modeling_outputs import (
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging, can_return_tuple
+from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.output_capturing import capture_outputs
 from .configuration_textnet import TextNetConfig
 
