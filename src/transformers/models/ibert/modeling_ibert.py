@@ -25,7 +25,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import gelu
 from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
@@ -34,7 +33,10 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_ibert import IBertConfig
 from .quant_modules import IntGELU, IntLayerNorm, IntSoftmax, QuantAct, QuantEmbedding, QuantLinear
 
@@ -221,7 +223,6 @@ class IBertSelfAttention(nn.Module):
         hidden_states,
         hidden_states_scaling_factor,
         attention_mask=None,
-        output_attentions=False,
     ):
         # Projection
         mixed_query_layer, mixed_query_layer_scaling_factor = self.query(hidden_states, hidden_states_scaling_factor)
@@ -284,14 +285,7 @@ class IBertSelfAttention(nn.Module):
             context_layer, context_layer_scaling_factor
         )
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-        output_scaling_factor = (
-            (context_layer_scaling_factor, attention_probs_scaling_factor)
-            if output_attentions
-            else (context_layer_scaling_factor,)
-        )
-
-        return outputs, output_scaling_factor
+        return (context_layer, context_layer_scaling_factor), attention_probs
 
 
 class IBertSelfOutput(nn.Module):
@@ -353,20 +347,16 @@ class IBertAttention(nn.Module):
         hidden_states,
         hidden_states_scaling_factor,
         attention_mask=None,
-        output_attentions=False,
     ):
-        self_outputs, self_outputs_scaling_factor = self.self(
+        (context_layer, context_layer_scaling_factor), attention_probs = self.self(
             hidden_states,
             hidden_states_scaling_factor,
             attention_mask,
-            output_attentions,
         )
         attention_output, attention_output_scaling_factor = self.output(
-            self_outputs[0], self_outputs_scaling_factor[0], hidden_states, hidden_states_scaling_factor
+            context_layer, context_layer_scaling_factor, hidden_states, hidden_states_scaling_factor
         )
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        outputs_scaling_factor = (attention_output_scaling_factor,) + self_outputs_scaling_factor[1:]
-        return outputs, outputs_scaling_factor
+        return (attention_output, attention_output_scaling_factor), attention_probs
 
 
 class IBertIntermediate(nn.Module):
@@ -469,25 +459,18 @@ class IBertLayer(nn.Module):
         hidden_states,
         hidden_states_scaling_factor,
         attention_mask=None,
-        output_attentions=False,
     ):
-        self_attention_outputs, self_attention_outputs_scaling_factor = self.attention(
+        (attention_output, attention_output_scaling_factor), _ = self.attention(
             hidden_states,
             hidden_states_scaling_factor,
             attention_mask,
-            output_attentions=output_attentions,
         )
-        attention_output = self_attention_outputs[0]
-        attention_output_scaling_factor = self_attention_outputs_scaling_factor[0]
-
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         layer_output, layer_output_scaling_factor = self.feed_forward_chunk(
             attention_output, attention_output_scaling_factor
         )
-        outputs = (layer_output,) + outputs
 
-        return outputs
+        return layer_output
 
     def feed_forward_chunk(self, attention_output, attention_output_scaling_factor):
         attention_output, attention_output_scaling_factor = self.pre_intermediate_act(
@@ -518,49 +501,15 @@ class IBertEncoder(nn.Module):
         hidden_states,
         hidden_states_scaling_factor,
         attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
     ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-        all_cross_attentions = None  # `config.add_cross_attention` is not supported
-
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(
+        for layer_module in self.layer:
+            hidden_states = layer_module(
                 hidden_states,
                 hidden_states_scaling_factor,
                 attention_mask,
-                output_attentions,
             )
 
-            hidden_states = layer_outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
-        return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
-        )
+        return hidden_states
 
 
 class IBertPooler(nn.Module):
@@ -583,6 +532,10 @@ class IBertPooler(nn.Module):
 class IBertPreTrainedModel(PreTrainedModel):
     config: IBertConfig
     base_model_prefix = "ibert"
+    _can_record_outputs = {
+        "hidden_states": IBertLayer,
+        "attentions": IBertAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -656,6 +609,8 @@ class IBertModel(IBertPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -664,17 +619,8 @@ class IBertModel(IBertPreTrainedModel):
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> BaseModelOutputWithPoolingAndCrossAttentions | tuple[torch.FloatTensor]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -703,26 +649,16 @@ class IBertModel(IBertPreTrainedModel):
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
-        encoder_outputs = self.encoder(
+        sequence_output = self.encoder(
             embedding_output,
             embedding_output_scaling_factor,
             attention_mask=extended_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
         )
 
 
@@ -749,6 +685,7 @@ class IBertForMaskedLM(IBertPreTrainedModel):
         self.lm_head.decoder = new_embeddings
         self.lm_head.bias = new_embeddings.bias
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -758,28 +695,21 @@ class IBertForMaskedLM(IBertPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> MaskedLMOutput | tuple[torch.FloatTensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MaskedLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.ibert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
@@ -788,10 +718,6 @@ class IBertForMaskedLM(IBertPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -840,6 +766,7 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -849,28 +776,21 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> SequenceClassifierOutput | tuple[torch.FloatTensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SequenceClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.ibert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
@@ -897,9 +817,6 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
@@ -921,6 +838,7 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -930,11 +848,8 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
         labels: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> MultipleChoiceModelOutput | tuple[torch.FloatTensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -965,7 +880,6 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -984,9 +898,7 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
             token_type_ids=flat_token_type_ids,
             attention_mask=flat_attention_mask,
             inputs_embeds=flat_inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
         pooled_output = outputs[1]
 
@@ -998,10 +910,6 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
-
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
             loss=loss,
@@ -1024,6 +932,7 @@ class IBertForTokenClassification(IBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1033,26 +942,19 @@ class IBertForTokenClassification(IBertPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> TokenClassifierOutput | tuple[torch.FloatTensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.ibert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1064,10 +966,6 @@ class IBertForTokenClassification(IBertPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -1108,6 +1006,7 @@ class IBertForQuestionAnswering(IBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1118,22 +1017,15 @@ class IBertForQuestionAnswering(IBertPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> QuestionAnsweringModelOutput | tuple[torch.FloatTensor]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> QuestionAnsweringModelOutput:
         outputs = self.ibert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1159,10 +1051,6 @@ class IBertForQuestionAnswering(IBertPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,
