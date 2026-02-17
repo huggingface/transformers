@@ -71,8 +71,8 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
         if getattr(config, "freeze_batch_norm_2d", False):
             self.freeze_batch_norm_2d()
 
-        # These are used to control the output of the model when called. If output_hidden_states is True, then
-        # return_layers is modified to include all layers.
+        # These are used to control the output of the model when called. If hidden states are requested (via
+        # config or kwargs), return_layers is modified to include all layers.
         self._return_layers = {
             layer["module"]: str(layer["index"]) for layer in self._backbone.feature_info.get_dicts()
         }
@@ -120,14 +120,12 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = kwargs.pop(
+            "output_hidden_states", self.config.output_hidden_states
         )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = kwargs.pop("output_attentions", self.config.output_attentions)
 
         if output_attentions:
             raise ValueError("Cannot output attentions for timm backbones at the moment")
