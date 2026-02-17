@@ -235,6 +235,8 @@
     title: SpQR
   - local: quantization/vptq
     title: VPTQ
+  - local: quantization/sinq
+    title: SINQ
   - local: quantization/contribute
     title: Contribute
   title: Quantization
@@ -565,6 +567,8 @@
         title: GLM-4.7-Flash
       - local: model_doc/glm_image
         title: GLM-Image
+      - local: model_doc/glm_moe_dsa
+        title: GlmMoeDsa
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -721,6 +725,10 @@
         title: Qwen2MoE
       - local: model_doc/qwen3
         title: Qwen3
+      - local: model_doc/qwen3_5
+        title: Qwen3.5
+      - local: model_doc/qwen3_5_moe
+        title: Qwen3.5 Moe
       - local: model_doc/qwen3_moe
         title: Qwen3MoE
       - local: model_doc/qwen3_next
@@ -1275,6 +1283,8 @@
         title: VisualBERT
       - local: model_doc/voxtral
         title: Voxtral
+      - local: model_doc/voxtral_realtime
+        title: VoxtralRealtime
       - local: model_doc/xclip
         title: X-CLIP
       title: Multimodal models

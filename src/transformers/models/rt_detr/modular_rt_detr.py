@@ -50,7 +50,8 @@ from ...utils import (
     requires_backends,
     torch_int,
 )
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..conditional_detr.modeling_conditional_detr import inverse_sigmoid
 from ..deformable_detr.modeling_deformable_detr import DeformableDetrMultiscaleDeformableAttention
 from ..detr.image_processing_detr_fast import DetrImageProcessorFast
@@ -792,7 +793,7 @@ class RTDetrEncoderLayer(nn.Module):
             hidden_states = self.final_layer_norm(hidden_states)
 
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -1192,7 +1193,8 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
         inputs_embeds=None,
@@ -1260,7 +1262,8 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         inputs_embeds=None,

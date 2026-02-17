@@ -113,6 +113,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PREFIX: '[Workflow Run ⚙️](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n'
           github_repository: ${{ github.repository }}
           pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
         run: |
@@ -121,7 +122,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "repos/${github_repository}/issues/${pr_number}/comments" \
-            -f body="💔 This comment contains \`run-slow\`, but unknown error occurred and [the workflow run]($GITHUB_RUN_URL) aborted!"
+            -f body="$(echo -e "$PREFIX")💔 This comment contains \`run-slow\`, but unknown error occurred and [the workflow run]($GITHUB_RUN_URL) aborted!"
 
   reply_to_comment:
     name: Reply to the comment
@@ -134,6 +135,8 @@ jobs:
       - name: Reply to the comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREFIX: '[Workflow Run ⚙️](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})'
+          INFO: '\n\nThis comment contains `run-slow`, running the specified jobs'
           BODY: '\n\nmodels: ${{ needs.get-tests.outputs.models }}\nquantizations: ${{ needs.get-tests.outputs.quantizations }}'
           github_repository: ${{ github.repository }}
           pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
@@ -143,7 +146,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "repos/${github_repository}/issues/${pr_number}/comments" \
-            -f body="This comment contains \`run-slow\`, running the specified jobs: $(echo -e "$BODY")"
+            -f body="$(echo -e "$PREFIX")$(echo -e "$INFO"): $(echo -e "$BODY")"
 
   create_run:
     name: Create run
@@ -260,7 +263,7 @@ jobs:
                     # Count failures where commit is not None
                     total += sum(
                         1 for failure in failures 
-                        if isinstance(failure, dict) and failure.get('commit') is not None
+                        if isinstance(failure, dict) and failure.get('bad_commit') is not None
                     )
             return total
           
@@ -274,22 +277,26 @@ jobs:
                 model_lines = []
                 for device, failures in model_result.items():
                     
-                    # Filter out None commits and extract just the test names
-                    test_names = [
-                        failure['test'] 
-                        for failure in failures 
-                        if isinstance(failure, dict) and failure.get('commit') is not None
+                    filtered_failures = [
+                        failure for failure in failures 
+                        if isinstance(failure, dict) and failure.get('bad_commit') is not None
                     ]
 
                     # Add tests to model lines
-                    for idx, test_name in enumerate(test_names):
+                    for idx, failure in enumerate(filtered_failures):
                         if idx == 0:
-                            job_link = failures[idx]['job_link']
+                            job_link = failure['job_link']
                             model_lines.append(f"- [{model}]({job_link}):")
-          
-                        model_lines.append(f"    {test_name}")
-
-                # Only add model section if it has tests
+        
+                        test_name = failure['test']
+                        status = failure.get('status', '')
+                        if "DIFFERENT error message" in status:
+                            indicator = "(❌ ⟹ ❌)"
+                        else:
+                            indicator = "(✅ ⟹ ❌)"
+        
+                        model_lines.append(f"    {test_name} {indicator}")
+        
                 if len(model_lines) > 0:
                     lines.extend(model_lines)
                     lines.append("")  # Empty line between models
@@ -363,6 +370,8 @@ jobs:
           main_commit: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_BASE_SHA }}
           model_ci_result: ${{ needs.model-ci.result }}
           quantization_ci_result: ${{ needs.quantization-ci.result }}
+          model_infrastructure_ok: ${{ needs.model-ci.outputs.is_infrastructure_ok }}
+          quant_infrastructure_ok: ${{ needs.quantization-ci.outputs.is_infrastructure_ok }}
         run: |
           # Create commit links (8 chars display, full SHA in URL)
           run_commit_link="[${run_commit:0:8}](https://github.com/${github_repository}/commit/${run_commit})"
@@ -377,13 +386,38 @@ jobs:
             echo '### Commit Info'
             echo "| Context | Commit | Description |"
             echo "|---------|--------|-------------|"
-            echo "| RUN | ${run_commit_link} | merge commit |"
-            echo "| PR | ${pr_commit_link} | branch commit |"
-            echo "| main | ${main_commit_link} | base commit |"
+            echo "| RUN | ${run_commit_link} | workflow commit (merge commit) |"
+            echo "| PR | ${pr_commit_link} | branch commit (from PR) |"
+            echo "| main | ${main_commit_link} | base commit (on \`main\`) |"
             echo ''
+
+            # Check infrastructure health - simple and clean!
+            infrastructure_error=false
+            
+            # Model CI
+            if [[ "$model_ci_result" != "skipped" && "$model_ci_result" != "cancelled" ]]; then
+              if [[ "$model_infrastructure_ok" == "false" ]]; then
+                echo "⚠️ **Model CI failed to report results**"
+                echo ''
+                infrastructure_error=true
+              fi
+            fi
+            
+            # Quantization CI
+            if [[ "$quantization_ci_result" != "skipped" && "$quantization_ci_result" != "cancelled" ]]; then
+              if [[ "$quant_infrastructure_ok" == "false" ]]; then
+                echo "⚠️ **Quantization CI failed to report results**"
+                echo ''
+                infrastructure_error=true
+              fi
+            fi
+            
+            if [[ "$infrastructure_error" == "true" ]]; then
+              echo 'The test failure analysis could not be completed. Please check the [workflow run]('$GITHUB_RUN_URL') for details.'
+              echo "STATUS=error" >> $GITHUB_ENV
       
             # Check if both jobs were skipped or cancelled
-            if [[ "$model_ci_result" == "skipped" || "$model_ci_result" == "cancelled" ]] && \
+            elif [[ "$model_ci_result" == "skipped" || "$model_ci_result" == "cancelled" ]] && \
                [[ "$quantization_ci_result" == "skipped" || "$quantization_ci_result" == "cancelled" ]]; then
               echo '⚠️ No test being reported (jobs are skipped or cancelled)!'
               echo "STATUS=error" >> $GITHUB_ENV

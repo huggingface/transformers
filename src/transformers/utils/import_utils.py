@@ -104,7 +104,7 @@ VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.4.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.9.0"
+KERNELS_MIN_VERSION = "0.10.2"
 
 
 @lru_cache
@@ -210,12 +210,11 @@ def is_torch_mps_available(min_version: str | None = None) -> bool:
     if is_torch_available():
         import torch
 
-        if hasattr(torch.backends, "mps"):
-            backend_available = torch.backends.mps.is_available() and torch.backends.mps.is_built()
-            if min_version is not None:
-                flag = version.parse(get_torch_version()) >= version.parse(min_version)
-                backend_available = backend_available and flag
-            return backend_available
+        backend_available = torch.backends.mps.is_available() and torch.backends.mps.is_built()
+        if min_version is not None:
+            flag = version.parse(get_torch_version()) >= version.parse(min_version)
+            backend_available = backend_available and flag
+        return backend_available
     return False
 
 
@@ -1013,6 +1012,11 @@ def is_compressed_tensors_available() -> bool:
 
 
 @lru_cache
+def is_sinq_available() -> bool:
+    return _is_package_available("sinq")
+
+
+@lru_cache
 def is_gptqmodel_available() -> bool:
     return _is_package_available("gptqmodel")
 
@@ -1263,12 +1267,7 @@ def is_torchdynamo_compiling() -> bool:
 
         return torch.compiler.is_compiling()
     except Exception:
-        try:
-            import torch._dynamo as dynamo
-
-            return dynamo.is_compiling()
-        except Exception:
-            return False
+        return False
 
 
 def is_torchdynamo_exporting() -> bool:

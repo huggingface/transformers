@@ -131,7 +131,7 @@ class Glm4vImageProcessingTester:
 
 @require_torch
 @require_vision
-class ViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class Glm4vImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Glm4vImageProcessor if is_vision_available() else None
     fast_image_processing_class = Glm4vImageProcessorFast if is_torchvision_available() else None
 

@@ -878,7 +878,7 @@ class Cache:
 
     @property
     def is_compileable(self) -> bool:
-        """Return whether the cache is compileable"""
+        """Return whether the cache is compilable"""
         # For DynamicCache dispatching the layers lazily (otherwise, all([]) is True)
         if len(self.layers) == 0:
             return False
@@ -1261,20 +1261,6 @@ class EncoderDecoderCache(Cache):
         """
         self.check_dynamic_cache(self.crop.__name__)
         self.self_attention_cache.crop(maximum_length)
-
-    def batch_split(self, full_batch_size: int, split_size: int) -> "list[EncoderDecoderCache]":
-        """
-        Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
-        `_split_model_inputs()` in `generation.utils`
-        """
-        self.check_dynamic_cache(self.batch_split.__name__)
-        self_attention_cache = self.self_attention_cache.batch_split(full_batch_size, split_size)
-        cross_attention_cache = self.cross_attention_cache.batch_split(full_batch_size, split_size)
-
-        out = []
-        for self_attn, cross_attn in zip(self_attention_cache, cross_attention_cache):
-            out.append(EncoderDecoderCache(self_attn, cross_attn))
-        return out
 
     def batch_repeat_interleave(self, repeats: int):
         """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search (on the Hub)."""

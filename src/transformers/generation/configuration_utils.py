@@ -1485,7 +1485,7 @@ class CompileConfig:
 
     Args:
         fullgraph (`bool`, *optional*, defaults to `False`):
-            If False (default), attempts to discover compileable regions that will be optimized. If True, then require
+            If False (default), attempts to discover compilable regions that will be optimized. If True, then require
             that the entire function be capturable into a single graph. If this is not possible (that is, if there are
             graph breaks), then an error will be raised.
         dynamic (`bool` or `None`, *optional*):

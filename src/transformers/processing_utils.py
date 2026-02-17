@@ -228,15 +228,13 @@ class ImagesKwargs(TypedDict, total=False):
 
     Attributes:
         do_convert_rgb (`bool`):
-            Whether to convert the video to RGB format.
+            Whether to convert the image to RGB format.
         do_resize (`bool`, *optional*):
             Whether to resize the image.
         size (`dict[str, int]`, *optional*):
             Resize the shorter side of the input to `size["shortest_edge"]`.
         crop_size (`dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
-        do_convert_rgb (`bool`):
-            Whether to convert the video to RGB format.
         resample (`PILImageResampling`, *optional*):
             Resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*):
@@ -1504,7 +1502,7 @@ class ProcessorMixin(PushToHubMixin):
 
             if (
                 "tokenizer" in sub_processor_type
-            ):  # This is only necessary for the checkpoing in test_procesing_mistral3.py which has no config.json and
+            ):  # This is only necessary for the checkpoint in test_processing_mistral3.py which has no config.json and
                 # the tokenizer_config.json references LlamaTokenizerFast. TODO: update the config on the hub.
                 if "PixtralProcessor" in cls.__name__:
                     from .tokenization_utils_tokenizers import TokenizersBackend
@@ -1727,6 +1725,23 @@ class ProcessorMixin(PushToHubMixin):
         else:
             is_batched = False
             conversations = [conversation]
+
+        # Normalize OpenAI-style "image_url" content blocks to HuggingFace-style "image" blocks
+        # OpenAI format: {"type": "image_url", "image_url": {"url": "..."}}
+        # HuggingFace format: {"type": "image", "url": "..."}
+        for conversation_idx, conversation in enumerate(conversations):
+            for message in conversation:
+                if not isinstance(message.get("content"), list):
+                    continue
+                new_content = []
+                for content in message["content"]:
+                    if isinstance(content, dict) and content.get("type") == "image_url" and "image_url" in content:
+                        image_url_info = content["image_url"]
+                        url = image_url_info.get("url", "") if isinstance(image_url_info, dict) else image_url_info
+                        new_content.append({"type": "image", "url": url})
+                    else:
+                        new_content.append(content)
+                message["content"] = new_content
 
         tokenize = template_kwargs.pop("tokenize", False)
         return_dict = template_kwargs.pop("return_dict", True)

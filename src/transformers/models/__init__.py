@@ -158,6 +158,7 @@ if TYPE_CHECKING:
     from .glm4v_moe import *
     from .glm46v import *
     from .glm_image import *
+    from .glm_moe_dsa import *
     from .glm_ocr import *
     from .glmasr import *
     from .glpn import *
@@ -321,6 +322,8 @@ if TYPE_CHECKING:
     from .qwen2_moe import *
     from .qwen2_vl import *
     from .qwen3 import *
+    from .qwen3_5 import *
+    from .qwen3_5_moe import *
     from .qwen3_moe import *
     from .qwen3_next import *
     from .qwen3_omni_moe import *
@@ -413,6 +416,7 @@ if TYPE_CHECKING:
     from .vivit import *
     from .vjepa2 import *
     from .voxtral import *
+    from .voxtral_realtime import *
     from .wav2vec2 import *
     from .wav2vec2_bert import *
     from .wav2vec2_conformer import *
