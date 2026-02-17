@@ -1,9 +1,9 @@
-from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..utils.import_utils import is_fouroversix_available
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
-from ..utils.import_utils import is_fouroversix_available
+
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -12,10 +12,9 @@ from ..utils import (
     is_torch_available,
 )
 
+
 if is_torch_available():
     import torch
-
-    from ..core_model_loading import WeightConverter
 
 
 class FourOverSixHfQuantizer(HfQuantizer):
@@ -57,9 +56,7 @@ class FourOverSixHfQuantizer(HfQuantizer):
         module, _ = get_module_from_name(model, param_name)
         return QuantizedModule.is_quantized_module_type(type(module))
 
-    def adjust_max_memory(
-        self, max_memory: dict[str, int | str]
-    ) -> dict[str, int | str]:
+    def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for buffers that are created during quantization
         max_memory = {key: val * 0.9 for key, val in max_memory.items()}
         return max_memory

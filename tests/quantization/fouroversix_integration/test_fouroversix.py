@@ -96,13 +96,9 @@ class FourOverSixBaseTest(unittest.TestCase):
         """
         Simple test that checks if the quantized model is working properly
         """
-        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
-            torch_device
-        )
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
-        output = self.quantized_model.generate(
-            **input_ids, max_new_tokens=self.max_new_tokens
-        )
+        output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
         self.assertEqual(
             self.tokenizer.decode(output[0], skip_special_tokens=True),
             self.EXPECTED_OUTPUT,
@@ -115,13 +111,9 @@ class FourOverSixBaseTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
 
-            model = AutoModelForCausalLM.from_pretrained(
-                tmpdirname, device_map=self.device_map
-            )
+            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
 
-            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
-                torch_device
-            )
+            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
             self.assertEqual(
@@ -145,9 +137,7 @@ class FourOverSixBaseTest(unittest.TestCase):
         )
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
-        output = quantized_model.generate(
-            **input_ids, max_new_tokens=self.max_new_tokens
-        )
+        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
         self.assertEqual(
             self.tokenizer.decode(output[0], skip_special_tokens=True),
             self.EXPECTED_OUTPUT,
@@ -168,9 +158,7 @@ class FourOverSixBaseTest(unittest.TestCase):
             )
             self.assertTrue(set(model.hf_device_map.values()) == {0, 1})
 
-            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
-                torch_device
-            )
+            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
             self.assertEqual(

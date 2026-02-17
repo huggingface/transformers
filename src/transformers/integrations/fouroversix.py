@@ -3,6 +3,7 @@ import torch
 from ..quantizers.quantizers_utils import get_module_from_name
 from ..utils import is_fouroversix_available
 
+
 if is_fouroversix_available():
     from fouroversix import ModelQuantizationConfig
 
@@ -33,8 +34,7 @@ class FourOverSixQuantize(ConversionOps):
         module, _ = get_module_from_name(model, full_layer_name)
         module_name = full_layer_name.rsplit(".", 1)[0]
         high_precision_parameters = {
-            key.replace(f"{module_name}.", "", 1): value[0]
-            for key, value in input_dict.items()
+            key.replace(f"{module_name}.", "", 1): value[0] for key, value in input_dict.items()
         }
 
         quantized_params = module.get_quantized_parameters(**high_precision_parameters)
@@ -49,8 +49,7 @@ class FourOverSixQuantize(ConversionOps):
             missing_keys.discard(key)
 
         return {
-            f"{module_name}.{quantized_key}": quantized_params[quantized_key]
-            for quantized_key in quantized_params
+            f"{module_name}.{quantized_key}": quantized_params[quantized_key] for quantized_key in quantized_params
         }
 
 
