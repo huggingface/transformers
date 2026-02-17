@@ -23,9 +23,12 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_tvp import TvpConfig
 
 
@@ -349,12 +352,7 @@ class TvpAttention(nn.Module):
             .contiguous()
         )
 
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions: bool | None = None,
-    ):
+    def forward(self, hidden_states, attention_mask=None):
         batch_size, sequence_length = hidden_states.shape[:2]
         mixed_query_layer = self.query(hidden_states)
 
@@ -385,9 +383,7 @@ class TvpAttention(nn.Module):
         attn_output = self.dense(attn_output)
         attn_output = self.dropout(attn_output)
         attn_output = self.layer_norm(attn_output + hidden_states)
-        # add attentions if we output them
-        outputs = (attn_output, attention_probs) if output_attentions else (attn_output,)
-        return outputs
+        return (attn_output, attention_probs)
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Tvp
@@ -427,23 +423,12 @@ class TvpEncodeLayer(GradientCheckpointingLayer):
         self.intermediate = TvpIntermediate(config)
         self.output = TvpOutputLayer(config)
 
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions: bool | None = None,
-    ):
-        self_attention_outputs = self.attention(
-            hidden_states,
-            attention_mask,
-            output_attentions=output_attentions,
-        )
+    def forward(self, hidden_states, attention_mask=None):
+        self_attention_outputs = self.attention(hidden_states, attention_mask)
         attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
-        outputs = (layer_output,) + outputs
-        return outputs
+        return layer_output
 
 
 class TvpEncoder(nn.Module):
@@ -453,49 +438,10 @@ class TvpEncoder(nn.Module):
         self.layer = nn.ModuleList([TvpEncodeLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-    ) -> tuple | BaseModelOutput:
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        all_hidden_states = ()
-        all_attentions = ()
-
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
-
-            hidden_states = layer_outputs[0]
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        # Add last layer
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            outputs = (hidden_states,)
-            if output_hidden_states:
-                outputs = outputs + (all_hidden_states,)
-            if output_attentions:
-                outputs = outputs + (all_attentions,)
-            return outputs  # last-layer hidden state, (all hidden states), (all attentions)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states if output_hidden_states else None,
-            attentions=all_attentions if output_attentions else None,
-        )
+    def forward(self, hidden_states, attention_mask=None):
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states, attention_mask)
+        return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Tvp
@@ -520,6 +466,10 @@ class TvpPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("video", "text")
     supports_gradient_checkpointing = True
+    _can_record_outputs = {
+        "hidden_states": TvpEncodeLayer,
+        "attentions": TvpAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -709,18 +659,17 @@ class TvpModel(TvpPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
         ```python
@@ -735,7 +684,6 @@ class TvpModel(TvpPreTrainedModel):
         >>> text_inputs = tokenizer("This is an example input", return_tensors="pt")
         >>> output = model(text_inputs.input_ids, pixel_values, text_inputs.attention_mask)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
         # Add visual prompt, it compensates for the spatiotemporal information loss in 2D visual features.
         pixel_values = self.vision_model(
             self.visual_prompter(pixel_values, interpolate_pad_encoding=interpolate_pos_encoding)
@@ -761,24 +709,13 @@ class TvpModel(TvpPreTrainedModel):
         # (batch_size, sequence_length + visual_sequence_length, hidden_size)
         embedding_output = torch.cat([text_prompt, text_embedding_output, visual_embedding_output], dim=1)
 
-        encoder_outputs = self.encoder(
-            embedding_output,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        last_hidden_state = encoder_outputs.last_hidden_state if return_dict else encoder_outputs[0]
+        last_hidden_state = self.encoder(embedding_output, attention_mask=attention_mask)
         pooled_output = self.pooler(last_hidden_state)
         last_hidden_state = self.dropout(last_hidden_state)
         pooled_output = self.dropout(pooled_output)
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -810,6 +747,7 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
 
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -817,12 +755,9 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         pixel_values: torch.FloatTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         labels: tuple[torch.Tensor] | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        **kwargs,
-    ) -> tuple | TvpVideoGroundingOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> TvpVideoGroundingOutput:
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, 3)`, *optional*):
             The labels contains duration, start time, and end time of the video corresponding to the text.
@@ -840,17 +775,14 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         >>> text_inputs = tokenizer("This is an example input", return_tensors="pt")
         >>> output = model(text_inputs.input_ids, pixel_values, text_inputs.attention_mask)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
         outputs = self.model(
             input_ids,
             pixel_values,
             attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
         )
-        pooler_output = outputs[1]
+        pooler_output = outputs.pooler_output
         logits = self.video_grounding_head(pooler_output)
 
         loss = None
@@ -863,11 +795,6 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
                 + self.config.distance_loss_weight * loss_dict["distance"]
                 + self.config.duration_loss_weight * loss_dict["duration"]
             )
-        if not return_dict:
-            outputs = (logits,) + outputs[2:]
-            if loss is not None:
-                outputs = (loss,) + outputs
-            return outputs
 
         return TvpVideoGroundingOutput(
             loss=loss,
