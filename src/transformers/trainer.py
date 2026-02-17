@@ -1741,18 +1741,15 @@ class Trainer:
                     with sync_context():
                         tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
 
-                    if (
-                        args.logging_nan_inf_filter
-                        and not is_torch_xla_available()
-                        and not torch.isfinite(tr_loss_step)
-                    ):
+                    if tr_loss.device != tr_loss_step.device:
+                        raise ValueError(
+                            f"Calculated loss must be on the original device: {tr_loss.device} but device in use is {tr_loss_step.device}"
+                        )
+                    if args.logging_nan_inf_filter:
                         # if loss is nan or inf simply add the average of previous logged losses
-                        tr_loss = tr_loss + tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+                        tr_loss_avg = tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+                        tr_loss = tr_loss + torch.where(torch.isfinite(tr_loss_step), tr_loss_step, tr_loss_avg)
                     else:
-                        if tr_loss.device != tr_loss_step.device:
-                            raise ValueError(
-                                f"Calculated loss must be on the original device: {tr_loss.device} but device in use is {tr_loss_step.device}"
-                            )
                         tr_loss = tr_loss + tr_loss_step
 
                     self.current_flos += float(self.floating_point_ops(inputs))
