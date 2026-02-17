@@ -249,9 +249,10 @@ class Transpose(ConversionOps):
     Transposes the given tensor along dim0 and dim1.
     """
 
-    def __init__(self, dim0: int = 0, dim1: int = 1):
+    def __init__(self, dim0: int = 0, dim1: int = 1, check_dims: bool = False):
         self.dim0 = dim0
         self.dim1 = dim1
+        self.check_dims = check_dims
 
     @torch.no_grad
     def convert(
@@ -260,7 +261,18 @@ class Transpose(ConversionOps):
         target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
+        # In this case, always transpose
+        if not self.check_dims:
+            return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
+        # In this case, check the shapes before transposing
+        else:
+            # NOTE: this rely on the first param name, so cannot be used for many-to-one operation
+            expected_shape = kwargs["model"].get_parameter(kwargs["full_layer_name"]).shape
+            # The shapes are the same: do NOT transpose
+            if tensor.shape == expected_shape:
+                return {target_pattern: tensor}
+            else:
+                return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
 
     def get_target_pattern(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
@@ -279,7 +291,7 @@ class Transpose(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return Transpose(dim0=self.dim1, dim1=self.dim0)
+        return Transpose(dim0=self.dim1, dim1=self.dim0, check_dims=self.check_dims)
 
 
 class PermuteForRope(ConversionOps):
