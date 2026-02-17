@@ -25,7 +25,10 @@ from ...backbone_utils import BackboneMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_vitdet import VitDetConfig
 
 
@@ -227,7 +230,7 @@ class VitDetAttention(nn.Module):
             self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
             self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
 
-    def forward(self, hidden_state, output_attentions=False):
+    def forward(self, hidden_state):
         batch_size, height, width, _ = hidden_state.shape
         # qkv with shape (3, batch_size, num_heads, height * width, num_channels)
         qkv = self.qkv(hidden_state).reshape(batch_size, height * width, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
@@ -249,15 +252,11 @@ class VitDetAttention(nn.Module):
         hidden_state = hidden_state.reshape(batch_size, height, width, -1)
         hidden_state = self.proj(hidden_state)
 
-        if output_attentions:
-            attention_probs = attention_probs.reshape(
-                batch_size, self.num_heads, attention_probs.shape[-2], attention_probs.shape[-1]
-            )
-            outputs = (hidden_state, attention_probs)
-        else:
-            outputs = (hidden_state,)
+        attention_probs = attention_probs.reshape(
+            batch_size, self.num_heads, attention_probs.shape[-2], attention_probs.shape[-1]
+        )
 
-        return outputs
+        return hidden_state, attention_probs
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -471,11 +470,7 @@ class VitDetLayer(GradientCheckpointingLayer):
                 bottleneck_channels=dim // 2,
             )
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = hidden_states.permute(0, 2, 3, 1)
 
         shortcut = hidden_states
@@ -487,12 +482,7 @@ class VitDetLayer(GradientCheckpointingLayer):
             height, width = hidden_states.shape[1], hidden_states.shape[2]
             hidden_states, pad_height_width = window_partition(hidden_states, self.window_size)
 
-        self_attention_outputs = self.attention(
-            hidden_states,
-            output_attentions=output_attentions,
-        )
-        hidden_states = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        hidden_states = self.attention(hidden_states)[0]
 
         # Reverse window partition
         if self.window_size > 0:
@@ -508,9 +498,7 @@ class VitDetLayer(GradientCheckpointingLayer):
         if self.use_residual_block:
             hidden_states = self.residual(hidden_states)
 
-        outputs = (hidden_states,) + outputs
-
-        return outputs
+        return hidden_states
 
 
 class VitDetEncoder(nn.Module):
@@ -539,33 +527,18 @@ class VitDetEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        output_attentions: bool = False,
         output_hidden_states: bool = False,
-        return_dict: bool = True,
-    ) -> tuple | BaseModelOutput:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
+    ) -> BaseModelOutput:
+        all_hidden_states = [hidden_states] if output_hidden_states else None
 
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states)
+            if all_hidden_states is not None:
+                all_hidden_states.append(hidden_states)
 
-            layer_outputs = layer_module(hidden_states, output_attentions)
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+            hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
         )
 
 
@@ -577,6 +550,7 @@ class VitDetPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = []
+    _can_record_outputs = {"attentions": VitDetAttention}
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
@@ -622,14 +596,14 @@ class VitDetModel(VitDetPreTrainedModel):
         return self.embeddings.projection
 
     @auto_docstring
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
         r"""
         Examples:
 
@@ -649,11 +623,8 @@ class VitDetModel(VitDetPreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 768, 14, 14]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -662,19 +633,12 @@ class VitDetModel(VitDetPreTrainedModel):
 
         encoder_outputs = self.encoder(
             embedding_output,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        sequence_output = encoder_outputs[0]
-
-        if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
 
         return BaseModelOutput(
-            last_hidden_state=sequence_output,
+            last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -698,13 +662,13 @@ class VitDetBackbone(BackboneMixin, VitDetPreTrainedModel):
         return self.embeddings.projection
 
     @auto_docstring
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         pixel_values: torch.Tensor,
         output_hidden_states: bool | None = None,
-        output_attentions: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -725,39 +689,26 @@ class VitDetBackbone(BackboneMixin, VitDetPreTrainedModel):
         >>> list(feature_maps[-1].shape)
         [1, 768, 14, 14]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
         embedding_output = self.embeddings(pixel_values)
 
         outputs = self.encoder(
             embedding_output,
             output_hidden_states=True,
-            output_attentions=output_attentions,
-            return_dict=return_dict,
         )
 
-        hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        hidden_states = outputs.hidden_states
 
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
                 feature_maps += (hidden_state,)
 
-        if not return_dict:
-            if output_hidden_states:
-                output = (feature_maps,) + outputs[1:]
-            else:
-                output = (feature_maps,) + outputs[2:]
-            return output
-
         return BackboneOutput(
             feature_maps=feature_maps,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=outputs.attentions,
         )
 
 
