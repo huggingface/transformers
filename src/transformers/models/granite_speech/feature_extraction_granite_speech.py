@@ -115,7 +115,7 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
             # stacking and skipping by 2
             audio = logmel.reshape(bsz, -1, 2 * logmel.shape[-1])
 
-        return audio
+        return audio.cpu() if device is not None else audio
 
     def _get_num_audio_features(self, audio_lengths: Sequence[int]) -> Sequence[int]:
         """
