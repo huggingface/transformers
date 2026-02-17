@@ -1393,28 +1393,47 @@ class Trainer:
                 self._move_model_to_device(self.model, args.device)
             self.model_wrapped = self.model
 
-        inner_training_loop = find_executable_batch_size(
+        find_executable_batch_size(
             self._inner_training_loop, self._train_batch_size, args.auto_find_batch_size
         )
-        if args.push_to_hub:
-            try:
-                # Disable progress bars when uploading models during checkpoints to avoid polluting stdout
-                hf_hub_utils.disable_progress_bars()
-                return inner_training_loop(
+        try:
+            if args.push_to_hub:
+                try:
+                    hf_hub_utils.disable_progress_bars()
+                    output = self._inner_training_loop(
+                        args=args,
+                        resume_from_checkpoint=resume_from_checkpoint,
+                        trial=trial,
+                        ignore_keys_for_eval=ignore_keys_for_eval,
+                    )
+                finally:
+                    hf_hub_utils.enable_progress_bars()
+            else:
+                output = self._inner_training_loop(
                     args=args,
                     resume_from_checkpoint=resume_from_checkpoint,
                     trial=trial,
                     ignore_keys_for_eval=ignore_keys_for_eval,
                 )
-            finally:
-                hf_hub_utils.enable_progress_bars()
-        else:
-            return inner_training_loop(
-                args=args,
-                resume_from_checkpoint=resume_from_checkpoint,
-                trial=trial,
-                ignore_keys_for_eval=ignore_keys_for_eval,
-            )
+        except Exception as e:
+            print(f"Training failed but we will try evaluation: {e}")
+            from transformers.trainer_utils import TrainOutput
+
+            output = TrainOutput(0, 0, metrics={})
+
+        if args.eval_on_end:
+            print("\n--- [MARIAM DEBUG] EXECUTING FINAL EVALUATION ---")
+            eval_metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+
+            for key, value in eval_metrics.items():
+                if not key.startswith("eval_"):
+                    output.metrics[f"eval_{key}"] = value
+                else:
+                    output.metrics[key] = value
+
+            self.log_metrics("eval", eval_metrics)
+
+        return output
 
     def _inner_training_loop(
         self,
@@ -1906,6 +1925,10 @@ class Trainer:
         # for the embedding layer by removing the forward post hook.
         if self.neftune_noise_alpha is not None:
             deactivate_neftune(self.model, self.neftune_hook_handle, self.accelerator)
+
+        if args.eval_on_end:
+            logger.info("Runnning final evaluation as per eval_on_end=True")
+            self._evaluate(trial, ignore_keys_for_eval)
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 

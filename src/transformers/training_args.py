@@ -1077,6 +1077,12 @@ class TrainingArguments:
             )
         },
     )
+
+    eval_on_end: bool = field(
+        default=False,
+        metadata={"help": "Whether to run an evaluation at the end of training."},
+    )
+
     per_device_eval_batch_size: int = field(
         default=8, metadata={"help": "The batch size per device (GPU/TPU core/CPU) for evaluation."}
     )
@@ -1452,6 +1458,9 @@ class TrainingArguments:
                 "To change this behavior, specify --output_dir when creating TrainingArguments."
             )
 
+        if self.eval_on_end:
+            self.do_eval = True
+
         # Parse JSON string dict args from CLI (e.g., '{"key": "value"}').
         # Only parses strings starting with '{'; other strings are treated as file paths.
         for valid_field in self._VALID_DICT_FIELDS:
@@ -1631,6 +1640,11 @@ class TrainingArguments:
                 raise ValueError(
                     f"`torch_empty_cache_steps` must be an integer bigger than 0, got {self.torch_empty_cache_steps}."
                 )
+
+        if self.eval_on_end and self.eval_strategy == IntervalStrategy.NO:
+            logger.info(
+                "Evaluation strategy is 'no', but 'eval_on_end' is True. A final evaluation will still be performed."
+            )
 
         # logging_steps must be non-zero when logging_strategy="steps"
         if self.logging_strategy == IntervalStrategy.STEPS and self.logging_steps == 0:
@@ -2198,6 +2212,7 @@ class TrainingArguments:
         accumulation_steps: int | None = None,
         delay: float | None = None,
         loss_only: bool = False,
+        eval_on_end: bool = False,
     ):
         """
         A method that regroups all arguments linked to evaluation.
@@ -2239,7 +2254,10 @@ class TrainingArguments:
         self.eval_strategy = IntervalStrategy(strategy)
         if self.eval_strategy == IntervalStrategy.STEPS and steps == 0:
             raise ValueError("Setting `strategy` as 'steps' requires a positive value for `steps`.")
-        self.do_eval = self.eval_strategy != IntervalStrategy.NO
+
+        self.do_eval = (self.eval_strategy != IntervalStrategy.NO) or eval_on_end
+        self.eval_on_end = eval_on_end
+
         self.eval_steps = steps
         self.per_device_eval_batch_size = batch_size
         self.eval_accumulation_steps = accumulation_steps
