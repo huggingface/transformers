@@ -70,57 +70,55 @@ class MultiDatasetLoader:
     strategy. Each yielded batch is a tuple `(domain_key, batch)`.
     """
 
-    def __init__(self, dataloaders: dict[str, "DataLoader"], strategy: str = "proportional"):
+    def __init__(self, dataloaders: dict[str, "DataLoader"], strategy: str = "proportional", seed: int = 0):
         if strategy not in ["proportional", "round_robin"]:
             raise ValueError(f"Unknown sampling strategy: {strategy}. Must be 'proportional' or 'round_robin'.")
         self.dataloaders = dataloaders
         self.strategy = strategy
+        self.seed = seed
         self.num_examples = {
             domain: len(loader.dataset) for domain, loader in self.dataloaders.items() if hasattr(loader, "dataset")
         }
         self.total_examples = sum(self.num_examples.values())
-        if not self.num_examples:
-            self.total_batches = sum(len(loader) for loader in self.dataloaders.values())
-        elif self.strategy == "proportional":
+        self.total_batches = sum(len(loader) for loader in self.dataloaders.values())
+        if self.strategy == "proportional" and self.num_examples:
             self.probabilities = {domain: num / self.total_examples for domain, num in self.num_examples.items()}
-            self.total_batches = sum(len(loader) for loader in self.dataloaders.values())
-        else:  # round_robin
+        elif self.strategy == "round_robin":  # round_robin
             self.domain_order = list(self.dataloaders.keys())
-            self._next_domain_idx = 0
-            self.total_batches = sum(len(loader) for loader in self.dataloaders.values())
-
-        self.iterators = {domain: iter(loader) for domain, loader in self.dataloaders.items()}
 
     def __len__(self):
         return self.total_batches
 
-    def _get_next_batch_proportional(self):
+    def _get_next_batch_proportional(self, rng):
         domains = list(self.probabilities.keys())
         probs = list(self.probabilities.values())
-        chosen_domain = np.random.choice(domains, p=probs)
+        chosen_domain = rng.choice(domains, p=probs)
         try:
             return chosen_domain, next(self.iterators[chosen_domain])
         except StopIteration:
             self.iterators[chosen_domain] = iter(self.dataloaders[chosen_domain])
             return chosen_domain, next(self.iterators[chosen_domain])
 
-    def _get_next_batch_round_robin(self):
+    def _get_next_batch_round_robin(self, depth=0):
+        if depth >= len(self.domain_order):
+            raise StopIteration("All domain dataloaders are exhausted.")
         chosen_domain = self.domain_order[self._next_domain_idx]
         self._next_domain_idx = (self._next_domain_idx + 1) % len(self.domain_order)
         try:
             return chosen_domain, next(self.iterators[chosen_domain])
         except StopIteration:
             self.iterators[chosen_domain] = iter(self.dataloaders[chosen_domain])
-            return self._get_next_batch_round_robin()
+            return self._get_next_batch_round_robin(depth=depth + 1)
 
     def __iter__(self):
         self.iterators = {domain: iter(loader) for domain, loader in self.dataloaders.items()}
+        rng = np.random.RandomState(self.seed)
         if self.strategy == "round_robin":
             self._next_domain_idx = 0
         for _ in range(len(self)):
             try:
                 if self.strategy == "proportional":
-                    yield self._get_next_batch_proportional()
+                    yield self._get_next_batch_proportional(rng)
                 else:  # round_robin
                     yield self._get_next_batch_round_robin()
             except StopIteration:

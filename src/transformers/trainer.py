@@ -338,9 +338,6 @@ class Trainer:
             accept the model outputs and labels and return a loss tensor. Used in conjunction with a dictionary of
             datasets passed to `train_dataset`. If provided, the trainer will use the corresponding loss function
             for each domain during training.
-        loss_aggregation_strategy (`str`, *optional*, defaults to `"sum"`):
-            Strategy for aggregating losses when using `multi_dataset_strategy="aggregate"`. Can be either `"sum"` or
-            `"mean"`. Only used when training with multiple datasets in aggregate mode.
 
     Important attributes:
 
@@ -393,7 +390,6 @@ class Trainer:
         optimizer_cls_and_kwargs: tuple[type[torch.optim.Optimizer], dict[str, Any]] | None = None,
         preprocess_logits_for_metrics: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] | None = None,
         compute_loss_fns: dict[str, Callable] | None = None,
-        loss_aggregation_strategy: str = "sum",
     ):
         # Init flow:
         #   1. Args & seed               – defaults, determinism
@@ -557,7 +553,6 @@ class Trainer:
         # Callables
         self.compute_loss_func = compute_loss_func
         self.compute_loss_fns = compute_loss_fns
-        self.loss_aggregation_strategy = loss_aggregation_strategy
         self.compute_metrics = compute_metrics
         self.preprocess_logits_for_metrics = preprocess_logits_for_metrics
 
@@ -900,7 +895,9 @@ class Trainer:
                 )
                 for domain, ds in self.train_dataset.items()
             }
-            return MultiDatasetLoader(dataloaders, strategy=self.args.dataset_sampling_strategy.value)
+            return MultiDatasetLoader(
+                dataloaders, strategy=self.args.dataset_sampling_strategy.value, seed=self.args.seed
+            )
 
         return self._get_dataloader(
             dataset=self.train_dataset,
@@ -1470,7 +1467,6 @@ class Trainer:
         self.accelerator.free_memory()
         self._train_batch_size = batch_size
         if self.args.auto_find_batch_size:
-            self.state.train_batch_size = self._train_batch_size
             if self.state.train_batch_size != self._train_batch_size:
                 release_memory(self.model_wrapped)
                 self.model_wrapped = self.model
@@ -1482,6 +1478,7 @@ class Trainer:
                     self.args.per_device_train_batch_size = self._train_batch_size // max(1, self.args.n_gpu)
                     propagate_args_to_deepspeed(self.accelerator, self.args, auto_find_batch_size=True)
                     self.args.per_device_train_batch_size = original_bs
+            self.state.train_batch_size = self._train_batch_size
         logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
@@ -1508,11 +1505,18 @@ class Trainer:
             # For aggregation, we follow the principle that all dataloaders have the same length, OR we
             # train up to the shortest one.
             len_dataloader = min(len(dl) for dl in train_dataloader.values())
-            num_update_steps_per_epoch = len_dataloader // args.gradient_accumulation_steps
-            num_examples = self.num_examples(train_dataloader)
+            num_update_steps_per_epoch = max(len_dataloader // args.gradient_accumulation_steps, 1)
+            num_examples = sum(self.num_examples(dl) for dl in train_dataloader.values())
+            epoch_based = args.max_steps < 0
+            if epoch_based:
+                max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
+                num_train_epochs = math.ceil(args.num_train_epochs)
+            else:
+                max_steps = args.max_steps
+                num_train_epochs = max_steps // num_update_steps_per_epoch + int(
+                    max_steps % num_update_steps_per_epoch > 0
+                )
             num_train_samples = num_examples * args.num_train_epochs
-            num_train_epochs = args.num_train_epochs
-            max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
@@ -1739,18 +1743,27 @@ class Trainer:
                         "Gradient accumulation is not supported with the 'aggregate' multi-dataset strategy yet."
                     )
                 for step in range(steps_in_epoch):
+                    grad_norm = None
                     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
+                    self.accelerator.gradient_state._set_sync_gradients(True)
+                    model.train()
+                    if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
+                        self.optimizer.train()
                     domain_losses = []
-                    domain_inputs_for_flos = {}
+                    any_inputs = None
                     for domain, iterator in epoch_iterator.items():
                         try:
                             inputs = next(iterator)
-                            domain_inputs_for_flos.update(inputs)
                         except StopIteration:
                             # Indicates datasets may have different lengths. We stop at the shortest.
                             continue
+                        if any_inputs is None:
+                            any_inputs = inputs
+                        inputs = self._prepare_inputs(inputs)
                         with self.compute_loss_context_manager():
-                            loss = self.compute_loss(model, self._prepare_inputs(inputs), domain=domain)
+                            loss = self.compute_loss(model, inputs, domain=domain)
+                        if self.args.n_gpu > 1:
+                            loss = loss.mean()
                         domain_losses.append(loss)
                     if not domain_losses:
                         break
@@ -1769,12 +1782,60 @@ class Trainer:
                     ):
                         tr_loss += tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
                     else:
+                        if tr_loss.device != tr_loss_step.device:
+                            raise ValueError(
+                                f"Calculated loss must be on the original device: {tr_loss.device} but device in use is {tr_loss_step.device}"
+                            )
                         tr_loss += tr_loss_step
-                    self.current_flos += float(self.floating_point_ops(domain_inputs_for_flos))
-                    self.accelerator.backward(tr_loss_step)
-                    # Optimizer step
-                    self.optimizer.step()
-                    self.lr_scheduler.step()
+                    # TODO: Approximating multi-domain FLOPs by scaling one domain's inputs;
+                    # add per-domain forward-pass tracking later if req (added complexity for a
+                    # training log metric?).
+                    if any_inputs is not None:
+                        self.current_flos += float(self.floating_point_ops(any_inputs)) * len(domain_losses)
+                    backward_kwargs = {}
+                    if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
+                        backward_kwargs["learning_rate"] = self._get_learning_rate()
+                    if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
+                        backward_kwargs["scale_wrt_gas"] = False
+                    self.accelerator.backward(aggregated_loss, **backward_kwargs)
+                    if (
+                        self.args.torch_empty_cache_steps is not None
+                        and self.state.global_step % self.args.torch_empty_cache_steps == 0
+                    ):
+                        clear_device_cache()
+                    if args.max_grad_norm is not None and args.max_grad_norm > 0:
+                        if is_sagemaker_mp_enabled() and args.fp16:
+                            _grad_norm = self.optimizer.clip_master_grads(args.max_grad_norm)
+                        else:
+                            grad_norm_context = contextlib.nullcontext
+                            if self.is_tp_enabled:
+                                from torch.distributed._tensor.experimental import implicit_replication
+
+                                grad_norm_context = implicit_replication
+                            with grad_norm_context():
+                                _grad_norm = self.accelerator.clip_grad_norm_(
+                                    model.parameters(),
+                                    args.max_grad_norm,
+                                )
+                        if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
+                            grad_norm = model.get_global_grad_norm()
+                            if hasattr(grad_norm, "item"):
+                                grad_norm = grad_norm.item()
+                        else:
+                            grad_norm = _grad_norm
+                    self.control = self.callback_handler.on_pre_optimizer_step(args, self.state, self.control)
+                    context = contextlib.nullcontext
+                    if self.is_tp_enabled:
+                        from torch.distributed._tensor.experimental import implicit_replication
+
+                        context = implicit_replication
+                    with context():
+                        self.optimizer.step()
+                    self.control = self.callback_handler.on_optimizer_step(args, self.state, self.control)
+                    learning_rate = self._get_learning_rate()
+                    if not self.accelerator.optimizer_step_was_skipped:
+                        if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                            self.lr_scheduler.step()
                     model.zero_grad()
                     self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1) / steps_in_epoch
@@ -1790,6 +1851,8 @@ class Trainer:
                         learning_rate=learning_rate,
                     )
                     if self.control.should_epoch_stop or self.control.should_training_stop:
+                        break
+                    if args.max_steps > 0 and self.state.global_step >= max_steps:
                         break
                 continue
             for _ in range(total_updates):
@@ -2139,7 +2202,11 @@ class Trainer:
         if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled and self.model.training:
             return deepspeed_sp_compute_loss(self.accelerator, model, inputs, return_outputs, pc)
 
-        if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
+        if (
+            self.label_smoother is not None
+            or self.compute_loss_func is not None
+            or (domain is not None and self.compute_loss_fns is not None)
+        ) and "labels" in inputs:
             labels = inputs.pop("labels")
         else:
             labels = None
@@ -2162,6 +2229,11 @@ class Trainer:
                 labels,
                 num_items_in_batch=num_items_in_batch,
             )
+        # Domain-specific loss functions for multi-dataset training
+        elif domain is not None and self.compute_loss_fns is not None:
+            if domain not in self.compute_loss_fns:
+                raise ValueError(f"No loss function provided for domain: {domain}")
+            loss = self.compute_loss_fns[domain](outputs, labels)
         # Default HF loss handling (label smoothing) if no custom loss function
         elif labels is not None:
             unwrapped_model = self.accelerator.unwrap_model(model)
@@ -2170,14 +2242,7 @@ class Trainer:
                 if _is_peft_model(unwrapped_model)
                 else unwrapped_model._get_name()
             )
-
-            # User-defined compute_loss function for multi-dataset training
-            if domain is not None and self.compute_loss_fns is not None:
-                if domain not in self.compute_loss_fns:
-                    raise ValueError(f"No loss function provided for domain: {domain}")
-                loss_fn = self.compute_loss_fns[domain]
-                loss = loss_fn(outputs, labels)
-            elif model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
+            if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
             else:
                 loss = self.label_smoother(outputs, labels)

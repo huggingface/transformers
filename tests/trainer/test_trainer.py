@@ -3447,17 +3447,19 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_dataset_a = RegressionDataset(a=2, b=3, length=32)
         train_dataset_b = RegressionDataset(a=5, b=1, length=32)
         train_datasets = {"domain_a": train_dataset_a, "domain_b": train_dataset_b}
+        call_counts = {"domain_a": 0, "domain_b": 0}
 
         def loss_fn_a(outputs, labels):
+            call_counts["domain_a"] += 1
             return nn.functional.mse_loss(outputs[0], labels) * 2
 
         def loss_fn_b(outputs, labels):
+            call_counts["domain_b"] += 1
             return nn.functional.mse_loss(outputs[0], labels)
 
         loss_fns = {"domain_a": loss_fn_a, "domain_b": loss_fn_b}
         with tempfile.TemporaryDirectory() as tmp_dir:
             model = RegressionModel()
-            initial_params = {n: p.clone() for n, p in model.named_parameters()}
             args = TrainingArguments(
                 output_dir=tmp_dir, report_to="none", num_train_epochs=1, per_device_train_batch_size=4
             )
@@ -3468,25 +3470,27 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 compute_loss_fns=loss_fns,
             )
             trainer.train()
-            for name, param in model.named_parameters():
-                self.assertFalse(torch.allclose(param, initial_params[name], rtol=1e-10, atol=1e-10))
+            self.assertGreater(call_counts["domain_a"], 0, "Loss function for domain_a was never called")
+            self.assertGreater(call_counts["domain_b"], 0, "Loss function for domain_b was never called")
 
     def test_multi_dataset_aggregation(self):
         train_dataset_a = RegressionDataset(a=2, b=3, length=32)
         train_dataset_b = RegressionDataset(a=5, b=1, length=32)
         train_datasets = {"domain_a": train_dataset_a, "domain_b": train_dataset_b}
 
-        # Make loss for domain A much larger.
+        call_counts = {"domain_a": 0, "domain_b": 0}
+
         def loss_fn_a(outputs, labels):
+            call_counts["domain_a"] += 1
             return nn.functional.mse_loss(outputs[0], labels) * 10
 
         def loss_fn_b(outputs, labels):
+            call_counts["domain_b"] += 1
             return nn.functional.mse_loss(outputs[0], labels)
 
         loss_fns = {"domain_a": loss_fn_a, "domain_b": loss_fn_b}
         with tempfile.TemporaryDirectory() as tmp_dir:
             model = RegressionModel()
-            initial_params = {n: p.clone() for n, p in model.named_parameters()}
             args = TrainingArguments(
                 output_dir=tmp_dir,
                 report_to="none",
@@ -3497,6 +3501,81 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
             trainer = Trainer(model=model, args=args, train_dataset=train_datasets, compute_loss_fns=loss_fns)
             trainer.train()
+            self.assertGreater(call_counts["domain_a"], 0, "Loss function for domain_a was never called")
+            self.assertGreater(call_counts["domain_b"], 0, "Loss function for domain_b was never called")
+            # NOTE: This assert hinges on both datasets having same length + batch size dividing evenly.
+            self.assertEqual(call_counts["domain_a"], call_counts["domain_b"])
+
+    def test_multi_dataset_round_robin(self):
+        train_dataset_a = RegressionDataset(a=2, b=3, length=32)
+        train_dataset_b = RegressionDataset(a=5, b=1, length=32)
+        train_datasets = {"domain_a": train_dataset_a, "domain_b": train_dataset_b}
+        call_order = []
+
+        def loss_fn_a(outputs, labels):
+            call_order.append("domain_a")
+            return nn.functional.mse_loss(outputs[0], labels)
+
+        def loss_fn_b(outputs, labels):
+            call_order.append("domain_b")
+            return nn.functional.mse_loss(outputs[0], labels)
+
+        loss_fns = {"domain_a": loss_fn_a, "domain_b": loss_fn_b}
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                report_to="none",
+                num_train_epochs=1,
+                per_device_train_batch_size=4,
+                dataset_sampling_strategy="round_robin",
+            )
+            trainer = Trainer(model=model, args=args, train_dataset=train_datasets, compute_loss_fns=loss_fns)
+            trainer.train()
+            self.assertGreater(len(call_order), 0, "No loss functions were called")
+            # Verify strict alternation
+            domains = list(train_datasets.keys())
+            for i, domain in enumerate(call_order):
+                expected = domains[i % len(domains)]
+                self.assertEqual(domain, expected, f"Step {i}: expected {expected}, got {domain}")
+
+    def test_multi_dataset_missing_domain_raises(self):
+        train_dataset_a = RegressionDataset(a=2, b=3, length=32)
+        train_dataset_b = RegressionDataset(a=5, b=1, length=32)
+        train_datasets = {"domain_a": train_dataset_a, "domain_b": train_dataset_b}
+
+        def loss_fn_a(outputs, labels):
+            return nn.functional.mse_loss(outputs[0], labels)
+
+        loss_fns = {"domain_a": loss_fn_a}
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                report_to="none",
+                num_train_epochs=1,
+                per_device_train_batch_size=4,
+                dataset_sampling_strategy="round_robin",
+            )
+            trainer = Trainer(model=model, args=args, train_dataset=train_datasets, compute_loss_fns=loss_fns)
+            with self.assertRaises(ValueError) as cm:
+                trainer.train()
+            self.assertIn("No loss function provided for domain", str(cm.exception))
+
+    def test_multi_dataset_no_custom_loss(self):
+        train_dataset_a = RegressionDataset(a=2, b=3, length=32)
+        train_dataset_b = RegressionDataset(a=5, b=1, length=32)
+        train_datasets = {"domain_a": train_dataset_a, "domain_b": train_dataset_b}
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            initial_params = {n: p.clone() for n, p in model.named_parameters()}
+            args = TrainingArguments(
+                output_dir=tmp_dir, report_to="none", num_train_epochs=1, per_device_train_batch_size=4
+            )
+            # No compute_loss_fns; should use model's default loss
+            trainer = Trainer(model=model, args=args, train_dataset=train_datasets)
+            trainer.train()
+            # But the model should still train!
             for name, param in model.named_parameters():
                 self.assertFalse(torch.allclose(param, initial_params[name], rtol=1e-10, atol=1e-10))
 

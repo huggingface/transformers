@@ -150,11 +150,12 @@ class ExamplesTests(TestCasePlus):
         load_datasets = datasets.load_dataset
 
         def mock_load_dataset(*args, **kwargs):
-            if args[1] == "mrpc":
-                mrpc_dataset = load_datasets("nyu-mll/glue", "mrpc", split="train[:1%]")
-                rte_dataset = load_datasets("nyu-mll/glue", "rte", split="train[:1%]")
+            task_name = args[1] if len(args) > 1 else kwargs.get("name")
+            if task_name == "mrpc":
+                mrpc_split_a = load_datasets("nyu-mll/glue", "mrpc", split="train[:1%]")
+                mrpc_split_b = load_datasets("nyu-mll/glue", "mrpc", split="train[1%:2%]")
                 dataset_dict = load_datasets("nyu-mll/glue", "mrpc")
-                dataset_dict["train"] = {"mrpc": mrpc_dataset, "rte": rte_dataset}
+                dataset_dict["train"] = {"mrpc_a": mrpc_split_a, "mrpc_b": mrpc_split_b}
                 return dataset_dict
             return load_datasets(*args, **kwargs)
 
