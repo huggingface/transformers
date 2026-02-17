@@ -4231,7 +4231,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         distributions, tying the weights and logging the loading report."""
         try:
             # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
-            model.mark_tied_weights_as_initialized()
+            model.mark_tied_weights_as_initialized(loading_info)
 
             # Move missing (and potentially mismatched) keys and non-persistent buffers back to their expected device from
             # meta device (because they were not moved when loading the weights as they were not in the loaded state dict)
@@ -4545,22 +4545,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 key for key in loading_info.unexpected_keys if ignore_unexpected_regex.search(key) is None
             }
 
-        # Some remote code models define module-level tying in their __init__. When modules themselves are shared,
-        # weights inside both modules appear in `state_dict` but only one will appear in the safetensors checkpoints
-        # as they are inherently tied as the 2 modules are the same object. In this case, once we load a parameter
-        # inside one of the 2 modules, the other will also automatically be loaded and will have the `_is_hf_initialized`
-        # flag (because we call `setattr` with the loaded param on the module which is the same object), but it will
-        # still appear as a missing key as we never get it out of the set (because it appears in the state_dict twice
-        # with both names).
-        # So we remove it now
-        if self.is_remote_code():
-            loading_info.missing_keys = {
-                key
-                for key in loading_info.missing_keys
-                if not getattr(self.get_parameter_or_buffer(key), "_is_hf_initialized", False)
-            }
-
-    def mark_tied_weights_as_initialized(self):
+    def mark_tied_weights_as_initialized(self, loading_info):
         """Adds the `_is_hf_initialized` flag on parameters that will be tied, in order to avoid initializing them
         later as they will be tied (overwritten) anyway.
         This is very important as most embeddings are tied, and they are huge params (vocabularies are often 256k), so
@@ -4568,6 +4553,23 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         for tied_param in self.all_tied_weights_keys.keys():
             param = self.get_parameter(tied_param)
             param._is_hf_initialized = True
+
+        # Some remote code models define module tying (not parameter tying) in their __init__. When modules themselves are shared,
+        # weights inside both modules appear in the `state_dict` but only one will appear in the safetensors checkpoints
+        # as they are inherently tied because the 2 modules are the same object. In this case, once we load a parameter
+        # inside one of the 2 modules, the other will also automatically be loaded and will have the `_is_hf_initialized`
+        # flag (because we call `setattr` with the loaded param on the module, which is the same object), but its counterpart
+        # will still appear as a missing key as we never get it out of the set (because it appears in the state_dict as well).
+        # So we remove it now - otherwise it's considered missing and will be wrongly reinitialized
+        # Note: this is never an issue in main Transformers, as we never do module-tying, only parameter-tying, and we know
+        # which params are supposed to be tied to which other params
+        if self.is_remote_code():
+            # Remove those that are already initialized, but appear as missing due to module tying
+            loading_info.missing_keys = {
+                key
+                for key in loading_info.missing_keys
+                if not getattr(self.get_parameter_or_buffer(key), "_is_hf_initialized", False)
+            }
 
     def get_parameter_or_buffer(self, target: str):
         """
