@@ -126,8 +126,6 @@ class DPREncoder(DPRPreTrainedModel):
         attention_mask: Tensor | None = None,
         token_type_ids: Tensor | None = None,
         inputs_embeds: Tensor | None = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
         **kwargs,
     ) -> BaseModelOutputWithPooling | tuple[Tensor, ...]:
         outputs = self.bert_model(
@@ -135,8 +133,7 @@ class DPREncoder(DPRPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
         sequence_output = outputs[0]
         pooled_output = sequence_output[:, 0, :]
@@ -175,8 +172,6 @@ class DPRSpanPredictor(DPRPreTrainedModel):
         input_ids: Tensor,
         attention_mask: Tensor,
         inputs_embeds: Tensor | None = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
         **kwargs,
     ) -> DPRReaderOutput | tuple[Tensor, ...]:
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
@@ -186,8 +181,7 @@ class DPRSpanPredictor(DPRPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
         sequence_output = outputs[0]
 
@@ -273,8 +267,6 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         attention_mask: Tensor | None = None,
         token_type_ids: Tensor | None = None,
         inputs_embeds: Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> DPRContextEncoderOutput | tuple[Tensor, ...]:
         r"""
@@ -315,11 +307,6 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         >>> embeddings = model(input_ids).pooler_output
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -345,8 +332,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         return DPRContextEncoderOutput(
@@ -375,8 +361,6 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         attention_mask: Tensor | None = None,
         token_type_ids: Tensor | None = None,
         inputs_embeds: Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> DPRQuestionEncoderOutput | tuple[Tensor, ...]:
         r"""
@@ -417,11 +401,6 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         >>> embeddings = model(input_ids).pooler_output
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -448,8 +427,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         return DPRQuestionEncoderOutput(
@@ -477,8 +455,6 @@ class DPRReader(DPRPretrainedReader):
         input_ids: Tensor | None = None,
         attention_mask: Tensor | None = None,
         inputs_embeds: Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> DPRReaderOutput | tuple[Tensor, ...]:
         r"""
@@ -519,11 +495,6 @@ class DPRReader(DPRPretrainedReader):
         >>> relevance_logits = outputs.relevance_logits
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -543,8 +514,7 @@ class DPRReader(DPRPretrainedReader):
             input_ids,
             attention_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
 
