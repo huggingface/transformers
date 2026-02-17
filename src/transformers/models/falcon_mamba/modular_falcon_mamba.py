@@ -18,7 +18,10 @@ from torch import nn
 
 from ... import initialization as init
 from ...utils import auto_docstring, logging
-from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling
+from ...utils.import_utils import (
+    is_mambapy_available,
+    is_torchdynamo_compiling,
+)
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (
     MambaBlock,

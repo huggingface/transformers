@@ -82,6 +82,11 @@ class FalconMambaConfig(PreTrainedConfig):
         use_falcon_mambapy (`bool`, *optional*, defaults to `False`):
             This argument corresponds to `use_mambapy` in MambaConfig.
             Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not available. If `True`, the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
+        use_falcon_associative_scan (`bool`, *optional*, defaults to `True`):
+            Whether to use PyTorch's `torch._higher_order_ops.associative_scan` for the parallel scan instead of the naive
+            sequential implementation. The associative scan is only active during `torch.compile` tracing and
+            requires torch >= 2.9.0. Both paths are tested to produce numerically identical results (see
+            `test_associative_scan_matches_sequential`). Set to `False` to fall back to the sequential loop.
         mixer_rms_eps (`float`, *optional*, defaults to 1e-06):
             The RMS norm epsilon value that is used in the Mixer RMS norm for B, C and dt states.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
