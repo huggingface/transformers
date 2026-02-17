@@ -407,8 +407,10 @@ class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
         hidden_states,
         attention_mask: torch.Tensor | None = None,
         relative_position_embeddings: torch.Tensor | None = None,
-        output_attentions: bool = False,
+        **kwargs,
     ):
+        output_attentions = kwargs.pop("output_attentions", False)
+
         # 1. Feed-Forward 1 layer
         residual = hidden_states
         hidden_states = self.ffn1_layer_norm(hidden_states)
@@ -439,7 +441,7 @@ class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states * 0.5 + residual
         hidden_states = self.final_layer_norm(hidden_states)
 
-        return hidden_states, attn_weigts
+        return hidden_states
 
 
 class Wav2Vec2ConformerEncoder(nn.Module):
@@ -464,13 +466,8 @@ class Wav2Vec2ConformerEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        **kwargs,
     ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
         if attention_mask is not None:
             # make sure padded tokens output 0
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
@@ -493,9 +490,6 @@ class Wav2Vec2ConformerEncoder(nn.Module):
         synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for i, layer in enumerate(self.layers):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
@@ -506,27 +500,12 @@ class Wav2Vec2ConformerEncoder(nn.Module):
                     hidden_states,
                     attention_mask=attention_mask,
                     relative_position_embeddings=relative_position_embeddings,
-                    output_attentions=output_attentions,
+                    **kwargs,
                 )
-                hidden_states = layer_outputs[0]
-
-            if skip_the_layer:
-                layer_outputs = (None, None)
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                hidden_states = layer_outputs
 
         hidden_states = self.layer_norm(hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class Wav2Vec2ConformerGumbelVectorQuantizer(Wav2Vec2GumbelVectorQuantizer):
@@ -548,6 +527,10 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
     main_input_name = "input_values"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
+    _can_record_outputs = {
+        "hidden_states": Wav2Vec2ConformerEncoderLayer,
+        "attentions": Wav2Vec2ConformerSelfAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
