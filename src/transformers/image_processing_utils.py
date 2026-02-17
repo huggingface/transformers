@@ -57,35 +57,45 @@ INIT_SERVICE_KWARGS = [
 @auto_docstring
 class BaseImageProcessor(ImageProcessingMixin):
     r"""
-    Base class for image processors with a pluggable backend architecture.
+    Base class for image processors with an inheritance-based backend architecture.
 
-    This class orchestrates preprocessing by delegating to backends. It handles kwargs validation, input preparation,
-    and dispatches to the selected backend's `preprocess` method. The backends implement the actual
-    operations (resize, crop, rescale, normalize etc.). The architecture supports any backend (built-in, future, or
-    user-defined); new backends can be added via subclassing or at runtime with `register_backend()`. Built-in
-    backends include PIL (portable, CPU) and TorchVision (GPU-accelerated, faster).
+    This class defines the preprocessing pipeline: kwargs validation, input preparation, and dispatching to the
+    backend's `_preprocess` method. Backend subclasses (`TorchVisionBackend`, `PilBackend`) inherit from this class
+    and implement the actual image operations (resize, crop, rescale, normalize, etc.). Model-specific image
+    processors then inherit from the appropriate backend class.
 
-    Backend Selection
-    -----------------
+    Architecture Overview
+    ---------------------
 
-    The processor automatically selects the best available backend, or accepts any registered backend:
-    - `backend="auto"` (default): Uses torchvision if available, otherwise pil (or first available)
-    - `backend="torchvision"`: TorchVision backend (GPU-accelerated, faster)
-    - `backend="pil"`: PIL backend (NumPy/PIL, more portable)
-    - `backend="<name>"`: Any backend registered via `register_backend()` (e.g. custom MLX, JAX backends)
+    The class hierarchy is:
 
-        processor = MyImageProcessor(backend="torchvision")  # Fast, GPU support
-        processor = MyImageProcessor(backend="pil")         # Portable, CPU-only
-        MyImageProcessor.register_backend("mlx", MlxBackend)
-        processor = MyImageProcessor(backend="mlx")
+        BaseImageProcessor (this class)
+        ├── TorchVisionBackend    (GPU-accelerated, torch.Tensor)
+        │   └── ModelImageProcessor (e.g. LlavaNextImageProcessor)
+        └── PilBackend            (portable CPU, np.ndarray)
+            └── ModelImageProcessorPil (e.g. CLIPImageProcessorPil)
+
+    The preprocessing flow is:
+
+        __call__() → preprocess() → _preprocess_image_like_inputs() → _prepare_image_like_inputs()
+                                                                       (calls process_image per image)
+                                                                     → _preprocess()
+                                                                       (batch operations: resize, crop, etc.)
+
+    - `process_image`: Implemented by backends. Converts a single raw input (PIL, NumPy, or Tensor) to the
+      backend's working format (torch.Tensor or np.ndarray), handles RGB conversion and channel reordering.
+    - `_preprocess`: Implemented by backends. Performs the actual batch processing (resize, center crop, rescale,
+      normalize, pad) and returns a `BatchFeature`.
 
     Basic Implementation
     --------------------
 
-    For processors that only need standard operations (resize, center crop, rescale, normalize), define class
-    attributes:
+    For processors that only need standard operations (resize, center crop, rescale, normalize), inherit from
+    a backend and define class attributes:
 
-        class MyImageProcessor(BaseImageProcessor):
+        from transformers.image_processing_backends import PilBackend
+
+        class MyImageProcessor(PilBackend):
             resample = PILImageResampling.BILINEAR
             image_mean = IMAGENET_DEFAULT_MEAN
             image_std = IMAGENET_DEFAULT_STD
@@ -94,74 +104,59 @@ class BaseImageProcessor(ImageProcessingMixin):
             do_rescale = True
             do_normalize = True
 
+    The backend's `_preprocess` method handles the standard pipeline automatically.
+
     Custom Processing
     -----------------
 
-    Override `_preprocess_image_like_inputs` to call a custom backend, or override the backend's `preprocess` (most
-    common): Custom logic usually lives in a backend subclass. The backend implements resize, rescale, normalize,
-    etc. Override `_backend_classes` to use your custom backend, which overrides `preprocess` and calls
-    `self.resize`, `self.center_crop`, etc. (on the backend instance). Alternatively, override
-    `_preprocess_image_like_inputs` to bypass the default flow; then use `self._backend_instance.preprocess(...)`
-    to delegate to the backend.
+    For processors that need custom logic (e.g., patch-based processing, multiple input types), override
+    `_preprocess` in your model-specific processor. The `_preprocess` method receives already-prepared images
+    (converted to the backend format with channels-first ordering) and performs the actual processing:
 
-    Override `_preprocess_image_like_inputs` (for additional inputs):
-        For processors handling multiple input types (e.g., images + segmentation maps), override this method:
+        class MyImageProcessor(TorchVisionBackend):
+            def _preprocess(self, images, do_resize, size, **kwargs):
+                # Custom processing logic
+                patches = self._create_patches(images)
+                # Use backend methods for standard operations
+                for patch in patches:
+                    patch = self.resize(patch, size=size)
+                    patch = self.normalize(patch, mean=image_mean, std=image_std)
+                return BatchFeature(data={"pixel_values": patches})
 
-            def _preprocess_image_like_inputs(
-                self,
-                images: ImageInput,
-                segmentation_maps: ImageInput | None = None,
-                do_convert_rgb: bool,
-                input_data_format: ChannelDimension,
-                device: "torch.device" | None = None,
-                **kwargs,
-            ) -> BatchFeature:
-                images = self._prepare_image_like_inputs(images, do_convert_rgb, input_data_format, device)
-                batch_feature = self._backend_instance.preprocess(images, **kwargs)
+    For processors handling multiple input types (e.g., images + segmentation maps), override
+    `_preprocess_image_like_inputs`:
 
-                if segmentation_maps is not None:
-                    maps = self._prepare_image_like_inputs(segmentation_maps, ...)
-                    batch_feature["labels"] = self._backend_instance.preprocess(maps, ...).pixel_values
+        def _preprocess_image_like_inputs(
+            self,
+            images: ImageInput,
+            segmentation_maps: ImageInput | None = None,
+            **kwargs,
+        ) -> BatchFeature:
+            images = self._prepare_image_like_inputs(images, **kwargs)
+            batch_feature = self._preprocess(images, **kwargs)
 
-                return batch_feature
+            if segmentation_maps is not None:
+                maps = self._prepare_image_like_inputs(segmentation_maps, **kwargs)
+                batch_feature["labels"] = self._preprocess(maps, **kwargs).pixel_values
 
-    Extensible Backend Architecture
-    -------------------------------
+            return batch_feature
 
-    The processor supports any backend. To customize existing backend behavior, override `_backend_classes`:
+    Extending Backend Behavior
+    --------------------------
 
-        class MyTorchVisionBackend(TorchVisionBackend):
+    To customize operations for a specific backend, subclass the backend and override its methods:
+
+        from transformers.image_processing_backends import TorchVisionBackend, PilBackend
+
+        class MyTorchVisionProcessor(TorchVisionBackend):
             def resize(self, image, size, **kwargs):
                 # Custom resize logic for torchvision
                 return super().resize(image, size, **kwargs)
 
-        class MyPilBackend(PilBackend):
+        class MyPilProcessor(PilBackend):
             def resize(self, image, size, **kwargs):
                 # Custom resize logic for PIL
                 return super().resize(image, size, **kwargs)
-
-        class MyImageProcessor(BaseImageProcessor):
-            _backend_classes = {
-                "torchvision": MyTorchVisionBackend,
-                "pil": MyPilBackend,
-            }
-
-    To add a new backend (e.g. MLX, JAX, or any future/custom implementation), extend both `_backend_classes`
-    and `_backend_availability_checks`. For runtime registration without subclassing, use `register_backend()`:
-
-        class MyNewBackend(ImageProcessingBackend):
-            # Implement required methods
-            ...
-
-        class MyImageProcessor(BaseImageProcessor):
-            _backend_classes = {
-                **BaseImageProcessor._backend_classes,
-                "my_backend": MyNewBackend,
-            }
-            _backend_availability_checks = {
-                **BaseImageProcessor._backend_availability_checks,
-                "my_backend": lambda: check_my_backend_available(),
-            }
 
     Custom Parameters
     -----------------
@@ -171,20 +166,18 @@ class BaseImageProcessor(ImageProcessingMixin):
         class MyImageProcessorKwargs(ImagesKwargs):
             custom_param: int | None = None
 
-        class MyImageProcessor(BaseImageProcessor):
+        class MyImageProcessor(TorchVisionBackend):
             valid_kwargs = MyImageProcessorKwargs
             custom_param = 10  # default value
 
     Key Notes
     ---------
 
-    - The architecture supports any backend: built-in (pil, torchvision), future frameworks, or user-defined
-    - Backends receive images as torch.Tensor (torchvision) or np.ndarray (PIL), channel-first; custom backends
-      may use other types
-    - All images have channel dimension first during actual processing, regardless of backend
+    - Backend selection is done at the class level: inherit from `TorchVisionBackend` or `PilBackend`
+    - Backends receive images as `torch.Tensor` (TorchVision) or `np.ndarray` (PIL), always channels-first
+    - All images have channel dimension first during processing, regardless of backend
     - Arguments not provided by users default to class attribute values
-    - Use `register_backend()` to add custom backends at runtime without modifying source code
-    - Backend classes encapsulate backend-specific logic and can be overridden for customization
+    - Backend classes encapsulate backend-specific logic (resize, normalize, etc.) and can be overridden
     """
 
     valid_kwargs = ImagesKwargs
@@ -212,11 +205,26 @@ class BaseImageProcessor(ImageProcessingMixin):
         return self.preprocess(images, *args, **kwargs)
 
     def process_image(self, *args, **kwargs):
-        """Process a single image for preprocessing. To be overridden by backends."""
+        """
+        Process a single raw image into the backend's working format.
+
+        Implemented by backend subclasses (`TorchVisionBackend`, `PilBackend`). Converts a raw input
+        (PIL Image, NumPy array, or torch Tensor) to the backend's internal format (`torch.Tensor` for
+        TorchVision, `np.ndarray` for PIL), handles RGB conversion and ensures channels-first ordering.
+        """
         raise NotImplementedError
 
     def _preprocess(self, *args, **kwargs):
-        """Preprocess a batch of images. To be overridden by backends."""
+        """
+        Perform the actual batch image preprocessing (resize, center crop, rescale, normalize, pad).
+
+        Implemented by backend subclasses (`TorchVisionBackend`, `PilBackend`). Receives a list of
+        already-prepared images (in the backend's format, channels-first) and applies the configured
+        preprocessing operations. Returns a `BatchFeature` with the processed pixel values.
+
+        Model-specific processors can override this method to implement custom preprocessing logic
+        (e.g., patch-based processing in LLaVA-NeXT).
+        """
         raise NotImplementedError
 
     def _prepare_images_structure(
@@ -245,16 +253,21 @@ class BaseImageProcessor(ImageProcessingMixin):
         **kwargs: Unpack[ImagesKwargs],
     ) -> list[Any]:
         """
-        Prepare image-like inputs for processing.
+        Prepare image-like inputs for processing by converting each image via `process_image`.
+
+        Flattens the input structure and applies `process_image` (implemented by the backend) to each
+        individual image, converting raw inputs (PIL, NumPy, Tensor) into the backend's working format
+        with channels-first ordering.
 
         Args:
             images (`ImageInput`):
                 The image-like inputs to process.
-            expected_ndims (`int`, *optional*):
+            expected_ndims (`int`, *optional*, defaults to 3):
                 The expected number of dimensions for the images.
 
         Returns:
-            List[`torch.Tensor`] or List[`np.ndarray`]: The processed images.
+            `list[torch.Tensor]` or `list[np.ndarray]`: The prepared images in the backend's format,
+            with channels-first ordering.
         """
         images = self._prepare_images_structure(images, expected_ndims=expected_ndims)
 
@@ -276,8 +289,12 @@ class BaseImageProcessor(ImageProcessingMixin):
         **kwargs: Unpack[ImagesKwargs],
     ) -> BatchFeature:
         """
-        Preprocess image-like inputs.
-        To be overridden by subclasses when image-like inputs other than images should be processed.
+        Preprocess image-like inputs by preparing them and dispatching to `_preprocess`.
+
+        This method first calls `_prepare_image_like_inputs` to convert raw inputs into the backend's
+        format, then calls `_preprocess` for the actual batch processing. Override this method in
+        model-specific processors that need to handle multiple image-like input types (e.g., images
+        and segmentation maps) or need custom orchestration of the preprocessing pipeline.
         """
         images = self._prepare_image_like_inputs(images, *args, **kwargs)
         return self._preprocess(images, *args, **kwargs)
@@ -363,7 +380,6 @@ class BaseImageProcessor(ImageProcessingMixin):
         kwargs = self._standardize_kwargs(**kwargs)
 
         # Validate kwargs
-        print("kwargs: ", kwargs)
         self._validate_preprocess_kwargs(**kwargs)
 
         return self._preprocess_image_like_inputs(images, *args, **kwargs)
