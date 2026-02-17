@@ -297,9 +297,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = TextGenerationPipeline(
             model=model,
             tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
-            processor=processor,
             dtype=dtype,
             max_new_tokens=5,
         )
