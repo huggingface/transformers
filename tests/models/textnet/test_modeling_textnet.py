@@ -271,8 +271,6 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-
-
     @unittest.skip(reason="TextNet does not use feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
