@@ -245,24 +245,22 @@ class CodeGenBlock(GradientCheckpointingLayer):
         attention_mask: torch.FloatTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         use_cache: bool | None = False,
-        output_attentions: bool | None = False,
         cache_position: torch.LongTensor | None = None,
-    ) -> tuple[torch.Tensor] | tuple[torch.Tensor, tuple[torch.FloatTensor, ...]] | None:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
-        attn_outputs, attn_weights = self.attn(
+        attn_outputs, _ = self.attn(
             hidden_states=hidden_states,
             layer_past=layer_past,
             attention_mask=attention_mask,
             position_ids=position_ids,
             use_cache=use_cache,
-            output_attentions=output_attentions,
             cache_position=cache_position,
         )
         feed_forward_hidden_states = self.mlp(hidden_states)
         hidden_states = attn_outputs + feed_forward_hidden_states + residual
 
-        return hidden_states, attn_weights
+        return hidden_states
 
 
 @auto_docstring
