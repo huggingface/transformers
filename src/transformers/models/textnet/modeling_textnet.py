@@ -217,9 +217,9 @@ class TextNetPreTrainedModel(PreTrainedModel):
     config: TextNetConfig
     base_model_prefix = "textnet"
     main_input_name = "pixel_values"
-
+    
     _can_record_outputs = {
-        "hidden_states": TextNetEncoder,
+        "hidden_states": TextNetRepConvLayer,
     }
 
 
@@ -250,6 +250,7 @@ class TextNetModel(TextNetPreTrainedModel):
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
         )
 
 
@@ -262,16 +263,16 @@ class TextNetModel(TextNetPreTrainedModel):
 class TextNetForImageClassification(TextNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+
         self.num_labels = config.num_labels
         self.textnet = TextNetModel(config)
-        self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.flatten = nn.Flatten()
-        self.fc = nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
 
-        # classification head
-        self.classifier = nn.ModuleList([self.avg_pool, self.flatten])
+        self.classifier = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+            nn.Linear(config.hidden_sizes[-1], config.num_labels)
+        )
 
-        # initialize weights and apply final processing
         self.post_init()
 
     @can_return_tuple
@@ -316,17 +317,35 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         outputs: BaseModelOutputWithPoolingAndNoAttention = self.textnet(
             pixel_values,
             output_hidden_states=output_hidden_states,
-            return_dict=True,  # IMPORTANT: must be True
+            return_dict=True,
             **kwargs,
         )
 
-        pooled_output = outputs.pooler_output
+        pooled_output = outputs.last_hidden_state
         logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(logits, labels)
+
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif labels.dtype in (torch.long, torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = nn.MSELoss()
+                loss = loss_fct(logits.squeeze(), labels.squeeze())
+
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = nn.CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = nn.BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,)
