@@ -33,7 +33,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from .configuration_vilt import ViltConfig
 
 
@@ -390,12 +390,18 @@ class ViltAttention(nn.Module):
         self.output = ViltSelfOutput(config)
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
-        self_outputs = self.attention(hidden_states, attention_mask, output_attentions)
+        self_outputs = self.attention(
+            hidden_states,
+            attention_mask,
+            output_attentions=output_attentions,
+        )
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        if output_attentions:
+            return (attention_output, self_outputs[1])
+        else:
+            return (attention_output, None)
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->Vilt
@@ -443,26 +449,24 @@ class ViltLayer(GradientCheckpointingLayer):
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in ViLT, layernorm is applied before self-attention
+            self.layernorm_before(hidden_states),
             attention_mask,
             output_attentions=output_attentions,
         )
+
         attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        attention_probs = self_attention_outputs[1]
 
-        # first residual connection
-        hidden_states = attention_output + hidden_states.to(attention_output.device)
+        hidden_states = attention_output + hidden_states
 
-        # in ViLT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
-
-        # second residual connection is done here
         layer_output = self.output(layer_output, hidden_states)
 
-        outputs = (layer_output,) + outputs
-
-        return outputs
+        if output_attentions:
+            return (layer_output, attention_probs)
+        else:
+            return (layer_output,)
 
 
 class ViltEncoder(nn.Module):
@@ -483,11 +487,16 @@ class ViltEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        for i, layer_module in enumerate(self.layer):
+        for layer_module in self.layer:
+
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -499,11 +508,13 @@ class ViltEncoder(nn.Module):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
+
 
 
 @auto_docstring
@@ -549,17 +560,17 @@ class ViltModel(ViltPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
-        token_type_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_mask: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        image_embeds: torch.FloatTensor | None = None,
-        image_token_type_idx: int | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        pixel_values=None,
+        pixel_mask=None,
+        inputs_embeds=None,
+        image_embeds=None,
+        image_token_type_idx=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
         **kwargs,
     ) -> BaseModelOutputWithPooling | tuple[torch.FloatTensor]:
         r"""
@@ -590,12 +601,15 @@ class ViltModel(ViltPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions if output_attentions is not None else self.config.output_attentions
+        )
+
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -636,7 +650,9 @@ class ViltModel(ViltPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+            attention_mask, embedding_output.shape[:-1]
+        )
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -645,6 +661,7 @@ class ViltModel(ViltPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
@@ -658,7 +675,6 @@ class ViltModel(ViltPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
 
 class ViltPooler(nn.Module):
     def __init__(self, config):
@@ -702,6 +718,7 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         self.mlm_score.bias = new_embeddings.bias
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -712,9 +729,6 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         image_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> MaskedLMOutput | tuple[torch.FloatTensor]:
         r"""
@@ -776,38 +790,34 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         >>> print(output)
         a bunch of cats laying on a couch.
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.vilt(
-            input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
             inputs_embeds=inputs_embeds,
             image_embeds=image_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        sequence_output, pooled_output = outputs[:2]
+        sequence_output = outputs.last_hidden_state
+
         # split up final hidden states into text and image features
         text_seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-        text_features, _ = (sequence_output[:, :text_seq_len], sequence_output[:, text_seq_len:])
+        text_features = sequence_output[:, :text_seq_len]
 
         mlm_logits = self.mlm_score(text_features)
 
         masked_lm_loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()  # -100 index = padding token
-            # move labels to correct device to enable PP
+            loss_fct = CrossEntropyLoss()
             labels = labels.to(mlm_logits.device)
-            masked_lm_loss = loss_fct(mlm_logits.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (mlm_logits,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            masked_lm_loss = loss_fct(
+                mlm_logits.view(-1, self.config.vocab_size),
+                labels.view(-1),
+            )
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -815,6 +825,7 @@ class ViltForMaskedLM(ViltPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
 
 
 class ViltPredictionHeadTransform(nn.Module):
@@ -872,19 +883,17 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
-        token_type_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_mask: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        image_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        pixel_values=None,
+        pixel_mask=None,
+        inputs_embeds=None,
+        image_embeds=None,
+        labels=None,
         **kwargs,
     ) -> SequenceClassifierOutput | tuple[torch.FloatTensor]:
         r"""
@@ -922,22 +931,19 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
         >>> print("Predicted answer:", model.config.id2label[idx])
         Predicted answer: 2
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.vilt(
-            input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
             inputs_embeds=inputs_embeds,
             image_embeds=image_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        pooler_output = outputs.pooler_output if return_dict else outputs[1]
+        pooler_output = outputs.pooler_output
 
         logits = self.classifier(pooler_output)
 
@@ -947,10 +953,6 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
             labels = labels.to(logits.device)
             loss = nn.functional.binary_cross_entropy_with_logits(logits, labels) * labels.shape[1]
             # see https://github.com/jnhwkim/ban-vqa/blob/master/train.py#L19
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
@@ -979,19 +981,17 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
-        token_type_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_mask: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        image_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        pixel_values=None,
+        pixel_mask=None,
+        inputs_embeds=None,
+        image_embeds=None,
+        labels=None,
         **kwargs,
     ) -> SequenceClassifierOutput | tuple[torch.FloatTensor]:
         r"""
@@ -1025,32 +1025,24 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
         ...     outputs = model(**encoding)
         ...     scores[text] = outputs.logits[0, :].item()
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         loss = None
         if labels is not None:
             raise NotImplementedError("Training is not yet supported.")
 
         outputs = self.vilt(
-            input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
             inputs_embeds=inputs_embeds,
             image_embeds=image_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        pooler_output = outputs.pooler_output if return_dict else outputs[1]
+        pooler_output = outputs.pooler_output
 
         logits = self.rank_output(pooler_output)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
@@ -1085,19 +1077,17 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
-        token_type_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_mask: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        image_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        pixel_values=None,
+        pixel_mask=None,
+        inputs_embeds=None,
+        image_embeds=None,
+        labels=None,
         **kwargs,
     ) -> ViltForImagesAndTextClassificationOutput | tuple[torch.FloatTensor]:
         r"""
@@ -1138,11 +1128,9 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
         >>> print("Predicted answer:", model.config.id2label[idx])
         Predicted answer: True
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_attentions = kwargs.get("output_attentions", self.config.output_attentions)
+        output_hidden_states = kwargs.get("output_hidden_states", self.config.output_hidden_states)
+        return_dict = kwargs.get("return_dict", self.config.use_return_dict)
 
         if pixel_values is not None and pixel_values.ndim == 4:
             # add dummy num_images dimension
@@ -1160,12 +1148,12 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
                 "Make sure to match the number of images in the model with the number of images in the input."
             )
         pooler_outputs = []
-        hidden_states = [] if output_hidden_states else None
-        attentions = [] if output_attentions else None
+        hidden_states = []
+        attentions = []
         for i in range(num_images):
             # forward every image through the model
             outputs = self.vilt(
-                input_ids,
+                input_ids=input_ids,
                 attention_mask=attention_mask,
                 token_type_ids=token_type_ids,
                 pixel_values=pixel_values[:, i, :, :, :] if pixel_values is not None else None,
@@ -1177,10 +1165,11 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-            pooler_output = outputs.pooler_output if return_dict else outputs[1]
-            pooler_outputs.append(pooler_output)
+            pooler_outputs.append(outputs.pooler_output)
+
             if output_hidden_states:
                 hidden_states.append(outputs.hidden_states)
+
             if output_attentions:
                 attentions.append(outputs.attentions)
 
@@ -1194,15 +1183,21 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
             labels = labels.to(logits.device)
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
+        return_dict = kwargs.get("return_dict", self.config.use_return_dict)
+
         if not return_dict:
-            output = (logits, hidden_states, attentions)
-            return ((loss,) + output) if loss is not None else output
+            output = (logits,)
+            if hidden_states:
+                output = output + (hidden_states,)
+            if attentions:
+                output = output + (attentions,)
+            return output
 
         return ViltForImagesAndTextClassificationOutput(
             loss=loss,
             logits=logits,
-            hidden_states=hidden_states,
-            attentions=attentions,
+            hidden_states=hidden_states if hidden_states else None,
+            attentions=attentions if attentions else None,
         )
 
 
@@ -1221,19 +1216,17 @@ class ViltForTokenClassification(ViltPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
-        token_type_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_mask: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        image_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        pixel_values=None,
+        pixel_mask=None,
+        inputs_embeds=None,
+        image_embeds=None,
+        labels=None,
         **kwargs,
     ) -> TokenClassifierOutput | tuple[torch.FloatTensor]:
         r"""
@@ -1244,22 +1237,18 @@ class ViltForTokenClassification(ViltPreTrainedModel):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.vilt(
-            input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
             inputs_embeds=inputs_embeds,
             image_embeds=image_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
 
         text_input_size = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
@@ -1272,10 +1261,6 @@ class ViltForTokenClassification(ViltPreTrainedModel):
             # move labels to correct device to enable PP
             labels = labels.to(logits.device)
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
