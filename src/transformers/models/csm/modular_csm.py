@@ -216,7 +216,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -389,9 +389,9 @@ class CsmBackboneModelEmbeddings(nn.Module):
         )
 
     def forward(self, input_ids):
-        input_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
-        input_embeds = input_embeds.sum(dim=2)
-        return input_embeds
+        inputs_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
+        inputs_embeds = inputs_embeds.sum(dim=2)
+        return inputs_embeds
 
 
 @auto_docstring

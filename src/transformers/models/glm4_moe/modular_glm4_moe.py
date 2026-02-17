@@ -280,11 +280,11 @@ class Glm4MoeDecoderLayer(DeepseekV3DecoderLayer):
 
 
 class Glm4MoePreTrainedModel(DeepseekV3PreTrainedModel):
-    pass
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
 
 
 class Glm4MoeModel(DeepseekV3Model):
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
+    pass
 
 
 class Glm4MoeForCausalLM(DeepseekV3ForCausalLM):

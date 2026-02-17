@@ -1242,7 +1242,7 @@ class Sam3GeometryEncoder(nn.Module):
         if prompt_mask is not None:
             prompt_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=prompt_embeds,
+                inputs_embeds=prompt_embeds,
                 attention_mask=prompt_mask,
             )
 
@@ -1442,7 +1442,7 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
         if text_mask is not None:
             prompt_cross_attn_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=features_flattened,
+                inputs_embeds=features_flattened,
                 attention_mask=text_mask,
                 encoder_hidden_states=text_features,
             )
@@ -1732,7 +1732,7 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         if text_mask is not None:
             text_cross_attn_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=hidden_states,
+                inputs_embeds=hidden_states,
                 attention_mask=text_mask,
                 encoder_hidden_states=text_features,
             )
@@ -2042,7 +2042,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
             if prompt_mask is not None:
                 cross_attn_mask = create_bidirectional_mask(
                     config=self.config,
-                    input_embeds=normed_hidden_states,
+                    inputs_embeds=normed_hidden_states,
                     encoder_hidden_states=prompt_features,
                     attention_mask=prompt_mask,
                 )
