@@ -375,6 +375,9 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
+        # output_attentions and output_hidden_states apply to both encoder and decoder
+        kwargs_decoder.setdefault("output_attentions", kwargs_encoder.get("output_attentions", self.config.output_attentions))
+        kwargs_decoder.setdefault("output_hidden_states", kwargs_encoder.get("output_hidden_states", self.config.output_hidden_states))
 
         if encoder_outputs is None:
             if pixel_values is None:
