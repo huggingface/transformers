@@ -304,6 +304,10 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             )
             self.assertIsNotNone(outputs)
 
+    # Need to be False as we only use a Transpose without modifying the keys
+    def test_reverse_loading_mapping(self, check_keys_were_modified=False):
+        super().test_reverse_loading_mapping(check_keys_were_modified)
+
 
 @require_torch
 class Qwen3VLMoeIntegrationTest(unittest.TestCase):

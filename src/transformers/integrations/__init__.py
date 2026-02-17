@@ -138,6 +138,7 @@ _import_structure = {
     ],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
+    "sinq": ["SinqDeserialize", "SinqQuantize"],
     "spqr": ["replace_with_spqr_linear"],
     "vptq": ["replace_with_vptq_linear"],
 }
@@ -280,6 +281,7 @@ if TYPE_CHECKING:
     from .neftune import activate_neftune, deactivate_neftune, neftune_post_forward_hook
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers
+    from .sinq import SinqDeserialize, SinqQuantize
     from .spqr import replace_with_spqr_linear
     from .vptq import replace_with_vptq_linear
 
