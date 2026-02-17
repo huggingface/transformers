@@ -1145,7 +1145,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _supports_sdpa: bool = False
     _supports_flash_attn: bool = False
     _supports_flex_attn: bool = False
-    _default_flash_implementation: str | None = None  # Model's preferred flash kernel (e.g., "kernels-community/flash-mla")
+    _default_flash_implementation: str | None = (
+        None  # Model's preferred flash kernel (e.g., "kernels-community/flash-mla")
+    )
 
     # Tensor-parallelism-related properties
     # A tensor parallel plan of the form `{"model.layer.mlp.param": "colwise"}` to be applied to the model when TP is enabled.

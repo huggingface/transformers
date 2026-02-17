@@ -111,6 +111,7 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         automatically corrects to the model's _default_flash_implementation.
         """
         from kernels import get_kernel
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         expected_kernel = "kernels-community/vllm-flash-attn3"
         flash = get_kernel(expected_kernel)
