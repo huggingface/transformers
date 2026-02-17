@@ -242,7 +242,6 @@ docs/source/en/model_doc/yoso.md
 docs/source/en/model_memory_anatomy.md
 docs/source/en/model_sharing.md
 docs/source/en/notebooks.md
-docs/source/en/pad_truncation.md
 docs/source/en/peft.md
 docs/source/en/perf_hardware.md
 docs/source/en/perf_torch_compile.md
