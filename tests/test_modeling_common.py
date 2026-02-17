@@ -928,6 +928,10 @@ class ModelTesterMixin:
                     model.save_pretrained(tmpdirname)
 
                     model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
+                    self.assertFalse(
+                        model._keep_in_fp32_modules & model._keep_in_fp32_modules_strict,
+                        "We found a layer in both the `_keep_in_fp32_modules` and `_keep_in_fp32_modules_strict` lists. Please remove it from one of the two lists.",
+                    )
                     # When reloading in fp16, keep_in_fp32_modules AND keep_in_fp32_modules_strict should be upcasted
                     all_fp32_modules = model._keep_in_fp32_modules | model._keep_in_fp32_modules_strict
                     for name, param in model.state_dict().items():
