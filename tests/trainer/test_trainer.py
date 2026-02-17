@@ -27,7 +27,10 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock, patch
-
+from transformers import Trainer, TrainingArguments
+import torch
+from torch import nn
+from datasets import Dataset
 import numpy as np
 import pytest
 from huggingface_hub import ModelCard, create_branch, list_repo_commits, list_repo_files
@@ -6093,3 +6096,48 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
                 self.assertIsInstance(module, torch.nn.Embedding)
                 self.assertEqual(name, "weight")
                 self.assertDictEqual(config, {"optim_bits": 32})
+    
+
+
+
+def test_eval_on_end(tmp_path):
+        
+    import torch
+    from torch import nn
+    from datasets import Dataset
+    from transformers import Trainer, TrainingArguments
+
+    class DummyModel(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.linear = nn.Linear(10, 2)
+
+        def forward(self, input_ids=None, labels=None):
+            logits = self.linear(input_ids.float())
+            loss = logits.mean()
+            return {"loss": loss, "logits": logits}
+
+
+    dataset = Dataset.from_dict({
+        "input_ids": [[1]*10]*8,
+        "labels": [1]*8,
+    })
+
+    args = TrainingArguments(
+        output_dir=str(tmp_path),
+        per_device_train_batch_size=2,
+        eval_on_end=True,
+        num_train_epochs=1,
+    )
+
+    trainer = Trainer(
+        model=DummyModel(),
+        args=args,
+        train_dataset=dataset,
+        eval_dataset=dataset,
+    )
+    output = trainer.train()
+
+    assert any(k.startswith("eval_") for k in output.metrics)
+
+

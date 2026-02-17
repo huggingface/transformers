@@ -1090,6 +1090,13 @@ class TrainingArguments:
             "help": "Whether to run through the entire `evaluation` step at the very beginning of training as a sanity check."
         },
     )
+    eval_on_end: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to run evaluation at the end of training."
+        },
+    )
+
     eval_do_concat_batches: bool = field(
         default=True,
         metadata={

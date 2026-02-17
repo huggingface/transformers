@@ -1906,6 +1906,13 @@ class Trainer:
         # for the embedding layer by removing the forward post hook.
         if self.neftune_noise_alpha is not None:
             deactivate_neftune(self.model, self.neftune_hook_handle, self.accelerator)
+        
+        if self.args.eval_on_end and self.eval_dataset is not None:
+            logger.info("Running evaluation at the end of training")
+            eval_metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+            metrics.update(eval_metrics)
+
+
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
