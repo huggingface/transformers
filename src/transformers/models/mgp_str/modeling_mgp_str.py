@@ -23,7 +23,8 @@ from torch import nn
 from ... import initialization as init
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils.output_capturing import capture_outputs
 from .configuration_mgp_str import MgpstrConfig
 
 
@@ -198,19 +199,17 @@ class MgpstrLayer(nn.Module):
         mlp_hidden_dim = int(config.hidden_size * config.mlp_ratio)
         self.mlp = MgpstrMlp(config, mlp_hidden_dim)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, **kwargs):
         self_attention_outputs = self.attn(self.norm1(hidden_states))
         attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1]
 
         # first residual connection
         hidden_states = self.drop_path(attention_output) + hidden_states
 
         # second residual connection is done here
-        layer_output = hidden_states + self.drop_path(self.mlp(self.norm2(hidden_states)))
+        hidden_states = hidden_states + self.drop_path(self.mlp(self.norm2(hidden_states)))
 
-        outputs = (layer_output, outputs)
-        return outputs
+        return hidden_states
 
 
 class MgpstrEncoder(nn.Module):
@@ -223,29 +222,16 @@ class MgpstrEncoder(nn.Module):
             *[MgpstrLayer(config=config, drop_path=dpr[i]) for i in range(config.num_hidden_layers)]
         )
 
-    def forward(self, hidden_states, output_attentions=False, output_hidden_states=False, return_dict=True):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
+    def forward(self, hidden_states, **kwargs):
 
         for _, blk in enumerate(self.blocks):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = blk(hidden_states)
-            hidden_states = layer_outputs[0]
+            hidden_states = blk(hidden_states, **kwargs)
 
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
 
 
@@ -282,6 +268,10 @@ class MgpstrPreTrainedModel(PreTrainedModel):
     config: MgpstrConfig
     base_model_prefix = "mgp_str"
     _no_split_modules = []
+    _can_record_outputs = {
+        "hidden_states": MgpstrLayer,
+        "attentions": MgpstrAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
@@ -313,18 +303,13 @@ class MgpstrModel(MgpstrPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.proj
 
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor] | BaseModelOutput:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+    ) -> BaseModelOutput:
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -335,17 +320,11 @@ class MgpstrModel(MgpstrPreTrainedModel):
 
         encoder_outputs = self.encoder(
             embedding_output,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        if not return_dict:
             return encoder_outputs
         return BaseModelOutput(
             last_hidden_state=encoder_outputs.last_hidden_state,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -376,16 +355,14 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: bool | None = None,
         output_a3_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor] | MgpstrModelOutput:
+    ) -> MgpstrModelOutput:
         r"""
         output_a3_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of a3 modules. See `a3_attentions` under returned tensors
@@ -418,20 +395,14 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         >>> out_strs["generated_text"]
         '["ticket"]'
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         mgp_outputs = self.mgp_str(
             pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        sequence_output = mgp_outputs[0]
+        sequence_output = mgp_outputs.last_hidden_state
 
         char_a3_out, char_attention = self.char_a3_module(sequence_output)
         bpe_a3_out, bpe_attention = self.bpe_a3_module(sequence_output)
@@ -444,9 +415,6 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         all_a3_attentions = (char_attention, bpe_attention, wp_attention) if output_a3_attentions else None
         all_logits = (char_logits, bpe_logits, wp_logits)
 
-        if not return_dict:
-            outputs = (all_logits, all_a3_attentions) + mgp_outputs[1:]
-            return tuple(output for output in outputs if output is not None)
         return MgpstrModelOutput(
             logits=all_logits,
             hidden_states=mgp_outputs.hidden_states,
