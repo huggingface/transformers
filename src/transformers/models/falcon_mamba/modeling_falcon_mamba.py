@@ -34,7 +34,10 @@ from ...integrations import lazy_load_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling
+from ...utils.import_utils import (
+    is_mambapy_available,
+    is_torchdynamo_compiling,
+)
 from .configuration_falcon_mamba import FalconMambaConfig
 
 
@@ -200,6 +203,7 @@ class FalconMambaMixer(nn.Module):
         self.act = ACT2FN[config.hidden_act]
 
         self.use_falcon_mambapy = config.use_falcon_mambapy
+        self.use_associative_scan = config.use_associative_scan
 
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=config.use_bias)
