@@ -79,7 +79,7 @@ deps = {
     "torchvision": "torchvision",
     "pyctcdecode": "pyctcdecode>=0.4.0",
     "tqdm": "tqdm>=4.27",
-    "typer-slim": "typer-slim",
+    "typer": "typer",
     "unidic": "unidic>=1.0.2",
     "unidic_lite": "unidic_lite>=1.0.7",
     "urllib3": "urllib3<2.0.0",
