@@ -28,7 +28,10 @@ from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_hgnet_v2 import HGNetV2Config
 
 
@@ -315,26 +318,17 @@ class HGNetV2Encoder(nn.Module):
             resnet_stage = HGNetV2Stage(config, stage_index)
             self.stages.append(resnet_stage)
 
-    def forward(
-        self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
-    ) -> BaseModelOutputWithNoAttention:
-        hidden_states = () if output_hidden_states else None
+    def forward(self, hidden_state: Tensor, output_hidden_states: bool = False) -> BaseModelOutputWithNoAttention:
+        all_hidden_states = [hidden_state] if output_hidden_states else None
 
         for stage in self.stages:
-            if output_hidden_states:
-                hidden_states = hidden_states + (hidden_state,)
-
             hidden_state = stage(hidden_state)
-
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_state, hidden_states] if v is not None)
+            if all_hidden_states is not None:
+                all_hidden_states.append(hidden_state)
 
         return BaseModelOutputWithNoAttention(
             last_hidden_state=hidden_state,
-            hidden_states=hidden_states,
+            hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
         )
 
 
@@ -351,13 +345,14 @@ class HGNetV2Backbone(BackboneMixin, HGNetV2PreTrainedModel):
         # initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
         pixel_values: Tensor,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -378,15 +373,11 @@ class HGNetV2Backbone(BackboneMixin, HGNetV2PreTrainedModel):
         >>> list(feature_maps[-1].shape)
         [1, 2048, 7, 7]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
         embedding_output = self.embedder(pixel_values)
-
-        outputs = self.encoder(embedding_output, output_hidden_states=True, return_dict=True)
-
+        outputs = self.encoder(embedding_output, output_hidden_states=True)
         hidden_states = outputs.hidden_states
 
         feature_maps = ()
@@ -394,16 +385,9 @@ class HGNetV2Backbone(BackboneMixin, HGNetV2PreTrainedModel):
             if stage in self.out_features:
                 feature_maps += (hidden_states[idx],)
 
-        if not return_dict:
-            output = (feature_maps,)
-            if output_hidden_states:
-                output += (outputs.hidden_states,)
-            return output
-
         return BackboneOutput(
             feature_maps=feature_maps,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=None,
+            hidden_states=hidden_states if output_hidden_states else None,
         )
 
 
@@ -429,14 +413,15 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
         # initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -465,13 +450,12 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
         >>> outputs.logits.shape
         torch.Size([1, 2])
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
+
         embedding_output = self.embedder(pixel_values)
-        outputs = self.encoder(embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict)
-        last_hidden_state = outputs[0]
+        outputs = self.encoder(embedding_output, output_hidden_states=output_hidden_states)
+        last_hidden_state = outputs.last_hidden_state
         for layer in self.classifier:
             last_hidden_state = layer(last_hidden_state)
         logits = self.fc(last_hidden_state)
@@ -479,10 +463,6 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
 
         if labels is not None:
             loss = self.loss_function(labels, logits, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return (loss,) + output if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
