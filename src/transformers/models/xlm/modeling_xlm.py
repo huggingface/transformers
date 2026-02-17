@@ -611,12 +611,21 @@ class XLMLayer(nn.Module):
         self.layer_norm2 = layer_norm2
         self.dropout = dropout
 
-    def forward(self, tensor, attn_mask, mask, cache=None, cache_position=None):
+    def forward(
+        self,
+        x,
+        attn_mask,
+        mask,
+        cache=None,
+        output_attentions=False,
+        cache_position=None,
+    ):
         # self attention — always returns (attn_output, attn_weights)
         attn_output, attn_weights = self.attention(
-            tensor,
+            x,
             attn_mask,
             cache=cache,
+            output_attentions=output_attentions,
             cache_position=cache_position,
         )
         attn_output = nn.functional.dropout(attn_output, p=self.dropout, training=self.training)
@@ -718,10 +727,11 @@ class XLMForQuestionAnsweringOutput(ModelOutput):
 
 @auto_docstring
 class XLMModel(XLMPreTrainedModel):
+    
     _can_record_outputs = {
         "attentions": XLMLayer,
     }
-
+    
     def __init__(self, config):
         super().__init__(config)
 
@@ -893,7 +903,14 @@ class XLMModel(XLMPreTrainedModel):
         for layer in self.layers:
             if output_hidden_states:
                 hidden_states = hidden_states + (tensor,)
-            tensor, _ = layer(tensor, attn_mask, mask, cache=cache, cache_position=cache_position)
+            tensor, _ = layer(
+                tensor,
+                attn_mask,
+                mask,
+                cache=cache,
+                output_attentions=output_attentions,
+                cache_position=cache_position,
+            )
 
         # Add last hidden state
         if output_hidden_states:
@@ -903,7 +920,6 @@ class XLMModel(XLMPreTrainedModel):
             last_hidden_state=tensor,
             hidden_states=hidden_states,
         )
-
 
 class XLMPredLayer(nn.Module):
     """
