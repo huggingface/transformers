@@ -4020,7 +4020,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             use_safetensors=use_safetensors,
             download_kwargs=download_kwargs_with_commit,
             user_agent=user_agent,
-            is_remote_code=cls._auto_class is not None,
+            is_remote_code=cls.is_remote_code(),
             transformers_explicit_filename=getattr(config, "transformers_weights", None),
         )
 
@@ -4545,6 +4545,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 key for key in loading_info.unexpected_keys if ignore_unexpected_regex.search(key) is None
             }
 
+        # Some remote code models define module-level tying in their __init__. When modules themselves are shared,
+        # weights inside both modules appear in `state_dict` but only one will appear in the safetensors checkpoints
+        # as they are inherently tied as the 2 modules are the same object. In this case, once we load a parameter
+        # inside one of the 2 modules, the other will also automatically be loaded and will have the `_is_hf_initialized`
+        # flag (because we call `setattr` with the loaded param on the module which is the same object), but it will
+        # still appear as a missing key as we never get it out of the set (because it appears in the state_dict twice
+        # with both names).
+        # So we remove it now
+        if self.is_remote_code():
+            loading_info.missing_keys = {
+                key
+                for key in loading_info.missing_keys
+                if not getattr(self.get_parameter_or_buffer(key), "_is_hf_initialized", False)
+            }
+
     def mark_tied_weights_as_initialized(self):
         """Adds the `_is_hf_initialized` flag on parameters that will be tied, in order to avoid initializing them
         later as they will be tied (overwritten) anyway.
@@ -4599,6 +4614,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def eval(self):
         return self.train(False)
+
+    @classmethod
+    def is_remote_code(cls) -> bool:
+        return cls._auto_class is not None
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
