@@ -217,7 +217,7 @@ class TextNetPreTrainedModel(PreTrainedModel):
     config: TextNetConfig
     base_model_prefix = "textnet"
     main_input_name = "pixel_values"
-    
+
     _can_record_outputs = {
         "hidden_states": TextNetRepConvLayer,
     }
