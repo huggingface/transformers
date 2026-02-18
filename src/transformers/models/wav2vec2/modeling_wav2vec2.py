@@ -1294,6 +1294,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
             hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
         )
 
+        kwargs.setdefault("output_attentions", self.config.output_attentions)
+        kwargs.setdefault("output_hidden_states", self.config.output_hidden_states)
+
         encoder_outputs = self.encoder(
             hidden_states,
             attention_mask=attention_mask,
