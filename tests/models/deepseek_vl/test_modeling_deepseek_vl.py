@@ -34,10 +34,6 @@ from transformers.testing_utils import (
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
-if is_torch_available():
-    import torch
-
-
 class DeepseekVLVisionText2TextModelTester(VLMModelTester):
     base_model_class = DeepseekVLModel
     config_class = DeepseekVLConfig
