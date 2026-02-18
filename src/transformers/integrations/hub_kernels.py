@@ -277,6 +277,7 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d", "version": 1},
     "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
     "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
+    "flash-mla": {"repo_id": "kernels-community/flash-mla"},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
@@ -337,6 +338,12 @@ def load_and_register_attn_kernel(
     if hasattr(kernel, "flash_attn_varlen_func"):
         if attention_wrapper is None:
             attention_wrapper = flash_attention_forward
+        kernel_function = attention_wrapper
+    elif hasattr(kernel, "flash_mla_sparse_fwd"):
+        from .flash_mla import flash_mla_forward
+
+        if attention_wrapper is None:
+            attention_wrapper = flash_mla_forward
         kernel_function = attention_wrapper
     elif kernel_name is not None:
         kernel_function = getattr(kernel, kernel_name)

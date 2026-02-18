@@ -66,6 +66,7 @@ _import_structure = {
         "replace_with_higgs_linear",
     ],
     "hqq": ["prepare_for_hqq_linear"],
+    "flash_mla": ["flash_mla_forward"],
     "hub_kernels": [
         "LayerRepository",
         "lazy_load_kernel",
@@ -214,6 +215,7 @@ if TYPE_CHECKING:
     )
     from .higgs import HiggsLinear, dequantize_higgs, quantize_with_higgs, replace_with_higgs_linear
     from .hqq import prepare_for_hqq_linear
+    from .flash_mla import flash_mla_forward
     from .hub_kernels import (
         LayerRepository,
         lazy_load_kernel,

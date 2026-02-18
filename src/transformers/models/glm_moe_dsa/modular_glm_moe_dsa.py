@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+
 from collections.abc import Callable
 
 import torch
@@ -27,7 +28,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...models.llama.modeling_llama import rotate_half
 from ...processing_utils import Unpack
 from ...utils import logging
-from ...utils.generic import is_flash_attention_requested
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeForCausalLM,
     Glm4MoeModel,
@@ -178,7 +178,7 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     model_type = "glm_moe_dsa"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.o_proj": "rowwise_split_input",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -499,11 +499,10 @@ class GlmMoeDsaAttention(nn.Module):
         past_key_values: Cache | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         cos, sin = position_embeddings
 
-        # ===== Query path =====
         if self.q_lora_rank is None:
             query_states = self.q_proj(hidden_states)
             q_resid = None
@@ -515,7 +514,6 @@ class GlmMoeDsaAttention(nn.Module):
         q_nope, q_pe = torch.split(query_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
         q_pe = apply_rotary_pos_emb(q_pe, cos, sin, unsqueeze_dim=1)  # BHSD format
 
-        # ===== KV path =====
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)  # [B, S, kv_rank + rope_D]
         k_compressed, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         k_compressed = self.kv_a_layernorm(k_compressed)  # [B, S, kv_rank]
@@ -539,9 +537,10 @@ class GlmMoeDsaAttention(nn.Module):
         # Cache update
         if past_key_values is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
-        # ===== Indexer (DSA sparse mask) =====
         # attention_mask is [B, 1, S, T] (4D) for eager and (2D) otherwise but indexer works with [B, S, T] (3D)
         indexer_mask = (
             attention_mask[:, 0, :, :]
@@ -561,10 +560,8 @@ class GlmMoeDsaAttention(nn.Module):
         # Build combined DSA + causal mask: -inf everywhere except selected top-k positions
         total_len = key_states.shape[2]
         index_mask = torch.full(
-            (batch_size, seq_length, total_len),
-            float("-inf"),
-            device=hidden_states.device,
-            dtype=query_states.dtype,
+            (batch_size, seq_length, total_len), float("-inf"),
+            device=hidden_states.device, dtype=query_states.dtype,
         )
         index_mask.scatter_(-1, topk_indices, 0.0)  # [B, S, T]
         index_mask = index_mask.unsqueeze(1)  # [B, 1, S, T]
@@ -578,10 +575,6 @@ class GlmMoeDsaAttention(nn.Module):
                 else index_mask
             )
 
-        # Flash attention head_dim padding (qk_head_dim != v_head_dim)
-        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
-            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
-
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
@@ -594,16 +587,14 @@ class GlmMoeDsaAttention(nn.Module):
             combined_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            indices=topk_indices,  # flash_mla_with_kvcache
+            topk_indices=topk_indices,  # Pass topk_indices for flash-mla sparse attention
             **kwargs,
         )
-
-        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
-            attn_output = attn_output[:, :, :, : self.v_head_dim]
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
+
 
 
 class GlmMoeDsaDecoderLayer(Glm4MoeLiteDecoderLayer):
