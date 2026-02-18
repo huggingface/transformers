@@ -16,7 +16,7 @@ Integration with Deepspeed
 """
 
 import copy
-import importlib.metadata as importlib_metadata
+import importlib.metadata
 import importlib.util
 import weakref
 from functools import partialmethod
@@ -40,9 +40,9 @@ def is_deepspeed_available():
     # AND checking it has an author field in the metadata that is HuggingFace.
     if package_exists:
         try:
-            _ = importlib_metadata.metadata("deepspeed")
+            _ = importlib.metadata.metadata("deepspeed")
             return True
-        except importlib_metadata.PackageNotFoundError:
+        except importlib.metadata.PackageNotFoundError:
             return False
 
 
