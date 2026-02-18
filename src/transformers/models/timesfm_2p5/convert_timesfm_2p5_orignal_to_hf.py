@@ -4,9 +4,9 @@ import re
 import shutil
 
 import numpy as np
+import timesfm
 import torch
 
-import timesfm
 from transformers import Timesfm2P5Config, Timesfm2P5ModelForPrediction
 
 
@@ -215,44 +215,40 @@ def check_outputs(model_path, huggingface_repo_id="google/timesfm-2.5-200m-pytor
     print("\nChecking model outputs...")
 
     # Load original TimesFM 2.5 model using same method as write_model
-    try:
-        from huggingface_hub import hf_hub_download
+    from huggingface_hub import hf_hub_download
 
-        # Download the checkpoint file
-        checkpoint_path = hf_hub_download(repo_id=huggingface_repo_id, filename="model.safetensors")
+    # Download the checkpoint file
+    checkpoint_path = hf_hub_download(repo_id=huggingface_repo_id, filename="model.safetensors")
 
-        # Create model instance and load checkpoint
-        tfm = timesfm.TimesFM_2p5_200M_torch()
-        tfm.model.load_checkpoint(checkpoint_path)
+    # Create model instance and load checkpoint
+    tfm = timesfm.TimesFM_2p5_200M_torch()
+    tfm.model.load_checkpoint(checkpoint_path)
 
-        # Compile with forecasting configuration (following README example)
-        tfm.compile(
-            timesfm.ForecastConfig(
-                max_context=1024,
-                max_horizon=256,
-                normalize_inputs=True,
-                use_continuous_quantile_head=True,
-            )
+    # Compile with forecasting configuration (following README example)
+    tfm.compile(
+        timesfm.ForecastConfig(
+            max_context=1024,
+            max_horizon=256,
+            normalize_inputs=True,
+            use_continuous_quantile_head=True,
         )
-    except Exception as e:
-        print(f"⚠️  Warning: Could not load original model for validation: {e}")
-        print("Skipping output comparison check.")
-        return 0.0, 0.0
+    )
 
     # Load converted model
     converted_model = Timesfm2P5ModelForPrediction.from_pretrained(
         model_path,
         dtype=torch.float32,
+        attn_implementation="sdpa",
     )
     if torch.cuda.is_available():
         converted_model = converted_model.to("cuda")
     converted_model.eval()  # Set to evaluation mode
 
-    # Create test inputs (same as in original test)
+    # Create deterministic test inputs
     forecast_input = [
         np.linspace(0, 1, 100),
         np.sin(np.linspace(0, 20, 67)),
-        np.sin(np.linspace(0, 10, 150)) + np.random.normal(0, 0.1, 150),
+        np.sin(np.linspace(0, 10, 150)),
     ]
 
     # Get predictions from original model
@@ -293,13 +289,13 @@ def check_outputs(model_path, huggingface_repo_id="google/timesfm-2.5-200m-pytor
     QUANTILE_THRESHOLD = 1e-5
 
     if max_point_diff > POINT_THRESHOLD or max_quantile_diff > QUANTILE_THRESHOLD:
-        print(
-            f"\n⚠️ Output differences detected (may be acceptable):\n"
+        raise ValueError(
+            f"Output mismatch detected!\n"
             f"Point forecast max diff: {max_point_diff} (threshold: {POINT_THRESHOLD})\n"
             f"Quantile forecast max diff: {max_quantile_diff} (threshold: {QUANTILE_THRESHOLD})"
         )
-    else:
-        print("\n✅ All outputs match within acceptable tolerance!")
+
+    print("\n✅ All outputs match within acceptable tolerance!")
 
     # Print shapes for verification
     print("\nOutput shapes:")

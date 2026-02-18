@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_timesfm_2p5.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,12 +18,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 
 
-class Timesfm2P5Config(PretrainedConfig):
+class Timesfm2P5Config(PreTrainedConfig):
     """Configuration class for TimesFM 2.5 model."""
 
     model_type = "timesfm_2p5"
@@ -64,19 +62,19 @@ class Timesfm2P5Config(PretrainedConfig):
         use_positional_embedding: bool = False,  # TimesFM 2.5 uses rotary embeddings instead
         use_continuous_quantile_head: bool = True,
         normalize_inputs: bool = True,
+        force_flip_invariance: bool = True,
+        infer_is_positive: bool = True,
         # Gemma2-compatible parameters for query scaling
         query_pre_attn_scalar: float = 256.0,  # This provides the per-dim scaling
-        attn_logit_softcapping: Optional[float] = None,
-        layer_types: Optional[list] = None,  # All layers are the same type
-        sliding_window: Optional[int] = None,  # No sliding window
+        attn_logit_softcapping: float | None = None,
+        layer_types: list | None = None,  # All layers are the same type
+        sliding_window: int | None = None,  # No sliding window
         max_position_embeddings: int = 16384,  # Should match context_length
         rope_theta: float = 10000.0,  # RoPE theta parameter
+        rope_parameters: dict | None = None,
         **kwargs,
     ):
-        super().__init__(
-            is_encoder_decoder=self.is_encoder_decoder,
-            **kwargs,
-        )
+        self.rope_parameters = rope_parameters
         self.patch_length = patch_length
         self.context_length = context_length
         self.horizon_length = horizon_length
@@ -95,6 +93,9 @@ class Timesfm2P5Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.min_timescale = min_timescale
         self.max_timescale = max_timescale
+
+        kwargs["is_encoder_decoder"] = self.is_encoder_decoder
+        super().__init__(**kwargs)
         self.output_quantile_len = output_quantile_len
         self.decode_index = decode_index
         self.use_rotary_embeddings = use_rotary_embeddings
@@ -104,6 +105,8 @@ class Timesfm2P5Config(PretrainedConfig):
         self.activation = activation
         self.use_continuous_quantile_head = use_continuous_quantile_head
         self.normalize_inputs = normalize_inputs
+        self.force_flip_invariance = force_flip_invariance
+        self.infer_is_positive = infer_is_positive
         self.query_pre_attn_scalar = query_pre_attn_scalar
         self.attn_logit_softcapping = attn_logit_softcapping
         self.num_key_value_heads = num_key_value_heads
@@ -112,6 +115,7 @@ class Timesfm2P5Config(PretrainedConfig):
         self.sliding_window = sliding_window
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
+        self.rope_parameters = self.rope_parameters or {"rope_type": "default", "rope_theta": rope_theta}
 
 
 __all__ = ["Timesfm2P5Config"]

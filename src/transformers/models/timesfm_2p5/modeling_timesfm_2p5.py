@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_timesfm_2p5.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,20 +19,23 @@
 # limitations under the License.
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...integrations import use_kernel_forward_from_hub
+from ... import initialization as init
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import maybe_autocast
 from .configuration_timesfm_2p5 import Timesfm2P5Config
 
 
@@ -49,12 +51,12 @@ class Timesfm2P5Output(BaseModelOutput):
         Boolean mask indicating fully padded patches.
     """
 
-    loc: Optional[torch.Tensor] = None
-    scale: Optional[torch.Tensor] = None
+    loc: torch.Tensor | None = None
+    scale: torch.Tensor | None = None
 
-    context_mu: Optional[torch.Tensor] = None
-    context_sigma: Optional[torch.Tensor] = None
-    patch_padding: Optional[torch.Tensor] = None
+    context_mu: torch.Tensor | None = None
+    context_sigma: torch.Tensor | None = None
+    patch_padding: torch.Tensor | None = None
 
 
 @dataclass
@@ -69,9 +71,9 @@ class Timesfm2P5OutputForPrediction(BaseModelOutput):
         Training loss combining MSE and quantile losses when targets are supplied.
     """
 
-    mean_predictions: Optional[torch.Tensor] = None
-    full_predictions: Optional[torch.Tensor] = None
-    loss: Optional[Union[torch.Tensor, float]] = None
+    mean_predictions: torch.Tensor | None = None
+    full_predictions: torch.Tensor | None = None
+    loss: torch.Tensor | float | None = None
 
 
 class Timesfm2P5MLP(nn.Module):
@@ -160,7 +162,7 @@ class Timesfm2P5ResidualBlock(nn.Module):
 
 @use_kernel_forward_from_hub("RMSNorm")
 class Timesfm2P5RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         Timesfm2P5RMSNorm is equivalent to T5LayerNorm
         """
@@ -168,7 +170,7 @@ class Timesfm2P5RMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -184,20 +186,49 @@ class Timesfm2P5RotaryEmbedding(nn.Module):
 
     def __init__(self, config: Timesfm2P5Config, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Timesfm2P5Config | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -206,7 +237,7 @@ class Timesfm2P5RotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -222,7 +253,8 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+@use_kernel_func_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -230,8 +262,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -249,53 +279,29 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
+def timesfm_2p5_eager_attention_forward(
     module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    query_states: torch.Tensor,
+    key_states: torch.Tensor,
+    value_states: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
     dropout: float = 0.0,
-    scaling: Optional[float] = None,
-    softcap: Optional[float] = None,
     **kwargs,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    if scaling is None:
-        scaling = module.head_dim**-0.5
+):
+    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = torch.where(attention_mask, attn_weights, -torch.finfo(attn_weights.dtype).max / 2)
 
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-
-    if softcap is not None:
-        attn_weights = attn_weights / softcap
-        attn_weights = torch.tanh(attn_weights)
-        attn_weights = attn_weights * softcap
-    if attention_mask is not None:  # no matter the length, we just slice it
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    # upcast attention to fp32
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
+
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Timesfm2P5Attention(nn.Module):
     """
     TimesFM 2.5 attention extends Gemma2Attention but overrides the forward to implement
@@ -304,6 +310,7 @@ class Timesfm2P5Attention(nn.Module):
 
     def __init__(self, config: Timesfm2P5Config, layer_idx: int):
         super().__init__()
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -325,7 +332,7 @@ class Timesfm2P5Attention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
         # Add QK normalization specific to TimesFM 2.5
         self.use_qk_norm = getattr(config, "use_qk_norm", True)
@@ -338,16 +345,15 @@ class Timesfm2P5Attention(nn.Module):
         if self.use_per_dim_scale:
             self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
+        attention_mask: torch.Tensor | None,
         past_key_values=None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        cache_position: torch.LongTensor | None = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Forward with TimesFM 2.5 specific QK normalization and per-dimension scaling."""
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
@@ -374,12 +380,10 @@ class Timesfm2P5Attention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # Use the standard attention computation from Gemma2
-        attention_interface = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, timesfm_2p5_eager_attention_forward
+        )
 
-        # Attention computation with custom scaling disabled (we use per_dim_scale instead)
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -387,9 +391,7 @@ class Timesfm2P5Attention(nn.Module):
             value_states,
             attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
-            scaling=1.0,  # No scaling - we already applied per_dim_scale to queries
-            sliding_window=getattr(self, "sliding_window", None),
-            softcap=getattr(self, "attn_logit_softcapping", None),
+            scaling=1.0,
             **kwargs,
         )
 
@@ -433,12 +435,12 @@ class Timesfm2P5DecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         output_attentions: bool = False,
-        **kwargs,
-    ) -> tuple[Optional[torch.Tensor], torch.Tensor]:
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor | None, torch.Tensor]:
         # Self-Attention with pre and post normalization
         residual = hidden_states
         hidden_states = self.pre_attn_ln(hidden_states)
@@ -461,20 +463,79 @@ class Timesfm2P5DecoderLayer(nn.Module):
         return scores, hidden_states
 
 
+class Timesfm2P5PositionalEmbedding(nn.Module):
+    """Generates position embedding for a given 1-d sequence."""
+
+    def __init__(self, config: Timesfm2P5Config):
+        super().__init__()
+        min_timescale = config.min_timescale
+        max_timescale = config.max_timescale
+        self.min_timescale, self.max_timescale = min_timescale, max_timescale
+        self.embedding_dims = config.hidden_size
+
+        num_timescales = self.embedding_dims // 2
+        log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(num_timescales - 1, 1)
+        self.register_buffer(
+            "inv_timescales",
+            min_timescale * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment),
+        )
+
+    def forward(self, seq_length=None, position=None):
+        """Generates a Tensor of sinusoids with different frequencies.
+
+        Args:
+            seq_length: an optional Python int defining the output sequence length.
+              if the `position` argument is specified.
+            position: [B, seq_length], optional position for each token in the
+              sequence, only required when the sequence is packed.
+
+        Returns:
+            [B, seqlen, D] if `position` is specified, else [1, seqlen, D]
+        """
+        if position is None and seq_length is None:
+            raise ValueError("Either position or seq_length must be provided")
+
+        if position is None:
+            # [1, seqlen]
+            position = torch.arange(seq_length, dtype=torch.float32, device=self.inv_timescales.device).unsqueeze(0)
+        elif position.ndim != 2:
+            raise ValueError(f"position must be 2-dimensional, got shape {position.shape}")
+
+        scaled_time = position.view(*position.shape, 1) * self.inv_timescales.view(1, 1, -1)
+        signal = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=2)
+
+        # Padding to ensure correct embedding dimension
+        signal = F.pad(signal, (0, 0, 0, self.embedding_dims % 2))
+        return signal
+
+
 @auto_docstring
 class Timesfm2P5PreTrainedModel(PreTrainedModel):
     config: Timesfm2P5Config
     base_model_prefix = "timesfm_2p5"
     _no_split_modules = ["Timesfm2P5DecoderLayer"]
     main_input_name = "past_values"
+    input_modalities = ("time",)
     _supports_sdpa = True
     config_class = Timesfm2P5Config
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Timesfm2P5Attention):
             # Initialize scaling parameter
-            nn.init.ones_(module.scaling)
+            init.ones_(module.scaling)
+        elif isinstance(module, Timesfm2P5PositionalEmbedding):
+            num_timescales = module.embedding_dims // 2
+            max_timescale, min_timescale = module.max_timescale, module.min_timescale
+            log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(
+                num_timescales - 1, 1
+            )
+            init.copy_(
+                module.inv_timescales,
+                min_timescale
+                * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment),
+            )
 
 
 class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
@@ -515,7 +576,7 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         self.rotary_emb = Timesfm2P5RotaryEmbedding(config)
 
         # Initialize weights and apply final processing
-        # self.post_init()  # Temporarily disabled due to initialization issue
+        self.post_init()
 
     def _revin(self, x: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor, reverse: bool = False) -> torch.Tensor:
         if len(loc.shape) == len(x.shape) - 1:
@@ -575,6 +636,7 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         past_values_padding: torch.LongTensor,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ):
         batch_size, seq_len = past_values.shape
         patch_len = self.config.patch_length
@@ -618,7 +680,7 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         input_embeddings = self.input_ff_layer(tokenizer_inputs)
 
         patch_padding = patched_masks_bool[..., -1]
-        attention_mask = self._make_attention_mask(patch_padding, input_embeddings.dtype)
+        attention_mask = self._make_attention_mask(patch_padding)
 
         # Compute position IDs accounting for padding (matches original TimesFM implementation)
         # position = arange(n_patches) - num_masked
@@ -642,6 +704,7 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 output_attentions=output_attentions,
+                **kwargs,
             )
 
             if output_attentions:
@@ -667,16 +730,12 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
             patch_padding=patch_padding,
         )
 
-    def _make_attention_mask(self, patch_padding: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
-        batch_size, seq_len = patch_padding.shape
+    def _make_attention_mask(self, patch_padding: torch.Tensor) -> torch.Tensor:
+        _, seq_len = patch_padding.shape
         num_masked = patch_padding.to(torch.int32).sum(dim=-1)
         q_index = torch.arange(seq_len, device=patch_padding.device)[None, None, :, None]
         kv_index = torch.arange(seq_len, device=patch_padding.device)[None, None, None, :]
-        allowed = torch.logical_and(q_index >= kv_index, kv_index >= num_masked[:, None, None, None])
-
-        mask = torch.zeros((batch_size, 1, seq_len, seq_len), dtype=dtype, device=patch_padding.device)
-        mask = mask.masked_fill(~allowed, torch.finfo(dtype).min)
-        return mask
+        return torch.logical_and(q_index >= kv_index, kv_index >= num_masked[:, None, None, None])
 
 
 class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
@@ -735,7 +794,7 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         self.post_init()
 
     def _preprocess(
-        self, inputs: Sequence[torch.Tensor], freq: Sequence[int], context_len: Optional[int] = None
+        self, inputs: Sequence[torch.Tensor], freq: Sequence[int], context_len: int | None = None
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Override parent's _preprocess to support custom context_len for forecasting.
 
@@ -801,13 +860,15 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
     def forward(
         self,
         past_values: Sequence[torch.Tensor],
-        window_size: Optional[int] = None,
-        future_values: Optional[torch.Tensor] = None,
-        forecast_context_len: Optional[int] = None,
+        window_size: int | None = None,
+        future_values: torch.Tensor | None = None,
+        forecast_context_len: int | None = None,
         return_forecast_on_context: bool = False,
-        truncate_negative: bool = False,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        truncate_negative: bool | None = None,
+        force_flip_invariance: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        **kwargs,
     ) -> Timesfm2P5OutputForPrediction:
         """
         TimesFM 2.5 forward method matching original forecast operations.
@@ -828,7 +889,11 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
             return_forecast_on_context (`bool`, *optional*):
                 True to return the forecast on the context when available.
             truncate_negative (`bool`, *optional*):
-                Truncate to only non-negative values if any contexts have non-negative values.
+                Truncate to only non-negative values if any contexts have non-negative values. If `None`,
+                defaults to `config.infer_is_positive`.
+            force_flip_invariance (`bool`, *optional*):
+                If `True`, enforces TimesFM's flip invariance by combining predictions from inputs and
+                negated inputs. If `None`, defaults to `config.force_flip_invariance`.
             return_dict (`bool`, *optional*):
                 Whether or not to return a ModelOutput instead of a plain tuple.
             output_attentions (`bool`, *optional*):
@@ -864,6 +929,10 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
             output_attentions = self.config.output_attentions
         if output_hidden_states is None:
             output_hidden_states = self.config.output_hidden_states
+        if truncate_negative is None:
+            truncate_negative = getattr(self.config, "infer_is_positive", False)
+        if force_flip_invariance is None:
+            force_flip_invariance = getattr(self.config, "force_flip_invariance", True)
 
         # Pass fcontext_len to _preprocess so it pads to the correct length
         input_ts, input_padding, _ = self._preprocess(inputs, freq, context_len=fcontext_len)
@@ -886,6 +955,7 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
             past_values_padding=input_padding,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         hidden_states = model_outputs.last_hidden_state
@@ -908,6 +978,44 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         output_quantile_len = getattr(self.config, "output_quantile_len", 1024)
         quantile_output = quantile_output.view(batch_size, num_patches, output_quantile_len, num_quantiles)
         quantile_spreads = quantile_output[:, -1, :, :]  # Take last patch: [batch, output_quantile_len, num_quantiles]
+
+        if force_flip_invariance:
+            flipped_model_outputs = self.decoder(
+                past_values=-normalized_ts,
+                past_values_padding=input_padding,
+                output_attentions=False,
+                output_hidden_states=False,
+                **kwargs,
+            )
+            flipped_hidden_states = flipped_model_outputs.last_hidden_state
+            flipped_context_mu = flipped_model_outputs.context_mu
+            flipped_context_sigma = flipped_model_outputs.context_sigma
+
+            flipped_point_output_norm = self.output_projection_point(flipped_hidden_states)
+            flipped_quantile_output_norm = self.output_projection_quantiles(flipped_hidden_states)
+
+            flipped_point_output = self.decoder._revin(
+                flipped_point_output_norm, flipped_context_mu, flipped_context_sigma, reverse=True
+            )
+            flipped_quantile_output = self.decoder._revin(
+                flipped_quantile_output_norm, flipped_context_mu, flipped_context_sigma, reverse=True
+            )
+
+            flipped_point_output = flipped_point_output.view(
+                batch_size, num_patches, self.config.horizon_length, num_quantiles
+            )
+            flipped_pf_outputs = flipped_point_output[:, -1, :, :]
+
+            flipped_quantile_output = flipped_quantile_output.view(
+                batch_size, num_patches, output_quantile_len, num_quantiles
+            )
+            flipped_quantile_spreads = flipped_quantile_output[:, -1, :, :]
+
+            def _flip_quantiles(x: torch.Tensor) -> torch.Tensor:
+                return torch.cat([x[..., :1], torch.flip(x[..., 1:], dims=(-1,))], dim=-1)
+
+            quantile_spreads = (quantile_spreads - _flip_quantiles(flipped_quantile_spreads)) / 2
+            pf_outputs = (pf_outputs - _flip_quantiles(flipped_pf_outputs)) / 2
 
         horizon = min(self.horizon_len, pf_outputs.shape[1])
         full_forecast = pf_outputs[:, :horizon, :].clone()
@@ -972,28 +1080,6 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         # Apply convolution to calculate the moving average
         smoothed_arr = F.conv1d(arr_padded.view(1, 1, -1), kernel.view(1, 1, -1)).squeeze()
         return [smoothed_arr, arr - smoothed_arr]
-
-    @staticmethod
-    def _revin(
-        x: torch.Tensor,
-        mu: torch.Tensor,
-        sigma: torch.Tensor,
-        reverse: bool = False,
-    ) -> torch.Tensor:
-        """Reversible instance normalization - exact copy from original TimesFM."""
-        _TOLERANCE = 1e-6
-
-        if len(mu.shape) == len(x.shape) - 1:
-            mu = mu[..., None]
-            sigma = sigma[..., None]
-        elif len(mu.shape) == len(x.shape) - 2:
-            mu = mu[..., None, None]
-            sigma = sigma[..., None, None]
-
-        if reverse:
-            return x * sigma + mu
-        else:
-            return (x - mu) / torch.where(sigma < _TOLERANCE, 1.0, sigma)
 
     @staticmethod
     def _timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
