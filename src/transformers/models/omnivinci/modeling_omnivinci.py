@@ -109,6 +109,15 @@ def _resolve_component_path(config: OmniVinciConfig, key: str) -> Optional[str]:
     raise TypeError(f"Unsupported config type for '{key}': {type(value)}")
 
 
+def _get_attn_implementation(config: PretrainedConfig, default: str = "sdpa") -> str:
+    attn_impl = getattr(config, "_attn_implementation", None)
+    if not attn_impl:
+        attn_impl = getattr(config, "_attn_implementation_internal", None)
+    if attn_impl == "flash_attention_2":
+        return default
+    return attn_impl or default
+
+
 def build_llm_and_tokenizer(
     model_name_or_path: str,
     config: PretrainedConfig,
@@ -119,6 +128,8 @@ def build_llm_and_tokenizer(
 ) -> Tuple[PreTrainedModel, PreTrainedTokenizer]:
     """Build language model and tokenizer from pretrained checkpoint."""
     llm_cfg = AutoConfig.from_pretrained(model_name_or_path)
+    if attn_implementation is None:
+        attn_implementation = _get_attn_implementation(config)
     llm_cfg._attn_implementation = attn_implementation
     llm_cfg.model_max_length = model_max_length
     if model_max_length is not None:
@@ -228,6 +239,8 @@ class MultimodalProjector(PreTrainedModel):
             nn.Linear(config.hidden_size, config.hidden_size),
         )
 
+        self.post_init()
+
     def forward(self, x, *args, **kwargs):
         return self.layers(x)
 
@@ -270,6 +283,8 @@ class SoundMultimodalProjector(PreTrainedModel):
             nn.GELU(),
             nn.Linear(config.hidden_size, config.hidden_size),
         )
+
+        self.post_init()
 
     def forward(self, x, *args, **kwargs):
         return self.layers(x)
@@ -322,7 +337,7 @@ class Qwen2AudioTower(AudioTower):
     def __init__(self, model_name_or_path: str, config: PretrainedConfig):
         super().__init__()
         self.audio_tower = Qwen2AudioEncoder.from_pretrained(
-            model_name_or_path, attn_implementation="flash_attention_2"
+            model_name_or_path, attn_implementation=_get_attn_implementation(config)
         )
         self.audio_chunk_unit_duration = 30
         self.audio_chunk_unit_length = 3000
@@ -465,7 +480,7 @@ class SiglipVisionTowerDynamicS2(VisionTowerDynamicS2):
 
         self.vision_tower = SiglipVisionModel.from_pretrained(
             model_name_or_path,
-            attn_implementation="flash_attention_2",
+            attn_implementation=_get_attn_implementation(config),
             torch_dtype=model_dtype,
         )
         self.image_processor = SiglipImageProcessor.from_pretrained(model_name_or_path)
@@ -542,6 +557,7 @@ class VILAPretrainedModel(PreTrainedModel):
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
     _no_split_modules = ["Qwen2DecoderLayer", "SiglipEncoderLayer"]
 
     def __init__(self, config: OmniVinciConfig, *args, **kwargs):
@@ -796,6 +812,9 @@ class VILAPretrainedModel(PreTrainedModel):
         # configuration
         if getattr(self.config, "llm_cfg", None) is None:
             self.config.llm_cfg = self.llm.config
+        # Transformers v5 generation/cache code resolves decoder metadata via config.get_text_config().
+        # Expose the loaded LLM config so required fields (e.g. num_hidden_layers) are always available.
+        self.config.text_config = self.llm.config
         if getattr(self.config, "vision_tower_cfg", None) is None:
             self.config.vision_tower_cfg = self.vision_tower.config
         if getattr(self.config, "mm_projector_cfg", None) is None:
@@ -1077,6 +1096,9 @@ class VILAForCausalLM(VILAPretrainedModel, GenerationMixin):
             raise ValueError("Sound inputs were provided, but sound modules are not initialized.")
 
         audio_features, audio_output_lengths = sound_tower(sounds)
+        projector_param = next(sound_mm_projector.parameters(), None)
+        if projector_param is not None and audio_features.dtype != projector_param.dtype:
+            audio_features = audio_features.to(projector_param.dtype)
         audio_features = sound_mm_projector(audio_features)
 
         if audio_output_lengths is not None:
@@ -1131,7 +1153,8 @@ class VILAForCausalLM(VILAPretrainedModel, GenerationMixin):
         # Based on segment_aud_indices_list and segment_vis_indices_list, get interleaved vis-aud embeddings for video
         video_sound_embeds_idx = 0
         sep_embed = self.encoders["video"].embed_tokens("\n")
-        text_embeds = text_embeds.to(self.dtype)
+        llm_embed_dtype = self.llm_model_embed_tokens.weight.dtype
+        text_embeds = text_embeds.to(llm_embed_dtype)
         sep_embed = sep_embed.to(text_embeds.dtype)
 
         if video_info is not None and self.config.load_audio_in_video and self.config.interleaved_vis_aud_in_video:
@@ -1513,6 +1536,10 @@ class VILAForCausalLM(VILAPretrainedModel, GenerationMixin):
             (inputs_embeds, attention_mask, position_ids, labels) = self.repack_multimodal_data(
                 inputs_embeds, attention_mask, position_ids, labels
             )
+
+        llm_param = next(self.llm.parameters(), None)
+        if llm_param is not None and inputs_embeds.dtype != llm_param.dtype:
+            inputs_embeds = inputs_embeds.to(llm_param.dtype)
 
         outputs = self.llm(
             inputs_embeds=inputs_embeds,

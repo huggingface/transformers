@@ -61,11 +61,13 @@ class NVOmniVideoInference:
         if getattr(self.config, "resume_path", None) is None or not Path(str(self.config.resume_path)).exists():
             self.config.resume_path = str(self.model_path)
 
-        default_attn_impl = "flash_attention_2" if torch.cuda.is_available() else "sdpa"
-        attn_implementation = os.environ.get("OMNIVINCI_ATTN_IMPLEMENTATION", default_attn_impl).strip()
-        if attn_implementation:
-            self.config._attn_implementation = attn_implementation
-            logger.info(f"Using attention implementation: {attn_implementation}")
+        default_attn_impl = "sdpa"
+        attn_implementation = os.environ.get("OMNIVINCI_ATTN_IMPLEMENTATION", default_attn_impl).strip() or default_attn_impl
+        if attn_implementation == "flash_attention_2":
+            logger.warning("FlashAttention is disabled in this setup; forcing SDPA.")
+            attn_implementation = "sdpa"
+        self.config._attn_implementation = attn_implementation
+        logger.info(f"Using attention implementation: {attn_implementation}")
 
         logger.info("Loading model...")
         start_time = time.time()
