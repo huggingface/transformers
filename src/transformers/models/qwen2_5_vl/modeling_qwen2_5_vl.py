@@ -372,7 +372,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
 
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
-        for t, h, w in grid_thw:
+        for t, h, w in grid_thw.tolist():
             hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
             hpos_ids = hpos_ids.reshape(
                 h // self.spatial_merge_size,
@@ -404,8 +404,9 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         cu_window_seqlens: list = [0]
         window_index_id = 0
         vit_merger_window_size = self.window_size // self.spatial_merge_size // self.patch_size
+        grid_thw_list = grid_thw.tolist()
 
-        for grid_t, grid_h, grid_w in grid_thw:
+        for grid_t, grid_h, grid_w in grid_thw_list:
             llm_grid_h, llm_grid_w = (
                 grid_h // self.spatial_merge_size,
                 grid_w // self.spatial_merge_size,
@@ -435,7 +436,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             window_index.append(index_new + window_index_id)
             cu_seqlens_tmp = seqlens.cumsum(0) * self.spatial_merge_unit + cu_window_seqlens[-1]
             cu_window_seqlens.extend(cu_seqlens_tmp.tolist())
-            window_index_id += (grid_t * llm_grid_h * llm_grid_w).item()
+            window_index_id += grid_t * llm_grid_h * llm_grid_w
         window_index = torch.cat(window_index, dim=0)
 
         return window_index, cu_window_seqlens
@@ -1093,6 +1094,8 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             dtype=input_ids.dtype,
             device=input_ids.device,
         )
+        image_grid_thw_list = image_grid_thw.tolist() if image_grid_thw is not None else None
+        video_grid_thw_list = video_grid_thw.tolist() if video_grid_thw is not None else None
         image_index, video_index = 0, 0
         for i, input_ids in enumerate(total_input_ids):
             if attention_mask is not None:
@@ -1116,21 +1119,13 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 else:
                     ed_video = len(input_tokens) + 1
                 if ed_image < ed_video:
-                    t, h, w = (
-                        image_grid_thw[image_index][0],
-                        image_grid_thw[image_index][1],
-                        image_grid_thw[image_index][2],
-                    )
+                    t, h, w = image_grid_thw_list[image_index]
                     second_per_grid_t = 0
                     image_index += 1
                     remain_images -= 1
                     ed = ed_image
                 else:
-                    t, h, w = (
-                        video_grid_thw[video_index][0],
-                        video_grid_thw[video_index][1],
-                        video_grid_thw[video_index][2],
-                    )
+                    t, h, w = video_grid_thw_list[video_index]
                     if second_per_grid_ts is not None:
                         second_per_grid_t = second_per_grid_ts[video_index]
                     else:
@@ -1139,9 +1134,9 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                     remain_videos -= 1
                     ed = ed_video
                 llm_grid_t, llm_grid_h, llm_grid_w = (
-                    t.item(),
-                    h.item() // spatial_merge_size,
-                    w.item() // spatial_merge_size,
+                    t,
+                    h // spatial_merge_size,
+                    w // spatial_merge_size,
                 )
                 text_len = ed - st
                 st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0

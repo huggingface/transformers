@@ -216,7 +216,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
 
         device_type = query.device.type if query.device.type != "mps" else "cpu"
         if query.dtype == torch.float32:
-            if torch.is_autocast_enabled():
+            if torch.is_autocast_enabled(device_type):
                 target_dtype = torch.get_autocast_dtype(device_type)
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_is_quantized"):

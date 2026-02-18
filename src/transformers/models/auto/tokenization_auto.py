@@ -308,6 +308,12 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
             if is_mistral_common_available()
             else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
+        (
+            "voxtral_realtime",
+            "MistralCommonBackend"
+            if is_mistral_common_available()
+            else ("TokenizersBackend" if is_tokenizers_available() else None),
+        ),
         ("wav2vec2", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-bert", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-conformer", "Wav2Vec2CTCTokenizer"),
@@ -643,7 +649,8 @@ class AutoTokenizer:
             and tokenizer_config_class is not None
             and config_model_type is not None
             and config_model_type != ""
-            and TOKENIZER_MAPPING_NAMES.get(config_model_type, "").replace("Fast", "")
+            and TOKENIZER_MAPPING_NAMES.get(config_model_type) is not None
+            and TOKENIZER_MAPPING_NAMES.get(config_model_type).replace("Fast", "")
             != tokenizer_config_class.replace("Fast", "")
         ):
             # new model, but we ignore it unless the model type is the same

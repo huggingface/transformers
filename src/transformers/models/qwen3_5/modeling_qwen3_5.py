@@ -1120,16 +1120,17 @@ class Qwen3_5VisionModel(Qwen3_5PreTrainedModel):
 
     def rot_pos_emb(self, grid_thw: torch.Tensor) -> torch.Tensor:
         merge_size = self.spatial_merge_size
+        grid_thw_list = grid_thw.tolist()
 
-        max_hw = int(grid_thw[:, 1:].max().item())
+        max_hw = max(max(h, w) for _, h, w in grid_thw_list)
         freq_table = self.rotary_pos_emb(max_hw)  # (max_hw, dim // 2)
         device = freq_table.device
 
-        total_tokens = int(torch.prod(grid_thw, dim=1).sum().item())
+        total_tokens = sum(t * h * w for t, h, w in grid_thw_list)
         pos_ids = torch.empty((total_tokens, 2), dtype=torch.long, device=device)
 
         offset = 0
-        for num_frames, height, width in grid_thw:
+        for num_frames, height, width in grid_thw_list:
             merged_h, merged_w = height // merge_size, width // merge_size
 
             block_rows = torch.arange(merged_h, device=device)  # block row indices
@@ -1158,13 +1159,16 @@ class Qwen3_5VisionModel(Qwen3_5PreTrainedModel):
         return embeddings
 
     def fast_pos_embed_interpolate(self, grid_thw):
-        grid_ts, grid_hs, grid_ws = grid_thw[:, 0], grid_thw[:, 1], grid_thw[:, 2]
+        grid_thw_list = grid_thw.tolist()
+        grid_ts = [row[0] for row in grid_thw_list]
+        grid_hs = [row[1] for row in grid_thw_list]
+        grid_ws = [row[2] for row in grid_thw_list]
         device = self.pos_embed.weight.device
 
         idx_list = [[] for _ in range(4)]
         weight_list = [[] for _ in range(4)]
 
-        for t, h, w in zip(grid_ts, grid_hs, grid_ws):
+        for t, h, w in grid_thw_list:
             h_idxs = torch.linspace(0, self.num_grid_per_side - 1, h)
             w_idxs = torch.linspace(0, self.num_grid_per_side - 1, w)
 
@@ -1433,6 +1437,9 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
             video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
             video_grid_thw[:, 0] = 1
 
+        image_grid_thw_list = image_grid_thw.tolist() if image_grid_thw is not None else None
+        video_grid_thw_list = video_grid_thw.tolist() if video_grid_thw is not None else None
+
         spatial_merge_size = self.config.vision_config.spatial_merge_size
         image_token_id = self.config.image_token_id
         video_token_id = self.config.video_token_id
@@ -1471,27 +1478,19 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
                 else:
                     ed_video = len(input_tokens) + 1
                 if ed_image < ed_video:
-                    t, h, w = (
-                        image_grid_thw[image_index][0],
-                        image_grid_thw[image_index][1],
-                        image_grid_thw[image_index][2],
-                    )
+                    t, h, w = image_grid_thw_list[image_index]
                     image_index += 1
                     remain_images -= 1
                     ed = ed_image
                 else:
-                    t, h, w = (
-                        video_grid_thw[video_index][0],
-                        video_grid_thw[video_index][1],
-                        video_grid_thw[video_index][2],
-                    )
+                    t, h, w = video_grid_thw_list[video_index]
                     video_index += 1
                     remain_videos -= 1
                     ed = ed_video
                 llm_grid_t, llm_grid_h, llm_grid_w = (
-                    t.item(),
-                    h.item() // spatial_merge_size,
-                    w.item() // spatial_merge_size,
+                    t,
+                    h // spatial_merge_size,
+                    w // spatial_merge_size,
                 )
                 text_len = ed - st
                 st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0

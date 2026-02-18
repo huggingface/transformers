@@ -838,7 +838,7 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         else:
             marginal_probs = probs.mean(dim=0)
 
-        perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
+        perplexity = torch.exp(-torch.sum(torch.xlogy(marginal_probs, marginal_probs), dim=-1)).sum()
         return perplexity
 
     def forward(self, hidden_states, mask_time_indices=None):
