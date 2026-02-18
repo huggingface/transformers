@@ -507,7 +507,7 @@ class Wav2Vec2Attention(nn.Module):
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -532,7 +532,7 @@ class Wav2Vec2Attention(nn.Module):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        attn_output, attn_weights = attention_interface(
+        attention_outputs = attention_interface(
             self,
             query_states,
             key_states,
@@ -542,11 +542,16 @@ class Wav2Vec2Attention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
+        if len(attention_outputs) == 2:
+            attn_output, attn_weights = attention_outputs
+            past_key_value = None
+        else:
+            attn_output, attn_weights, past_key_value = attention_outputs
 
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights
+        return attn_output, attn_weights, past_key_value
 
 
 class Wav2Vec2FeedForward(nn.Module):
@@ -591,7 +596,7 @@ class Wav2Vec2EncoderLayer(GradientCheckpointingLayer):
 
     def forward(self, hidden_states, attention_mask=None, **kwargs):
         attn_residual = hidden_states
-        hidden_states, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
+        hidden_states, _, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
 
@@ -630,7 +635,7 @@ class Wav2Vec2EncoderLayerStableLayerNorm(GradientCheckpointingLayer):
     ):
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
-        hidden_states, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
+        hidden_states, _, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
         hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))

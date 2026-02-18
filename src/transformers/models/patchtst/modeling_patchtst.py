@@ -107,7 +107,7 @@ class PatchTSTAttention(nn.Module):
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -132,7 +132,7 @@ class PatchTSTAttention(nn.Module):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        attn_output, attn_weights = attention_interface(
+        attention_outputs = attention_interface(
             self,
             query_states,
             key_states,
@@ -142,11 +142,16 @@ class PatchTSTAttention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
+        if len(attention_outputs) == 2:
+            attn_output, attn_weights = attention_outputs
+            past_key_value = None
+        else:
+            attn_output, attn_weights, past_key_value = attention_outputs
 
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights
+        return attn_output, attn_weights, past_key_value
 
 
 class PatchTSTBatchNorm(nn.Module):
