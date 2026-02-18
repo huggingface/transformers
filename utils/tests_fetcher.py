@@ -79,6 +79,7 @@ CORE_FILES = (
     "src/transformers/modeling_utils.py",
     "src/transformers/core_model_loading.py",
     "src/transformers/cache_utils.py",
+    "src/transformers/generation/utils.py",
 )
 
 
