@@ -33,7 +33,7 @@ class Qwen3ASRModelTester:
             "vocab_size": 151936,   
             "hidden_size": 16,
             "intermediate_size": 32,
-            "num_hidden_layers": 2,
+            "num_hidden_layers": 1,
             "num_attention_heads": 2,
             "num_key_value_heads": 2,
             "max_position_embeddings": 16,
@@ -44,7 +44,6 @@ class Qwen3ASRModelTester:
             "tie_word_embeddings": False,
             "output_attentions": True,
             "output_hidden_states": True,
-            "attn_implementation": "eager"
         }
         audio_config = {
             "model_type": "Qwen3ASRAudioEncoderConfig",
@@ -177,7 +176,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(gen_ids.cpu(), exp_ids)
         self.assertListEqual(txt, exp_txt) 
 
-    @slow
+    #@slow
     def test_fixture_batch_matches(self):
         """
         reproducer (creates JSON directly in repo): https://gist.github.com/TODO
@@ -233,14 +232,16 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
             tokenize=True, 
             add_generation_prompt=True, 
             return_dict=True,
-            return_tensors="pt"
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
         ).to(model.device, dtype=model.dtype)
 
         seq = model.generate(
             **batch, 
             max_new_tokens=64, 
             do_sample=False
-        ).sequences
+        )
 
         inp_len = batch["input_ids"].shape[1]
         gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
@@ -249,6 +250,6 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
             seq, 
             skip_special_tokens=True
         )
-        
+
         torch.testing.assert_close(gen_ids.cpu(), exp_ids)
         self.assertListEqual(txt, exp_txt) 
