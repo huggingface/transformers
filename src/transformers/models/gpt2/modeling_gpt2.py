@@ -40,9 +40,11 @@ from ...pytorch_utils import Conv1D
 from ...utils import (
     ModelOutput,
     auto_docstring,
+    can_return_tuple,
     logging,
 )
-from ...utils.generic import maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_gpt2 import GPT2Config
 
 
@@ -280,18 +282,16 @@ class GPT2Block(GradientCheckpointingLayer):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         use_cache: bool | None = False,
-        output_attentions: bool | None = False,
         **kwargs,
-    ) -> tuple[torch.Tensor] | tuple[torch.Tensor, tuple[torch.FloatTensor, ...]] | None:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
-        attn_output, self_attn_weights = self.attn(
+        attn_output, _ = self.attn(
             hidden_states,
             past_key_values=past_key_values,
             cache_position=cache_position,
             attention_mask=attention_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
             **kwargs,
         )
         # residual connection
@@ -306,13 +306,12 @@ class GPT2Block(GradientCheckpointingLayer):
                 )
             residual = hidden_states
             hidden_states = self.ln_cross_attn(hidden_states)
-            cross_attn_output, cross_attn_weights = self.crossattention(
+            cross_attn_output, _ = self.crossattention(
                 hidden_states,
                 past_key_values=past_key_values,
                 attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
-                output_attentions=output_attentions,
             )
             # residual connection
             hidden_states = residual + cross_attn_output
@@ -323,13 +322,7 @@ class GPT2Block(GradientCheckpointingLayer):
         # residual connection
         hidden_states = residual + feed_forward_hidden_states
 
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (self_attn_weights,)
-            if encoder_hidden_states is not None:
-                outputs += (cross_attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 # Copied from transformers.models.xlm.modeling_xlm.XLMSequenceSummary with XLM->GPT2
@@ -443,6 +436,11 @@ class GPT2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_attention_backend = True
     _can_compile_fullgraph = True
+    _can_record_outputs = {
+        "hidden_states": GPT2Block,
+        "attentions": OutputRecorder(GPT2Attention, layer_name=".attn", index=1),
+        "cross_attentions": OutputRecorder(GPT2Attention, layer_name=".crossattention", index=1),
+    }
 
     # No longer used as we directly use our masks instead
     _keys_to_ignore_on_load_unexpected = ["attn.bias", "crossattention.bias"]
@@ -534,6 +532,8 @@ class GPT2Model(GPT2PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -547,11 +547,8 @@ class GPT2Model(GPT2PreTrainedModel):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -566,12 +563,8 @@ class GPT2Model(GPT2PreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        kwargs.pop("output_attentions", None)
+        kwargs.pop("output_hidden_states", None)
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -588,13 +581,6 @@ class GPT2Model(GPT2PreTrainedModel):
 
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
 
         # based on pattern from src/transformers/models/whisper/modeling_whisper.py::WhisperDecoder
         if use_cache:
@@ -648,14 +634,8 @@ class GPT2Model(GPT2PreTrainedModel):
 
         output_shape = (-1,) + input_shape[1:] + (hidden_states.size(-1),)
 
-        all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
-        all_hidden_states = () if output_hidden_states else None
         for i, block in enumerate(self.h):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            outputs = block(
+            hidden_states = block(
                 hidden_states,
                 past_key_values if not (self.gradient_checkpointing and self.training) else None,
                 cache_position,
@@ -663,39 +643,18 @@ class GPT2Model(GPT2PreTrainedModel):
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 use_cache=use_cache,
-                output_attentions=output_attentions,
                 position_ids=position_ids,
                 **kwargs,
             )
 
-            hidden_states = outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (outputs[2],)
-
         hidden_states = self.ln_f(hidden_states)
 
         hidden_states = hidden_states.view(output_shape)
-        # Add last hidden state
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
 
         past_key_values = past_key_values if use_cache else None
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, past_key_values, all_hidden_states, all_self_attentions, all_cross_attentions]
-                if v is not None
-            )
-
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -716,6 +675,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -730,12 +690,9 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
         encoder_attention_mask: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> tuple | CausalLMOutputWithCrossAttentions:
+    ) -> CausalLMOutputWithCrossAttentions:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -754,9 +711,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
+        transformer_outputs: BaseModelOutputWithPastAndCrossAttentions = self.transformer(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
@@ -767,11 +722,9 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
-        hidden_states = transformer_outputs[0]
+        hidden_states = transformer_outputs.last_hidden_state
 
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
@@ -785,10 +738,6 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
-
-        if not return_dict:
-            output = (logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
@@ -821,6 +770,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -835,11 +785,8 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         mc_labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | GPT2DoubleHeadsModelOutput:
+    ) -> GPT2DoubleHeadsModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -889,9 +836,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
         >>> lm_logits = outputs.logits
         >>> mc_logits = outputs.mc_logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
+        transformer_outputs: BaseModelOutputWithPastAndCrossAttentions = self.transformer(
             input_ids,
             past_key_values=past_key_values,
             cache_position=cache_position,
@@ -900,12 +845,10 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        hidden_states = transformer_outputs[0]
+        hidden_states = transformer_outputs.last_hidden_state
 
         lm_logits = self.lm_head(hidden_states)
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids).squeeze(-1)
@@ -921,12 +864,6 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
             shift_labels = labels[..., 1:].contiguous()
             loss_fct = CrossEntropyLoss()
             lm_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-
-        if not return_dict:
-            output = (lm_logits, mc_logits) + transformer_outputs[1:]
-            if mc_loss is not None:
-                output = (mc_loss,) + output
-            return ((lm_loss,) + output) if lm_loss is not None else output
 
         return GPT2DoubleHeadsModelOutput(
             loss=lm_loss,
@@ -963,6 +900,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -974,11 +912,8 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | SequenceClassifierOutputWithPast:
+    ) -> SequenceClassifierOutputWithPast:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -997,9 +932,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
+        transformer_outputs: BaseModelOutputWithPastAndCrossAttentions = self.transformer(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
@@ -1007,11 +940,9 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
-        hidden_states = transformer_outputs[0]
+        hidden_states = transformer_outputs.last_hidden_state
         logits = self.score(hidden_states)
 
         if input_ids is not None:
@@ -1059,10 +990,6 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
-        if not return_dict:
-            output = (pooled_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
         return SequenceClassifierOutputWithPast(
             loss=loss,
             logits=pooled_logits,
@@ -1091,6 +1018,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1102,11 +1030,8 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | TokenClassifierOutput:
+    ) -> TokenClassifierOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -1125,9 +1050,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
+        transformer_outputs: BaseModelOutputWithPastAndCrossAttentions = self.transformer(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
@@ -1135,12 +1058,10 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        hidden_states = transformer_outputs[0]
+        hidden_states = transformer_outputs.last_hidden_state
         hidden_states = self.dropout(hidden_states)
         logits = self.classifier(hidden_states)
 
@@ -1149,10 +1070,6 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
             labels = labels.to(logits.device)
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + transformer_outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -1173,6 +1090,7 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1183,11 +1101,8 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | QuestionAnsweringModelOutput:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -1202,20 +1117,16 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.transformer(
+        outputs: BaseModelOutputWithPastAndCrossAttentions = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
@@ -1238,10 +1149,6 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,
